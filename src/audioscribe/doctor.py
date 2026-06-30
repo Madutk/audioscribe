@@ -76,11 +76,32 @@ def _check_diarization() -> CheckResult:
         return CheckResult("FAIL", "pyannote.audio", f"Import fehlgeschlagen: {exc}")
     if not settings.hf_token:
         return CheckResult(
-            "FAIL",
-            "pyannote.audio",
-            "aktiviert, aber HF_TOKEN fehlt (siehe .env.example) -> 'run' bricht ab",
+            "FAIL", "Diarisierung", "HF_TOKEN fehlt (siehe .env.example) -> 'run' bricht ab"
         )
-    return CheckResult("OK", "pyannote.audio", f"Modell: {settings.diarization_model}, HF_TOKEN gesetzt")
+    # Echter gated-Zugriff: ein gesetzter Token heisst NICHT, dass die Modell-Bedingungen
+    # akzeptiert sind. auth_check fragt das ohne Download ab.
+    try:
+        from huggingface_hub import auth_check
+        from huggingface_hub.utils import GatedRepoError, RepositoryNotFoundError
+    except Exception:  # noqa: BLE001
+        return CheckResult(
+            "OK", "Diarisierung", f"HF_TOKEN gesetzt (Zugriff nicht pruefbar); {settings.diarization_model}"
+        )
+    for repo in (settings.diarization_model, "pyannote/segmentation-3.0"):
+        try:
+            auth_check(repo, token=settings.hf_token)
+        except (GatedRepoError, RepositoryNotFoundError):
+            return CheckResult(
+                "FAIL",
+                "Diarisierung",
+                f"Bedingungen NICHT akzeptiert: https://hf.co/{repo} "
+                "(eingeloggt 'Agree' klicken) -> 'run' bricht ab",
+            )
+        except Exception as exc:  # noqa: BLE001 - Netzwerk o.ae.
+            return CheckResult(
+                "WARN", "Diarisierung", f"Zugriff nicht pruefbar ({type(exc).__name__}); HF_TOKEN gesetzt"
+            )
+    return CheckResult("OK", "Diarisierung", "Token + Bedingungen ok (speaker-diarization-3.1, segmentation-3.0)")
 
 
 def _check_dirs() -> CheckResult:

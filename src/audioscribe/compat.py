@@ -9,6 +9,7 @@ from pathlib import Path
 from audioscribe.config import settings
 
 _TORCH_LOAD_PATCHED = False
+_HF_HUB_PATCHED = False
 
 # ctranslate2 4.4.0 (von WhisperX gepinnt, <4.5) ist gegen cuDNN 8 gebaut, waehrend
 # torch 2.6 cuDNN 9 mitbringt. Wir stellen die cuDNN-8-Libs einmalig separat bereit.
@@ -44,6 +45,49 @@ def apply_torch_load_compat() -> None:
 
     torch.load = _load  # type: ignore[assignment]
     _TORCH_LOAD_PATCHED = True
+
+
+def apply_hf_hub_compat() -> None:
+    """Uebersetzt das veraltete ``use_auth_token``-Argument zu ``token``.
+
+    pyannote.audio 3.x ruft ``hf_hub_download(..., use_auth_token=...)`` auf, aber
+    neuere ``huggingface_hub``-Versionen (>= 1.x) kennen nur noch ``token`` ->
+    ``TypeError: hf_hub_download() got an unexpected keyword argument 'use_auth_token'``.
+    Wir wrappen ``hf_hub_download`` so, dass ``use_auth_token`` auf ``token`` gemappt
+    wird, und ziehen die Referenz in bereits importierten Modulen (pyannote) nach.
+    Idempotent.
+    """
+    global _HF_HUB_PATCHED
+    if _HF_HUB_PATCHED:
+        return
+
+    import functools
+    import sys
+
+    import huggingface_hub
+
+    orig = huggingface_hub.hf_hub_download
+
+    @functools.wraps(orig)
+    def _download(*args, **kwargs):  # type: ignore[no-untyped-def]
+        if "use_auth_token" in kwargs:
+            token = kwargs.pop("use_auth_token")
+            kwargs.setdefault("token", token)
+        return orig(*args, **kwargs)
+
+    huggingface_hub.hf_hub_download = _download
+    # pyannote-Module, die ``from huggingface_hub import hf_hub_download`` gemacht haben,
+    # nachziehen. Bewusst nur ``pyannote.*`` antasten: ein Scan ueber ALLE sys.modules
+    # wuerde bei lazy/deprecated Modulen (speechbrain/torchaudio) deren Warnungen ausloesen.
+    for name, module in list(sys.modules.items()):
+        if module is None or not name.startswith("pyannote"):
+            continue
+        try:
+            if getattr(module, "hf_hub_download", None) is orig:
+                module.hf_hub_download = _download  # type: ignore[attr-defined]
+        except Exception:  # noqa: BLE001 - defensive
+            pass
+    _HF_HUB_PATCHED = True
 
 
 def _cudnn8_lib_dir() -> Path:
