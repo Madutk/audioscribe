@@ -42,6 +42,38 @@ def test_build_paragraphs_merges_consecutive_same_speaker():
     assert paras[2].text == "genau"
 
 
+def test_build_paragraphs_splits_every_n_sentences_via_word_timestamps():
+    words = [
+        Word(0.0, 0.5, "Eins."),
+        Word(0.6, 1.0, "Zwei."),
+        Word(1.1, 1.5, "Drei."),
+        Word(1.6, 2.0, "Vier."),
+    ]
+    seg = Segment(0.0, 2.0, "Eins. Zwei. Drei. Vier.", "Sprecher 1", words=words)
+    paras = build_paragraphs([seg], sentences_per_line=2)
+    assert len(paras) == 2
+    assert paras[0].text == "Eins. Zwei." and paras[0].start == 0.0
+    # Feiner Zeitstempel: zweite Zeile beginnt beim ersten Wort der naechsten Saetze.
+    assert paras[1].text == "Drei. Vier." and paras[1].start == 1.1
+
+
+def test_build_paragraphs_speaker_change_forces_break():
+    s1 = Segment(0.0, 1.0, "Hallo.", "Sprecher 1", words=[Word(0.0, 1.0, "Hallo.")])
+    s2 = Segment(1.0, 2.0, "Ja?", "Sprecher 2", words=[Word(1.0, 2.0, "Ja?")])
+    paras = build_paragraphs([s1, s2], sentences_per_line=2)
+    assert [p.speaker for p in paras] == ["Sprecher 1", "Sprecher 2"]
+    assert paras[1].start == 1.0
+
+
+def test_build_paragraphs_zero_merges_whole_turn():
+    s1 = Segment(0.0, 1.0, "Eins. Zwei.", "Sprecher 1", words=[Word(0.0, 1.0, "Eins. Zwei.")])
+    s2 = Segment(1.0, 2.0, "Drei.", "Sprecher 1", words=[Word(1.0, 2.0, "Drei.")])
+    paras = build_paragraphs([s1, s2], sentences_per_line=0)
+    assert len(paras) == 1
+    assert paras[0].speaker == "Sprecher 1"
+    assert paras[0].start == 0.0
+
+
 def test_fill_segment_speakers_from_word_majority():
     seg = Segment(
         0.0,

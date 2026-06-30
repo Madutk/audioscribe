@@ -5,11 +5,29 @@ Reine Datenlogik ohne ML-Abhaengigkeiten (gut unit-testbar).
 
 from __future__ import annotations
 
+import re
 from collections import Counter
 
 from audioscribe.models import Paragraph, Segment, Word
 
 UNKNOWN = "Unbekannt"
+
+# Satzende-Erkennung (grobe Heuristik; gelegentliche Fehlzaehler bei Abkuerzungen
+# verschieben nur einen Zeitstempel und sind unkritisch).
+_SENTENCE_TERMINATORS = re.compile(r"[.!?…]+")
+
+
+def _count_sentences(text: str) -> int:
+    """Zaehlt Satzenden (Gruppen aus . ! ? …) in einem Text-Stueck."""
+    return len(_SENTENCE_TERMINATORS.findall(text))
+
+
+def _clean_join(parts: list[str]) -> str:
+    """Fuegt Wort-Tokens mit Leerzeichen zusammen und korrigiert Satzzeichen-Abstaende."""
+    text = " ".join(parts)
+    text = re.sub(r"\s+([,.!?;:…»)\]])", r"\1", text)  # kein Space vor Satzzeichen
+    text = re.sub(r"([(«\[])\s+", r"\1", text)  # kein Space nach oeffnender Klammer
+    return text.strip()
 
 
 def result_to_segments(result: dict) -> list[Segment]:
@@ -67,13 +85,11 @@ def relabel_speakers(segments: list[Segment]) -> int:
     return len(order)
 
 
-def build_paragraphs(segments: list[Segment]) -> list[Paragraph]:
-    """Fasst aufeinanderfolgende Segmente desselben Sprechers zu Absaetzen zusammen (FR-5)."""
+def _merge_whole_turns(segs: list[Segment]) -> list[Paragraph]:
+    """Fasst aufeinanderfolgende Segmente desselben Sprechers zu EINEM Absatz zusammen."""
     paragraphs: list[Paragraph] = []
-    for seg in sorted(segments, key=lambda s: s.start):
+    for seg in segs:
         text = seg.text.strip()
-        if not text:
-            continue
         speaker = seg.speaker or UNKNOWN
         if paragraphs and paragraphs[-1].speaker == speaker:
             last = paragraphs[-1]
@@ -82,3 +98,65 @@ def build_paragraphs(segments: list[Segment]) -> list[Paragraph]:
         else:
             paragraphs.append(Paragraph(seg.start, seg.end, speaker, text))
     return paragraphs
+
+
+def _split_by_sentences(segs: list[Segment], sentences_per_line: int) -> list[Paragraph]:
+    """Bricht innerhalb eines Sprecher-Beitrags alle N Saetze um (feiner Zeitstempel).
+
+    Granularitaet kommt aus den Wort-Zeitstempeln (Alignment); fehlen die Woerter
+    fuer ein Segment, dient die Segment-Zeit als Fallback. Sprecherwechsel erzwingt
+    immer einen Umbruch.
+    """
+    paragraphs: list[Paragraph] = []
+    cur: dict | None = None
+
+    def flush() -> None:
+        nonlocal cur
+        if cur and cur["parts"]:
+            paragraphs.append(
+                Paragraph(cur["start"], cur["end"], cur["speaker"], _clean_join(cur["parts"]))
+            )
+        cur = None
+
+    for seg in segs:
+        speaker = seg.speaker or UNKNOWN
+        # Tokens = ausgerichtete Woerter, sonst das Segment als ein Token.
+        if seg.words:
+            tokens = [(w.text, w.start, w.end) for w in seg.words]
+        else:
+            tokens = [(seg.text, seg.start, seg.end)]
+        for text, t_start, t_end in tokens:
+            token = (text or "").strip()
+            if not token:
+                continue
+            if cur is None or cur["speaker"] != speaker:
+                flush()
+                cur = {
+                    "start": t_start if t_start is not None else seg.start,
+                    "end": t_end if t_end is not None else seg.end,
+                    "speaker": speaker,
+                    "parts": [],
+                    "sentences": 0,
+                }
+            cur["parts"].append(token)
+            if t_end is not None:
+                cur["end"] = t_end
+            cur["sentences"] += _count_sentences(token)
+            if cur["sentences"] >= sentences_per_line:
+                flush()
+
+    flush()
+    return paragraphs
+
+
+def build_paragraphs(segments: list[Segment], sentences_per_line: int = 2) -> list[Paragraph]:
+    """Erzeugt die zeitgestempelten Ausgabe-Absaetze (FR-5/FR-11).
+
+    ``sentences_per_line`` steuert die Zeitstempel-Granularitaet: alle N Saetze ein
+    neuer Zeitstempel. ``0`` (oder negativ) fasst den ganzen Sprecher-Beitrag zu
+    einem Block zusammen (altes Verhalten).
+    """
+    segs = [s for s in sorted(segments, key=lambda s: s.start) if (s.text or "").strip()]
+    if not sentences_per_line or sentences_per_line < 1:
+        return _merge_whole_turns(segs)
+    return _split_by_sentences(segs, sentences_per_line)
