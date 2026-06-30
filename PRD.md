@@ -69,6 +69,7 @@ Sprechertrennung kombiniert.
 | FR-8 | Optionale Konvertierung des Markdown in PDF. |
 | FR-9 | Sprache standardmäßig Deutsch, mit Option auf Auto-Erkennung. |
 | FR-10 | Das Tool nimmt auch **Videodateien** (mp4, mkv, mov, webm, …) entgegen und extrahiert vor der Transkription automatisch die Audiospur (als 16-kHz-Mono-WAV). |
+| FR-11 | **Feingranulare Zeitstempel**: auch innerhalb eines Sprecher-Beitrags wird in einstellbaren Abständen ein neuer Zeitstempel gesetzt (Default: alle 2 Sätze, parametrisierbar; `0` = ganzer Beitrag als ein Block). Die Zeit stammt aus den Wort-Zeitstempeln des Alignments. |
 
 ## 6. Nicht-funktionale Anforderungen
 

@@ -76,7 +76,7 @@ def run_pipeline(
     segments = result_to_segments(result)
     fill_segment_speakers(segments)
     num_speakers = relabel_speakers(segments)
-    paragraphs = build_paragraphs(segments)
+    paragraphs = build_paragraphs(segments, settings.sentences_per_timestamp)
 
     meta = TranscriptMeta(
         source=source_path,

@@ -69,6 +69,12 @@ class Settings:
     # --- Stufe 3: Wort-Alignment (wav2vec2) ---
     enable_alignment: bool = field(default_factory=lambda: _flag("ALIGNMENT", "1"))
 
+    # --- Ausgabe: Zeitstempel-Granularitaet ---
+    # Neuer Zeitstempel alle N Saetze (0 = ganzer Sprecher-Beitrag als ein Block).
+    sentences_per_timestamp: int = field(
+        default_factory=lambda: int(_env("SENTENCES_PER_TIMESTAMP", "2"))
+    )
+
     # --- Stufe 4: Diarisierung (pyannote) — Kern-Feature, standardmaessig AN ---
     enable_diarization: bool = field(default_factory=lambda: _flag("DIARIZATION", "1"))
     diarization_model: str = field(

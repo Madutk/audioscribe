@@ -53,7 +53,26 @@ uv run audioscribe run input/meeting.m4a --no-diarize --language auto
 # Sprecheranzahl vorgeben / eingrenzen
 uv run audioscribe run input/meeting.m4a --num-speakers 3
 uv run audioscribe run input/meeting.m4a --min-speakers 2 --max-speakers 5
+
+# Zeitstempel-Granularitaet: neuer Zeitstempel alle N Saetze (Default 2; 0 = ganzer Beitrag)
+uv run audioscribe run input/meeting.m4a --sentences-per-timestamp 3
 ```
+
+### Zeitstempel-Granularität
+
+Standardmäßig wird **alle 2 Sätze** ein neuer Zeitstempel gesetzt, auch innerhalb eines
+langen Sprecher-Beitrags – die feine Zeit stammt aus den Wort-Zeitstempeln des Alignments.
+Steuerbar über `--sentences-per-timestamp N` bzw. `AUDIOSCRIBE_SENTENCES_PER_TIMESTAMP`:
+
+```
+**[00:01:23] Sprecher 1:** Guten Morgen, fangen wir an. Schön, dass alle da sind.
+**[00:01:31] Sprecher 1:** Heute geht es um das Quartalsergebnis. Ich teile gleich den Bildschirm.
+**[00:01:44] Sprecher 2:** Ja, einverstanden …
+```
+
+`--sentences-per-timestamp 0` fasst – wie früher – den ganzen Beitrag eines Sprechers zu
+einem Block mit nur einem Zeitstempel zusammen. Ohne Alignment (`--no-align`) fällt die
+Granularität auf Segment-Ebene zurück.
 
 ### Ausgabeformat (Markdown)
 

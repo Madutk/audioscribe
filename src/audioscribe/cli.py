@@ -45,6 +45,12 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument("--model", help="Whisper-Modell (Default: large-v3)")
     run.add_argument("--compute-type", help="Rechenpraezision (float16/int8_float16/int8)")
     run.add_argument("--device", help="cuda (Default) oder cpu")
+    run.add_argument(
+        "--sentences-per-timestamp",
+        type=int,
+        metavar="N",
+        help="neuer Zeitstempel alle N Saetze (Default 2; 0 = ganzer Sprecher-Beitrag am Stueck)",
+    )
     run.add_argument("--pdf", action="store_true", help="zusaetzlich PDF erzeugen")
     run.add_argument("--output", help="Ausgabeverzeichnis (Default: ./output)")
 
@@ -68,6 +74,7 @@ def main(argv: list[str] | None = None) -> int:
         _set("WHISPER_MODEL", args.model)
         _set("WHISPER_COMPUTE_TYPE", args.compute_type)
         _set("DEVICE", args.device)
+        _set("SENTENCES_PER_TIMESTAMP", args.sentences_per_timestamp)
 
         # cuDNN-8-Libs fuer ctranslate2 bereitstellen + via LD_LIBRARY_PATH auffindbar
         # machen (re-exec). Muss vor dem Import von torch/whisperx geschehen.
