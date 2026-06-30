@@ -128,6 +128,42 @@ Ordnername tragen den **Original-Videonamen** (z. B. `# Transkript: meeting.mp4`
 > klaren Meldung ab). Enthält der Ton **keine Sprache** (Stille/Musik), wird ein leeres
 > Transkript erzeugt – kein Abbruch.
 
+## Bild-Annotation: wichtige Standbilder zum Transkript (Review-Oberfläche)
+
+Optionale Ausbaustufe (PRD §13): Nach der Transkription wichtige Video-**Standbilder**
+markieren und dem Transkript an der zeitlich passenden Stelle zuordnen – z. B. geteilte
+Folien/Bildschirme. Läuft vollständig lokal (nur `localhost`, kein Upload).
+
+```bash
+# einmalig die optionalen Pakete installieren (FastAPI + uvicorn)
+uv sync --extra review
+
+# 1) wie gewohnt transkribieren – schreibt zusätzlich output/<name>/transcript.json
+uv run audioscribe run input/meeting.mp4
+
+# 2) Review-Oberfläche starten (öffnet den Browser auf http://127.0.0.1:8765)
+uv run audioscribe review input/meeting.mp4        # oder: review output/meeting
+
+# 3) annotiertes Transkript erzeugen (Markdown, optional PDF)
+uv run audioscribe export output/meeting --pdf
+```
+
+**Ablauf in der Oberfläche:**
+
+1. Das Video ist scrub-/suchbar; das Transkript läuft synchron mit (Klick auf eine Zeile
+   springt im Video dorthin, Klick auf ein Thumbnail zur Markierung).
+2. **„📸 Frame markieren"** greift den aktuellen Wiedergabe-Zeitpunkt – abzüglich eines
+   **Lag-Offsets** (Default −2,5 s, in der UI justierbar) – extrahiert per ffmpeg ein
+   **framegenaues PNG** und legt es als Markierung an (optional mit Notiz).
+3. Markierungen erscheinen rechts als **Thumbnail-Liste** und lassen sich einzeln löschen.
+4. `audioscribe export` merged Transkript + Markierungen zu `transkript.annotiert.md`
+   (+ optional `.pdf`); das editierbare `transkript.md` bleibt **unberührt**.
+
+**Artefakte je Aufnahme:** `output/<name>/transcript.json`, `frames/<HH-MM-SS>.png`,
+`marks.json`, `transkript.annotiert.md`. Die Markierungen (`marks.json`) **überstehen
+erneute Transkriptionsläufe** – die Einfügeposition wird beim Export aus dem Zeitstempel
+berechnet, nicht fest gespeichert.
+
 ## Erster Lauf & Modell-Downloads
 
 Beim ersten `run` werden die Modellgewichte einmalig geladen und danach gecached

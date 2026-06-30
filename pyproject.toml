@@ -19,6 +19,15 @@ dependencies = [
     "fpdf2>=2.7",
 ]
 
+[project.optional-dependencies]
+# Optionale Review-/Bild-Annotations-Oberflaeche (PRD §13, NFR-7). Lokaler Webserver;
+# der Kern-CLI (Transkription/Diarisierung) bleibt ohne diese Pakete lauffaehig.
+# Installation: uv sync --extra review
+review = [
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
+]
+
 [project.scripts]
 audioscribe = "audioscribe.cli:main"
 
