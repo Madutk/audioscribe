@@ -1,0 +1,37 @@
+# Python / uv
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.uv/
+uv.lock.bak
+
+# Modelle / Caches (lokal, gross - nicht versionieren)
+models/
+*.bin
+*.pt
+*.onnx
+.cache/
+
+# audioscribe Laufzeit-Artefakte
+input/
+output/
+work/
+*.mp3
+*.m4a
+*.wav
+*.flac
+*.ogg
+*.mp4
+*.srt
+*.pdf
+
+# Secrets (HuggingFace-Token fuer pyannote)
+.env
+.env.local
+
+# IDE / OS
+.idea/
+.vscode/
+Thumbs.db
+desktop.ini
