@@ -3,12 +3,15 @@
 Befehle:
   doctor  - Umgebungs-Check (Python/ffmpeg/CUDA/WhisperX/pyannote/HF-Token)
   run     - Audiodatei transkribieren + diarisieren -> Markdown (optional PDF)
+  review  - lokale Review-Oberflaeche: Video + Transkript, wichtige Frames markieren (PRD §13)
+  export  - Transkript + Markierungen zu annotiertem Markdown/PDF mergen (FR-18)
 """
 
 from __future__ import annotations
 
 import argparse
 import os
+from pathlib import Path
 
 from audioscribe import __version__
 
@@ -17,6 +20,20 @@ def _set(name: str, value: object) -> None:
     """Mappt CLI-Flags auf die AUDIOSCRIBE_*-Umgebungsvariablen (vor Config-Import)."""
     if value is not None:
         os.environ[f"AUDIOSCRIBE_{name}"] = str(value)
+
+
+def _resolve_out_dir(target: str) -> Path:
+    """Mappt ``ORDNER|VIDEO`` auf den Ausgabeordner ``output/<name>``.
+
+    Ist ``target`` ein vorhandenes Verzeichnis, wird es direkt genutzt; sonst wird der
+    Ausgabeordner aus dem Dateistamm unter ``settings.output_dir`` abgeleitet.
+    """
+    p = Path(target)
+    if p.is_dir():
+        return p
+    from audioscribe.config import settings
+
+    return settings.output_dir / p.stem
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -54,6 +71,21 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument("--pdf", action="store_true", help="zusaetzlich PDF erzeugen")
     run.add_argument("--output", help="Ausgabeverzeichnis (Default: ./output)")
 
+    rev = sub.add_parser(
+        "review", help="Review-Oberflaeche: Video + Transkript, wichtige Frames markieren"
+    )
+    rev.add_argument(
+        "target", metavar="ORDNER|VIDEO", help="Ausgabeordner (output/<name>) ODER Videopfad"
+    )
+    rev.add_argument("--port", type=int, default=8765, help="HTTP-Port (Default: 8765)")
+    rev.add_argument("--no-browser", action="store_true", help="Browser nicht automatisch oeffnen")
+
+    exp = sub.add_parser(
+        "export", help="Transkript + Markierungen zu annotiertem Markdown/PDF mergen"
+    )
+    exp.add_argument("target", metavar="ORDNER|VIDEO", help="Ausgabeordner (output/<name>) ODER Videopfad")
+    exp.add_argument("--pdf", action="store_true", help="zusaetzlich annotiertes PDF erzeugen")
+
     args = parser.parse_args(argv)
 
     if args.command == "doctor":
@@ -89,6 +121,35 @@ def main(argv: list[str] | None = None) -> int:
 
         result = run_pipeline(args.media, output_dir=args.output, make_pdf=args.pdf)
         print(f"\nFertig. Transkript: {result.output_path}")
+        return 0
+
+    if args.command == "review":
+        out_dir = _resolve_out_dir(args.target)
+        from audioscribe.review.server import serve
+
+        try:
+            serve(out_dir, port=args.port, open_browser=not args.no_browser)
+        except ModuleNotFoundError:
+            print(
+                "Die Review-Oberflaeche benoetigt fastapi + uvicorn. Installiere sie mit:\n"
+                "  uv sync --extra review"
+            )
+            return 1
+        except FileNotFoundError as exc:
+            print(str(exc))
+            return 1
+        return 0
+
+    if args.command == "export":
+        out_dir = _resolve_out_dir(args.target)
+        from audioscribe.review.exporter import export_annotated
+
+        try:
+            out_md = export_annotated(out_dir, make_pdf=args.pdf)
+        except FileNotFoundError as exc:
+            print(str(exc))
+            return 1
+        print(f"Annotiertes Transkript: {out_md}")
         return 0
 
     parser.print_help()

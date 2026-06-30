@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>AudioScribe Review</title>
+<style>
+  :root { --bg:#1e1e24; --panel:#26262e; --fg:#e8e8ec; --muted:#9a9aa8; --accent:#5b8def; --hot:#3a3a48; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:14px/1.5 system-ui, sans-serif; background:var(--bg); color:var(--fg); }
+  header { padding:10px 16px; background:var(--panel); display:flex; gap:16px; align-items:center; flex-wrap:wrap; }
+  header h1 { font-size:15px; margin:0; font-weight:600; }
+  header .meta { color:var(--muted); font-size:12px; }
+  .wrap { display:flex; gap:16px; padding:16px; align-items:flex-start; }
+  .left { flex:2; min-width:0; }
+  .right { flex:1; min-width:280px; max-height:calc(100vh - 120px); overflow:auto; }
+  video { width:100%; background:#000; border-radius:6px; }
+  .controls { margin-top:10px; display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  button { background:var(--accent); color:#fff; border:0; padding:9px 14px; border-radius:6px; cursor:pointer; font-weight:600; }
+  button.secondary { background:var(--hot); }
+  button:disabled { opacity:.5; cursor:default; }
+  input, label { font:inherit; }
+  input[type=number] { width:60px; }
+  input[type=text] { flex:1; min-width:120px; padding:8px; border-radius:6px; border:1px solid #3a3a48; background:#1b1b22; color:var(--fg); }
+  .section-title { font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin:4px 0 8px; }
+  .transcript { background:var(--panel); border-radius:6px; padding:8px; max-height:300px; overflow:auto; }
+  .para { padding:4px 8px; border-radius:4px; cursor:pointer; }
+  .para:hover { background:var(--hot); }
+  .para.active { background:#34406a; }
+  .para .ts { color:var(--accent); font-variant-numeric:tabular-nums; margin-right:6px; }
+  .para .spk { color:var(--muted); }
+  .mark { display:flex; gap:10px; background:var(--panel); border-radius:6px; padding:8px; margin-bottom:8px; align-items:flex-start; }
+  .mark img { width:120px; border-radius:4px; cursor:pointer; background:#000; }
+  .mark .info { flex:1; min-width:0; }
+  .mark .info .ts { color:var(--accent); font-variant-numeric:tabular-nums; }
+  .mark .info .note { color:var(--muted); font-size:12px; word-break:break-word; }
+  .mark .del { background:transparent; color:#e0708a; padding:2px 6px; }
+  .empty { color:var(--muted); font-size:13px; padding:8px; }
+  .hint { color:var(--muted); font-size:12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>AudioScribe&nbsp;Review</h1>
+  <span class="meta" id="meta"></span>
+</header>
+
+<div class="wrap">
+  <div class="left">
+    <video id="player" controls preload="metadata" src="/video"></video>
+    <div class="controls">
+      <button id="markBtn">📸 Frame markieren</button>
+      <label class="hint">Lag&nbsp;−<input type="number" id="lag" value="2.5" step="0.5" min="0" />s</label>
+      <input type="text" id="note" placeholder="Notiz (optional, z. B. „Folie 3 – Quartalszahlen“)" />
+    </div>
+    <p class="hint">Tipp: Leertaste = Play/Pause · Klick auf eine Transkriptzeile springt im Video dorthin · Klick auf ein Thumbnail springt zur Markierung.</p>
+
+    <div class="section-title">Transkript</div>
+    <div class="transcript" id="transcript"></div>
+  </div>
+
+  <div class="right">
+    <div class="section-title">Markierungen (<span id="markCount">0</span>)</div>
+    <div id="marks"></div>
+  </div>
+</div>
+
+<script>
+const player = document.getElementById('player');
+const fmt = s => { s = Math.max(0, Math.round(s)); const h=String(Math.floor(s/3600)).padStart(2,'0'),
+  m=String(Math.floor(s%3600/60)).padStart(2,'0'), x=String(s%60).padStart(2,'0'); return `${h}:${m}:${x}`; };
+
+let paragraphs = [];
+
+async function loadTranscript() {
+  const d = await (await fetch('/api/transcript')).json();
+  paragraphs = d.paragraphs || [];
+  document.getElementById('meta').textContent =
+    `${d.source} · ${fmt(d.duration_s)} · ${d.language} · ${d.num_speakers} Sprecher`;
+  const box = document.getElementById('transcript');
+  box.innerHTML = '';
+  paragraphs.forEach((p, i) => {
+    const el = document.createElement('div');
+    el.className = 'para'; el.dataset.i = i; el.dataset.start = p.start;
+    el.innerHTML = `<span class="ts">${fmt(p.start)}</span><span class="spk">${p.speaker}:</span> ` +
+      p.text.replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
+    el.onclick = () => { player.currentTime = p.start; player.play(); };
+    box.appendChild(el);
+  });
+}
+
+function highlightActive() {
+  const t = player.currentTime;
+  let active = -1;
+  for (let i = 0; i < paragraphs.length; i++) { if (paragraphs[i].start <= t) active = i; else break; }
+  document.querySelectorAll('.para').forEach(el =>
+    el.classList.toggle('active', Number(el.dataset.i) === active));
+}
+
+async function loadMarks() {
+  const marks = await (await fetch('/api/marks')).json();
+  document.getElementById('markCount').textContent = marks.length;
+  const box = document.getElementById('marks');
+  box.innerHTML = '';
+  if (!marks.length) { box.innerHTML = '<div class="empty">Noch keine Markierungen.</div>'; return; }
+  marks.forEach(m => {
+    const el = document.createElement('div');
+    el.className = 'mark';
+    el.innerHTML =
+      `<img src="/${m.png}" title="Zur Markierung springen" />
+       <div class="info"><div class="ts">${fmt(m.t)}</div>
+       <div class="note">${(m.note||'').replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]))}</div></div>
+       <button class="del" title="Markierung löschen">✕</button>`;
+    el.querySelector('img').onclick = () => { player.currentTime = m.t; };
+    el.querySelector('.del').onclick = async () => {
+      await fetch('/api/mark', { method:'DELETE', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ png: m.png }) });
+      loadMarks();
+    };
+    box.appendChild(el);
+  });
+}
+
+document.getElementById('markBtn').onclick = async () => {
+  const lag = parseFloat(document.getElementById('lag').value) || 0;
+  const noteEl = document.getElementById('note');
+  const t = Math.max(0, player.currentTime - lag);
+  const btn = document.getElementById('markBtn');
+  btn.disabled = true; btn.textContent = '⏳ Extrahiere …';
+  try {
+    const r = await fetch('/api/mark', { method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ t, note: noteEl.value.trim() || null }) });
+    if (!r.ok) alert('Fehler: ' + (await r.text()));
+    else { noteEl.value = ''; loadMarks(); }
+  } finally { btn.disabled = false; btn.textContent = '📸 Frame markieren'; }
+};
+
+player.addEventListener('timeupdate', highlightActive);
+loadTranscript().then(highlightActive);
+loadMarks();
+</script>
+</body>
+</html>

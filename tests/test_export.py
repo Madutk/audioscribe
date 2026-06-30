@@ -1,6 +1,7 @@
+import json
 from pathlib import Path
 
-from audioscribe.export import render_markdown
+from audioscribe.export import render_markdown, transcript_to_dict, write_transcript_json
 from audioscribe.models import Paragraph, TranscriptMeta, TranscriptResult
 
 
@@ -33,3 +34,30 @@ def test_render_markdown_has_header_and_lines():
 def test_render_markdown_ends_with_newline():
     md = render_markdown(_sample())
     assert md.endswith("\n")
+
+
+def test_transcript_to_dict_structure():
+    d = transcript_to_dict(_sample())
+    assert d["version"] == 1
+    assert d["source"] == "meeting.m4a"
+    assert d["num_speakers"] == 2
+    assert "source_path" in d  # absoluter Pfad zum Original-Medium (FR-12)
+    assert d["paragraphs"][0] == {
+        "index": 0,
+        "start": 5.0,
+        "end": 10.0,
+        "speaker": "Sprecher 1",
+        "text": "Guten Morgen, fangen wir an.",
+    }
+    assert d["paragraphs"][1]["index"] == 1
+    assert d["paragraphs"][1]["text"] == "Ja, einverstanden."
+
+
+def test_write_transcript_json_roundtrip(tmp_path):
+    out = write_transcript_json(_sample(), tmp_path)
+    assert out.name == "transcript.json"
+    assert out.parent.name == "meeting"  # <out_dir>/<stem>/transcript.json
+    data = json.loads(out.read_text(encoding="utf-8"))
+    assert data["language"] == "de"
+    assert len(data["paragraphs"]) == 2
+    assert data["paragraphs"][1]["speaker"] == "Sprecher 2"

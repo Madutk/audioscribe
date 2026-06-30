@@ -1,7 +1,12 @@
-"""Export des Transkripts als Markdown (Primaerformat, FR-7) und optional PDF (FR-8)."""
+"""Export des Transkripts als Markdown (Primaerformat, FR-7) und optional PDF (FR-8).
+
+Zusaetzlich wird eine maschinenlesbare ``transcript.json`` geschrieben (FR-12) – die
+Eingabe fuer die nachgelagerte Review-/Bild-Annotations-Schicht (PRD §13).
+"""
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from audioscribe.models import TranscriptResult, format_timecode
@@ -48,6 +53,53 @@ def write_markdown(result: TranscriptResult, out_dir: Path) -> Path:
     out_md = target_dir / "transkript.md"
     out_md.write_text(render_markdown(result), encoding="utf-8")
     return out_md
+
+
+# Schema-Version der transcript.json; bei inkompatiblen Aenderungen hochzaehlen.
+TRANSCRIPT_JSON_VERSION = 1
+
+
+def transcript_to_dict(result: TranscriptResult) -> dict:
+    """Maschinenlesbare Repraesentation des Transkripts fuer die Review-Schicht (FR-12).
+
+    Enthaelt die Absaetze (Einfuege-Einheit fuer Bild-Markierungen) samt Zeitstempeln
+    sowie den **absoluten Pfad zum Original-Medium** – das extrahierte WAV enthaelt
+    keine Bilder, die Review-UI braucht das Originalvideo (PRD §13.8).
+    """
+    m = result.meta
+    return {
+        "version": TRANSCRIPT_JSON_VERSION,
+        "source": m.source.name,
+        "source_path": str(Path(m.source).resolve()),
+        "duration_s": m.duration_s,
+        "language": m.language,
+        "num_speakers": m.num_speakers,
+        "model": m.model,
+        "created": m.created,
+        "paragraphs": [
+            {
+                "index": i,
+                "start": p.start,
+                "end": p.end,
+                "speaker": p.speaker,
+                "text": p.text,
+            }
+            for i, p in enumerate(result.paragraphs)
+        ],
+    }
+
+
+def write_transcript_json(result: TranscriptResult, out_dir: Path) -> Path:
+    """Schreibt ``<out_dir>/<stem>/transcript.json`` und liefert den Pfad (FR-12)."""
+    stem = result.meta.source.stem
+    target_dir = Path(out_dir) / stem
+    target_dir.mkdir(parents=True, exist_ok=True)
+    out_json = target_dir / "transcript.json"
+    out_json.write_text(
+        json.dumps(transcript_to_dict(result), ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    return out_json
 
 
 def _unicode_fonts() -> tuple[str, str] | None:

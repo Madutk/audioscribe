@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 
 from audioscribe.config import settings
-from audioscribe.export import write_markdown, write_pdf
+from audioscribe.export import write_markdown, write_pdf, write_transcript_json
 from audioscribe.models import TranscriptMeta, TranscriptResult
 from audioscribe.pipeline.audio import load_audio
 from audioscribe.pipeline.diarize import diarize
@@ -92,6 +92,10 @@ def run_pipeline(
     md_path = write_markdown(transcript, out_dir)
     transcript.output_path = md_path
     reporter.info(f"Markdown: {md_path}")
+
+    # Maschinenlesbares Transkript fuer die nachgelagerte Review-/Annotations-Schicht (FR-12).
+    json_path = write_transcript_json(transcript, out_dir)
+    reporter.info(f"JSON: {json_path}")
 
     if make_pdf:
         pdf_path = write_pdf(transcript, md_path.with_suffix(".pdf"))
