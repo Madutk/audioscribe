@@ -6,7 +6,11 @@ dem Originalvideo extrahiert. fastapi/uvicorn werden erst INNERHALB der Funktion
 importiert, damit der Kern-CLI ohne diese Pakete lauffaehig bleibt.
 """
 
-from __future__ import annotations
+# Bewusst OHNE 'from __future__ import annotations': FastAPI loest String-Annotationen
+# nur gegen die Modul-Globals auf. MarkIn/DeleteIn werden aber erst INNERHALB von
+# create_app() definiert (damit pydantic nicht beim Import gebraucht wird) - als String
+# waeren sie unauffindbar und der Request-Body landete faelschlich als Query-Parameter
+# (POST /api/mark antwortete dann mit 422).
 
 import json
 import webbrowser
