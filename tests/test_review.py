@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from audioscribe.review.frames import build_extract_cmd, frame_filename
 from audioscribe.review.marks import Mark, load_marks, save_marks
 from audioscribe.review.merge import render_markdown_with_marks
@@ -96,3 +98,24 @@ def test_merge_empty_transcript_still_lists_images():
     data = {**_data(), "paragraphs": []}
     md = render_markdown_with_marks(data, [Mark(t=5.0, png="frames/00-00-05.png")])
     assert "(frames/00-00-05.png)" in md
+
+
+# --- Regression: POST /api/mark nimmt einen JSON-Body ---
+
+
+def test_api_mark_liest_json_body(tmp_path):
+    """MarkIn wird erst in create_app() definiert; mit 'from __future__ import annotations'
+    fand FastAPI die Klasse nicht und erwartete den Body als Query-Parameter (422)."""
+    pytest.importorskip("fastapi")
+    from fastapi.testclient import TestClient
+
+    from audioscribe.review.server import create_app
+
+    (tmp_path / "transcript.json").write_text(
+        json.dumps({"source_path": str(tmp_path / "fehlt.mp4"), "paragraphs": []}),
+        encoding="utf-8",
+    )
+    client = TestClient(create_app(tmp_path))
+    response = client.post("/api/mark", json={"t": 1.0, "note": "hallo"})
+    # 404 = Video fehlt (erwartet); entscheidend ist: KEIN 422 wegen des Bodys.
+    assert response.status_code != 422
