@@ -32,7 +32,8 @@ cu124 = [
     "torch>=2.4,<2.7",
     "torchaudio>=2.4,<2.7",
 ]
-# Optionale Review-/Bild-Annotations-Oberflaeche (PRD §13, NFR-7). Lokaler Webserver;
+# Optionale Browser-Oberflaechen: Review/Bild-Annotation (PRD §13, NFR-7) und die
+# Stapelverarbeitung ganzer Ordner ('audioscribe ui'). Lokaler Webserver;
 # der Kern-CLI (Transkription/Diarisierung) bleibt ohne diese Pakete lauffaehig.
 # Installation: uv sync --extra cu124 --extra review (bzw. --extra cpu --extra review)
 review = [

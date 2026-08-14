@@ -28,8 +28,8 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 # Abhängigkeiten installieren — GENAU EINE Backend-Variante wählen:
 uv sync --extra cu124      # Rechner MIT NVIDIA-GPU (CUDA-PyTorch)
 uv sync --extra cpu        # Rechner OHNE NVIDIA-Karte (schlanke CPU-Wheels, ~3 GB weniger)
-# (beide gleichzeitig lehnt uv mit einem Konfliktfehler ab; die Review-Oberfläche
-#  kommt bei Bedarf dazu: uv sync --extra cu124 --extra review)
+# (beide gleichzeitig lehnt uv mit einem Konfliktfehler ab; die Browser-Oberflächen
+#  kommen bei Bedarf dazu: uv sync --extra cu124 --extra review)
 #
 # WICHTIG auf CPU-Rechnern: uv run synct standardmäßig OHNE Extras und würde das
 # große PyPI-CUDA-torch zurückinstallieren — daher das Extra auch beim Ausführen
@@ -109,6 +109,61 @@ Granularität auf Segment-Ebene zurück.
 
 Namen werden bei Bedarf manuell nachgetragen (Markdown ist das editierbare
 Primärformat; PDF wird daraus optional erzeugt).
+
+## Browser-Oberfläche: ganze Ordner transkribieren
+
+Wer nicht je Datei einen CLI-Aufruf tippen möchte: `audioscribe ui` startet eine schlanke
+Oberfläche, in der **Eingangs- und Ausgangsordner** gewählt werden. Alle darin gefundenen
+Audio-/Videodateien werden **nacheinander** transkribiert, der Fortschritt läuft live mit.
+Vollständig lokal (nur `localhost`, kein Upload).
+
+```bash
+# einmalig die optionalen Pakete installieren (FastAPI + uvicorn)
+uv sync --extra cu124 --extra review      # bzw. --extra cpu --extra review
+
+uv run audioscribe ui                     # öffnet http://127.0.0.1:8766
+uv run audioscribe ui --port 9000 --no-browser
+```
+
+**Ablauf in der Oberfläche:**
+
+1. **Eingangs- und Ausgangsordner** wählen – entweder über „📁 Waehlen" (Ordner-Browser mit
+   Schnellzielen für Projekt, Home und Windows-Laufwerke) oder direkt ins Textfeld getippt.
+   Die zuletzt benutzten Ordner und Optionen werden **serverseitig gemerkt** und stehen nach
+   einem Neustart wieder da – unabhängig von Browser und Adresse.
+2. Die **Dateiliste** zeigt alle gefundenen Medien mit Länge und Größe. Jede Datei hat ein
+   **Kontrollkästchen**; vorausgewählt sind die noch offenen. Schnellschalter: „Alle",
+   „Nur offene", „Keine". Wer eine bereits transkribierte Datei ankreuzt, lässt sie **neu**
+   laufen – die Markierung „bereits transkribiert" bleibt sichtbar.
+3. **Optionen**: Modell, Sprache, Gerät (`cuda` ist ausgegraut, wenn keine GPU verfügbar ist)
+   und Sprecher-Diarisierung an/aus.
+4. **„▶ Transkription starten"** – je Datei ein Fortschrittsbalken, dazu ein Gesamtbalken über
+   die Audio-Gesamtlänge und eine **Restzeit**. Schlägt eine Datei fehl, läuft der Stapel mit
+   der nächsten weiter. Am Ende steht eine Zusammenfassung.
+
+Ergebnisse landen wie gewohnt unter `<Ausgangsordner>/<Dateiname>/transkript.md`. Jede Datei
+läuft als eigener `audioscribe run`-Subprozess – der Lauf hängt also **nicht** am Browser-Tab
+und läuft weiter, wenn er geschlossen wird (Beenden per „■ Abbrechen" oder Strg+C im Terminal).
+
+**Woher der Fortschritt kommt:** WhisperX meldet während der Transkription den Anteil der
+bereits verarbeiteten Audio-Abschnitte, pyannote während der Diarisierung den Anteil der
+Segmentierung und Sprecher-Einbettungen. Die Restzeit wird aus den **bereits fertigen Dateien**
+geschätzt (Audiolänge gegen Laufzeit, getrennt nach festem Aufwand je Datei und Durchsatz) und
+erscheint deshalb erst, sobald die erste Datei durch ist. Dateien ohne auslesbare Länge
+(z. B. manche `.ts`-Container) werden separat ausgewiesen statt geraten.
+
+Dieselben Fortschrittszeilen lassen sich auch im Terminal einschalten – standardmäßig bleibt
+die Ausgabe dort ruhig:
+
+```bash
+AUDIOSCRIBE_PROGRESS=1 uv run audioscribe run input/meeting.mp4
+```
+
+**Windows/WSL:** Die Adresse einfach im Windows-Browser öffnen – WSL2 leitet `127.0.0.1`
+durch. Öffnet sich kein Browser automatisch, die im Terminal ausgegebene URL von Hand
+aufrufen. Ein aus dem Explorer kopierter Pfad wie `C:\Users\user\Videos` kann direkt
+eingefügt werden und wird zu `/mnt/c/Users/user/Videos` – Medien auf dem WSL-Dateisystem
+(z. B. `input/`) werden allerdings spürbar schneller gelesen als solche unter `/mnt/c`.
 
 ## Video transkribieren
 
@@ -250,6 +305,7 @@ uv run pytest        # Unit-Tests (reine Logik, keine Modell-Downloads)
 
 ## Status / Scope
 
-Basisstufe gemäß `PRD.md`: eine Datei pro Aufruf, Markdown-Ausgabe (+ optional PDF),
-Diarisierung als „Sprecher N" (keine echte Personen-Identifikation). AudioScribe ist die
-Transkriptions-Basisstufe für die übergeordnete Meeting-Protokoll-Pipeline.
+Basisstufe gemäß `PRD.md`: eine Datei pro CLI-Aufruf (die Browser-Oberfläche arbeitet ganze
+Ordner nacheinander ab), Markdown-Ausgabe (+ optional PDF), Diarisierung als „Sprecher N"
+(keine echte Personen-Identifikation). AudioScribe ist die Transkriptions-Basisstufe für die
+übergeordnete Meeting-Protokoll-Pipeline.

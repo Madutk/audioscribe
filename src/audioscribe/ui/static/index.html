@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>AudioScribe</title>
+<style>
+  :root { --bg:#1e1e24; --panel:#26262e; --fg:#e8e8ec; --muted:#9a9aa8; --accent:#5b8def; --hot:#3a3a48;
+          --ok:#5fd08a; --err:#e0708a; --warn:#e0b070; --track:#1b1b22; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:14px/1.5 system-ui, sans-serif; background:var(--bg); color:var(--fg); }
+  header { padding:10px 16px; background:var(--panel); display:flex; gap:16px; align-items:center; flex-wrap:wrap; }
+  header h1 { font-size:15px; margin:0; font-weight:600; }
+  header .meta { color:var(--muted); font-size:12px; }
+  .wrap { display:flex; gap:16px; padding:16px; align-items:flex-start; flex-wrap:wrap; }
+  .left { flex:1; min-width:340px; }
+  .right { flex:1.2; min-width:340px; }
+  .card { background:var(--panel); border-radius:6px; padding:12px; margin-bottom:16px; }
+  .section-title { font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin:0 0 8px;
+                   display:flex; gap:8px; align-items:baseline; flex-wrap:wrap; }
+  .section-title .hint { text-transform:none; letter-spacing:normal; }
+  button { background:var(--accent); color:#fff; border:0; padding:9px 14px; border-radius:6px; cursor:pointer; font:inherit; font-weight:600; }
+  button.secondary { background:var(--hot); }
+  button.danger { background:#8a3a4c; }
+  button.link { background:transparent; color:var(--accent); padding:2px 6px; font-weight:500; }
+  button:disabled { opacity:.5; cursor:default; }
+  button.start { width:100%; padding:12px; font-size:15px; }
+  input, select, label { font:inherit; }
+  input[type=text] { width:100%; padding:8px; border-radius:6px; border:1px solid #3a3a48; background:var(--track); color:var(--fg); }
+  select { padding:8px; border-radius:6px; border:1px solid #3a3a48; background:var(--track); color:var(--fg); width:100%; }
+  .row { display:flex; gap:8px; align-items:center; margin-bottom:10px; }
+  .row > input[type=text] { flex:1; min-width:0; }
+  .grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .field label { display:block; font-size:12px; color:var(--muted); margin-bottom:4px; }
+  .checks { display:flex; gap:16px; flex-wrap:wrap; margin-top:12px; }
+  .checks label { display:flex; gap:6px; align-items:center; cursor:pointer; }
+  .files { max-height:300px; overflow:auto; }
+  .file { display:flex; gap:8px; align-items:center; padding:4px 6px; border-radius:4px; }
+  .file:nth-child(odd) { background:#2c2c36; }
+  .file .name { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; cursor:pointer; }
+  .file .len, .file .size { color:var(--muted); font-size:12px; font-variant-numeric:tabular-nums; }
+  .badge { font-size:11px; padding:1px 7px; border-radius:10px; background:var(--hot); color:var(--muted); white-space:nowrap; }
+  .badge.fertig { background:#1f4a33; color:var(--ok); }
+  .badge.laeuft { background:#274070; color:#a9c4ff; }
+  .badge.fehler { background:#4a2030; color:var(--err); }
+  .badge.abgebrochen { background:#4a3a20; color:var(--warn); }
+  .bar { height:6px; border-radius:3px; background:var(--track); overflow:hidden; }
+  .bar > i { display:block; height:100%; background:var(--accent); width:0; transition:width .4s linear; }
+  .file .bar { width:70px; flex:none; }
+  .bar.big { height:10px; border-radius:5px; }
+  pre#log { background:#16161b; border-radius:6px; padding:10px; margin:0; height:300px; overflow:auto;
+            font:12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; white-space:pre-wrap; word-break:break-word; }
+  .status { margin:10px 0 6px; font-size:13px; }
+  .status .stage { color:var(--accent); }
+  .eta { color:var(--muted); font-size:12px; margin-top:6px; font-variant-numeric:tabular-nums; }
+  .summary { padding:10px; border-radius:6px; background:#1f3350; margin-bottom:12px; }
+  .hint { color:var(--muted); font-size:12px; }
+  .err { color:var(--err); font-size:13px; min-height:18px; }
+  /* Ordner-Dialog */
+  .overlay { position:fixed; inset:0; background:rgba(0,0,0,.6); display:none; align-items:center; justify-content:center; padding:20px; }
+  .overlay.open { display:flex; }
+  .dialog { background:var(--panel); border-radius:8px; width:min(680px,100%); max-height:80vh; display:flex; flex-direction:column; padding:14px; }
+  .crumbs { display:flex; flex-wrap:wrap; gap:2px; font-size:12px; margin-bottom:8px; }
+  .crumbs a, .links a { color:var(--accent); cursor:pointer; text-decoration:none; }
+  .links { display:flex; gap:10px; flex-wrap:wrap; font-size:12px; margin-bottom:10px; }
+  .dirlist { flex:1; overflow:auto; background:var(--track); border-radius:6px; padding:4px; min-height:180px; }
+  .dirlist div { padding:5px 8px; border-radius:4px; cursor:pointer; }
+  .dirlist div:hover { background:var(--hot); }
+  .dialog footer { display:flex; gap:10px; align-items:center; margin-top:10px; }
+  .dialog footer .hint { flex:1; }
+</style>
+</head>
+<body>
+<header>
+  <h1>AudioScribe</h1>
+  <span class="meta">Stapelverarbeitung: Ordner waehlen, Dateien ankreuzen, transkribieren</span>
+</header>
+
+<div class="wrap">
+  <div class="left">
+    <div class="card">
+      <p class="section-title">Ordner</p>
+      <div class="field"><label for="inDir">Eingangsordner</label></div>
+      <div class="row">
+        <input type="text" id="inDir" placeholder="/home/... oder C:\Users\..." />
+        <button class="secondary" id="pickIn">📁 Waehlen</button>
+      </div>
+      <div class="field"><label for="outDir">Ausgangsordner</label></div>
+      <div class="row">
+        <input type="text" id="outDir" placeholder="/home/.../output" />
+        <button class="secondary" id="pickOut">📁 Waehlen</button>
+      </div>
+      <p class="hint">Windows-Pfade koennen direkt eingefuegt werden – <code>C:\Users\…</code> wird zu <code>/mnt/c/Users/…</code>.</p>
+      <div class="err" id="pathErr"></div>
+    </div>
+
+    <div class="card">
+      <p class="section-title">
+        Dateien
+        <span class="hint" id="fileCount"></span>
+        <span style="flex:1"></span>
+        <button class="link" data-pick="all">Alle</button>
+        <button class="link" data-pick="open">Nur offene</button>
+        <button class="link" data-pick="none">Keine</button>
+      </p>
+      <div class="files" id="files"><p class="hint">Ordner waehlen …</p></div>
+    </div>
+
+    <div class="card">
+      <p class="section-title">Optionen</p>
+      <div class="grid">
+        <div class="field"><label for="model">Modell</label><select id="model"></select></div>
+        <div class="field"><label for="language">Sprache</label><select id="language"></select></div>
+        <div class="field"><label for="device">Geraet</label><select id="device"></select></div>
+      </div>
+      <div class="checks">
+        <label><input type="checkbox" id="diarize" checked /> Sprecher-Diarisierung</label>
+      </div>
+    </div>
+
+    <button class="start" id="start">▶ Transkription starten</button>
+    <div class="status" id="status"></div>
+    <div class="err" id="startErr"></div>
+  </div>
+
+  <div class="right">
+    <div class="card">
+      <p class="section-title">Fortschritt</p>
+      <div id="summary"></div>
+      <div class="bar big"><i id="overallBar"></i></div>
+      <div class="eta" id="eta">–</div>
+      <p class="section-title" style="margin-top:14px">Protokoll</p>
+      <pre id="log"></pre>
+      <div class="row" style="margin:10px 0 0">
+        <button class="danger" id="cancel" disabled>■ Abbrechen</button>
+        <span class="hint">Der Lauf laeuft im Server weiter – der Tab darf geschlossen werden.</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="overlay">
+  <div class="dialog">
+    <p class="section-title" id="dlgTitle">Ordner waehlen</p>
+    <div class="links" id="dlgLinks"></div>
+    <div class="crumbs" id="dlgCrumbs"></div>
+    <div class="dirlist" id="dlgList"></div>
+    <footer>
+      <span class="hint" id="dlgInfo"></span>
+      <button class="secondary" id="dlgCancel">Abbrechen</button>
+      <button id="dlgOk">Diesen Ordner waehlen</button>
+    </footer>
+  </div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+let defaults = null;      // /api/defaults
+let scanned = [];         // zuletzt gescannte Dateien
+let offset = 0;           // gelesene Log-Zeilen
+let dlgTarget = null;     // 'in' | 'out'
+let dlgPath = '';         // aktuell im Dialog gezeigter Ordner
+
+async function api(path, opts) {
+  const res = await fetch(path, opts);
+  let data = null;
+  try { data = await res.json(); } catch (e) { /* leer */ }
+  if (!res.ok) throw new Error((data && data.detail) || res.statusText);
+  return data;
+}
+
+const post = (path, body) => api(path, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(body),
+});
+
+/** Sekunden -> "1:23:45" bzw. "4:05". */
+function hms(seconds) {
+  if (!seconds && seconds !== 0) return '–';
+  const s = Math.round(seconds), h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
+  const pad = (n) => String(n).padStart(2, '0');
+  return h ? `${h}:${pad(m)}:${pad(s % 60)}` : `${m}:${pad(s % 60)}`;
+}
+
+/** Restzeit bewusst grob: unter 30 min auf Minuten, darueber auf 5 min gerundet. */
+function coarse(seconds) {
+  const min = Math.max(1, Math.round(seconds / 60));
+  if (min < 30) return `${min} min`;
+  const rounded = Math.round(min / 5) * 5;
+  return rounded < 60 ? `${rounded} min` : `${Math.floor(rounded / 60)} h ${rounded % 60 || ''}`.trim();
+}
+
+// --- Start ------------------------------------------------------------------
+
+async function init() {
+  defaults = await api('/api/defaults');
+  fill($('model'), defaults.models, defaults.model);
+  fill($('language'), defaults.languages, defaults.language);
+  fill($('device'), defaults.devices, defaults.device);
+  if (defaults.cuda === false) {
+    const opt = [...$('device').options].find((o) => o.value === 'cuda');
+    if (opt) { opt.disabled = true; opt.textContent = 'cuda (nicht verfuegbar)'; }
+    if ($('device').value === 'cuda') $('device').value = 'auto';
+  }
+  $('diarize').checked = defaults.diarize !== false;
+  $('inDir').value = defaults.input_dir;
+  $('outDir').value = defaults.output_dir;
+  await scan();
+  setInterval(poll, 1000);
+  poll();
+}
+
+function fill(sel, values, chosen) {
+  const all = values.includes(chosen) ? values : [chosen, ...values];
+  sel.innerHTML = all.map((v) => `<option value="${esc(v)}">${esc(v)}</option>`).join('');
+  sel.value = chosen;
+}
+
+/** Ordner und Optionen serverseitig merken (ueberlebt Neustart und Adresswechsel). */
+const remember = () => post('/api/state', {
+  input_dir: $('inDir').value,
+  output_dir: $('outDir').value,
+  model: $('model').value,
+  language: $('language').value,
+  device: $('device').value,
+  diarize: $('diarize').checked,
+}).catch(() => {});
+
+// --- Dateiliste -------------------------------------------------------------
+
+async function scan() {
+  $('pathErr').textContent = '';
+  try {
+    const data = await api(`/api/scan?input_dir=${encodeURIComponent($('inDir').value)}`
+      + `&output_dir=${encodeURIComponent($('outDir').value)}`);
+    $('inDir').value = data.input_dir;
+    $('outDir').value = data.output_dir;
+    scanned = data.files;
+    $('files').innerHTML = data.count
+      ? data.files.map((f) => `<div class="file" data-name="${esc(f.name)}">
+           <input type="checkbox" class="sel" ${f.done ? '' : 'checked'} />
+           <span class="name" title="${esc(f.name)}">${esc(f.name)}</span>
+           <span class="len">${f.seconds ? hms(f.seconds) : '?'}</span>
+           <span class="size">${f.mb} MB</span>
+           <span class="bar"><i></i></span>
+           <span class="badge">${f.done ? 'bereits transkribiert' : 'offen'}</span></div>`).join('')
+      : '<p class="hint">Keine Medien-Dateien in diesem Ordner.</p>';
+    updateCount();
+  } catch (err) {
+    $('pathErr').textContent = err.message;
+    $('files').innerHTML = '';
+    scanned = [];
+    updateCount();
+  }
+}
+
+const selectedNames = () => [...$('files').querySelectorAll('.file')]
+  .filter((row) => row.querySelector('.sel').checked)
+  .map((row) => row.dataset.name);
+
+function updateCount() {
+  const names = selectedNames();
+  const seconds = scanned
+    .filter((f) => names.includes(f.name))
+    .reduce((sum, f) => sum + (f.seconds || 0), 0);
+  $('fileCount').textContent = scanned.length
+    ? `– ${names.length} von ${scanned.length} ausgewaehlt${seconds ? ' · ' + hms(seconds) + ' Audio' : ''}`
+    : '';
+  $('start').disabled = names.length === 0;
+}
+
+function pick(mode) {
+  for (const row of $('files').querySelectorAll('.file')) {
+    const done = scanned.find((f) => f.name === row.dataset.name)?.done;
+    row.querySelector('.sel').checked = mode === 'all' || (mode === 'open' && !done);
+  }
+  updateCount();
+}
+
+// --- Ordner-Dialog ----------------------------------------------------------
+
+async function openDialog(target) {
+  dlgTarget = target;
+  $('dlgTitle').textContent = target === 'in' ? 'Eingangsordner waehlen' : 'Ausgangsordner waehlen';
+  $('dlgLinks').innerHTML = defaults.quick_links
+    .map((l) => `<a data-path="${esc(l.path)}">${esc(l.label)}</a>`).join('');
+  $('overlay').classList.add('open');
+  await showDir(target === 'in' ? $('inDir').value : $('outDir').value);
+}
+
+async function showDir(path) {
+  try {
+    const data = await api('/api/browse?path=' + encodeURIComponent(path));
+    dlgPath = data.path;
+    $('dlgCrumbs').innerHTML = data.crumbs
+      .map((c) => `<a data-path="${esc(c.path)}">${esc(c.name)}</a>`).join('<span>/</span>');
+    const up = data.parent ? `<div data-path="${esc(data.parent)}">⬆ ..</div>` : '';
+    $('dlgList').innerHTML = up + (data.dirs.length
+      ? data.dirs.map((d) => `<div data-path="${esc(d.path)}">📁 ${esc(d.name)}</div>`).join('')
+      : '<p class="hint">Keine Unterordner.</p>');
+    $('dlgInfo').textContent = `${data.path} – ${data.media_count} Medien-Datei(en)`;
+  } catch (err) {
+    $('dlgInfo').textContent = err.message;
+  }
+}
+
+// --- Lauf -------------------------------------------------------------------
+
+async function start() {
+  $('startErr').textContent = '';
+  try {
+    await post('/api/start', {
+      input_dir: $('inDir').value,
+      output_dir: $('outDir').value,
+      files: selectedNames(),
+      model: $('model').value,
+      language: $('language').value,
+      device: $('device').value,
+      diarize: $('diarize').checked,
+    });
+    offset = 0;
+    $('log').textContent = '';
+    $('summary').innerHTML = '';
+    poll();
+  } catch (err) {
+    $('startErr').textContent = err.message;
+  }
+}
+
+async function poll() {
+  let s;
+  try { s = await api('/api/status?offset=' + offset); } catch (e) { return; }
+  offset = s.offset;
+
+  if (s.lines.length) {
+    const log = $('log');
+    const atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 40;
+    log.textContent += s.lines.join('\n') + '\n';
+    if (atBottom) log.scrollTop = log.scrollHeight;
+  }
+
+  $('start').disabled = s.running || selectedNames().length === 0;
+  $('cancel').disabled = !s.running;
+
+  if (s.running && s.current) {
+    const stage = s.stage
+      ? ` · <span class="stage">Stufe ${s.stage.index}/${s.stage.total}: ${esc(s.stage.name)}</span>` : '';
+    $('status').innerHTML = `Datei ${s.current.index} von ${s.total}: <b>${esc(s.current.name)}</b>${stage}`;
+  } else if (!s.running) {
+    $('status').textContent = '';
+  }
+
+  // Die Marken und Balken der Dateiliste bleiben nach dem Lauf stehen; erst ein
+  // Ordnerwechsel liest sie ueber /api/scan neu ein.
+  for (const f of s.files) {
+    const row = $('files').querySelector(`.file[data-name="${CSS.escape(f.name)}"]`);
+    if (!row) continue;
+    const badge = row.querySelector('.badge');
+    badge.textContent = f.state;
+    badge.className = 'badge ' + f.state;
+    row.querySelector('.bar > i').style.width = Math.round((f.fraction || 0) * 100) + '%';
+  }
+
+  const e = s.eta;
+  $('overallBar').style.width =
+    (e && e.audio_total_s ? Math.round((e.audio_done_s / e.audio_total_s) * 100) : 0) + '%';
+  if (e && e.audio_total_s) {
+    const rest = e.eta_s === null ? 'Restzeit wird geschaetzt …' : `noch ca. ${coarse(e.eta_s)}`;
+    const unknown = e.unknown_count ? ` (+${e.unknown_count} ohne bekannte Laenge)` : '';
+    $('eta').textContent = `${hms(e.audio_done_s)} von ${hms(e.audio_total_s)} Audio · ${rest}${unknown}`;
+  } else {
+    $('eta').textContent = s.running ? 'laeuft …' : '–';
+  }
+
+  $('summary').innerHTML = s.summary ? `<div class="summary">${esc(s.summary)}</div>` : '';
+}
+
+// --- Verdrahtung ------------------------------------------------------------
+
+$('pickIn').onclick = () => openDialog('in');
+$('pickOut').onclick = () => openDialog('out');
+$('dlgCancel').onclick = () => $('overlay').classList.remove('open');
+$('overlay').onclick = (e) => { if (e.target === $('overlay')) $('overlay').classList.remove('open'); };
+$('dlgOk').onclick = () => {
+  (dlgTarget === 'in' ? $('inDir') : $('outDir')).value = dlgPath;
+  $('overlay').classList.remove('open');
+  scan().then(remember);
+};
+for (const id of ['dlgList', 'dlgCrumbs', 'dlgLinks']) {
+  $(id).onclick = (e) => { const p = e.target.dataset.path; if (p) showDir(p); };
+}
+for (const id of ['inDir', 'outDir']) {
+  $(id).onchange = () => scan().then(remember);
+}
+for (const id of ['model', 'language', 'device', 'diarize']) {
+  $(id).onchange = remember;
+}
+$('files').onclick = (e) => {
+  if (e.target.classList.contains('sel')) updateCount();
+  else if (e.target.classList.contains('name')) {
+    const box = e.target.closest('.file').querySelector('.sel');
+    box.checked = !box.checked;
+    updateCount();
+  }
+};
+for (const btn of document.querySelectorAll('[data-pick]')) {
+  btn.onclick = () => pick(btn.dataset.pick);
+}
+$('start').onclick = start;
+$('cancel').onclick = () => api('/api/cancel', { method: 'POST' }).catch(() => {});
+
+init();
+</script>
+</body>
+</html>
