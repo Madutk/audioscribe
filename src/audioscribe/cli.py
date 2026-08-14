@@ -1,7 +1,7 @@
 """CLI-Einstiegspunkt fuer audioscribe.
 
 Befehle:
-  doctor  - Umgebungs-Check (Python/ffmpeg/CUDA/WhisperX/pyannote/HF-Token)
+  doctor  - Umgebungs-Check (Python/ffmpeg/Device(CUDA/CPU)/WhisperX/pyannote/HF-Token)
   run     - Audiodatei transkribieren + diarisieren -> Markdown (optional PDF)
   review  - lokale Review-Oberflaeche: Video + Transkript, wichtige Frames markieren (PRD §13)
   export  - Transkript + Markierungen zu annotiertem Markdown/PDF mergen (FR-18)
@@ -44,7 +44,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--version", action="version", version=f"audioscribe {__version__}")
     sub = parser.add_subparsers(dest="command")
 
-    sub.add_parser("doctor", help="Umgebungs-Check (Python/ffmpeg/CUDA/WhisperX/pyannote)")
+    sub.add_parser("doctor", help="Umgebungs-Check (Python/ffmpeg/Device/WhisperX/pyannote)")
 
     run = sub.add_parser("run", help="Audio-/Videodatei transkribieren und diarisieren")
     run.add_argument(
@@ -60,8 +60,13 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument("--min-speakers", type=int, help="Mindest-Sprecheranzahl")
     run.add_argument("--max-speakers", type=int, help="Maximal-Sprecheranzahl")
     run.add_argument("--model", help="Whisper-Modell (Default: large-v3)")
-    run.add_argument("--compute-type", help="Rechenpraezision (float16/int8_float16/int8)")
-    run.add_argument("--device", help="cuda (Default) oder cpu")
+    run.add_argument(
+        "--compute-type",
+        help="Rechenpraezision: auto (Default; cuda->float16, cpu->int8) | float16 | int8_float16 | int8",
+    )
+    run.add_argument(
+        "--device", help="auto (Default: CUDA falls verfuegbar, sonst CPU) | cuda | cpu"
+    )
     run.add_argument(
         "--sentences-per-timestamp",
         type=int,
@@ -108,11 +113,28 @@ def main(argv: list[str] | None = None) -> int:
         _set("DEVICE", args.device)
         _set("SENTENCES_PER_TIMESTAMP", args.sentences_per_timestamp)
 
-        # cuDNN-8-Libs fuer ctranslate2 bereitstellen + via LD_LIBRARY_PATH auffindbar
-        # machen (re-exec). Muss vor dem Import von torch/whisperx geschehen.
-        from audioscribe.config import settings
+        # Geraet aufloesen (auto -> cuda|cpu) und das Ergebnis in die Env zurueckschreiben:
+        # so gilt nach dem os.execv-Re-Exec des cuDNN-Bootstraps dieselbe Entscheidung.
+        from audioscribe.config import resolve_compute_type, resolve_device, settings
 
-        if settings.device.startswith("cuda"):
+        try:
+            device = resolve_device(settings.device)
+        except RuntimeError as exc:
+            print(str(exc))
+            return 1
+        compute_type = resolve_compute_type(settings.whisper_compute_type, device)
+        _set("DEVICE", device)
+        _set("WHISPER_COMPUTE_TYPE", compute_type)
+        print(f"Device: {device}, compute_type: {compute_type}")
+
+        # ctranslate2-Wheel fuer neuere glibc reparieren (beide Pfade, vor whisperx-Import).
+        from audioscribe.compat import ensure_ctranslate2_loadable
+
+        ensure_ctranslate2_loadable(log=print)
+
+        # cuDNN-8-Libs fuer ctranslate2 bereitstellen + via LD_LIBRARY_PATH auffindbar
+        # machen (re-exec). Muss vor dem Import von whisperx geschehen; nur im CUDA-Pfad.
+        if device.startswith("cuda"):
             from audioscribe.compat import ensure_native_libs
 
             ensure_native_libs(log=print)

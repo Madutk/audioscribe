@@ -6,8 +6,10 @@ Alle Pfade/Modelle an einer Stelle, ueberschreibbar via Umgebungsvariablen
 
 from __future__ import annotations
 
+import functools
 import os
 import shutil
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -57,11 +59,14 @@ class Settings:
     cache_dir: Path = field(default_factory=lambda: Path.home() / ".cache" / "audioscribe")
 
     # --- Rechen-Backend ---
-    device: str = field(default_factory=lambda: _env("DEVICE", "cuda"))
+    # Rohwert: "auto" (CUDA falls verfuegbar, sonst CPU) | "cuda[:N]" | "cpu".
+    # Aufloesung erst bei Gebrauch via resolve_device() (kein torch-Import beim Config-Import).
+    device: str = field(default_factory=lambda: _env("DEVICE", "auto"))
 
     # --- Stufe 1+2: Transkription (faster-whisper via WhisperX) ---
     whisper_model: str = field(default_factory=lambda: _env("WHISPER_MODEL", "large-v3"))
-    whisper_compute_type: str = field(default_factory=lambda: _env("WHISPER_COMPUTE_TYPE", "float16"))
+    # Rohwert: "auto" -> device-abhaengig (cuda: float16, cpu: int8), s. resolve_compute_type().
+    whisper_compute_type: str = field(default_factory=lambda: _env("WHISPER_COMPUTE_TYPE", "auto"))
     # "de" = Deutsch erzwingen (kein Sprach-Detection-Overhead); "auto" = erkennen lassen.
     whisper_language: str = field(default_factory=lambda: _env("WHISPER_LANGUAGE", "de"))
     batch_size: int = field(default_factory=lambda: int(_env("BATCH_SIZE", "8")))
@@ -93,6 +98,46 @@ class Settings:
 
 
 settings = Settings()
+
+
+@functools.lru_cache(maxsize=1)
+def cuda_available() -> bool:
+    """Probet CUDA via torch (lazy + gecacht); False auch bei fehlendem torch/CPU-Build."""
+    try:
+        import torch
+
+        return bool(torch.cuda.is_available())
+    except Exception:  # noqa: BLE001 - kein torch / kaputte Installation -> kein CUDA
+        return False
+
+
+def resolve_device(raw: str, cuda_check: Callable[[], bool] = cuda_available) -> str:
+    """Loest den Rohwert aus ``settings.device`` in ein konkretes Geraet auf.
+
+    ``"auto"`` -> ``"cuda"`` falls verfuegbar, sonst ``"cpu"``. Explizites
+    ``"cpu"``/``"cuda[:N]"`` bleibt unveraendert (bei ``cpu`` ohne CUDA-Probe);
+    explizit erzwungenes CUDA ohne verfuegbares CUDA ist ein harter Fehler.
+    """
+    value = raw.strip().lower()
+    if value == "auto":
+        return "cuda" if cuda_check() else "cpu"
+    if value.startswith("cuda") and not cuda_check():
+        raise RuntimeError(
+            f"Geraet '{raw}' angefordert, aber CUDA ist nicht verfuegbar. "
+            "Optionen: '--device auto' (automatischer CPU-Fallback), '--device cpu', "
+            "oder Installation pruefen mit 'audioscribe doctor' ('uv sync --extra cu124')."
+        )
+    return value
+
+
+def resolve_compute_type(raw: str, device: str) -> str:
+    """Loest ``"auto"`` device-abhaengig auf: cuda -> float16, cpu -> int8.
+
+    Explizite Werte gewinnen. (CTranslate2 unterstuetzt kein float16 auf CPU.)
+    """
+    if raw.strip().lower() != "auto":
+        return raw
+    return "float16" if device.startswith("cuda") else "int8"
 
 
 def ensure_ffmpeg_on_path() -> str:

@@ -9,10 +9,13 @@ einzige Online-Aktion ist der einmalige Download der Modellgewichte.
 Pipeline: **WhisperX** — faster-whisper `large-v3` (Transkription) → wav2vec2
 (Wort-Alignment) → pyannote `speaker-diarization-3.1` (Diarisierung). Die Modelle laufen
 sequenziell; der VRAM wird zwischen den Stufen freigegeben (Ziel-HW: RTX 3080, 8 GB).
+Läuft wahlweise auf **NVIDIA-GPU (CUDA, schnell)** oder **CPU-only (deutlich langsamer)**.
 
 ## Umgebung
 
-- **WSL2 / Ubuntu 24.04**, Python 3.12, NVIDIA-GPU mit CUDA (in WSL verfügbar).
+- **WSL2 / Ubuntu 24.04** (oder anderes Linux), Python 3.12.
+- **GPU optional**: NVIDIA-GPU mit CUDA (schnell) **oder** reiner CPU-Betrieb
+  (Rechner ohne NVIDIA-Karte; mehrfache Echtzeit-Laufzeit, s. „CPU-Betrieb" unten).
 - Paket-/Env-Verwaltung über **[uv](https://docs.astral.sh/uv/)**.
 - `ffmpeg` wird **gebündelt** mitgeliefert (`imageio-ffmpeg`) — kein System-`ffmpeg`/`sudo` nötig.
 
@@ -22,8 +25,16 @@ sequenziell; der VRAM wird zwischen den Stufen freigegeben (Ziel-HW: RTX 3080, 8
 # uv installieren (einmalig, falls noch nicht vorhanden)
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# Abhängigkeiten installieren (lädt u.a. CUDA-PyTorch + WhisperX)
-uv sync
+# Abhängigkeiten installieren — GENAU EINE Backend-Variante wählen:
+uv sync --extra cu124      # Rechner MIT NVIDIA-GPU (CUDA-PyTorch)
+uv sync --extra cpu        # Rechner OHNE NVIDIA-Karte (schlanke CPU-Wheels, ~3 GB weniger)
+# (beide gleichzeitig lehnt uv mit einem Konfliktfehler ab; die Review-Oberfläche
+#  kommt bei Bedarf dazu: uv sync --extra cu124 --extra review)
+#
+# WICHTIG auf CPU-Rechnern: uv run synct standardmäßig OHNE Extras und würde das
+# große PyPI-CUDA-torch zurückinstallieren — daher das Extra auch beim Ausführen
+# mitgeben: uv run --extra cpu audioscribe …
+# (Auf GPU-Rechnern ist das unkritisch: auch das PyPI-torch ist CUDA-fähig.)
 
 # HuggingFace-Token für die Diarisierung hinterlegen
 cp .env.example .env
@@ -56,6 +67,9 @@ uv run audioscribe run input/meeting.m4a --min-speakers 2 --max-speakers 5
 
 # Zeitstempel-Granularitaet: neuer Zeitstempel alle N Saetze (Default 2; 0 = ganzer Beitrag)
 uv run audioscribe run input/meeting.m4a --sentences-per-timestamp 3
+
+# Geraet: Default "auto" (CUDA falls verfuegbar, sonst CPU); erzwingen mit --device
+uv run audioscribe run input/meeting.m4a --device cpu
 ```
 
 ### Zeitstempel-Granularität
@@ -176,7 +190,8 @@ offline. Validiere die Qualität am ersten echten Sample und justiere ggf. nach 
 Zwei bekannte Reibungspunkte des aktuellen Stacks werden automatisch im Code behandelt
 (`src/audioscribe/compat.py`):
 
-- **cuDNN:** WhisperX pinnt `ctranslate2<4.5` (gegen cuDNN **8** gebaut), torch 2.6 bringt
+- **cuDNN** (betrifft nur den CUDA-Pfad; im CPU-Betrieb wird der Schritt komplett
+  übersprungen): WhisperX pinnt `ctranslate2<4.5` (gegen cuDNN **8** gebaut), torch 2.6 bringt
   aber cuDNN **9** mit. AudioScribe lädt die cuDNN-8-Bibliotheken **einmalig** separat nach
   (`~/.cache/audioscribe/cudnn8/`) und macht sie via `LD_LIBRARY_PATH` auffindbar – ohne
   torchs cuDNN 9 zu stören (andere SO-Namen).
@@ -190,9 +205,37 @@ Zwei bekannte Reibungspunkte des aktuellen Stacks werden automatisch im Code beh
 
 ```bash
 # in der .env oder als Flag
-AUDIOSCRIBE_WHISPER_COMPUTE_TYPE=int8_float16   # oder int8
+AUDIOSCRIBE_WHISPER_COMPUTE_TYPE=int8_float16   # oder int8; Default "auto" (cuda->float16)
 AUDIOSCRIBE_BATCH_SIZE=4                          # Standard 8; bei OOM senken
 ```
+
+## CPU-Betrieb (Rechner ohne NVIDIA-Karte)
+
+Mit `uv sync --extra cpu` installiert und `--device auto` (Default) läuft AudioScribe
+automatisch auf der CPU; `compute_type` wird dann automatisch auf `int8` gesetzt
+(CTranslate2 unterstützt kein `float16` auf CPU).
+
+```bash
+uv sync --extra cpu
+uv run --extra cpu audioscribe doctor
+uv run --extra cpu audioscribe run input/meeting.m4a
+```
+
+Zu beachten:
+
+- Das `--extra cpu` gehört auf CPU-Rechnern **auch an `uv run`** — ohne Extra synct
+  uv die Umgebung zurück auf das PyPI-torch (CUDA-Bundle, ~3 GB mehr; läuft zwar
+  auch auf CPU, verfehlt aber den Zweck der schlanken Installation).
+
+- **Deutlich langsamer** als auf GPU — `large-v3` braucht auf CPU ein Mehrfaches der
+  Aufnahmedauer. Wirksamster Hebel ist ein **kleineres Modell**, nicht die Batch-Größe:
+  ```bash
+  uv run audioscribe run input/meeting.m4a --model medium   # oder small
+  ```
+- Diarisierung (pyannote) läuft ebenfalls auf CPU, auch das dauert entsprechend länger.
+- Auf einem GPU-Rechner lässt sich CPU-Betrieb mit `--device cpu` erzwingen (z. B. zum Testen).
+- `uv run audioscribe doctor` zeigt das effektive Gerät, den torch-Build (`+cpu`/`+cu124`)
+  und den effektiven `compute_type`.
 
 ## Konfiguration
 
