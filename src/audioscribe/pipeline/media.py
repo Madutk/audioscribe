@@ -6,6 +6,8 @@ und legen es als WAV in ``work/`` ab (wiederverwendbares Artefakt).
 
 from __future__ import annotations
 
+import re
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -54,3 +56,76 @@ def extract_audio(video: Path, reporter: Reporter | None = None) -> Path:
     if reporter:
         reporter.info(f"Audiospur extrahiert -> work/{out.name}")
     return out
+
+
+# "  Duration: 00:06:58.97, start: 0.000000, bitrate: 4713 kb/s"
+_DURATION_RE = re.compile(r"Duration:\s*(\d+):(\d\d):(\d\d(?:\.\d+)?)")
+
+
+def parse_ffmpeg_duration(text: str) -> float | None:
+    """Liest die Laufzeit aus einer ffmpeg-Ausgabe; ``None``, wenn keine drinsteht.
+
+    ``Duration: N/A`` ist ein realer Fall (MPEG-TS und manche FLV/MKV ohne Dauer-Feld)
+    und liefert korrekt ``None``.
+    """
+    match = _DURATION_RE.search(text)
+    if not match:
+        return None
+    hours, minutes, seconds = match.groups()
+    return int(hours) * 3600 + int(minutes) * 60 + float(seconds)
+
+
+def probe_duration(media: Path, *, timeout: float = 20.0) -> float | None:
+    """Laufzeit einer Medien-Datei in Sekunden, ohne sie zu dekodieren.
+
+    Nutzt ``ffprobe``, wenn vorhanden (eine saubere Zahl), sonst ``ffmpeg -i`` und die
+    ``Duration:``-Zeile. ``ffprobe`` gehoert NICHT zu den Abhaengigkeiten - das von
+    ``imageio-ffmpeg`` gebuendelte Paket enthaelt nur ``ffmpeg``.
+
+    Der Exit-Code wird bewusst ignoriert: ``ffmpeg -i`` ohne Ausgabedatei endet je nach
+    Version mit 0 oder ungleich 0, und bei kaputter Eingabe mit 183. Nur der Text zaehlt.
+    ``None`` heisst "Laufzeit unbekannt" - **kein** Gueltigkeitstest fuer die Datei.
+    """
+    media = Path(media)
+    ffprobe = shutil.which("ffprobe")
+    if ffprobe:
+        cmd = [
+            ffprobe, "-v", "error",
+            "-show_entries", "format=duration",
+            "-of", "default=nw=1:nk=1",
+            str(media),
+        ]
+        out = _run_probe(cmd, timeout)
+        if out is not None:
+            try:
+                value = float(out[0].strip())
+            except (ValueError, IndexError):
+                value = 0.0
+            if value > 0:
+                return value
+
+    try:
+        ffmpeg = ensure_ffmpeg_on_path()
+    except RuntimeError:
+        return None
+    out = _run_probe([ffmpeg, "-hide_banner", "-nostdin", "-i", str(media)], timeout)
+    return parse_ffmpeg_duration(out[0] + out[1]) if out is not None else None
+
+
+def _run_probe(cmd: list[str], timeout: float) -> tuple[str, str] | None:
+    """Fuehrt ein Probe-Kommando aus und liefert ``(stdout, stderr)`` oder ``None``.
+
+    ``stdin=DEVNULL``: ffmpeg liest sonst von stdin und blockiert im Serverprozess.
+    """
+    try:
+        proc = subprocess.run(  # noqa: S603 - festes Kommando, Pfad kommt aus scan_media
+            cmd,
+            capture_output=True,
+            text=True,
+            errors="replace",
+            stdin=subprocess.DEVNULL,
+            timeout=timeout,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return proc.stdout or "", proc.stderr or ""

@@ -5,6 +5,7 @@ Befehle:
   run     - Audiodatei transkribieren + diarisieren -> Markdown (optional PDF)
   review  - lokale Review-Oberflaeche: Video + Transkript, wichtige Frames markieren (PRD §13)
   export  - Transkript + Markierungen zu annotiertem Markdown/PDF mergen (FR-18)
+  ui      - Browser-Oberflaeche: Ein-/Ausgangsordner waehlen, alle Medien darin transkribieren
 """
 
 from __future__ import annotations
@@ -85,6 +86,13 @@ def main(argv: list[str] | None = None) -> int:
     rev.add_argument("--port", type=int, default=8765, help="HTTP-Port (Default: 8765)")
     rev.add_argument("--no-browser", action="store_true", help="Browser nicht automatisch oeffnen")
 
+    ui = sub.add_parser(
+        "ui", help="Browser-Oberflaeche: Ordner waehlen und alle Medien darin transkribieren"
+    )
+    # Eigener Port, damit UI (8766) und Review-Oberflaeche (8765) parallel laufen koennen.
+    ui.add_argument("--port", type=int, default=8766, help="HTTP-Port (Default: 8766)")
+    ui.add_argument("--no-browser", action="store_true", help="Browser nicht automatisch oeffnen")
+
     exp = sub.add_parser(
         "export", help="Transkript + Markierungen zu annotiertem Markdown/PDF mergen"
     )
@@ -159,6 +167,19 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         except FileNotFoundError as exc:
             print(str(exc))
+            return 1
+        return 0
+
+    if args.command == "ui":
+        from audioscribe.ui.server import serve as serve_ui
+
+        try:
+            serve_ui(port=args.port, open_browser=not args.no_browser)
+        except ModuleNotFoundError:
+            print(
+                "Die Browser-Oberflaeche benoetigt fastapi + uvicorn. Installiere sie mit:\n"
+                "  uv sync --extra review"
+            )
             return 1
         return 0
 

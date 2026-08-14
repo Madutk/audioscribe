@@ -43,7 +43,11 @@ def transcribe(audio, reporter: Reporter | None = None) -> dict:
         language=language,
     )
     try:
-        result = model.transcribe(audio, batch_size=settings.batch_size)
+        # print_progress: WhisperX druckt je VAD-Abschnitt (~30 s Audio) "Progress: N%..." -
+        # die Fortschrittsquelle fuer die Oberflaeche. Im Terminal standardmaessig aus.
+        result = model.transcribe(
+            audio, batch_size=settings.batch_size, print_progress=settings.emit_progress
+        )
     except IndexError:
         # WhisperX/transformers wirft IndexError, wenn die VAD keine Sprache findet
         # (stilles/sprachloses Audio) -> leeres Transkript statt Absturz.

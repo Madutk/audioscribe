@@ -74,6 +74,11 @@ class Settings:
     # --- Stufe 3: Wort-Alignment (wav2vec2) ---
     enable_alignment: bool = field(default_factory=lambda: _flag("ALIGNMENT", "1"))
 
+    # --- maschinenlesbare Fortschrittszeilen ("[Fortschritt] 42.5%") ---
+    # Standardmaessig AUS, damit die Terminal-Ausgabe ruhig bleibt; die Browser-Oberflaeche
+    # setzt AUDIOSCRIBE_PROGRESS=1 in der Umgebung des Kindprozesses (ui/jobs.child_env).
+    emit_progress: bool = field(default_factory=lambda: _flag("PROGRESS", "0"))
+
     # --- Ausgabe: Zeitstempel-Granularitaet ---
     # Neuer Zeitstempel alle N Saetze (0 = ganzer Sprecher-Beitrag als ein Block).
     sentences_per_timestamp: int = field(

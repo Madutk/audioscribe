@@ -14,11 +14,20 @@ den Woertern uebernimmt weiterhin ``whisperx.assign_word_speakers``.
 from __future__ import annotations
 
 import gc
+import time
+from collections.abc import Callable
 
 from audioscribe.config import resolve_device, settings
-from audioscribe.progress import Reporter
+from audioscribe.progress import Reporter, emit_progress
 
 SAMPLE_RATE = 16_000
+
+# Die beiden pyannote-Schritte, die ueberhaupt ``total``/``completed`` melden, auf einen
+# gemeinsamen 0..100-Balken abgebildet. Alle anderen Schritte melden nur Artefakte.
+_HOOK_SPANS: dict[str, tuple[float, float]] = {
+    "segmentation": (0.0, 50.0),
+    "embeddings": (50.0, 100.0),
+}
 
 
 def _free_vram() -> None:
@@ -42,6 +51,56 @@ def _assign_word_speakers():
         import whisperx  # aeltere Layouts exportieren es top-level
 
         return whisperx.assign_word_speakers
+
+
+def make_progress_hook(
+    emit: Callable[[float], None] = emit_progress,
+    *,
+    min_delta: float = 1.0,
+    min_interval: float = 0.5,
+    clock: Callable[[], float] = time.monotonic,
+):
+    """Baut den ``hook``-Rueckruf fuer ``pyannote``-Pipelines.
+
+    Signatur laut pyannote: ``(step_name, step_artifact, file=None, total=None,
+    completed=None)``. Drei Eigenschaften sind hier nicht optional:
+
+    * **Nichts darf nach aussen dringen.** pyannote ruft den Hook ungeschuetzt auf - eine
+      Ausnahme wuerde mitten in der Diarisierung durchschlagen und die Datei kippen.
+      Darum liegt der komplette Rumpf in einem ``try/except``.
+    * **``step_artifact`` wird nie angefasst** - bei den reinen Artefakt-Aufrufen sind das
+      grosse Numpy-Arrays.
+    * **Drosselung.** Das Segmentierungsfenster laeuft mit 1 s Schrittweite ueber die
+      gesamte Aufnahme; ohne Bremse waeren das bei zwei Stunden mehrere tausend Zeilen.
+    """
+    state = {"last_percent": -min_delta, "last_time": float("-inf")}
+
+    def hook(
+        step_name: str,
+        step_artifact=None,
+        file=None,
+        total: int | None = None,
+        completed: int | None = None,
+    ) -> None:
+        try:
+            span = _HOOK_SPANS.get(step_name)
+            if span is None or completed is None or not total:
+                return
+            low, high = span
+            percent = low + (high - low) * min(1.0, max(0.0, completed / total))
+            now = clock()
+            # monoton halten: der zweite Schritt darf nie hinter den ersten zurueckfallen
+            if percent < state["last_percent"] + min_delta:
+                return
+            if now - state["last_time"] < min_interval and percent < 100.0:
+                return
+            state["last_percent"] = percent
+            state["last_time"] = now
+            emit(percent)
+        except Exception:  # noqa: BLE001 - Fortschrittsanzeige darf die Diarisierung nie kippen
+            return
+
+    return hook
 
 
 def diarize(audio, result: dict, reporter: Reporter | None = None) -> dict:
@@ -99,7 +158,15 @@ def diarize(audio, result: dict, reporter: Reporter | None = None) -> dict:
     try:
         pipeline.to(torch.device(resolve_device(settings.device)))
         audio_data = {"waveform": torch.from_numpy(audio[None, :]), "sample_rate": SAMPLE_RATE}
-        diarization = pipeline(audio_data, **kwargs)
+        if settings.emit_progress:
+            try:
+                diarization = pipeline(audio_data, hook=make_progress_hook(), **kwargs)
+            except TypeError:
+                # Ein per AUDIOSCRIBE_DIARIZATION_MODEL gesetztes anderes Modell kennt
+                # 'hook' moeglicherweise nicht - dann eben ohne Fortschrittsanzeige.
+                diarization = pipeline(audio_data, **kwargs)
+        else:
+            diarization = pipeline(audio_data, **kwargs)
 
         diarize_df = pd.DataFrame(
             diarization.itertracks(yield_label=True),
