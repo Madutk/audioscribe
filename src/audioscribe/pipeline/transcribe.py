@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import gc
 
-from audioscribe.config import settings
+from audioscribe.config import resolve_compute_type, resolve_device, settings
 from audioscribe.progress import Reporter
 
 
@@ -35,10 +35,11 @@ def transcribe(audio, reporter: Reporter | None = None) -> dict:
     apply_torch_load_compat()  # pyannote-VAD-Checkpoint laedt nur mit weights_only=False (PyTorch 2.6)
 
     language = None if settings.whisper_language.lower() == "auto" else settings.whisper_language
+    device = resolve_device(settings.device)
     model = whisperx.load_model(
         settings.whisper_model,
-        device=settings.device,
-        compute_type=settings.whisper_compute_type,
+        device=device,
+        compute_type=resolve_compute_type(settings.whisper_compute_type, device),
         language=language,
     )
     try:
@@ -78,8 +79,9 @@ def align(audio, result: dict, reporter: Reporter | None = None) -> dict:
     apply_torch_load_compat()
 
     language = result.get("language") or settings.whisper_language
+    device = resolve_device(settings.device)
     try:
-        align_model, metadata = whisperx.load_align_model(language_code=language, device=settings.device)
+        align_model, metadata = whisperx.load_align_model(language_code=language, device=device)
     except Exception as exc:  # noqa: BLE001 - z.B. keine Modellgewichte fuer die Sprache
         if reporter:
             reporter.info(f"Alignment uebersprungen (kein Modell fuer '{language}': {exc})")
@@ -91,7 +93,7 @@ def align(audio, result: dict, reporter: Reporter | None = None) -> dict:
             align_model,
             metadata,
             audio,
-            settings.device,
+            device,
             return_char_alignments=False,
         )
     finally:

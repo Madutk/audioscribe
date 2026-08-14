@@ -148,6 +148,7 @@ einer Pipeline, ist auf der vorhandenen Hardware lauffähig und etabliert.
 - Einfache GUI / Drag-&-Drop.
 - **Visuelle Bild-Annotation** – wichtige Standbilder aus dem Video dem Transkript
   zeitlich zuordnen. Ausspezifiziert in **§13**.
+- **CPU-only-Betrieb** – Nutzung auf Rechnern ohne NVIDIA-Karte. Ausspezifiziert in **§14**.
 
 ## 13. Ausbaustufe: Visuelle Bild-Annotation (Review-Oberfläche)
 
@@ -265,3 +266,72 @@ die übergeordnete Meeting-Protokoll-Pipeline.
 - [ ] `audioscribe export` erzeugt ein Markdown (+ optional PDF) mit den Bildern an der zeitlich passenden Stelle.
 - [ ] Erneute Transkription oder Handedits am Markdown **lassen `marks.json` unangetastet**.
 - [ ] Der gesamte Vorgang läuft lokal (`localhost`, kein Upload); der Kern-CLI bleibt ohne die Review-Dependencies lauffähig.
+
+## 14. Ausbaustufe: CPU-only-Betrieb (Rechner ohne NVIDIA-Karte)
+
+> Status: Umgesetzt · Additive Ausbaustufe auf der Transkriptions-Basisstufe (§1–§12).
+> Der Nutzer arbeitet auch an Rechnern **ohne** NVIDIA-GPU; dort muss AudioScribe
+> installier- und lauffähig sein — als **Option** bei Installation und Ausführung.
+
+### 14.1 Ziel
+
+AudioScribe läuft wahlweise auf **CUDA** (wie bisher, schnell) oder **rein auf der CPU**
+(langsamer, aber ohne NVIDIA-Hardware/-Treiber). Die Wahl fällt zweistufig: bei der
+Installation (welches PyTorch-Backend wird installiert) und beim Ausführen (welches
+Gerät wird verwendet — standardmäßig automatisch erkannt).
+
+### 14.2 Abgrenzung / Designentscheidungen (festgelegt)
+
+- **Kein Apple-MPS-Support** — Zielplattform bleibt Linux/WSL2 (NFR-4).
+- **`--device auto` ist der neue Default** (statt bisher fest `cuda`): CUDA falls
+  verfügbar, sonst CPU. Explizites `--device cuda|cpu` erzwingt.
+- **Backend-Wahl über zwei sich ausschließende uv-Extras** (`cpu` / `cu124`) mit
+  `[tool.uv] conflicts` — offizielles uv-Muster für PyTorch-Accelerator-Wahl,
+  ein gemeinsames `uv.lock` für beide Varianten.
+
+### 14.3 Funktionale Anforderungen
+
+| ID | Anforderung |
+|----|-------------|
+| FR-19 | Die Installation bietet zwei sich ausschließende Backend-Extras: `uv sync --extra cu124` (CUDA-Wheels, wie bisher) und `uv sync --extra cpu` (schlanke CPU-Wheels ohne `nvidia-*`-Pakete). Gleichzeitige Wahl bricht mit einem Konfliktfehler ab; beide Varianten teilen sich ein `uv.lock`. |
+| FR-20 | `--device` (bzw. `AUDIOSCRIBE_DEVICE`) akzeptiert `auto` (Default), `cuda[:N]` und `cpu`. `auto` wählt CUDA, falls via torch verfügbar, sonst CPU. Explizit erzwungenes `cuda` ohne verfügbares CUDA bricht mit einer klaren Fehlermeldung ab (Hinweis auf `--device auto|cpu` und `doctor`). |
+| FR-21 | `--compute-type` (bzw. `AUDIOSCRIBE_WHISPER_COMPUTE_TYPE`) defaultet auf `auto` und wird device-abhängig aufgelöst: `cuda → float16`, `cpu → int8` (CTranslate2 unterstützt kein float16 auf CPU). Eine explizite Angabe gewinnt immer. |
+| FR-22 | `audioscribe doctor` bewertet die Gerätesituation gemäß Statusmatrix: fehlendes CUDA ist nur noch FAIL, wenn das Gerät explizit auf `cuda` erzwungen ist; bei `auto` wird der CPU-Fallback als OK (mit „langsam“-Hinweis) gemeldet. Angezeigt werden torch-Build (`+cpu`/`+cu124`), effektives Gerät, effektiver `compute_type` und ggf. der GPU-Name. |
+
+### 14.4 Nicht-funktionale Anforderungen
+
+| ID | Anforderung |
+|----|-------------|
+| NFR-10 | **Kein torch-Import beim bloßen Config-Import**: Die Geräteauflösung passiert lazy erst bei Gebrauch; `review`/`export` bleiben torch-frei lauffähig (konsistent mit NFR-7). |
+| NFR-11 | **Identisches Verhalten**: Ausgaben (Markdown/JSON/PDF) sind auf CPU inhaltlich identisch zum GPU-Lauf — nur langsamer. Der cuDNN-8-Bootstrap (LD_LIBRARY_PATH/Re-Exec) entfällt im CPU-Pfad vollständig. |
+
+### 14.5 Technischer Ansatz (festgelegte Entscheidungen)
+
+- **pyproject:** torch/torchaudio wandern aus den Kern-Dependencies in die Extras
+  `cpu`/`cu124` (je `>=2.4,<2.7`; Deckel hält beide Lock-Varianten auf derselben
+  torch-Version). Extra-abhängige `[tool.uv.sources]` binden sie an die Indexe
+  `download.pytorch.org/whl/cpu` bzw. `/whl/cu124`.
+- **Auflösung:** reine Funktionen `resolve_device()` / `resolve_compute_type()` in
+  `config.py`; `Settings` speichert Rohwerte (`auto`). Die CLI löst im `run`-Befehl auf,
+  schreibt das Ergebnis in die `AUDIOSCRIBE_*`-Env zurück (Konsistenz über das
+  Re-Exec des cuDNN-Bootstraps hinweg) und führt den Bootstrap nur im CUDA-Pfad aus.
+- **Restlücke (bewusst):** `uv sync`/`uv run` ganz ohne Backend-Extra installiert das
+  PyPI-torch (CUDA-Bundle); uv kennt keine Pflicht- oder Default-Extras. Auf
+  CPU-Rechnern gehört das Extra deshalb auch an `uv run` (`uv run --extra cpu …`).
+  Abgefangen über README und den doctor (torch-Build-Anzeige + Tipp auf
+  `--extra cpu`, wenn ohne CUDA der fette Build installiert ist).
+
+### 14.6 Standard-Defaults
+
+| Punkt | Default |
+|-------|---------|
+| Gerät | `auto` (CUDA falls verfügbar, sonst CPU). |
+| compute_type | `auto` → `float16` (cuda) / `int8` (cpu). |
+| batch_size | unverändert 8 (limitiert VRAM; auf CPU unkritisch — wirksamster Hebel dort ist ein kleineres Modell, z. B. `--model medium`). |
+
+### 14.7 Akzeptanzkriterien
+
+- [ ] `uv sync --extra cpu` installiert ohne `nvidia-*`-Pakete (torch-Build `+cpu`); `uv sync --extra cu124` verhält sich wie bisher; beide gleichzeitig → Konfliktfehler.
+- [ ] `audioscribe run` läuft auf einem Rechner ohne NVIDIA-Karte ohne Zusatzangabe durch (`auto` → CPU, compute_type `int8`, kein cuDNN-Download/Re-Exec).
+- [ ] `--device cpu` erzwingt CPU auch auf einem GPU-Rechner; `--device cuda` ohne CUDA bricht mit klarer Meldung ab.
+- [ ] `audioscribe doctor` meldet die Matrix aus FR-22 korrekt (insb. kein FAIL mehr bei `auto` ohne CUDA).

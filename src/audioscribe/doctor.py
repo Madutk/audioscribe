@@ -11,7 +11,7 @@ import sys
 from dataclasses import dataclass
 from typing import Literal
 
-from audioscribe.config import ensure_ffmpeg_on_path, settings
+from audioscribe.config import ensure_ffmpeg_on_path, resolve_compute_type, settings
 
 Status = Literal["OK", "WARN", "FAIL"]
 
@@ -43,23 +43,70 @@ def _check_ffmpeg() -> CheckResult:
     return CheckResult("OK", "ffmpeg", f"gebuendelt (imageio-ffmpeg) via Wrapper: {path}")
 
 
-def _check_torch_cuda() -> CheckResult:
+def evaluate_device(
+    raw_device: str,
+    cuda_ok: bool,
+    torch_version: str,
+    compute_type_raw: str,
+    gpu_name: str | None = None,
+) -> CheckResult:
+    """Reine Bewertungslogik fuer den Device-Check (testbar ohne torch).
+
+    Statusmatrix (PRD §14, FR-22): fehlendes CUDA ist nur noch FAIL, wenn das
+    Geraet explizit auf cuda erzwungen wurde; 'auto' faellt auf CPU zurueck.
+    """
+    raw = raw_device.strip().lower()
+    build = f"torch {torch_version}"
+
+    if raw.startswith("cuda") and not cuda_ok:
+        return CheckResult(
+            "FAIL",
+            "PyTorch/Device",
+            f"{build} -> Device '{raw_device}' erzwungen, aber CUDA nicht verfuegbar "
+            "(CPU-Build/Treiber?) -> '--device auto|cpu' oder 'uv sync --extra cu124'",
+        )
+
+    device = "cuda" if (raw == "auto" and cuda_ok) else ("cpu" if raw == "auto" else raw)
+    compute_type = resolve_compute_type(compute_type_raw, device)
+
+    if device.startswith("cuda"):
+        label = f"auto={device}" if raw == "auto" else device
+        gpu = f" ({gpu_name})" if gpu_name else ""
+        return CheckResult(
+            "OK", "PyTorch/Device", f"{build} -> {label}{gpu}, compute_type={compute_type}"
+        )
+
+    if raw == "auto":
+        detail = f"{build} -> auto=cpu, CPU-Fallback (langsam), compute_type={compute_type}"
+    else:
+        hint = " — Hinweis: CUDA waere verfuegbar" if cuda_ok else ""
+        detail = f"{build} -> cpu (explizit; langsam), compute_type={compute_type}{hint}"
+    if not cuda_ok and "+cpu" not in torch_version:
+        # CUDA-/PyPI-Build ohne nutzbares CUDA: die schlanken CPU-Wheels sparen ~3 GB.
+        detail += " — Tipp: 'uv sync --extra cpu' installiert die schlanken CPU-Wheels"
+    return CheckResult("OK", "PyTorch/Device", detail)
+
+
+def _check_torch_device() -> CheckResult:
     try:
         import torch
     except ImportError as exc:
-        return CheckResult("FAIL", "PyTorch", f"Import fehlgeschlagen: {exc}")
-    if settings.device.startswith("cpu"):
-        return CheckResult("WARN", "PyTorch", f"torch {torch.__version__} -> Geraet 'cpu' (langsam)")
-    if not torch.cuda.is_available():
         return CheckResult(
-            "FAIL", "PyTorch CUDA", f"torch {torch.__version__} -> CUDA nicht verfuegbar"
+            "FAIL",
+            "PyTorch",
+            f"Import fehlgeschlagen: {exc} -> 'uv sync --extra cpu' oder '--extra cu124'",
         )
-    return CheckResult(
-        "OK", "PyTorch CUDA", f"torch {torch.__version__} -> {torch.cuda.get_device_name(0)}"
+    cuda_ok = torch.cuda.is_available()
+    gpu_name = torch.cuda.get_device_name(0) if cuda_ok else None
+    return evaluate_device(
+        settings.device, cuda_ok, torch.__version__, settings.whisper_compute_type, gpu_name
     )
 
 
 def _check_whisperx() -> CheckResult:
+    from audioscribe.compat import ensure_ctranslate2_loadable
+
+    ensure_ctranslate2_loadable()  # execstack-Fix fuer glibc >= 2.41, vor dem Import
     try:
         import whisperx  # noqa: F401
     except ImportError as exc:
@@ -115,7 +162,7 @@ def _check_dirs() -> CheckResult:
 CHECKS = (
     _check_python,
     _check_ffmpeg,
-    _check_torch_cuda,
+    _check_torch_device,
     _check_whisperx,
     _check_diarization,
     _check_dirs,

@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import gc
 
-from audioscribe.config import settings
+from audioscribe.config import resolve_device, settings
 from audioscribe.progress import Reporter
 
 SAMPLE_RATE = 16_000
@@ -97,7 +97,7 @@ def diarize(audio, result: dict, reporter: Reporter | None = None) -> dict:
             kwargs["max_speakers"] = settings.max_speakers
 
     try:
-        pipeline.to(torch.device(settings.device))
+        pipeline.to(torch.device(resolve_device(settings.device)))
         audio_data = {"waveform": torch.from_numpy(audio[None, :]), "sample_rate": SAMPLE_RATE}
         diarization = pipeline(audio_data, **kwargs)
 

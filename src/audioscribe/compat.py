@@ -90,6 +90,65 @@ def apply_hf_hub_compat() -> None:
     _HF_HUB_PATCHED = True
 
 
+def clear_execstack_flag(path: Path) -> bool:
+    """Loescht das Executable-Stack-Flag (PF_X) im ``PT_GNU_STACK``-Header einer ELF64-Lib.
+
+    Liefert True, wenn die Datei geaendert wurde; False, wenn nichts zu tun war
+    (kein ELF64, kein GNU_STACK-Header oder Flag bereits sauber).
+    """
+    import struct
+
+    pt_gnu_stack = 0x6474E551
+    with path.open("r+b") as f:
+        ident = f.read(16)
+        # Nur little-endian ELF64 (x86_64-Wheels); alles andere unangetastet lassen.
+        if ident[:4] != b"\x7fELF" or ident[4] != 2 or ident[5] != 1:
+            return False
+        f.seek(0x20)
+        (e_phoff,) = struct.unpack("<Q", f.read(8))
+        f.seek(0x36)
+        e_phentsize, e_phnum = struct.unpack("<HH", f.read(4))
+        for i in range(e_phnum):
+            off = e_phoff + i * e_phentsize
+            f.seek(off)
+            p_type, p_flags = struct.unpack("<II", f.read(8))
+            if p_type != pt_gnu_stack:
+                continue
+            if not p_flags & 0x1:  # PF_X nicht gesetzt -> nichts zu tun
+                return False
+            f.seek(off + 4)
+            f.write(struct.pack("<I", p_flags & ~0x1))
+            return True
+    return False
+
+
+def ensure_ctranslate2_loadable(log=None) -> None:
+    """Repariert das ctranslate2-Wheel fuer neuere glibc (>= 2.41, z.B. Ubuntu 25.x).
+
+    Die gebundelte ``libctranslate2`` (4.4.0) traegt ein ``PT_GNU_STACK``-Header-Flag
+    ``RWE`` (Build-Artefakt, tatsaechlich wird kein ausfuehrbarer Stack benoetigt).
+    Neuere glibc verweigert solche Libraries beim ``dlopen`` hart
+    ("cannot enable executable stack as shared object requires"). Wir loeschen das
+    X-Bit einmalig direkt in der installierten ``.so`` (idempotent, wie
+    ``execstack -c``). Muss VOR dem ersten ``import ctranslate2`` laufen.
+    """
+    log = log or (lambda _m: None)
+    try:
+        import importlib.util
+
+        spec = importlib.util.find_spec("ctranslate2")
+        if spec is None or not spec.origin:
+            return
+        libs_dir = Path(spec.origin).parent.parent / "ctranslate2.libs"
+        if not libs_dir.is_dir():
+            return
+        for so in libs_dir.glob("*.so*"):
+            if clear_execstack_flag(so):
+                log(f"ctranslate2: Executable-Stack-Flag entfernt ({so.name}, glibc >= 2.41)")
+    except Exception:  # noqa: BLE001 - best effort; der Import schlaegt sonst ohnehin fehl
+        pass
+
+
 def _cudnn8_lib_dir() -> Path:
     return settings.cache_dir / "cudnn8" / "lib"
 

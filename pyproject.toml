@@ -1,7 +1,7 @@
 [project]
 name = "audioscribe"
 version = "0.1.0"
-description = "Lokale Audio-Transkription mit Sprecher-Diarisierung (WhisperX: faster-whisper large-v3 + wav2vec2-Alignment + pyannote). Vollstaendig lokal, WSL2/CUDA."
+description = "Lokale Audio-Transkription mit Sprecher-Diarisierung (WhisperX: faster-whisper large-v3 + wav2vec2-Alignment + pyannote). Vollstaendig lokal, CUDA oder CPU."
 readme = "README.md"
 authors = [{ name = "Marek", email = "madutkow@googlemail.com" }]
 # Python auf 3.12 gepinnt: maximale Kompatibilitaet des ML-Stacks (whisperx / pyannote.audio 3.1).
@@ -10,9 +10,8 @@ requires-python = ">=3.12,<3.13"
 dependencies = [
     # --- Kern-Pipeline: WhisperX buendelt Transkription + wav2vec2-Alignment + pyannote-Diarization ---
     "whisperx>=3.3",
-    # --- CUDA-PyTorch (ueber dedizierten Index, s. [tool.uv.sources]) ---
-    "torch>=2.4",
-    "torchaudio>=2.4",
+    # torch/torchaudio: NICHT hier, sondern ueber die Extras 'cpu'/'cu124' (s.u.) —
+    # die Backend-Wahl (CPU-Wheels vs. CUDA-Wheels) faellt bei 'uv sync --extra ...'.
     # --- gebuendeltes ffmpeg-Binary: WhisperX dekodiert Audio per ffmpeg; so kein System-ffmpeg/sudo noetig ---
     "imageio-ffmpeg>=0.5",
     # --- optionale PDF-Erzeugung (FR-8); rein in Python, keine System-Libs ---
@@ -20,9 +19,22 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# --- Rechen-Backend: genau EINES der beiden Extras waehlen (PRD §14, FR-19) ---
+#   uv sync --extra cu124   -> NVIDIA-GPU (CUDA-Wheels, wie bisher)
+#   uv sync --extra cpu     -> Rechner ohne NVIDIA-Karte (schlanke CPU-Wheels)
+# Deckel <2.7: der cu124-Index endet bei torch 2.6.x; gleicher Deckel fuer cpu
+# haelt beide Lock-Varianten auf derselben torch-Version.
+cpu = [
+    "torch>=2.4,<2.7",
+    "torchaudio>=2.4,<2.7",
+]
+cu124 = [
+    "torch>=2.4,<2.7",
+    "torchaudio>=2.4,<2.7",
+]
 # Optionale Review-/Bild-Annotations-Oberflaeche (PRD §13, NFR-7). Lokaler Webserver;
 # der Kern-CLI (Transkription/Diarisierung) bleibt ohne diese Pakete lauffaehig.
-# Installation: uv sync --extra review
+# Installation: uv sync --extra cu124 --extra review (bzw. --extra cpu --extra review)
 review = [
     "fastapi>=0.110",
     "uvicorn>=0.29",
@@ -44,11 +56,32 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/audioscribe"]
 
-# --- CUDA-PyTorch ueber dedizierten Index (cu124, PRD-Baseline; neuere Treiber sind abwaertskompatibel) ---
-[tool.uv.sources]
-torch = { index = "pytorch-cu124" }
-torchaudio = { index = "pytorch-cu124" }
+# --- PyTorch-Backend-Wahl: Index haengt am gewaehlten Extra (offizielles uv-Muster) ---
+# 'cpu' und 'cu124' schliessen sich aus; uv bricht bei gleichzeitiger Wahl mit Fehler ab.
+[tool.uv]
+conflicts = [
+    [
+        { extra = "cpu" },
+        { extra = "cu124" },
+    ],
+]
 
+[tool.uv.sources]
+torch = [
+    { index = "pytorch-cpu", extra = "cpu" },
+    { index = "pytorch-cu124", extra = "cu124" },
+]
+torchaudio = [
+    { index = "pytorch-cpu", extra = "cpu" },
+    { index = "pytorch-cu124", extra = "cu124" },
+]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+# cu124 = PRD-Baseline; neuere Treiber sind abwaertskompatibel.
 [[tool.uv.index]]
 name = "pytorch-cu124"
 url = "https://download.pytorch.org/whl/cu124"
