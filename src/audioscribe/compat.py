@@ -229,20 +229,35 @@ def ensure_pkg_resources(log=None) -> None:
     log("pkg_resources fehlt (setuptools >= 81) - Ersatz fuer ctranslate2 bereitgestellt")
 
 
+# Windows legt die DLLs unter bin/, Linux die .so-Dateien unter lib/ - beide bekommen ein
+# eigenes Verzeichnis, damit ein Wechsel des Systems im selben Cache nichts vermischt.
 def _cudnn8_lib_dir() -> Path:
-    return settings.cache_dir / "cudnn8" / "lib"
+    return settings.cache_dir / "cudnn8" / ("bin" if os.name == "nt" else "lib")
+
+
+# Nur die Inferenz-Bibliotheken werden entpackt: die *_train*-Varianten (rund 230 MB)
+# braucht ctranslate2 nie, und die Dateien sind einzeln mehrere hundert MB gross.
+_CUDNN8_WINDOWS_DLLS = ("cudnn64_8.dll", "cudnn_ops_infer64_8.dll", "cudnn_cnn_infer64_8.dll",
+                        "cudnn_adv_infer64_8.dll")
 
 
 def ensure_cudnn8(log=None) -> Path:
     """Stellt die cuDNN-8-Bibliotheken bereit (einmaliger Download), liefert ihr Lib-Verzeichnis.
 
-    Laedt das ``nvidia-cudnn-cu12``-Wheel (cuDNN 8.9.x) von PyPI und entpackt nur die
-    ``.so``-Dateien in ein eigenes Cache-Verzeichnis. Das kollidiert NICHT mit dem von
-    torch mitgebrachten cuDNN 9 (andere SO-Namen, ``.so.8`` vs. ``.so.9``).
+    Laedt das ``nvidia-cudnn-cu12``-Wheel (cuDNN 8.9.x) von PyPI und entpackt die
+    Inferenz-Bibliotheken in ein eigenes Cache-Verzeichnis. Das kollidiert NICHT mit dem
+    von torch mitgebrachten cuDNN 9: die Dateinamen tragen die Hauptversion
+    (``.so.8`` vs. ``.so.9`` bzw. ``64_8.dll`` vs. ``64_9.dll``).
+
+    Es gibt das Wheel fuer Linux UND fuer Windows - unter Windows bringt ctranslate2 zwar
+    ``cudnn64_8.dll`` mit, das ist aber nur der Verteiler; die eigentlichen
+    ``cudnn_*_infer64_8.dll`` fehlen, und ohne sie stirbt der Lauf beim Modell-Laden mit
+    "Could not locate cudnn_ops_infer64_8.dll".
     """
     log = log or (lambda _m: None)
+    windows = os.name == "nt"
     lib_dir = _cudnn8_lib_dir()
-    sentinel = lib_dir / "libcudnn_ops_infer.so.8"
+    sentinel = lib_dir / ("cudnn_ops_infer64_8.dll" if windows else "libcudnn_ops_infer.so.8")
     if sentinel.exists():
         return lib_dir
 
@@ -252,24 +267,82 @@ def ensure_cudnn8(log=None) -> Path:
     import zipfile
 
     lib_dir.mkdir(parents=True, exist_ok=True)
-    log(f"Lade cuDNN 8 ({CUDNN8_VERSION}) fuer ctranslate2 (einmalig, ~ein paar 100 MB)...")
+    log(f"Lade cuDNN 8 ({CUDNN8_VERSION}) fuer ctranslate2 (einmalig, ~700 MB)...")
     meta_url = f"https://pypi.org/pypi/nvidia-cudnn-cu12/{CUDNN8_VERSION}/json"
     with urllib.request.urlopen(meta_url) as resp:  # noqa: S310 - PyPI ist vertrauenswuerdig
         meta = json.load(resp)
+    plattform = "win_amd64" if windows else "manylinux"
     wheel_url = next(
         u["url"]
         for u in meta["urls"]
-        if u["filename"].endswith(".whl") and "x86_64" in u["filename"]
+        if u["filename"].endswith(".whl") and plattform in u["filename"]
     )
+    # Fortschritt melden: 700 MB ohne jede Rueckmeldung sehen im Protokoll wie ein
+    # Haenger aus - gerade in der Stapel-Oberflaeche, wo nur das Log sichtbar ist.
+    def _fortschritt(bloecke: int, blockgroesse: int, gesamt: int) -> None:
+        if gesamt <= 0:
+            return
+        anteil = min(100, int(100 * bloecke * blockgroesse / gesamt))
+        if anteil >= _fortschritt.naechste:  # type: ignore[attr-defined]
+            log(f"  cuDNN 8: {anteil}% ({gesamt // (1024 * 1024)} MB)")
+            _fortschritt.naechste = anteil + 20  # type: ignore[attr-defined]
+
+    _fortschritt.naechste = 0  # type: ignore[attr-defined]
+
     with tempfile.TemporaryDirectory() as td:
         whl = Path(td) / "cudnn8.whl"
-        urllib.request.urlretrieve(wheel_url, whl)  # noqa: S310
+        urllib.request.urlretrieve(wheel_url, whl, reporthook=_fortschritt)  # noqa: S310
         with zipfile.ZipFile(whl) as z:
             for name in z.namelist():
-                if "/cudnn/lib/" in name and ".so" in name and not name.endswith("/"):
-                    (lib_dir / Path(name).name).write_bytes(z.read(name))
+                if name.endswith("/"):
+                    continue
+                datei = Path(name).name
+                if windows:
+                    if "/cudnn/bin/" in name and datei in _CUDNN8_WINDOWS_DLLS:
+                        (lib_dir / datei).write_bytes(z.read(name))
+                elif "/cudnn/lib/" in name and ".so" in name:
+                    (lib_dir / datei).write_bytes(z.read(name))
     log(f"cuDNN 8 entpackt nach {lib_dir}")
     return lib_dir
+
+
+# Handles der registrierten DLL-Verzeichnisse: Werden sie eingesammelt, macht Windows die
+# Registrierung rueckgaengig - deshalb halten wir sie fuer die Prozesslaufzeit fest.
+_DLL_DIR_HANDLES: list = []
+
+
+def _add_windows_dll_dirs(lib_dir: Path, log) -> None:
+    """Macht cuDNN 8 und die cuBLAS-DLLs von torch fuer ctranslate2 auffindbar.
+
+    BEIDE Wege sind noetig, und zwar aus verschiedenen Gruenden:
+
+    * ``os.add_dll_directory`` gilt fuer DLLs, die Python selbst laedt (ctypes und die
+      Importmaschinerie nutzen die eingeschraenkte Suche mit ``LOAD_LIBRARY_SEARCH_*``).
+    * ``PATH`` gilt fuer DLLs, die eine bereits geladene DLL ihrerseits nachlaedt. Genau
+      das tut ``cudnn64_8.dll``: es ist nur ein Verteiler und holt sich
+      ``cudnn_ops_infer64_8.dll`` per ``LoadLibrary`` mit blossem Namen - dieser Aufruf
+      kennt die per ``add_dll_directory`` registrierten Verzeichnisse NICHT und sucht in
+      der klassischen Reihenfolge, in der PATH das letzte Glied ist.
+
+    Ohne den PATH-Teil scheitert der Lauf trotz vorhandener Datei mit
+    "Could not locate cudnn_ops_infer64_8.dll".
+    """
+    import sysconfig
+
+    purelib = Path(sysconfig.get_paths()["purelib"])
+    # cuDNN 8 zuerst; cuBLAS liegt unter Windows in torch/lib (nicht in nvidia/cublas).
+    verzeichnisse = [p for p in (lib_dir, purelib / "torch" / "lib") if p.is_dir()]
+    for pfad in verzeichnisse:
+        try:
+            _DLL_DIR_HANDLES.append(os.add_dll_directory(str(pfad)))
+        except OSError as exc:  # noqa: PERF203 - defensiv, darf den Lauf nicht kippen
+            log(f"DLL-Verzeichnis nicht nutzbar ({pfad}): {exc}")
+
+    pfade = os.environ.get("PATH", "").split(os.pathsep)
+    neu = [str(p) for p in verzeichnisse if str(p) not in pfade]
+    if neu:
+        os.environ["PATH"] = os.pathsep.join([*neu, *pfade])
+    log(f"cuDNN 8 bereit: {lib_dir}")
 
 
 def ensure_native_libs(log=None) -> None:
@@ -279,16 +352,16 @@ def ensure_native_libs(log=None) -> None:
     es und starten den Prozess einmalig per ``execv`` neu (Marker verhindert Schleifen).
     Muss VOR dem Import von torch/whisperx aufgerufen werden.
 
-    Unter Windows entfaellt das komplett: dort bringt das ctranslate2-Wheel die
-    ``cudnn64_8.dll`` im eigenen Paketverzeichnis mit und laedt sie beim Import selbst
-    (``os.add_dll_directory``). Die Linux-Wheels waeren dort nutzlos - ohne diesen
-    Abbruch wuerde der CUDA-Pfad mehrere hundert MB ``.so``-Dateien laden, die kein
-    Windows je oeffnet, und den Prozess anschliessend grundlos neu starten.
+    Unter Windows ist es einfacher: ``os.add_dll_directory`` wirkt sofort im laufenden
+    Prozess, ein Neustart entfaellt. Das zurueckgegebene Handle muss allerdings am Leben
+    bleiben - wird es eingesammelt, nimmt Windows das Verzeichnis wieder aus der Suche.
     """
     log = log or (lambda _m: None)
-    if os.name == "nt":
-        return
     lib_dir = ensure_cudnn8(log)
+
+    if os.name == "nt":
+        _add_windows_dll_dirs(lib_dir, log)
+        return
 
     if os.environ.get(_LD_MARKER) == "1":
         return

@@ -176,8 +176,10 @@ def main(argv: list[str] | None = None) -> int:
         ensure_ctranslate2_loadable(log=print)
         ensure_pkg_resources(log=print)
 
-        # cuDNN-8-Libs fuer ctranslate2 bereitstellen + via LD_LIBRARY_PATH auffindbar
-        # machen (re-exec). Muss vor dem Import von whisperx geschehen; nur im CUDA-Pfad.
+        # cuDNN-8-Libs fuer ctranslate2 bereitstellen und auffindbar machen: unter Linux
+        # ueber LD_LIBRARY_PATH samt Prozess-Neustart, unter Windows ueber
+        # os.add_dll_directory (wirkt sofort). Muss vor dem whisperx-Import geschehen;
+        # nur im CUDA-Pfad.
         if device.startswith("cuda"):
             from audioscribe.compat import ensure_native_libs
 
