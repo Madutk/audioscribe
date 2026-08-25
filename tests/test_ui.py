@@ -603,3 +603,31 @@ def test_state_merge_defaults():
     assert gemischt["model"] == "large-v3"
     assert gemischt["devices"] == "bleibt"
     assert "unbekannt" not in gemischt
+
+
+# --- CUDA-Probe der Oberflaeche ---
+
+
+def test_cuda_probe_wird_kurz_gecacht_und_laeuft_dann_neu(monkeypatch):
+    """Ein Cache ohne Ablauf haelt eine geaenderte Installation fest.
+
+    Nach 'uv sync --extra cu124' stuende sonst weiter 'cuda (nicht verfuegbar)' in der
+    Oberflaeche, bis jemand den Server neu startet.
+    """
+    from audioscribe.ui import server
+
+    proben = []
+    monkeypatch.setattr(server.jobs, "probe_cuda", lambda: (proben.append(1), len(proben) > 1)[1])
+    monkeypatch.setattr(server, "_cuda_cache", None)
+
+    uhr = [1000.0]
+    monkeypatch.setattr(server.time, "monotonic", lambda: uhr[0])
+
+    assert server._cuda() is False
+    uhr[0] += server._CUDA_TTL_S - 1
+    assert server._cuda() is False  # noch aus dem Cache
+    assert len(proben) == 1
+
+    uhr[0] += 2  # TTL abgelaufen
+    assert server._cuda() is True
+    assert len(proben) == 2
