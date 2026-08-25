@@ -31,16 +31,9 @@ uv sync --extra cpu        # Rechner OHNE NVIDIA-Karte (schlanke CPU-Wheels, ~3 
 # (beide gleichzeitig lehnt uv mit einem Konfliktfehler ab; die Browser-Oberflächen
 #  kommen bei Bedarf dazu: uv sync --extra cu124 --extra review)
 #
-# WICHTIG: uv run synct standardmäßig OHNE Extras und ersetzt die gewählten Wheels
-# stillschweigend durch die von PyPI — das Extra gehört daher AUCH ans Ausführen:
-#   uv run --extra cu124 --extra review audioscribe ui
-#   uv run --extra cpu audioscribe run …
-# Unter Windows ist das ein harter Fallstrick: das PyPI-torch ist dort ein reiner
-# CPU-Build. Ein 'uv run audioscribe ui' ohne Extra macht die CUDA-Installation
-# also rückgängig, und die Oberfläche zeigt danach 'cuda (nicht verfügbar)'.
-# (Unter Linux ist das PyPI-torch CUDA-fähig; dort kostet es nur ~3 GB zu viel.)
-# Wer das nicht jedes Mal tippen will: die Skripte direkt aus dem venv starten
-# (.venv/bin/audioscribe bzw. .venv\Scripts\audioscribe.exe) — die synchronisieren nicht.
+# WICHTIG: 'uv run' synct vorher OHNE Extras und ersetzt die gewählten Wheels durch
+# die von PyPI. Das Extra gehört daher AUCH ans Ausführen — oder man startet die
+# Skripte direkt aus dem venv. Siehe "GPU-Betrieb (CUDA)" bzw. "CPU-Betrieb".
 
 # HuggingFace-Token für die Diarisierung hinterlegen
 cp .env.example .env
@@ -282,6 +275,25 @@ Zwei bekannte Reibungspunkte des aktuellen Stacks werden automatisch im Code beh
 AUDIOSCRIBE_WHISPER_COMPUTE_TYPE=int8_float16   # oder int8; Default "auto" (cuda->float16)
 AUDIOSCRIBE_BATCH_SIZE=4                          # Standard 8; bei OOM senken
 ```
+
+## GPU-Betrieb (CUDA)
+
+```bash
+uv sync --extra cu124 --extra review     # CUDA-Wheels installieren (einmalig)
+
+.venv/bin/audioscribe run input/meeting.mp4      # Windows: .venv\Scripts\audioscribe.exe
+.venv/bin/audioscribe ui
+
+# mit uv: die Extras MÜSSEN mit — sonst synct uv die CUDA-Wheels wieder weg
+uv run --extra cu124 --extra review audioscribe ui
+```
+
+- `--device auto` (Default) nimmt CUDA, sonst CPU. `--device cuda` erzwingt sie (bricht
+  ohne CUDA ab), `--device cpu` schaltet sie aus. Dasselbe über `AUDIOSCRIBE_DEVICE`.
+- `--compute-type` folgt dem Gerät (`cuda → float16`, `cpu → int8`); bei knappem VRAM
+  `--compute-type int8_float16`, notfalls `AUDIOSCRIBE_BATCH_SIZE=4` (kein CLI-Flag).
+- Prüfen mit `audioscribe doctor`: dort muss `torch …+cu124 -> auto=cuda (<GPU-Name>)`
+  stehen. Steht da `+cpu`, hat ein `uv run` ohne Extras die Wheels ersetzt.
 
 ## CPU-Betrieb (Rechner ohne NVIDIA-Karte)
 
