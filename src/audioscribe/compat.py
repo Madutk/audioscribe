@@ -278,8 +278,16 @@ def ensure_native_libs(log=None) -> None:
     LD_LIBRARY_PATH wirkt nur, wenn es vor Prozessstart gesetzt ist; darum setzen wir
     es und starten den Prozess einmalig per ``execv`` neu (Marker verhindert Schleifen).
     Muss VOR dem Import von torch/whisperx aufgerufen werden.
+
+    Unter Windows entfaellt das komplett: dort bringt das ctranslate2-Wheel die
+    ``cudnn64_8.dll`` im eigenen Paketverzeichnis mit und laedt sie beim Import selbst
+    (``os.add_dll_directory``). Die Linux-Wheels waeren dort nutzlos - ohne diesen
+    Abbruch wuerde der CUDA-Pfad mehrere hundert MB ``.so``-Dateien laden, die kein
+    Windows je oeffnet, und den Prozess anschliessend grundlos neu starten.
     """
     log = log or (lambda _m: None)
+    if os.name == "nt":
+        return
     lib_dir = ensure_cudnn8(log)
 
     if os.environ.get(_LD_MARKER) == "1":
