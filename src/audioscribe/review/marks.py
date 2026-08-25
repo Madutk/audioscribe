@@ -20,6 +20,13 @@ class Mark:
     png: str  # Pfad relativ zum Ausgabeordner, z.B. "frames/00-01-20.png"
     note: str | None = None
     created: str | None = None
+    # Fortlaufende Nummer der automatischen Bildwechsel-Erkennung (FR-25). Sie steht im
+    # Dateinamen UND im annotierten Transkript ("#0001") und ist damit die Klammer, an der
+    # eine KI Bild und Textstelle zusammenbringt. Von Hand gesetzte Marks haben keine.
+    id: int | None = None
+    # Herkunft: "auto" (Bildwechsel-Erkennung) oder None (in der Review-Oberflaeche
+    # gesetzt). Ein erneuter Lauf ersetzt nur die automatischen (s. screens.merge_marks).
+    kind: str | None = None
 
 
 def marks_path(out_dir: str | Path) -> Path:
@@ -33,7 +40,15 @@ def load_marks(out_dir: str | Path) -> list[Mark]:
         return []
     raw = json.loads(path.read_text(encoding="utf-8"))
     marks = [
-        Mark(t=float(m["t"]), png=str(m["png"]), note=m.get("note"), created=m.get("created"))
+        Mark(
+            t=float(m["t"]),
+            png=str(m["png"]),
+            note=m.get("note"),
+            created=m.get("created"),
+            # .get(): aeltere marks.json kennen id/kind nicht - sie bleiben lesbar.
+            id=int(m["id"]) if m.get("id") is not None else None,
+            kind=m.get("kind"),
+        )
         for m in raw
     ]
     marks.sort(key=lambda m: m.t)

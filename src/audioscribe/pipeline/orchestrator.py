@@ -43,7 +43,17 @@ def run_pipeline(
     do_align = settings.enable_alignment
     do_diar = settings.enable_diarization
 
-    total = 3 + (1 if from_video else 0) + (1 if do_align else 0) + (1 if do_diar else 0)
+    # Bildwechsel-Erkennung braucht das Original-Video; bei reinem Audio entfaellt sie
+    # stillschweigend (das extrahierte 16k-WAV enthaelt keine Bilder).
+    do_screens = settings.enable_screens and from_video
+
+    total = (
+        3
+        + (1 if from_video else 0)
+        + (1 if do_align else 0)
+        + (1 if do_diar else 0)
+        + (1 if do_screens else 0)
+    )
     reporter = reporter or ConsoleReporter(total)
     step = 0
 
@@ -71,6 +81,16 @@ def run_pipeline(
         reporter.stage(step, "Diarisierung (pyannote)")
         result = diarize(audio_arr, result, reporter)
 
+    # Zielordner schon hier: die Bildwechsel-Stufe legt ihre Standbilder daneben ab.
+    out_dir = Path(output_dir) if output_dir else settings.output_dir
+    ziel_dir = out_dir / source_path.stem
+
+    screens: list = []
+    if do_screens:
+        step += 1
+        reporter.stage(step, "Bildwechsel erkennen (Bildschirmaufnahme)")
+        screens = _erkenne_bildwechsel(source_path, ziel_dir, duration, reporter)
+
     step += 1
     reporter.stage(step, "Zusammenfuehren & Export")
     segments = result_to_segments(result)
@@ -88,7 +108,6 @@ def run_pipeline(
     )
     transcript = TranscriptResult(meta=meta, paragraphs=paragraphs, segments=segments)
 
-    out_dir = Path(output_dir) if output_dir else settings.output_dir
     md_path = write_markdown(transcript, out_dir)
     transcript.output_path = md_path
     reporter.info(f"Markdown: {md_path}")
@@ -101,4 +120,48 @@ def run_pipeline(
         pdf_path = write_pdf(transcript, md_path.with_suffix(".pdf"))
         reporter.info(f"PDF: {pdf_path}")
 
+    if screens:
+        # Erst JETZT moeglich: der annotierte Export liest die eben geschriebene
+        # transcript.json und ordnet jedes Bild dem Absatz mit naechstem start <= t zu.
+        from audioscribe.review.exporter import export_annotated
+
+        try:
+            annot = export_annotated(ziel_dir, make_pdf=make_pdf)
+            reporter.info(f"Annotiertes Transkript: {annot}")
+        except (OSError, ValueError) as exc:  # noqa: BLE001 - Bilder sind da, Text ebenso
+            reporter.info(f"Annotiertes Transkript uebersprungen: {exc}")
+
     return transcript
+
+
+def _erkenne_bildwechsel(video: Path, ziel_dir: Path, dauer_s: float, reporter) -> list:
+    """Fuehrt die Bildwechsel-Erkennung aus; Fehler duerfen den Lauf nie kippen.
+
+    Das Transkript ist an dieser Stelle fertig - eine fehlende numpy-Installation oder ein
+    stolperndes ffmpeg darf nicht dazu fuehren, dass die eigentliche Arbeit verloren geht.
+    """
+    from audioscribe.pipeline import screens as screens_mod
+
+    if not screens_mod.screens_available():
+        reporter.info("numpy fehlt - Bildwechsel-Erkennung uebersprungen")
+        return []
+    try:
+        marks = screens_mod.capture_screens(
+            video,
+            ziel_dir,
+            sensitivity=settings.screen_sensitivity,
+            bildformat=settings.screen_format,
+            fps=settings.screen_fps,
+            min_gap=settings.screen_min_gap,
+            dauer_s=dauer_s,
+            reporter=reporter,
+        )
+    except Exception as exc:  # noqa: BLE001 - defensiv, s. Docstring
+        reporter.info(f"Bildwechsel-Erkennung fehlgeschlagen: {exc}")
+        return []
+
+    if marks:
+        reporter.info(f"{len(marks)} Standbilder: {ziel_dir / 'frames'} ({marks[0].png.split('/')[-1]} ...)")
+    else:
+        reporter.info("Keine Bildwechsel erkannt")
+    return marks

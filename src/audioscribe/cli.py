@@ -74,6 +74,34 @@ def main(argv: list[str] | None = None) -> int:
         metavar="N",
         help="neuer Zeitstempel alle N Saetze (Default 2; 0 = ganzer Sprecher-Beitrag am Stueck)",
     )
+    run.add_argument(
+        "--frames",
+        action="store_true",
+        help="Bildwechsel im Video erkennen und je Wechsel ein Standbild sichern "
+        "(fuer Bildschirmaufnahmen; erzeugt zusaetzlich transkript.annotiert.md)",
+    )
+    run.add_argument(
+        "--frame-sensitivity",
+        choices=("grob", "mittel", "fein"),
+        help="Empfindlichkeit der Bildwechsel-Erkennung (Default: mittel)",
+    )
+    run.add_argument(
+        "--frame-format",
+        choices=("jpg-1600", "jpg-1280", "png"),
+        help="Format/Groesse der Standbilder (Default: jpg-1600)",
+    )
+    run.add_argument(
+        "--frame-fps",
+        type=float,
+        metavar="N",
+        help="Abtastungen je Sekunde bei der Bildanalyse (Default: 2; 1 ist doppelt so schnell)",
+    )
+    run.add_argument(
+        "--frame-min-gap",
+        type=float,
+        metavar="SEK",
+        help="Mindestabstand zwischen zwei Standbildern in Sekunden (Default: 4)",
+    )
     run.add_argument("--pdf", action="store_true", help="zusaetzlich PDF erzeugen")
     run.add_argument("--output", help="Ausgabeverzeichnis (Default: ./output)")
 
@@ -120,6 +148,12 @@ def main(argv: list[str] | None = None) -> int:
         _set("WHISPER_COMPUTE_TYPE", args.compute_type)
         _set("DEVICE", args.device)
         _set("SENTENCES_PER_TIMESTAMP", args.sentences_per_timestamp)
+        if args.frames:
+            _set("SCREENS", 1)
+        _set("SCREEN_SENSITIVITY", args.frame_sensitivity)
+        _set("SCREEN_FORMAT", args.frame_format)
+        _set("SCREEN_FPS", args.frame_fps)
+        _set("SCREEN_MIN_GAP", args.frame_min_gap)
 
         # Geraet aufloesen (auto -> cuda|cpu) und das Ergebnis in die Env zurueckschreiben:
         # so gilt nach dem os.execv-Re-Exec des cuDNN-Bootstraps dieselbe Entscheidung.
