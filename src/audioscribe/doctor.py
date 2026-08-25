@@ -104,11 +104,17 @@ def _check_torch_device() -> CheckResult:
 
 
 def _check_whisperx() -> CheckResult:
-    from audioscribe.compat import ensure_ctranslate2_loadable
+    from audioscribe.compat import ensure_ctranslate2_loadable, ensure_pkg_resources
 
     ensure_ctranslate2_loadable()  # execstack-Fix fuer glibc >= 2.41, vor dem Import
+    ensure_pkg_resources()  # pkg_resources-Ersatz fuer ctranslate2 unter Windows
     try:
         import whisperx  # noqa: F401
+
+        # whisperx laedt sein ASR-Modul erst bei Gebrauch nach - ohne diesen Import
+        # faende der Check ein kaputtes ctranslate2 nicht und der Lauf braeche erst
+        # in Stufe 3 ab, nach Audio-Extraktion und Modell-Download.
+        import ctranslate2  # noqa: F401
     except ImportError as exc:
         return CheckResult("FAIL", "WhisperX", f"Import fehlgeschlagen: {exc}")
     return CheckResult("OK", "WhisperX", f"verfuegbar; Modell konfiguriert: {settings.whisper_model}")
@@ -121,12 +127,21 @@ def _check_diarization() -> CheckResult:
         import pyannote.audio  # noqa: F401
     except ImportError as exc:
         return CheckResult("FAIL", "pyannote.audio", f"Import fehlgeschlagen: {exc}")
-    if not settings.hf_token:
-        return CheckResult(
-            "FAIL", "Diarisierung", "HF_TOKEN fehlt (siehe .env.example) -> 'run' bricht ab"
-        )
-    # Echter gated-Zugriff: ein gesetzter Token heisst NICHT, dass die Modell-Bedingungen
-    # akzeptiert sind. auth_check fragt das ohne Download ab.
+    # Zuerst der Token selbst: ein abgelehnter Token laesst JEDES gesperrte Repo als
+    # "Bedingungen nicht akzeptiert" erscheinen - die Meldung schickte den Nutzer sonst
+    # zum falschen Knopf.
+    from audioscribe.hf import token_status
+
+    status, detail = token_status(settings.hf_token)
+    if status == "FEHLT":
+        return CheckResult("FAIL", "Diarisierung", f"{detail} -> 'run' bricht ab")
+    if status == "UNGUELTIG":
+        return CheckResult("FAIL", "HF_TOKEN", f"{detail} -> 'run' bricht ab")
+    if status == "UNPRUEFBAR":
+        return CheckResult("WARN", "Diarisierung", f"{detail}; HF_TOKEN gesetzt")
+
+    # Ein gueltiger Token heisst NICHT, dass die Modell-Bedingungen akzeptiert sind.
+    # auth_check fragt das ohne Download ab.
     try:
         from huggingface_hub import auth_check
         from huggingface_hub.utils import GatedRepoError, RepositoryNotFoundError

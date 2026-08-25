@@ -135,10 +135,12 @@ def main(argv: list[str] | None = None) -> int:
         _set("WHISPER_COMPUTE_TYPE", compute_type)
         print(f"Device: {device}, compute_type: {compute_type}")
 
-        # ctranslate2-Wheel fuer neuere glibc reparieren (beide Pfade, vor whisperx-Import).
-        from audioscribe.compat import ensure_ctranslate2_loadable
+        # ctranslate2 importierbar machen (beide Pfade, vor dem whisperx-Import):
+        # Wheel-Reparatur fuer neuere glibc (Linux) bzw. pkg_resources-Ersatz (Windows).
+        from audioscribe.compat import ensure_ctranslate2_loadable, ensure_pkg_resources
 
         ensure_ctranslate2_loadable(log=print)
+        ensure_pkg_resources(log=print)
 
         # cuDNN-8-Libs fuer ctranslate2 bereitstellen + via LD_LIBRARY_PATH auffindbar
         # machen (re-exec). Muss vor dem Import von whisperx geschehen; nur im CUDA-Pfad.
