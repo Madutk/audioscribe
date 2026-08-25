@@ -31,10 +31,16 @@ uv sync --extra cpu        # Rechner OHNE NVIDIA-Karte (schlanke CPU-Wheels, ~3 
 # (beide gleichzeitig lehnt uv mit einem Konfliktfehler ab; die Browser-Oberflächen
 #  kommen bei Bedarf dazu: uv sync --extra cu124 --extra review)
 #
-# WICHTIG auf CPU-Rechnern: uv run synct standardmäßig OHNE Extras und würde das
-# große PyPI-CUDA-torch zurückinstallieren — daher das Extra auch beim Ausführen
-# mitgeben: uv run --extra cpu audioscribe …
-# (Auf GPU-Rechnern ist das unkritisch: auch das PyPI-torch ist CUDA-fähig.)
+# WICHTIG: uv run synct standardmäßig OHNE Extras und ersetzt die gewählten Wheels
+# stillschweigend durch die von PyPI — das Extra gehört daher AUCH ans Ausführen:
+#   uv run --extra cu124 --extra review audioscribe ui
+#   uv run --extra cpu audioscribe run …
+# Unter Windows ist das ein harter Fallstrick: das PyPI-torch ist dort ein reiner
+# CPU-Build. Ein 'uv run audioscribe ui' ohne Extra macht die CUDA-Installation
+# also rückgängig, und die Oberfläche zeigt danach 'cuda (nicht verfügbar)'.
+# (Unter Linux ist das PyPI-torch CUDA-fähig; dort kostet es nur ~3 GB zu viel.)
+# Wer das nicht jedes Mal tippen will: die Skripte direkt aus dem venv starten
+# (.venv/bin/audioscribe bzw. .venv\Scripts\audioscribe.exe) — die synchronisieren nicht.
 
 # HuggingFace-Token für die Diarisierung hinterlegen
 cp .env.example .env
@@ -121,8 +127,13 @@ Vollständig lokal (nur `localhost`, kein Upload).
 # einmalig die optionalen Pakete installieren (FastAPI + uvicorn)
 uv sync --extra cu124 --extra review      # bzw. --extra cpu --extra review
 
-uv run audioscribe ui                     # öffnet http://127.0.0.1:8766
-uv run audioscribe ui --port 9000 --no-browser
+# Extras beim Start MITGEBEN - sonst synct uv die Umgebung ohne sie zurück und die
+# Geräte-Auswahl steht danach auf 'cuda (nicht verfügbar)':
+uv run --extra cu124 --extra review audioscribe ui        # öffnet http://127.0.0.1:8766
+uv run --extra cu124 --extra review audioscribe ui --port 9000 --no-browser
+
+# Ohne uv (synchronisiert nichts, kürzer):
+.venv/bin/audioscribe ui                  # Windows: .venv\Scripts\audioscribe.exe ui
 ```
 
 **Ablauf in der Oberfläche:**
@@ -286,9 +297,10 @@ uv run --extra cpu audioscribe run input/meeting.m4a
 
 Zu beachten:
 
-- Das `--extra cpu` gehört auf CPU-Rechnern **auch an `uv run`** — ohne Extra synct
-  uv die Umgebung zurück auf das PyPI-torch (CUDA-Bundle, ~3 GB mehr; läuft zwar
-  auch auf CPU, verfehlt aber den Zweck der schlanken Installation).
+- Das gewählte Extra gehört **auch an `uv run`** — ohne Extra synct uv die Umgebung
+  zurück auf das PyPI-torch. Unter Linux ist das das CUDA-Bundle (~3 GB mehr, läuft
+  auch auf CPU), unter Windows ein reiner CPU-Build (dann ist die GPU weg). Wer das
+  umgehen will, startet die Skripte direkt aus dem venv.
 
 - **Deutlich langsamer** als auf GPU — `large-v3` braucht auf CPU ein Mehrfaches der
   Aufnahmedauer. Wirksamster Hebel ist ein **kleineres Modell**, nicht die Batch-Größe:

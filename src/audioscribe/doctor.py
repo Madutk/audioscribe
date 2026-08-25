@@ -49,6 +49,7 @@ def evaluate_device(
     torch_version: str,
     compute_type_raw: str,
     gpu_name: str | None = None,
+    nvidia_karte: bool = False,
 ) -> CheckResult:
     """Reine Bewertungslogik fuer den Device-Check (testbar ohne torch).
 
@@ -84,6 +85,14 @@ def evaluate_device(
     if not cuda_ok and "+cpu" not in torch_version:
         # CUDA-/PyPI-Build ohne nutzbares CUDA: die schlanken CPU-Wheels sparen ~3 GB.
         detail += " — Tipp: 'uv sync --extra cpu' installiert die schlanken CPU-Wheels"
+    elif not cuda_ok and nvidia_karte:
+        # Karte da, aber CPU-Wheels installiert. Das passiert schneller als man denkt:
+        # 'uv run' synchronisiert vorher ohne die gewaehlten Extras und ersetzt die
+        # CUDA-Wheels stillschweigend wieder durch die von PyPI.
+        detail += (
+            " — NVIDIA-Karte erkannt, aber CPU-Build installiert: "
+            "'uv sync --extra cu124 --extra review' (und die UI danach ohne 'uv run' starten)"
+        )
     return CheckResult("OK", "PyTorch/Device", detail)
 
 
@@ -98,8 +107,15 @@ def _check_torch_device() -> CheckResult:
         )
     cuda_ok = torch.cuda.is_available()
     gpu_name = torch.cuda.get_device_name(0) if cuda_ok else None
+    # nvidia-smi kommt mit dem Treiber, nicht mit torch: seine blosse Anwesenheit verraet
+    # eine Karte auch dann, wenn torch als CPU-Build gar nichts von ihr wissen kann.
     return evaluate_device(
-        settings.device, cuda_ok, torch.__version__, settings.whisper_compute_type, gpu_name
+        settings.device,
+        cuda_ok,
+        torch.__version__,
+        settings.whisper_compute_type,
+        gpu_name,
+        nvidia_karte=bool(shutil.which("nvidia-smi")),
     )
 
 

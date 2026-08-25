@@ -120,3 +120,20 @@ def test_doctor_tipp_auf_cpu_wheels_bei_fettem_build_ohne_cuda():
 def test_doctor_kein_tipp_bei_cpu_build():
     r = evaluate_device("auto", False, "2.6.0+cpu", "auto")
     assert "--extra cpu" not in r.detail
+
+
+def test_doctor_hinweis_auf_cuda_wheels_bei_karte_und_cpu_build():
+    """CPU-Wheels auf einem Rechner mit NVIDIA-Karte: der Nutzer soll erfahren, warum.
+
+    'uv run' synchronisiert vorher ohne die gewaehlten Extras und ersetzt die
+    CUDA-Wheels stillschweigend wieder - ohne Hinweis sucht man den Fehler woanders.
+    """
+    r = evaluate_device("auto", False, "2.6.0+cpu", "auto", nvidia_karte=True)
+    assert r.status == "OK"
+    assert "NVIDIA-Karte erkannt" in r.detail
+    assert "--extra cu124" in r.detail
+
+
+def test_doctor_kein_cuda_hinweis_ohne_karte():
+    r = evaluate_device("auto", False, "2.6.0+cpu", "auto", nvidia_karte=False)
+    assert "NVIDIA-Karte erkannt" not in r.detail
