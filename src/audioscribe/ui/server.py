@@ -17,6 +17,7 @@ ohne zweiten Kanal aus und uebersteht ein Neuladen der Seite.
 
 import functools
 import json
+import time
 import webbrowser
 from pathlib import Path
 
@@ -27,11 +28,28 @@ from audioscribe.ui.runner import BatchRunner
 
 _STATIC_DIR = Path(__file__).parent / "static"
 
+# Lebensdauer des CUDA-Probe-Ergebnisses. Kurz genug, dass ein Wechsel der Installation
+# von selbst sichtbar wird; lang genug, dass Seitenaufrufe keinen Subprozess kosten.
+_CUDA_TTL_S = 120.0
+_cuda_cache: tuple[float, bool | None] | None = None
 
-@functools.lru_cache(maxsize=1)
+
 def _cuda() -> bool | None:
-    """CUDA-Probe (Wegwerf-Subprozess), einmalig und gecacht."""
-    return jobs.probe_cuda()
+    """CUDA-Probe (Wegwerf-Subprozess), kurz gecacht.
+
+    Die Probe startet Python samt torch-Import und kostet Sekunden - pro Seitenaufruf
+    waere das zu teuer. Ein Cache ohne Ablauf haelt aber auch eine laengst geaenderte
+    Installation fest: nach 'uv sync --extra cu124' stuende in der Oberflaeche weiter
+    'cuda (nicht verfuegbar)', bis jemand den Server neu startet - und niemand vermutet
+    die Ursache im Server.
+    """
+    global _cuda_cache
+    jetzt = time.monotonic()
+    if _cuda_cache is not None and jetzt - _cuda_cache[0] < _CUDA_TTL_S:
+        return _cuda_cache[1]
+    wert = jobs.probe_cuda()
+    _cuda_cache = (jetzt, wert)
+    return wert
 
 
 def _size_mb(path: Path) -> float:
