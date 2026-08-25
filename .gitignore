@@ -30,6 +30,10 @@ work/
 .env
 .env.local
 
+# Claude Code: die persoenlichen Berechtigungen bleiben lokal
+# (enthalten Maschinenpfade); die installierten Skills sind geteilt und liegen im Repo
+.claude/settings.local.json
+
 # IDE / OS
 .idea/
 .vscode/
