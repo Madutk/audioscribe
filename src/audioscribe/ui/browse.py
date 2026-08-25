@@ -1,9 +1,13 @@
 """Ordner-Auswahl im Browser: Pfad-Umsetzung Windows<->WSL, Verzeichnis-Listing.
 
 Ein Browser kennt keinen nativen Ordner-Dialog, der einen *Pfad* zurueckgibt - deshalb
-blaettert die Oberflaeche serverseitig durch das Dateisystem. Fuer den WSL-Alltag setzt
-``windows_to_wsl`` eingefuegte Explorer-Pfade (``C:\\Users\\...``, ``\\\\wsl$\\...``) auf
-die passenden POSIX-Pfade um.
+blaettert die Oberflaeche serverseitig durch das Dateisystem.
+
+Der Server laeuft entweder nativ unter Windows oder unter WSL/Linux. Eingefuegte Pfade
+werden deshalb in BEIDE Richtungen umgesetzt: unter WSL wird ``C:\\Users\\...`` zu
+``/mnt/c/Users/...``, nativ unter Windows umgekehrt ``/mnt/c/Users/...`` zu
+``C:\\Users\\...``. Derselbe kopierte Explorer-Pfad funktioniert damit ueberall, und ein
+Ordner, den ein frueherer WSL-Lauf gemerkt hat, oeffnet sich auch unter Windows.
 
 Sicherheit: Das Blaettern ist absichtlich nicht auf ein Wurzelverzeichnis beschraenkt -
 genau das ist das Feature. Abgesichert wird es dadurch, dass der Server ausschliesslich
@@ -15,12 +19,25 @@ from __future__ import annotations
 
 import os
 import re
+import string
 from pathlib import Path
+
+IS_WINDOWS = os.name == "nt"
 
 # "C:\Users\marek" / "c:/Users/marek" -> Laufwerksbuchstabe + Rest
 _DRIVE_RE = re.compile(r"^([A-Za-z]):(?:[\\/](.*))?$")
 # "\\wsl$\Ubuntu\home\marek" bzw. "\\wsl.localhost\Ubuntu\home\marek" -> Rest
 _UNC_WSL_RE = re.compile(r"^\\\\wsl(?:\$|\.localhost)\\[^\\]+(?:\\(.*))?$", re.IGNORECASE)
+# "/mnt/c/Users/marek" -> Laufwerksbuchstabe + Rest
+_MNT_DRIVE_RE = re.compile(r"^/mnt/([A-Za-z])(?:/(.*))?$")
+
+# FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM
+_HIDDEN_ATTRS = 0x2 | 0x4
+
+
+def _clean(text: str) -> str:
+    """Nutzereingabe entzwirbeln: Leerraum und die Anfuehrungszeichen aus dem Explorer weg."""
+    return (text or "").strip().strip('"').strip("'")
 
 
 def windows_to_wsl(text: str) -> str:
@@ -29,7 +46,7 @@ def windows_to_wsl(text: str) -> str:
     ``C:\\Users\\marek`` -> ``/mnt/c/Users/marek``,
     ``\\\\wsl$\\Ubuntu\\home\\marek`` -> ``/home/marek``.
     """
-    raw = text.strip().strip('"').strip("'")
+    raw = _clean(text)
     if not raw:
         return raw
 
@@ -46,12 +63,58 @@ def windows_to_wsl(text: str) -> str:
     return raw
 
 
-def normalize_path(text: str, *, default: Path | None = None) -> Path:
-    """Nutzereingabe -> absoluter Pfad (Windows-Umsetzung, ``~``, ``..`` aufgeloest)."""
-    raw = windows_to_wsl(text or "")
+def wsl_to_windows(text: str) -> str:
+    """Setzt einen WSL-Pfad auf seine Windows-Entsprechung um; Windows bleibt Windows.
+
+    ``/mnt/c/Users/marek`` -> ``C:\\Users\\marek``, ``C:/Users/marek`` -> ``C:\\Users\\marek``.
+    Reine Linux-Pfade (``/home/marek``) bleiben stehen - sie sind unter Windows hoechstens
+    ueber ``\\\\wsl$\\...`` erreichbar, und welche Distribution gemeint ist, weiss nur der Nutzer.
+    """
+    raw = _clean(text)
+    if not raw:
+        return raw
+
+    mnt = _MNT_DRIVE_RE.match(raw.replace("\\", "/"))
+    if mnt:
+        rest = (mnt.group(2) or "").replace("/", "\\")
+        return f"{mnt.group(1).upper()}:\\{rest}"
+
+    drive = _DRIVE_RE.match(raw)
+    if drive:
+        # Trenner IMMER setzen: "C:" allein meint unter Windows das *aktuelle*
+        # Verzeichnis auf C:, nicht die Wurzel.
+        rest = (drive.group(2) or "").replace("/", "\\")
+        return f"{drive.group(1).upper()}:\\{rest}"
+
+    return raw
+
+
+def to_native(text: str, *, windows: bool | None = None) -> str:
+    """Nutzereingabe -> Schreibweise des Systems, auf dem der Server laeuft."""
+    windows = IS_WINDOWS if windows is None else windows
+    return wsl_to_windows(text) if windows else windows_to_wsl(text)
+
+
+def normalize_path(text: str, *, default: Path | None = None, windows: bool | None = None) -> Path:
+    """Nutzereingabe -> absoluter Pfad (Pfad-Umsetzung, ``~``, ``..`` aufgeloest)."""
+    raw = to_native(text or "", windows=windows)
     if not raw:
         return Path(default) if default is not None else Path.home()
     return Path(raw).expanduser().resolve()
+
+
+def _is_hidden(entry: os.DirEntry) -> bool:
+    """Versteckt: Punktordner (POSIX) bzw. Hidden-/System-Attribut (Windows).
+
+    Ohne die Attribut-Pruefung staenden in ``C:\\`` Eintraege wie ``$Recycle.Bin`` oder
+    ``System Volume Information`` mitten in der Ordnerliste.
+    """
+    if entry.name.startswith("."):
+        return True
+    try:
+        return bool(entry.stat(follow_symlinks=False).st_file_attributes & _HIDDEN_ATTRS)
+    except (AttributeError, OSError):  # st_file_attributes gibt es nur unter Windows
+        return False
 
 
 def list_dirs(folder: Path, *, show_hidden: bool = False) -> list[Path]:
@@ -61,10 +124,10 @@ def list_dirs(folder: Path, *, show_hidden: bool = False) -> list[Path]:
         raise NotADirectoryError(f"Kein Verzeichnis: {folder}")
 
     out: list[Path] = []
-    # scandir statt iterdir: spart je Eintrag einen stat-Aufruf (spuerbar auf /mnt/c).
+    # scandir statt iterdir: spart je Eintrag einen stat-Aufruf (spuerbar auf Netzlaufwerken).
     with os.scandir(folder) as entries:
         for entry in entries:
-            if not show_hidden and entry.name.startswith("."):
+            if not show_hidden and _is_hidden(entry):
                 continue
             try:
                 if entry.is_dir():
@@ -75,14 +138,49 @@ def list_dirs(folder: Path, *, show_hidden: bool = False) -> list[Path]:
 
 
 def breadcrumbs(folder: Path) -> list[tuple[str, str]]:
-    """Pfadkette als ``(Anzeigename, Pfad)`` von der Wurzel bis ``folder``."""
+    """Pfadkette als ``(Anzeigename, Pfad)`` von der Wurzel bzw. dem Laufwerk bis ``folder``.
+
+    Erwartet einen absoluten Pfad (so, wie ``normalize_path`` ihn liefert): die Wurzel ist
+    ``/`` unter POSIX und ``C:\\`` unter Windows.
+    """
     folder = Path(folder)
-    crumbs = [("/", "/")]
-    current = Path("/")
+    anchor = folder.anchor or "/"
+    # Anzeigename ohne den Trenner am Ende ("C:" statt "C:\"), damit die Oberflaeche
+    # ihn wie zwischen allen anderen Krumen selbst setzen kann; "/" bleibt "/".
+    crumbs = [(anchor if anchor == "/" else anchor.rstrip("\\/") or anchor, anchor)]
+    current = Path(anchor)
     for part in folder.parts[1:]:
         current = current / part
         crumbs.append((part, str(current)))
     return crumbs
+
+
+def windows_drives() -> list[Path]:
+    """Vorhandene Laufwerke des laufenden Windows-Systems (``C:\\``, ``D:\\``, ...).
+
+    Die Bitmaske von ``GetLogicalDrives`` kostet keinen Datentraeger-Zugriff; erst danach
+    wird geprueft, ob das Laufwerk lesbar ist - ein leeres DVD-Laufwerk faellt so raus.
+    """
+    if not IS_WINDOWS:
+        return []
+    try:
+        import ctypes
+
+        mask = ctypes.windll.kernel32.GetLogicalDrives()  # type: ignore[attr-defined]
+    except (AttributeError, OSError, ImportError):
+        return []
+
+    out: list[Path] = []
+    for index, letter in enumerate(string.ascii_uppercase):
+        if not mask >> index & 1:
+            continue
+        drive = Path(f"{letter}:\\")
+        try:
+            if drive.is_dir():
+                out.append(drive)
+        except OSError:
+            continue
+    return out
 
 
 def quick_links(
@@ -92,8 +190,10 @@ def quick_links(
     output_dir: Path,
     home: Path | None = None,
     mnt_root: Path = Path("/mnt"),
+    windows: bool | None = None,
 ) -> list[tuple[str, str]]:
-    """Sprungziele fuer den Ordner-Dialog (Projektordner, Home, Windows-Laufwerke)."""
+    """Sprungziele fuer den Ordner-Dialog (Projektordner, Home, Laufwerke, Nutzer-Ordner)."""
+    windows = IS_WINDOWS if windows is None else windows
     home = Path.home() if home is None else Path(home)
     candidates: list[tuple[str, Path]] = [
         ("Projekt", Path(project_root)),
@@ -102,17 +202,31 @@ def quick_links(
         ("Home", home),
     ]
 
-    # Windows-Laufwerke haengen unter /mnt/<buchstabe>; /mnt/wsl & Co. ausblenden.
-    try:
-        drives = sorted(p for p in Path(mnt_root).iterdir() if len(p.name) == 1 and p.is_dir())
-    except OSError:
-        drives = []
-    candidates += [(f"Windows {d.name.upper()}:", d) for d in drives]
+    if windows:
+        # Nativ unter Windows sind die Laufwerke die Wurzeln - ein "/" gibt es nicht,
+        # ohne diese Sprungziele kaeme man aus dem Projektordner nie heraus.
+        candidates += [(drive.drive, drive) for drive in windows_drives()]
+        # Die uebersetzten Namen kommen mit: ein deutsches Windows hat "Dokumente",
+        # ein englisches "Documents" - vorhanden ist immer nur einer davon.
+        candidates += [
+            (name, home / name)
+            for name in ("Desktop", "Downloads", "Videos", "Dokumente", "Documents")
+        ]
+    else:
+        # Unter WSL haengen die Windows-Laufwerke in /mnt/<buchstabe>; /mnt/wsl & Co. raus.
+        try:
+            drives = sorted(p for p in Path(mnt_root).iterdir() if len(p.name) == 1 and p.is_dir())
+        except OSError:
+            drives = []
+        candidates += [(f"Windows {d.name.upper()}:", d) for d in drives]
 
     seen: set[str] = set()
     links: list[tuple[str, str]] = []
     for label, path in candidates:
-        if not path.is_dir():
+        try:
+            if not path.is_dir():
+                continue
+        except OSError:
             continue
         key = str(path)
         if key in seen:

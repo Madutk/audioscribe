@@ -69,6 +69,24 @@ def _media_seconds(media: Path, out_dir: Path) -> float | None:
     return _duration_cached(str(media), stat.st_mtime_ns, stat.st_size)
 
 
+def _remembered_dir(raw: object, fallback: Path) -> str:
+    """Gemerkten Ordner uebernehmen - aber nur, wenn er auf diesem Rechner existiert.
+
+    Der Zustand ueberdauert einen Wechsel des Betriebssystems (WSL <-> Windows) und den
+    Umzug auf einen anderen Rechner; ein Pfad von dort waere sonst eine Sackgasse, die
+    der Nutzer erst von Hand ueberschreiben muesste. Der Ausgangsordner darf fehlen,
+    solange sein uebergeordneter Ordner steht - angelegt wird er erst beim Start.
+    """
+    if not isinstance(raw, str) or not raw.strip():
+        return str(fallback)
+    path = browse.normalize_path(raw, default=fallback)
+    try:
+        plausibel = path.is_dir() or path.parent.is_dir()
+    except OSError:
+        plausibel = False
+    return str(path if plausibel else fallback)
+
+
 def _folder_info(raw: str, *, default: Path) -> dict:
     """Verzeichnis-Inhalt fuer den Ordner-Dialog (Unterordner + Medien-Uebersicht)."""
     folder = browse.normalize_path(raw, default=default)
@@ -147,6 +165,8 @@ def create_app():
             },
             state.load_state(),
         )
+        chosen["input_dir"] = _remembered_dir(chosen["input_dir"], settings.input_dir)
+        chosen["output_dir"] = _remembered_dir(chosen["output_dir"], settings.output_dir)
         return JSONResponse(
             {
                 **chosen,
@@ -154,6 +174,9 @@ def create_app():
                 "languages": list(jobs.LANGUAGES),
                 "devices": list(jobs.DEVICES),
                 "cuda": _cuda(),
+                # Steuert nur den Hinweistext der Oberflaeche: unter Windows werden
+                # Pfade nach C:\... umgesetzt, unter WSL nach /mnt/c/....
+                "platform": "windows" if browse.IS_WINDOWS else "posix",
                 "quick_links": [
                     {"label": label, "path": path}
                     for label, path in browse.quick_links(
