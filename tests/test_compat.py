@@ -58,3 +58,19 @@ def test_speechbrain_lazy_module_reisst_inspect_stack_nicht_mit(monkeypatch):
     # Ausserhalb von inspect bleibt das Lazy-Verhalten unangetastet.
     with pytest.raises(ImportError):
         platzhalter.irgendein_attribut
+
+
+def test_ensure_native_libs_laedt_unter_windows_nichts(monkeypatch):
+    """Der cuDNN-8-Bootstrap ist ein Linux-Workaround.
+
+    Das ctranslate2-Windows-Wheel bringt cudnn64_8.dll selbst mit; ohne den Abbruch
+    zoege der CUDA-Pfad mehrere hundert MB Linux-.so-Dateien und startete den Prozess
+    danach grundlos per execv neu.
+    """
+    gerufen = []
+    monkeypatch.setattr(compat.os, "name", "nt")
+    monkeypatch.setattr(compat, "ensure_cudnn8", lambda log=None: gerufen.append("download"))
+
+    compat.ensure_native_libs()
+
+    assert gerufen == []
