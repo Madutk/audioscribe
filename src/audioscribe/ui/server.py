@@ -139,6 +139,9 @@ def create_app():
         language: str | None = None
         device: str | None = None
         diarize: bool | None = None
+        frames: bool | None = None
+        frame_sensitivity: str | None = None
+        frame_format: str | None = None
 
     class StartIn(BaseModel):
         input_dir: str
@@ -149,6 +152,9 @@ def create_app():
         language: str = "de"
         device: str = "auto"
         diarize: bool = True
+        frames: bool = False
+        frame_sensitivity: str = "mittel"
+        frame_format: str = "jpg-1600"
 
     @app.middleware("http")
     async def _same_origin_only(request: Request, call_next):
@@ -180,6 +186,9 @@ def create_app():
                 "language": settings.whisper_language,
                 "device": settings.device,
                 "diarize": settings.enable_diarization,
+                "frames": settings.enable_screens,
+                "frame_sensitivity": settings.screen_sensitivity,
+                "frame_format": settings.screen_format,
             },
             state.load_state(),
         )
@@ -191,6 +200,8 @@ def create_app():
                 "models": list(jobs.WHISPER_MODELS),
                 "languages": list(jobs.LANGUAGES),
                 "devices": list(jobs.DEVICES),
+                "sensitivities": list(jobs.SENSITIVITIES),
+                "frame_formats": list(jobs.FRAME_FORMATS),
                 "cuda": _cuda(),
                 # Steuert nur den Hinweistext der Oberflaeche: unter Windows werden
                 # Pfade nach C:\... umgesetzt, unter WSL nach /mnt/c/....
@@ -258,6 +269,10 @@ def create_app():
             raise HTTPException(400, f"Unbekanntes Geraet: {body.device}")
         if not body.model.strip():
             raise HTTPException(400, "Kein Modell gewaehlt.")
+        if body.frames and body.frame_sensitivity not in jobs.SENSITIVITIES:
+            raise HTTPException(400, f"Unbekannte Empfindlichkeit: {body.frame_sensitivity}")
+        if body.frames and body.frame_format not in jobs.FRAME_FORMATS:
+            raise HTTPException(400, f"Unbekanntes Bildformat: {body.frame_format}")
 
         folder = browse.normalize_path(body.input_dir, default=settings.input_dir)
         out_dir = browse.normalize_path(body.output_dir, default=settings.output_dir)
@@ -280,6 +295,9 @@ def create_app():
             language=body.language.strip() or "de",
             device=body.device,
             diarize=body.diarize,
+            frames=body.frames,
+            frame_sensitivity=body.frame_sensitivity,
+            frame_format=body.frame_format,
         )
         state.save_state(
             {
@@ -289,6 +307,9 @@ def create_app():
                 "language": opts.language,
                 "device": opts.device,
                 "diarize": opts.diarize,
+                "frames": opts.frames,
+                "frame_sensitivity": opts.frame_sensitivity,
+                "frame_format": opts.frame_format,
             }
         )
         # Laufzeiten VOR dem Start messen - im Runner darf nie gemessen werden, das

@@ -50,6 +50,12 @@ LANGUAGES: tuple[str, ...] = ("de", "en", "auto")
 
 DEVICES: tuple[str, ...] = ("auto", "cuda", "cpu")
 
+# Bildwechsel-Erkennung: die Namen stammen aus pipeline.screens (SENSITIVITIES/FORMATS),
+# werden hier aber bewusst wiederholt - die Oberflaeche darf die Pipeline nicht importieren
+# (das zoege torch & Co. in den Webserver-Prozess).
+SENSITIVITIES: tuple[str, ...] = ("grob", "mittel", "fein")
+FRAME_FORMATS: tuple[str, ...] = ("jpg-1600", "jpg-1280", "png")
+
 
 @dataclass(frozen=True)
 class JobOptions:
@@ -61,6 +67,9 @@ class JobOptions:
     language: str = "de"
     device: str = "auto"
     diarize: bool = True
+    frames: bool = False
+    frame_sensitivity: str = "mittel"
+    frame_format: str = "jpg-1600"
 
 
 def scan_media(folder: Path) -> list[Path]:
@@ -147,6 +156,16 @@ def build_argv(media: Path, opts: JobOptions, *, prefix: Sequence[str] | None = 
     ]
     if not opts.diarize:
         argv.append("--no-diarize")
+    if opts.frames:
+        # Die Feinparameter (--frame-fps, --frame-min-gap) bleiben der Kommandozeile
+        # vorbehalten; die Oberflaeche setzt nur die beiden Auswahlfelder.
+        argv += [
+            "--frames",
+            "--frame-sensitivity",
+            opts.frame_sensitivity,
+            "--frame-format",
+            opts.frame_format,
+        ]
     return argv
 
 

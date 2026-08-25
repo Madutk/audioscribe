@@ -97,6 +97,19 @@ class Settings:
         default_factory=lambda: os.environ.get("HF_TOKEN") or os.environ.get("HUGGINGFACE_TOKEN")
     )
 
+    # --- Bildwechsel-Erkennung fuer Bildschirmaufnahmen (FR-23..FR-27) ---
+    # Standardmaessig AUS: die Analyse dekodiert das komplette Video (grob ein Achtel der
+    # Spieldauer) und ist nur bei Bildschirmaufnahmen sinnvoll.
+    enable_screens: bool = field(default_factory=lambda: _flag("SCREENS", "0"))
+    # Namen aus pipeline.screens.SENSITIVITIES bzw. .FORMATS; dort liegen auch die Defaults.
+    # Hier bewusst als Rohtext gehalten - config darf nicht von der Pipeline abhaengen.
+    screen_sensitivity: str = field(default_factory=lambda: _env("SCREEN_SENSITIVITY", "mittel"))
+    screen_format: str = field(default_factory=lambda: _env("SCREEN_FORMAT", "jpg-1600"))
+    # Abtastungen je Sekunde: 1 halbiert die Analysezeit, verpasst aber kurze Einblendungen.
+    screen_fps: float = field(default_factory=lambda: float(_env("SCREEN_FPS", "2")))
+    # Mindestabstand zwischen zwei Bildern (Sekunden) - gegen Bilderfluten bei Videos.
+    screen_min_gap: float = field(default_factory=lambda: float(_env("SCREEN_MIN_GAP", "4")))
+
     def ensure_dirs(self) -> None:
         for d in (self.input_dir, self.output_dir, self.work_dir, self.cache_dir):
             d.mkdir(parents=True, exist_ok=True)

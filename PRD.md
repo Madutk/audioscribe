@@ -335,3 +335,69 @@ Gerät wird verwendet — standardmäßig automatisch erkannt).
 - [ ] `audioscribe run` läuft auf einem Rechner ohne NVIDIA-Karte ohne Zusatzangabe durch (`auto` → CPU, compute_type `int8`, kein cuDNN-Download/Re-Exec).
 - [ ] `--device cpu` erzwingt CPU auch auf einem GPU-Rechner; `--device cuda` ohne CUDA bricht mit klarer Meldung ab.
 - [ ] `audioscribe doctor` meldet die Matrix aus FR-22 korrekt (insb. kein FAIL mehr bei `auto` ohne CUDA).
+
+## 15. Ausbaustufe: Automatische Bildwechsel-Erkennung (Bildschirmaufnahmen)
+
+> Status: umgesetzt · Additive Stufe der Transkriptions-Pipeline, standardmäßig **aus**.
+
+### 15.1 Ziel
+
+Bildschirmaufnahmen tragen einen erheblichen Teil ihres Inhalts im Bild. §13 holt ihn
+über **manuelles** Markieren in der Review-Oberfläche. Diese Stufe erkennt Wechsel des
+Bildschirminhalts **selbsttätig**, sichert je Wechsel ein Standbild und verknüpft es über
+eine ID mit dem Transkript. Ziel ist ein Dokument, das Transkript und Bilder gemeinsam
+einer KI zur Auswertung vorlegen kann.
+
+### 15.2 Designentscheidungen (festgelegt)
+
+- **Blockraster statt Pixelvergleich:** Das Bild wird auf 192×108 Graustufen verkleinert
+  und in 16×9 Blöcke zerlegt. Ein Block gilt als geändert, wenn seine mittlere
+  Absolutdifferenz die Schwelle übersteigt; ein Bildwechsel liegt erst bei mehreren
+  Blöcken vor. **Damit löst ein Mauszeiger nichts aus** — er belegt genau einen Block.
+  Gemessen an einer 2560×1440-Aufnahme: Mauszeiger 1–2 Blöcke, echte Wechsel 14–113.
+- **Ein ffmpeg-Prozess für das ganze Video** (Rohstrom über eine Pipe), nicht ein Aufruf
+  je Zeitpunkt. Konstanter Speicherbedarf, ~8× Echtzeit.
+- **Serien werden zusammengefasst:** Animationen schlagen mehrfach an; das Standbild
+  entsteht am Ende der Serie, also am fertig aufgebauten Bildschirm.
+- **Notausgang bei Dauerbewegung:** Eine mitlaufende Kamerakachel beruhigt sich nie —
+  nach 20 s wird trotzdem ein Bild gesichert, sonst lieferte eine Besprechungsaufnahme
+  ein einziges Bild vom Schluss.
+- **Verworfen:** ffmpegs `select='gt(scene,X)'` — kein Mauszeiger-Schutz, Schwelle bei
+  Bildschirmarbeit nicht interpretierbar.
+- **Wiederverwendung statt Parallelwelt:** Die Treffer werden als `Mark` in dasselbe
+  `marks.json` geschrieben, das die Review-Oberfläche nutzt. Damit greift der komplette
+  vorhandene Export-Pfad (FR-18) unverändert.
+
+### 15.3 Funktionale Anforderungen
+
+| ID | Anforderung |
+|----|-------------|
+| FR-23 | `audioscribe run --frames` erkennt Wechsel des Bildschirminhalts und sichert je Wechsel ein Standbild. Standardmäßig **aus**; nur für Videoquellen. |
+| FR-24 | Bewegungen des Mauszeigers und blinkende Textcursor lösen **kein** Standbild aus. |
+| FR-25 | Jedes Standbild trägt **ID und Zeitstempel** im Dateinamen (`frames/0001_00-01-23.jpg`); im annotierten Transkript erscheint es als `![Bild #0001 – 00:01:23](…)` am Absatz mit nächstem `start ≤ t`. |
+| FR-26 | Empfindlichkeit (`grob`/`mittel`/`fein`), Bildformat (`jpg-1600`/`jpg-1280`/`png`), Abtastrate und Mindestabstand sind einstellbar — über CLI-Flags, `AUDIOSCRIBE_SCREEN_*` und (die ersten beiden) in der Stapel-Oberfläche. |
+| FR-27 | Ein erneuter Lauf ersetzt die automatisch erzeugten Bilder samt Einträgen; **von Hand gesetzte Markierungen bleiben unberührt** (Gegenstück zu FR-15). |
+
+### 15.4 Nicht-funktionale Anforderungen
+
+| ID | Anforderung |
+|----|-------------|
+| NFR-10 | Die Stufe läuft **nach** Transkription und Diarisierung. Ein Fehler in ihr (fehlendes numpy, stolperndes ffmpeg) wird protokolliert und beendet den Lauf **nicht** — das Transkript ist zu dem Zeitpunkt bereits geschrieben. |
+| NFR-11 | Die Bildmenge ist gedeckelt (400 je Aufnahme); wird gekürzt, nennt das Protokoll den passenden Regler. Kein stillschweigendes Abschneiden. |
+
+### 15.5 Ein-/Ausgabe
+
+- **Artefakte je Aufnahme:** `output/<name>/frames/<ID>_<HH-MM-SS>.jpg`, ergänzte
+  `marks.json` (Felder `id`, `kind: "auto"`), `transkript.annotiert.md` (+ PDF bei `--pdf`).
+  `transkript.md` und `transcript.json` bleiben **unverändert** (NFR-6/NFR-9).
+- **Abhängigkeit:** Die Analyse nutzt numpy (kommt mit torch); fehlt es, wird die Stufe
+  übersprungen.
+
+### 15.6 Akzeptanzkriterien
+
+- [x] Ein Lauf mit `--frames` auf einer Bildschirmaufnahme erzeugt Standbilder an den
+      Stellen echter Wechsel; eine reine Mausbewegung erzeugt keines.
+- [x] Die Standbilder tragen ID und Zeitstempel; das annotierte Transkript verweist mit
+      derselben ID auf sie.
+- [x] Ein zweiter Lauf liefert dieselben IDs (1..N) und lässt manuelle Markierungen stehen.
+- [x] Ein Lauf **ohne** `--frames` verhält sich exakt wie zuvor.

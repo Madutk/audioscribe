@@ -24,6 +24,9 @@ STATE_KEYS: tuple[str, ...] = (
     "language",
     "device",
     "diarize",
+    "frames",
+    "frame_sensitivity",
+    "frame_format",
 )
 
 _STATE_NAME = "ui-state.json"
@@ -70,7 +73,7 @@ def _clean(values: Mapping[str, object]) -> dict:
         if key not in values:
             continue
         value = values[key]
-        if key == "diarize":
+        if key in ("diarize", "frames"):
             out[key] = bool(value)
         elif isinstance(value, str) and value.strip():
             out[key] = value.strip()

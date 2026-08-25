@@ -115,7 +115,15 @@
       </div>
       <div class="checks">
         <label><input type="checkbox" id="diarize" checked /> Sprecher-Diarisierung</label>
+        <label><input type="checkbox" id="frames" /> Bildwechsel erkennen (Bildschirmaufnahmen)</label>
       </div>
+      <div class="grid" id="frameOpts" style="margin-top:8px">
+        <div class="field"><label for="frameSens">Empfindlichkeit</label><select id="frameSens"></select></div>
+        <div class="field"><label for="frameFmt">Bildformat</label><select id="frameFmt"></select></div>
+      </div>
+      <p class="hint" id="frameHint">Sichert bei jedem Bildschirmwechsel ein Standbild und legt ein
+        <code>transkript.annotiert.md</code> mit den Bildern an. Mausbewegungen loesen nichts aus;
+        der Lauf dauert grob ein Achtel der Videolaenge laenger.</p>
     </div>
 
     <button class="start" id="start">▶ Transkription starten</button>
@@ -206,6 +214,10 @@ async function init() {
     if ($('device').value === 'cuda') $('device').value = 'auto';
   }
   $('diarize').checked = defaults.diarize !== false;
+  fill($('frameSens'), defaults.sensitivities, defaults.frame_sensitivity);
+  fill($('frameFmt'), defaults.frame_formats, defaults.frame_format);
+  $('frames').checked = defaults.frames === true;
+  toggleFrameOpts();
   $('pathHint').innerHTML = defaults.platform === 'windows'
     ? 'Pfade aus dem Explorer koennen direkt eingefuegt werden – <code>C:\\Users\\…</code>. ' +
       'WSL-Pfade (<code>/mnt/c/…</code>) werden mit umgesetzt.'
@@ -217,6 +229,13 @@ async function init() {
   poll();
 }
 
+/** Die beiden Auswahlfelder sind nur sinnvoll, wenn die Erkennung ueberhaupt laeuft. */
+function toggleFrameOpts() {
+  const an = $('frames').checked;
+  $('frameOpts').style.display = an ? '' : 'none';
+  $('frameHint').style.display = an ? '' : 'none';
+}
+
 function fill(sel, values, chosen) {
   const all = values.includes(chosen) ? values : [chosen, ...values];
   sel.innerHTML = all.map((v) => `<option value="${esc(v)}">${esc(v)}</option>`).join('');
@@ -225,6 +244,9 @@ function fill(sel, values, chosen) {
 
 /** Ordner und Optionen serverseitig merken (ueberlebt Neustart und Adresswechsel). */
 const remember = () => post('/api/state', {
+  frames: $('frames').checked,
+  frame_sensitivity: $('frameSens').value,
+  frame_format: $('frameFmt').value,
   input_dir: $('inDir').value,
   output_dir: $('outDir').value,
   model: $('model').value,
@@ -325,6 +347,9 @@ async function start() {
       language: $('language').value,
       device: $('device').value,
       diarize: $('diarize').checked,
+      frames: $('frames').checked,
+      frame_sensitivity: $('frameSens').value,
+      frame_format: $('frameFmt').value,
     });
     offset = 0;
     $('log').textContent = '';
@@ -400,9 +425,10 @@ for (const id of ['dlgList', 'dlgCrumbs', 'dlgLinks']) {
 for (const id of ['inDir', 'outDir']) {
   $(id).onchange = () => scan().then(remember);
 }
-for (const id of ['model', 'language', 'device', 'diarize']) {
+for (const id of ['model', 'language', 'device', 'diarize', 'frameSens', 'frameFmt']) {
   $(id).onchange = remember;
 }
+$('frames').onchange = () => { toggleFrameOpts(); remember(); };
 $('files').onclick = (e) => {
   if (e.target.classList.contains('sel')) updateCount();
   else if (e.target.classList.contains('name')) {

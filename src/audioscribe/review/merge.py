@@ -33,8 +33,15 @@ def group_marks_by_paragraph(paragraphs: list[dict], marks: list[Mark]) -> dict[
 
 
 def _image_line(m: Mark) -> str:
+    """Markdown-Bildzeile; automatisch erkannte Bilder tragen ihre ID sichtbar im Alt-Text.
+
+    Die ID ist der Anker fuer die Weiterverarbeitung: eine KI, die Transkript und Bilder
+    zusammen liest, kann sich damit auf "Bild #0007" beziehen, statt Zeitstempel zu
+    vergleichen. Von Hand gesetzte Marks haben keine ID und bleiben unveraendert.
+    """
     tc = format_timecode(m.t)
-    alt = f"Markierter Bildschirm {tc}" + (f" – {m.note}" if m.note else "")
+    kopf = f"Bild #{m.id:04d} – {tc}" if m.id is not None else f"Markierter Bildschirm {tc}"
+    alt = kopf + (f" – {m.note}" if m.note else "")
     return f"![{alt}]({m.png})"
 
 

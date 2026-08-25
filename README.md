@@ -139,8 +139,9 @@ uv run --extra cu124 --extra review audioscribe ui --port 9000 --no-browser
    **Kontrollkästchen**; vorausgewählt sind die noch offenen. Schnellschalter: „Alle",
    „Nur offene", „Keine". Wer eine bereits transkribierte Datei ankreuzt, lässt sie **neu**
    laufen – die Markierung „bereits transkribiert" bleibt sichtbar.
-3. **Optionen**: Modell, Sprache, Gerät (`cuda` ist ausgegraut, wenn keine GPU verfügbar ist)
-   und Sprecher-Diarisierung an/aus.
+3. **Optionen**: Modell, Sprache, Gerät (`cuda` ist ausgegraut, wenn keine GPU verfügbar ist),
+   Sprecher-Diarisierung an/aus und **Bildwechsel-Erkennung** für Bildschirmaufnahmen
+   (mit Empfindlichkeit und Bildformat, s. u.).
 4. **„▶ Transkription starten"** – je Datei ein Fortschrittsbalken, dazu ein Gesamtbalken über
    die Audio-Gesamtlänge und eine **Restzeit**. Schlägt eine Datei fehl, läuft der Stapel mit
    der nächsten weiter. Am Ende steht eine Zusammenfassung.
@@ -244,6 +245,47 @@ uv run audioscribe export output/meeting --pdf
 `marks.json`, `transkript.annotiert.md`. Die Markierungen (`marks.json`) **überstehen
 erneute Transkriptionsläufe** – die Einfügeposition wird beim Export aus dem Zeitstempel
 berechnet, nicht fest gespeichert.
+
+## Bildwechsel automatisch erkennen (Bildschirmaufnahmen)
+
+Statt Standbilder von Hand zu markieren, erkennt AudioScribe Wechsel des Bildschirm­inhalts
+selbst und sichert je Wechsel eines. **Mausbewegungen lösen nichts aus.**
+
+```bash
+uv run audioscribe run input/demo.mkv --frames
+
+# einstellbar:
+--frame-sensitivity grob|mittel|fein   # Default mittel
+--frame-format jpg-1600|jpg-1280|png   # Default jpg-1600 (~150 KB je Bild)
+--frame-fps 1                          # Abtastungen/s, Default 2
+--frame-min-gap 8                      # Mindestabstand in Sekunden, Default 4
+```
+
+In der Stapel-Oberfläche stehen Checkbox, Empfindlichkeit und Bildformat in der Karte
+„Optionen"; die beiden Feinparameter bleiben der Kommandozeile vorbehalten.
+
+**Ergebnis:** `output/<name>/frames/0001_00-01-23.jpg` … und ein
+`transkript.annotiert.md`, in dem jedes Bild mit seiner ID am zeitlich passenden Absatz
+steht:
+
+```
+**[00:01:20] Sprecher 1:** Hier seht ihr die Auswertung …
+
+![Bild #0001 – 00:01:23](frames/0001_00-01-23.jpg)
+```
+
+Die ID ist die Klammer zwischen Bild und Text: Transkript und Bilder lassen sich damit
+gemeinsam einer KI vorlegen, die sich auf „Bild #0001" beziehen kann.
+
+**Wie es arbeitet:** Ein einziger ffmpeg-Durchlauf verkleinert das Video auf 192×108
+Graustufen; verglichen wird über ein Raster aus 16×9 Blöcken. Ein Mauszeiger belegt genau
+einen Block und bleibt damit unter der Schwelle, ein Fenster- oder Folienwechsel betrifft
+Dutzende. Zusammenhängende Trefferserien (Animationen, Scrollen) ergeben **ein** Bild —
+aufgenommen am Ende der Serie, wenn der Bildschirm fertig aufgebaut ist.
+
+**Kosten:** grob ein Achtel der Videolänge (80-Minuten-Aufnahme ≈ 10 Minuten). Deshalb ist
+die Erkennung standardmäßig aus. Ein erneuter Lauf ersetzt die automatischen Bilder und
+lässt von Hand gesetzte Markierungen unberührt.
 
 ## Erster Lauf & Modell-Downloads
 
