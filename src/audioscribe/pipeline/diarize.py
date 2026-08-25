@@ -116,10 +116,15 @@ def diarize(audio, result: dict, reporter: Reporter | None = None) -> dict:
             "(Token setzen + Modell-Bedingungen akzeptieren) oder '--no-diarize' nutzen."
         )
 
-    from audioscribe.compat import apply_hf_hub_compat, apply_torch_load_compat
+    from audioscribe.compat import (
+        apply_hf_hub_compat,
+        apply_speechbrain_lazy_compat,
+        apply_torch_load_compat,
+    )
 
     apply_torch_load_compat()  # pyannote-Checkpoint laedt nur mit weights_only=False (PyTorch 2.6)
     apply_hf_hub_compat()  # pyannote uebergibt use_auth_token -> auf 'token' mappen (huggingface_hub 1.x)
+    apply_speechbrain_lazy_compat()  # Checkpoint-Laden stolpert sonst ueber speechbrains Lazy-Module
 
     import pandas as pd
     import torch
@@ -135,9 +140,23 @@ def diarize(audio, result: dict, reporter: Reporter | None = None) -> dict:
         load_exc = None
     if pipeline is None:
         hint = f"\n(Ursache: {type(load_exc).__name__}: {str(load_exc)[:200]})" if load_exc else ""
+        # Ein abgelehnter Token sieht fuer Hugging Face aus wie ein anonymer Zugriff, das
+        # gesperrte Repo meldet dann ebenfalls "gated". Erst nachfragen, dann anleiten -
+        # sonst klickt der Nutzer 'Agree', obwohl sein Token widerrufen ist.
+        from audioscribe.hf import TOKENS_URL, token_status
+
+        status, detail = token_status(settings.hf_token)
+        if status in ("FEHLT", "UNGUELTIG"):
+            raise RuntimeError(
+                f"Diarisierungsmodell konnte nicht geladen werden: {detail}\n"
+                f"Neuen Token erstellen ({TOKENS_URL}, Rolle 'read'), in die .env eintragen "
+                "und mit 'audioscribe doctor' pruefen. "
+                "Alternativ ohne Sprecher-Trennung: '--no-diarize'." + hint
+            )
         raise RuntimeError(
-            "Diarisierungsmodell konnte nicht geladen werden - meist sind die Modell-Bedingungen "
-            "noch nicht (vollstaendig) akzeptiert. BEIDE Seiten muessen EINGELOGGT akzeptiert werden:\n"
+            "Diarisierungsmodell konnte nicht geladen werden - der HF_TOKEN ist gueltig, also "
+            "sind die Modell-Bedingungen noch nicht (vollstaendig) akzeptiert. BEIDE Seiten "
+            "muessen EINGELOGGT akzeptiert werden:\n"
             "  https://huggingface.co/pyannote/speaker-diarization-3.1\n"
             "  https://huggingface.co/pyannote/segmentation-3.0\n"
             "Status pruefen mit 'audioscribe doctor'. Alternativ ohne Sprecher-Trennung: '--no-diarize'."

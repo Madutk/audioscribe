@@ -10,6 +10,7 @@ from audioscribe.config import settings
 
 _TORCH_LOAD_PATCHED = False
 _HF_HUB_PATCHED = False
+_LAZY_MODULE_PATCHED = False
 
 # ctranslate2 4.4.0 (von WhisperX gepinnt, <4.5) ist gegen cuDNN 8 gebaut, waehrend
 # torch 2.6 cuDNN 9 mitbringt. Wir stellen die cuDNN-8-Libs einmalig separat bereit.
@@ -90,6 +91,46 @@ def apply_hf_hub_compat() -> None:
     _HF_HUB_PATCHED = True
 
 
+def apply_speechbrain_lazy_compat() -> None:
+    """Verhindert, dass ``inspect`` speechbrains Lazy-Module nachlaedt (Windows-Bug).
+
+    pytorch_lightning prueft beim Laden eines Checkpoints per ``inspect.stack()``, ob
+    gerade TorchScript laeuft. ``inspect.getmodule`` fasst dabei jedes Modul in
+    ``sys.modules`` mit ``hasattr(module, "__file__")`` an - und speechbrain legt dort
+    Platzhalter ab, die bei JEDEM Attributzugriff nachladen. Fuer
+    ``speechbrain.integrations.k2_fsa`` scheitert das mangels ``k2``-Paket, und weil
+    ``hasattr`` nur AttributeError schluckt, reisst der ImportError den ganzen Lauf mit -
+    beim Laden des VAD-Modells, also mitten in Stufe 3.
+
+    speechbrain kennt den Fall und bricht Zugriffe aus ``inspect.py`` selbst ab, prueft
+    den Aufrufer aber mit ``filename.endswith("/inspect.py")`` - mit Schraegstrich. Unter
+    Windows heisst der Pfad ``...\\Lib\\inspect.py``, der Schutz greift also nie. Wir
+    setzen genau diese Pruefung trennzeichen-neutral davor. Idempotent; ohne speechbrain
+    passiert nichts.
+    """
+    global _LAZY_MODULE_PATCHED
+    if _LAZY_MODULE_PATCHED:
+        return
+    try:
+        from speechbrain.utils.importutils import LazyModule
+    except Exception:  # noqa: BLE001 - ohne speechbrain gibt es nichts zu reparieren
+        return
+
+    orig = LazyModule.__getattr__
+
+    def _getattr(self, attr):  # type: ignore[no-untyped-def]
+        try:
+            caller = sys._getframe(1).f_code.co_filename
+        except (AttributeError, ValueError):  # kein CPython-Stack -> wie gehabt weiter
+            return orig(self, attr)
+        if os.path.basename(caller) == "inspect.py":
+            raise AttributeError(attr)
+        return orig(self, attr)
+
+    LazyModule.__getattr__ = _getattr  # type: ignore[method-assign]
+    _LAZY_MODULE_PATCHED = True
+
+
 def clear_execstack_flag(path: Path) -> bool:
     """Loescht das Executable-Stack-Flag (PF_X) im ``PT_GNU_STACK``-Header einer ELF64-Lib.
 
@@ -147,6 +188,45 @@ def ensure_ctranslate2_loadable(log=None) -> None:
                 log(f"ctranslate2: Executable-Stack-Flag entfernt ({so.name}, glibc >= 2.41)")
     except Exception:  # noqa: BLE001 - best effort; der Import schlaegt sonst ohnehin fehl
         pass
+
+
+def ensure_pkg_resources(log=None) -> None:
+    """Legt ein minimales ``pkg_resources`` an, falls setuptools keines mehr mitbringt.
+
+    ctranslate2 < 4.5 macht beim Import **unter Windows** ein ``import pkg_resources``,
+    einzig um sein eigenes Paketverzeichnis zu finden und die DLLs daraus zu laden.
+    ``pkg_resources`` kam bisher mit setuptools mit, ist dort aber seit Version 81
+    abgekuendigt und in 82 entfernt -> ``ModuleNotFoundError: No module named
+    'pkg_resources'`` mitten in Stufe 3 (Transkription). Ein Upgrade von ctranslate2
+    scheidet aus: WhisperX pinnt ``ctranslate2<4.5.0``.
+
+    Ersetzt wird nur die eine tatsaechlich benutzte Funktion (``resource_filename``).
+    Muss VOR dem ersten ``import ctranslate2`` laufen; ausserhalb von Windows und bei
+    vorhandenem setuptools passiert nichts. Idempotent.
+    """
+    log = log or (lambda _m: None)
+    if os.name != "nt" or "pkg_resources" in sys.modules:
+        return
+
+    import importlib.util
+    import types
+
+    try:
+        if importlib.util.find_spec("pkg_resources") is not None:
+            return
+    except (ImportError, ValueError):  # kaputte/halbe Installation -> Shim setzen
+        pass
+
+    def resource_filename(package: str, resource: str) -> str:
+        spec = importlib.util.find_spec(package)
+        if spec is None or not spec.origin:
+            raise ImportError(f"Paketverzeichnis nicht auffindbar: {package}")
+        return str(Path(spec.origin).parent / resource)
+
+    module = types.ModuleType("pkg_resources")
+    module.resource_filename = resource_filename  # type: ignore[attr-defined]
+    sys.modules["pkg_resources"] = module
+    log("pkg_resources fehlt (setuptools >= 81) - Ersatz fuer ctranslate2 bereitgestellt")
 
 
 def _cudnn8_lib_dir() -> Path:

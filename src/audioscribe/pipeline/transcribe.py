@@ -30,9 +30,10 @@ def transcribe(audio, reporter: Reporter | None = None) -> dict:
     """
     import whisperx
 
-    from audioscribe.compat import apply_torch_load_compat
+    from audioscribe.compat import apply_speechbrain_lazy_compat, apply_torch_load_compat
 
     apply_torch_load_compat()  # pyannote-VAD-Checkpoint laedt nur mit weights_only=False (PyTorch 2.6)
+    apply_speechbrain_lazy_compat()  # Checkpoint-Laden stolpert sonst ueber speechbrains Lazy-Module
 
     language = None if settings.whisper_language.lower() == "auto" else settings.whisper_language
     device = resolve_device(settings.device)
@@ -73,7 +74,7 @@ def align(audio, result: dict, reporter: Reporter | None = None) -> dict:
     """
     import whisperx
 
-    from audioscribe.compat import apply_torch_load_compat
+    from audioscribe.compat import apply_speechbrain_lazy_compat, apply_torch_load_compat
 
     if not result.get("segments"):
         if reporter:
@@ -81,6 +82,7 @@ def align(audio, result: dict, reporter: Reporter | None = None) -> dict:
         return result
 
     apply_torch_load_compat()
+    apply_speechbrain_lazy_compat()
 
     language = result.get("language") or settings.whisper_language
     device = resolve_device(settings.device)
