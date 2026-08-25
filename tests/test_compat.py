@@ -60,17 +60,36 @@ def test_speechbrain_lazy_module_reisst_inspect_stack_nicht_mit(monkeypatch):
         platzhalter.irgendein_attribut
 
 
-def test_ensure_native_libs_laedt_unter_windows_nichts(monkeypatch):
-    """Der cuDNN-8-Bootstrap ist ein Linux-Workaround.
+def test_ensure_native_libs_registriert_dll_verzeichnis_statt_neustart(monkeypatch, tmp_path):
+    """Unter Windows wirkt add_dll_directory sofort - der execv-Neustart entfaellt.
 
-    Das ctranslate2-Windows-Wheel bringt cudnn64_8.dll selbst mit; ohne den Abbruch
-    zoege der CUDA-Pfad mehrere hundert MB Linux-.so-Dateien und startete den Prozess
-    danach grundlos per execv neu.
+    ctranslate2 bringt zwar cudnn64_8.dll mit, das ist aber nur der Verteiler; ohne die
+    cudnn_*_infer64_8.dll stirbt der Lauf beim Modell-Laden mit
+    "Could not locate cudnn_ops_infer64_8.dll".
     """
-    gerufen = []
     monkeypatch.setattr(compat.os, "name", "nt")
-    monkeypatch.setattr(compat, "ensure_cudnn8", lambda log=None: gerufen.append("download"))
+    monkeypatch.setattr(compat, "ensure_cudnn8", lambda log=None: tmp_path)
+    registriert = []
+    monkeypatch.setattr(
+        compat.os,
+        "add_dll_directory",
+        lambda pfad: registriert.append(pfad) or object(),
+        raising=False,
+    )
+
+    def kein_execv(*args):
+        raise AssertionError("execv darf unter Windows nicht laufen")
+
+    monkeypatch.setattr(compat.os, "execv", kein_execv)
 
     compat.ensure_native_libs()
 
-    assert gerufen == []
+    assert str(tmp_path) in registriert
+
+
+def test_cudnn8_verzeichnis_haengt_am_system(monkeypatch):
+    """Windows-DLLs und Linux-.so-Dateien duerfen sich im Cache nie vermischen."""
+    monkeypatch.setattr(compat.os, "name", "nt")
+    assert compat._cudnn8_lib_dir().name == "bin"
+    monkeypatch.setattr(compat.os, "name", "posix")
+    assert compat._cudnn8_lib_dir().name == "lib"
