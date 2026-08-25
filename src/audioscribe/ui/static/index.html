@@ -87,10 +87,10 @@
       </div>
       <div class="field"><label for="outDir">Ausgangsordner</label></div>
       <div class="row">
-        <input type="text" id="outDir" placeholder="/home/.../output" />
+        <input type="text" id="outDir" placeholder="C:\Users\...\output" />
         <button class="secondary" id="pickOut">📁 Waehlen</button>
       </div>
-      <p class="hint">Windows-Pfade koennen direkt eingefuegt werden – <code>C:\Users\…</code> wird zu <code>/mnt/c/Users/…</code>.</p>
+      <p class="hint" id="pathHint"></p>
       <div class="err" id="pathErr"></div>
     </div>
 
@@ -206,6 +206,10 @@ async function init() {
     if ($('device').value === 'cuda') $('device').value = 'auto';
   }
   $('diarize').checked = defaults.diarize !== false;
+  $('pathHint').innerHTML = defaults.platform === 'windows'
+    ? 'Pfade aus dem Explorer koennen direkt eingefuegt werden – <code>C:\\Users\\…</code>. ' +
+      'WSL-Pfade (<code>/mnt/c/…</code>) werden mit umgesetzt.'
+    : 'Windows-Pfade koennen direkt eingefuegt werden – <code>C:\\Users\\…</code> wird zu <code>/mnt/c/Users/…</code>.';
   $('inDir').value = defaults.input_dir;
   $('outDir').value = defaults.output_dir;
   await scan();
@@ -295,8 +299,9 @@ async function showDir(path) {
   try {
     const data = await api('/api/browse?path=' + encodeURIComponent(path));
     dlgPath = data.path;
+    const sep = defaults.platform === 'windows' ? '\\' : '/';
     $('dlgCrumbs').innerHTML = data.crumbs
-      .map((c) => `<a data-path="${esc(c.path)}">${esc(c.name)}</a>`).join('<span>/</span>');
+      .map((c) => `<a data-path="${esc(c.path)}">${esc(c.name)}</a>`).join(`<span>${sep}</span>`);
     const up = data.parent ? `<div data-path="${esc(data.parent)}">⬆ ..</div>` : '';
     $('dlgList').innerHTML = up + (data.dirs.length
       ? data.dirs.map((d) => `<div data-path="${esc(d.path)}">📁 ${esc(d.name)}</div>`).join('')

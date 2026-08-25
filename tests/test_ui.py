@@ -212,6 +212,26 @@ def test_windows_to_wsl_laesst_posix_unveraendert():
     assert browse.windows_to_wsl("") == ""
 
 
+def test_wsl_to_windows_mnt_und_laufwerk():
+    assert browse.wsl_to_windows("/mnt/c/Users/user") == r"C:\Users\user"
+    assert browse.wsl_to_windows("/mnt/d") == "D:\\"
+    assert browse.wsl_to_windows("c:/Users/user") == r"C:\Users\user"
+    # "C:" allein waere unter Windows das aktuelle Verzeichnis auf C: - Trenner muss dran.
+    assert browse.wsl_to_windows("C:") == "C:\\"
+    assert browse.wsl_to_windows(r'"C:\Users\user"') == r"C:\Users\user"
+
+
+def test_wsl_to_windows_laesst_linux_pfade_stehen():
+    assert browse.wsl_to_windows("/home/user") == "/home/user"
+    assert browse.wsl_to_windows(r"\\wsl$\Ubuntu\home\user") == r"\\wsl$\Ubuntu\home\user"
+    assert browse.wsl_to_windows("") == ""
+
+
+def test_to_native_richtet_sich_nach_dem_system():
+    assert browse.to_native(r"C:\Users\user", windows=True) == r"C:\Users\user"
+    assert browse.to_native(r"C:\Users\user", windows=False) == "/mnt/c/Users/user"
+
+
 def test_normalize_path_nutzt_default_bei_leerer_eingabe(tmp_path):
     assert browse.normalize_path("", default=tmp_path) == tmp_path.resolve()
 
@@ -227,13 +247,61 @@ def test_list_dirs_nur_verzeichnisse_ohne_punktordner(tmp_path):
     assert [p.name for p in browse.list_dirs(tmp_path)] == ["Alpha", "beta"]
 
 
-def test_breadcrumbs_pfadkette():
+@pytest.mark.skipif(os.name != "nt", reason="Datei-Attribute gibt es nur unter Windows")
+def test_list_dirs_blendet_versteckte_windows_ordner_aus(tmp_path):
+    import ctypes
+
+    (tmp_path / "sichtbar").mkdir()
+    versteckt = tmp_path / "versteckt"
+    versteckt.mkdir()
+    # FILE_ATTRIBUTE_HIDDEN - so sind z. B. "$Recycle.Bin" und "System Volume Information"
+    # in C:\ markiert; ohne Punkt im Namen wuerden sie sonst mitten in der Liste stehen.
+    assert ctypes.windll.kernel32.SetFileAttributesW(str(versteckt), 0x2)
+
+    assert [p.name for p in browse.list_dirs(tmp_path)] == ["sichtbar"]
+    assert [p.name for p in browse.list_dirs(tmp_path, show_hidden=True)] == [
+        "sichtbar",
+        "versteckt",
+    ]
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX-Wurzel")
+def test_breadcrumbs_pfadkette_posix():
     assert browse.breadcrumbs(Path("/mnt/c/Users")) == [
         ("/", "/"),
         ("mnt", "/mnt"),
         ("c", "/mnt/c"),
         ("Users", "/mnt/c/Users"),
     ]
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Laufwerksbuchstaben")
+def test_breadcrumbs_pfadkette_windows():
+    # Wurzel ist das Laufwerk, nicht "/" - sonst zeigen alle Krumen ins Leere.
+    assert browse.breadcrumbs(Path(r"C:\Users\user")) == [
+        ("C:", "C:\\"),
+        ("Users", r"C:\Users"),
+        ("user", r"C:\Users\user"),
+    ]
+
+
+def test_quick_links_windows_bietet_laufwerke_und_nutzerordner(tmp_path, monkeypatch):
+    root = tmp_path / "projekt"
+    home = tmp_path / "home"
+    (home / "Downloads").mkdir(parents=True)
+    root.mkdir()
+    laufwerk = tmp_path / "laufwerk_c"
+    laufwerk.mkdir()
+    monkeypatch.setattr(browse, "windows_drives", lambda: [laufwerk])
+
+    links = browse.quick_links(
+        project_root=root,
+        input_dir=root / "input",  # nicht vorhanden -> faellt raus
+        output_dir=root,  # gleicher Pfad wie Projekt -> nur einmal
+        home=home,
+        windows=True,
+    )
+    assert [label for label, _ in links] == ["Projekt", "Home", laufwerk.drive, "Downloads"]
 
 
 def test_quick_links_findet_nur_laufwerksbuchstaben(tmp_path):
@@ -248,6 +316,7 @@ def test_quick_links_findet_nur_laufwerksbuchstaben(tmp_path):
         output_dir=tmp_path / "fehlt",  # nicht vorhanden -> faellt raus
         home=root,
         mnt_root=mnt,
+        windows=False,
     )
     labels = [label for label, _ in links]
     assert labels == ["Projekt", "Windows C:", "Windows D:"]

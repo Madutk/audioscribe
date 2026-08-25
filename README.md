@@ -159,11 +159,19 @@ die Ausgabe dort ruhig:
 AUDIOSCRIBE_PROGRESS=1 uv run audioscribe run input/meeting.mp4
 ```
 
-**Windows/WSL:** Die Adresse einfach im Windows-Browser öffnen – WSL2 leitet `127.0.0.1`
-durch. Öffnet sich kein Browser automatisch, die im Terminal ausgegebene URL von Hand
-aufrufen. Ein aus dem Explorer kopierter Pfad wie `C:\Users\user\Videos` kann direkt
-eingefügt werden und wird zu `/mnt/c/Users/user/Videos` – Medien auf dem WSL-Dateisystem
-(z. B. `input/`) werden allerdings spürbar schneller gelesen als solche unter `/mnt/c`.
+**Ordner wählen:** Ein aus dem Explorer kopierter Pfad wie `C:\Users\user\Videos` kann in
+beide Felder direkt eingefügt werden; der Knopf **📁 Wählen** blättert serverseitig durch
+das Dateisystem. Die Schnellziele über der Ordnerliste führen zu den Laufwerken (`C:`, `D:`
+…) sowie zu Home, Desktop, Downloads und Videos – unter Windows gibt es keine gemeinsame
+Wurzel `/`, aus der man sich zu allen Ordnern durchklicken könnte. Versteckte Ordner und
+Systemordner (`$Recycle.Bin`, `System Volume Information`) bleiben ausgeblendet.
+
+**Windows/WSL:** Läuft AudioScribe unter WSL, die Adresse einfach im Windows-Browser
+öffnen – WSL2 leitet `127.0.0.1` durch. Öffnet sich kein Browser automatisch, die im
+Terminal ausgegebene URL von Hand aufrufen. Pfade werden dann in die jeweils passende
+Richtung umgesetzt: unter WSL wird `C:\Users\user\Videos` zu `/mnt/c/Users/user/Videos`,
+nativ unter Windows umgekehrt `/mnt/c/...` zu `C:\...`. Medien auf dem WSL-Dateisystem
+(z. B. `input/`) werden spürbar schneller gelesen als solche unter `/mnt/c`.
 
 ## Video transkribieren
 
