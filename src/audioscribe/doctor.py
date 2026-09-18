@@ -6,9 +6,11 @@ Exit-Code 0, wenn kein FAIL auftritt.
 
 from __future__ import annotations
 
+import os
 import shutil
 import sys
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Literal
 
 from audioscribe.config import ensure_ffmpeg_on_path, resolve_compute_type, settings
@@ -190,6 +192,40 @@ def _check_dirs() -> CheckResult:
     return CheckResult("OK", "Verzeichnisse", f"input/output/work unter {settings.project_root}")
 
 
+def _check_agent() -> CheckResult:
+    """KI-Analyse (optional, daher hoechstens WARN): SDK, Claude Code, Skills, Abrechnung."""
+    try:
+        import claude_agent_sdk
+    except ImportError:
+        return CheckResult(
+            "WARN", "KI-Analyse", "Claude Agent SDK fehlt (optional) -> 'uv sync --extra agent'"
+        )
+    from audioscribe.agent.skills import discover_skills
+
+    # Das SDK bringt eine eigene Claude-Code-CLI mit; sonst wird die installierte benutzt.
+    bundled = Path(claude_agent_sdk.__file__).parent / "_bundled"
+    has_cli = any(bundled.glob("claude*")) or bool(shutil.which("claude"))
+    skills = discover_skills(settings.agent_skills_dir)
+    known = {s.name for s in skills}
+    fehlend = [n for n in settings.agent_skills if n not in known]
+
+    teile = [f"SDK {getattr(claude_agent_sdk, '__version__', '?')}, Modell {settings.agent_model}"]
+    teile.append(f"{len(skills)} Skill(s) in {settings.agent_skills_dir}")
+    status: Status = "OK"
+    if not has_cli:
+        status = "WARN"
+        teile.append("Claude Code nicht gefunden")
+    if fehlend:
+        status = "WARN"
+        teile.append("Vorauswahl fehlt: " + ", ".join(fehlend))
+    if os.environ.get("ANTHROPIC_API_KEY"):
+        status = "WARN"
+        teile.append("ANTHROPIC_API_KEY gesetzt -> Abrechnung ueber die API statt ueber das Abo")
+    else:
+        teile.append("Abrechnung ueber das Claude-Abo (Login per 'claude')")
+    return CheckResult(status, "KI-Analyse", "; ".join(teile))
+
+
 CHECKS = (
     _check_python,
     _check_ffmpeg,
@@ -197,6 +233,7 @@ CHECKS = (
     _check_whisperx,
     _check_diarization,
     _check_dirs,
+    _check_agent,
 )
 
 _ICON = {"OK": "[ OK ]", "WARN": "[WARN]", "FAIL": "[FAIL]"}

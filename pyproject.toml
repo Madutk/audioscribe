@@ -40,6 +40,12 @@ review = [
     "fastapi>=0.110",
     "uvicorn>=0.29",
 ]
+# KI-Analyse per Claude-Agent ('audioscribe analyze', PRD §16). Das Agent SDK steuert
+# Claude Code und nutzt dessen Anmeldung - mit Claude-Abo ohne API-Key.
+# Installation: uv sync --extra cu124 --extra review --extra agent
+agent = [
+    "claude-agent-sdk>=0.2.156",
+]
 
 [project.scripts]
 audioscribe = "audioscribe.cli:main"

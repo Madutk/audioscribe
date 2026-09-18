@@ -401,3 +401,85 @@ einer KI zur Auswertung vorlegen kann.
       derselben ID auf sie.
 - [x] Ein zweiter Lauf liefert dieselben IDs (1..N) und lässt manuelle Markierungen stehen.
 - [x] Ein Lauf **ohne** `--frames` verhält sich exakt wie zuvor.
+
+## 16. Ausbaustufe: KI-Analyse per Claude-Agent
+
+> Status: umgesetzt (autonomer Lauf) · optionales Extra `agent` · Dialogmodus vorbereitet, nicht umgesetzt.
+
+### 16.1 Ziel
+
+§15 liefert ein Dokument aus Transkript und Bildern, das eine KI auswerten kann. Diese Stufe
+schließt den Schritt: Ein **Claude-Agent** analysiert einen Ergebnisordner selbstständig und
+legt alle Dokumente, etwa Prozessdokumentation, Arbeitsanweisung und QS-Bericht, in einem
+vom Nutzer gewählten Ordner ab. Gesteuert wird er über Prozessname, freien Kontext und
+eine Auswahl an Skills. Abgerechnet wird über das **Claude-Abo** des Nutzers.
+
+### 16.2 Designentscheidungen (festgelegt)
+
+- **Claude Agent SDK statt Messages API.** Die Messages API rechnet ausschließlich über
+  API-Key und Console-Guthaben ab. Das SDK steuert Claude Code und übernimmt dessen
+  Anmeldung, bei einem Login per Abo also ohne API-Key. Außerdem liefert es Agenten-Loop,
+  Datei-Werkzeuge, Bildverständnis (Read auf `frames/`) und Skills bereits mit.
+- **Skills als Kopie im Arbeitsordner.** Die gewählten Skills werden nach
+  `<ziel>/.claude/skills/` kopiert und nur über `setting_sources=["project"]` geladen. Der Lauf
+  ist so reproduzierbar dokumentiert und unabhängig von den übrigen User-Skills.
+- **Material als Kopie.** Transkript, `frames/` und `marks.json` werden nach `<ziel>/material/`
+  kopiert. Skill-Skripte, die neben die Eingabe schreiben, bleiben damit im Zielordner, und
+  die Ergebnisse sind in sich vollständig.
+- **Schreibschutz per `can_use_tool`.** Jeder Schreib- oder Lesezugriff außerhalb des
+  Arbeitsordners wird über eine reine Prüffunktion (`agent/guard.py`) entschieden und
+  abgelehnt. `Bash` ist nicht pfadgenau prüfbar. Es bleibt standardmäßig an, weil die
+  Skills Python-Skripte aufrufen, und lässt sich mit `--no-bash` abschalten.
+- **Subprozess auch aus der Oberfläche.** Die UI startet `audioscribe analyze` wie die
+  Transkription als Kindprozess. Damit sind Abbruch und Log gleich gelöst, und der Server
+  importiert das SDK nicht.
+- **Dialog vorbereitet.** Die Session-ID steht in `analyse.json`, `AnalyseSitzung.nachricht()`
+  nimmt Folgeanweisungen an, und `--resume` setzt eine Sitzung fort.
+
+### 16.3 Funktionale Anforderungen
+
+| ID | Anforderung |
+|----|-------------|
+| FR-28 | `audioscribe analyze ORDNER\|VIDEO` startet einen Claude-Agenten auf dem Ergebnisordner eines `run`. Das annotierte Transkript hat Vorrang. Fehlt ein Transkript, bricht der Befehl mit Hinweis auf `run --frames` ab. |
+| FR-29 | Der Nutzer gibt einen **Prozessnamen** (`--name`) und einen **Ausgabeordner** (`--out`) an. Alle Ergebnisse landen in `<out>/<slug(name)>/`. Fehlende Angaben werden im Terminal abgefragt. |
+| FR-30 | Freier **Kontext** als Text (`--context-text`) und/oder als Dateien (`--context`, mehrfach). Kleine Textdateien werden direkt übergeben, andere Formate liegen dem Agenten als Datei vor. |
+| FR-31 | **Skills** werden aus einem wählbaren Ordner (`--skills-dir`, Default `~/.claude/skills`, rekursiv) bereitgestellt: `--skill` mehrfach, Vorauswahl über `AUDIOSCRIBE_AGENT_SKILLS`, `--no-skills`, Liste mit `--list-skills`. |
+| FR-32 | Der Agent schließt mit `INDEX.md` ab (Dokumente, Zweck, offene Punkte, Annahmen). `analyse.json` protokolliert Status, Skills, Modell, Session-ID, Dauer und rechnerische Kosten, `agent-log.txt` den Verlauf. |
+| FR-33 | Die Browser-Oberfläche bietet einen Reiter „KI-Analyse“ mit Quellenauswahl, Prozessname, Ausgabeordner, Kontext, Kontextdateien, Skills, Modell, Live-Protokoll und Abbruch. Ausgabeordner, Modell und Skill-Auswahl werden gemerkt. Der Fortschritt wird aus den Werkzeugaufrufen abgeleitet, nicht geschätzt: Plan des Agenten (TaskCreate/TaskUpdate bzw. TodoWrite) als Schrittliste mit Balken, aktiver Skill, angesehene Standbilder und geschriebene Dokumente. Der Token-Gegenwert in USD wird nicht angezeigt, weil bei Abo-Anmeldung nichts abgerechnet wird. |
+| FR-34 | `audioscribe doctor` prüft SDK, Claude Code und Skill-Ordner und warnt, wenn `ANTHROPIC_API_KEY` die Abo-Abrechnung übersteuert. |
+
+### 16.4 Nicht-funktionale Anforderungen
+
+| ID | Anforderung |
+|----|-------------|
+| NFR-12 | Der Agent **schreibt nur im Zielordner**; der audioscribe-Ergebnisordner bleibt unverändert. Abgelehnte Zugriffe erscheinen im Protokoll. |
+| NFR-13 | Der Lauf ist von der privaten Claude-Code-Umgebung getrennt: keine User-Skills außer den gewählten, keine MCP-Server/Connectoren, keine globale `CLAUDE.md`. |
+| NFR-14 | Ohne das Extra `agent` bleiben alle übrigen Befehle und die Oberfläche lauffähig; `analyze` nennt dann den Installationsbefehl. |
+
+### 16.5 Ein-/Ausgabe
+
+- **Eingabe:** `output/<name>/` (`transkript[.annotiert].md`, `transcript.json`, `marks.json`,
+  `frames/`), Kontext, Skills.
+- **Ausgabe:** `<out>/<slug>/` mit den Dokumenten des Agenten, `INDEX.md`, `material/`,
+  `kontext/`, `analyse.json`, `agent-log.txt` und `.claude/skills/`.
+- **Konfiguration:** `AUDIOSCRIBE_AGENT_{MODEL, SKILLS_DIR, SKILLS, MAX_TURNS, OUTPUT_DIR}`.
+
+### 16.6 Akzeptanzkriterien
+
+- [x] Ein Lauf mit Abo-Login ohne `ANTHROPIC_API_KEY` erzeugt Dokumente und `INDEX.md`
+      im Zielordner. `analyse.json` enthält eine Session-ID.
+- [x] Ein Schreibversuch außerhalb des Zielordners wird abgelehnt und protokolliert.
+- [x] `--resume` setzt die Sitzung mit erhaltenem Verlauf fort.
+- [x] Start, Live-Protokoll und Abbruch funktionieren aus der Oberfläche. Ein Abbruch
+      hinterlässt `status: abgebrochen` und keine verwaisten Prozesse.
+
+### 16.7 Ausblick: Dialogmodus
+
+Nach dem autonomen Lauf sollen Rückfragen und Nachbesserungen im Dialog möglich sein. Die
+Grundlage steht: `AnalyseSitzung` hält einen `ClaudeSDKClient` offen und nimmt über
+`nachricht()` weitere Anweisungen in derselben Sitzung an. Offen sind:
+
+- ein Chat-Bereich im Reiter „KI-Analyse“, der Folgeanweisungen über `--resume` oder einen
+  langlebigen Sitzungsprozess schickt
+- Rückfragen des Agenten an den Nutzer (derzeit trifft er gekennzeichnete Annahmen)
+- eine Übersicht früherer Analysen aus den `analyse.json`-Dateien

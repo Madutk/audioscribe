@@ -24,7 +24,7 @@ from pathlib import Path
 from audioscribe.config import settings
 from audioscribe.pipeline.media import probe_duration
 from audioscribe.ui import browse, jobs, state
-from audioscribe.ui.runner import BatchRunner
+from audioscribe.ui.runner import AnalyseRunner, BatchRunner
 
 _STATIC_DIR = Path(__file__).parent / "static"
 
@@ -131,6 +131,7 @@ def create_app():
 
     app = FastAPI(title="AudioScribe UI")
     runner = BatchRunner()
+    analyse = AnalyseRunner()
 
     class StateIn(BaseModel):
         input_dir: str | None = None
@@ -155,6 +156,17 @@ def create_app():
         frames: bool = False
         frame_sensitivity: str = "mittel"
         frame_format: str = "jpg-1600"
+
+    class AgentStartIn(BaseModel):
+        source: str
+        name: str
+        output_dir: str
+        context_text: str = ""
+        # Ein Pfad je Eintrag; Windows- und WSL-Schreibweise werden umgesetzt.
+        context_files: list[str] = []
+        skills: list[str] = []
+        model: str = "claude-opus-5"
+        bash: bool = True
 
     @app.middleware("http")
     async def _same_origin_only(request: Request, call_next):
@@ -328,6 +340,120 @@ def create_app():
     @app.post("/api/cancel")
     def api_cancel():
         runner.cancel()
+        return JSONResponse({"ok": True})
+
+    # --- KI-Analyse (PRD §16) -------------------------------------------------
+
+    @app.get("/api/agent/defaults")
+    def api_agent_defaults():
+        from audioscribe.agent.skills import discover_skills
+
+        saved = state.load_state()
+        skills = discover_skills(settings.agent_skills_dir)
+        known = {s.name for s in skills}
+        chosen = saved.get("agent_skills")
+        if not isinstance(chosen, list):
+            chosen = [n for n in settings.agent_skills if n in known]
+        return JSONResponse(
+            {
+                "skills_dir": str(settings.agent_skills_dir),
+                "skills": [
+                    {"name": s.name, "description": s.description, "selected": s.name in chosen}
+                    for s in skills
+                ],
+                "model": saved.get("agent_model") or settings.agent_model,
+                "models": list(jobs.AGENT_MODELS),
+                "output_dir": _remembered_dir(
+                    saved.get("agent_output_dir"), settings.agent_output_dir
+                ),
+                "bash": saved.get("agent_bash", True),
+            }
+        )
+
+    @app.get("/api/agent/sources")
+    def api_agent_sources(output_dir: str = Query("")):
+        """Fertige Transkriptionen im Ausgangsordner der Transkription."""
+        folder = browse.normalize_path(output_dir, default=settings.output_dir)
+        try:
+            results = jobs.scan_results(folder)
+        except (NotADirectoryError, FileNotFoundError) as exc:
+            raise HTTPException(400, str(exc)) from exc
+        except PermissionError as exc:
+            raise HTTPException(403, f"Keine Leseberechtigung fuer: {folder}") from exc
+        return JSONResponse({"output_dir": str(folder), "sources": results})
+
+    @app.post("/api/agent/start")
+    def api_agent_start(body: AgentStartIn):
+        from audioscribe.agent.material import find_transcript
+        from audioscribe.agent.skills import discover_skills
+
+        name = body.name.strip()
+        if not name:
+            raise HTTPException(400, "Bitte einen Prozessnamen angeben.")
+        model = body.model.strip()
+        # Der Modellname wandert als eigenes argv-Element in den Subprozess; trotzdem
+        # nur harmlose Zeichen zulassen, damit die CLI keine Option daraus liest.
+        if not model or model.startswith("-") or not all(c.isalnum() or c in "-_.:[]" for c in model):
+            raise HTTPException(400, f"Ungueltiger Modellname: {body.model}")
+
+        source = browse.normalize_path(body.source, default=settings.output_dir)
+        try:
+            find_transcript(source)
+        except FileNotFoundError as exc:
+            raise HTTPException(400, str(exc)) from exc
+
+        known = {s.name for s in discover_skills(settings.agent_skills_dir)}
+        unknown = [s for s in body.skills if s not in known]
+        if unknown:
+            raise HTTPException(400, "Unbekannte Skills: " + ", ".join(unknown))
+
+        context_files = []
+        for raw in body.context_files:
+            if not raw.strip():
+                continue
+            path = browse.normalize_path(raw.strip(), default=settings.project_root)
+            if not path.is_file():
+                raise HTTPException(400, f"Kontextdatei nicht gefunden: {raw}")
+            context_files.append(path)
+
+        out_dir = browse.normalize_path(body.output_dir, default=settings.agent_output_dir)
+        try:
+            out_dir.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            raise HTTPException(400, f"Ausgabeordner nicht anlegbar: {exc}") from exc
+
+        opts = jobs.AnalyseOptions(
+            source=source,
+            name=name,
+            output_dir=out_dir,
+            context_text=body.context_text,
+            context_files=tuple(context_files),
+            skills=tuple(body.skills),
+            skills_dir=settings.agent_skills_dir,
+            model=model,
+            bash=body.bash,
+        )
+        state.save_state(
+            {
+                "agent_output_dir": str(out_dir),
+                "agent_model": model,
+                "agent_skills": list(body.skills),
+                "agent_bash": body.bash,
+            }
+        )
+        try:
+            workspace = analyse.start(opts)
+        except RuntimeError as exc:
+            raise HTTPException(409, str(exc)) from exc
+        return JSONResponse({"ok": True, "workspace": str(workspace)})
+
+    @app.get("/api/agent/status")
+    def api_agent_status(offset: int = Query(0, ge=0)):
+        return JSONResponse(analyse.snapshot(offset))
+
+    @app.post("/api/agent/cancel")
+    def api_agent_cancel():
+        analyse.cancel()
         return JSONResponse({"ok": True})
 
     return app

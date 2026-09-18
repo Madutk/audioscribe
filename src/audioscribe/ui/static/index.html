@@ -48,7 +48,7 @@
   .bar > i { display:block; height:100%; background:var(--accent); width:0; transition:width .4s linear; }
   .file .bar { width:70px; flex:none; }
   .bar.big { height:10px; border-radius:5px; }
-  pre#log { background:#16161b; border-radius:6px; padding:10px; margin:0; height:300px; overflow:auto;
+  pre#log, pre#anaLog { background:#16161b; border-radius:6px; padding:10px; margin:0; height:300px; overflow:auto;
             font:12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; white-space:pre-wrap; word-break:break-word; }
   .status { margin:10px 0 6px; font-size:13px; }
   .status .stage { color:var(--accent); }
@@ -68,15 +68,50 @@
   .dirlist div:hover { background:var(--hot); }
   .dialog footer { display:flex; gap:10px; align-items:center; margin-top:10px; }
   .dialog footer .hint { flex:1; }
+  /* Reiter */
+  .tabs { display:flex; gap:4px; }
+  .tabs button { background:transparent; color:var(--muted); padding:6px 12px; font-weight:500; }
+  .tabs button.active { background:var(--hot); color:var(--fg); }
+  [hidden] { display:none !important; }
+  /* KI-Analyse */
+  textarea { width:100%; min-height:110px; padding:8px; border-radius:6px; border:1px solid #3a3a48;
+             background:var(--track); color:var(--fg); font:inherit; resize:vertical; }
+  textarea.small { min-height:56px; font:12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .skills { max-height:260px; overflow:auto; }
+  .skill { display:flex; gap:8px; align-items:flex-start; padding:5px 6px; border-radius:4px; cursor:pointer; }
+  .skill:nth-child(odd) { background:#2c2c36; }
+  .skill b { font-weight:600; }
+  .skill .desc { color:var(--muted); font-size:12px; display:block; }
+  .source { display:flex; gap:8px; align-items:center; padding:4px 6px; border-radius:4px; cursor:pointer; }
+  .source:nth-child(odd) { background:#2c2c36; }
+  .source .name { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .result { padding:10px; border-radius:6px; background:#1f3350; margin-bottom:12px; word-break:break-all; }
+  .result.fehler { background:#4a2030; }
+  /* Fortschritt der KI-Analyse */
+  .bar.wait > i { width:30% !important; animation:wait 1.6s ease-in-out infinite; }
+  @keyframes wait { 0% { margin-left:-30%; } 100% { margin-left:100%; } }
+  .chips { display:flex; gap:6px; flex-wrap:wrap; margin:8px 0; }
+  .todos { list-style:none; margin:8px 0 12px; padding:0; font-size:13px; }
+  .todos li { display:flex; gap:8px; padding:2px 0; }
+  .todos li .mark { flex:none; width:16px; text-align:center; }
+  .todos li.completed { color:var(--muted); }
+  .todos li.completed .mark { color:var(--ok); }
+  .todos li.in_progress { color:#a9c4ff; font-weight:600; }
+  .docs { font-size:12px; color:var(--muted); margin-bottom:12px; word-break:break-all; }
+  .docs code { color:var(--fg); }
 </style>
 </head>
 <body>
 <header>
   <h1>AudioScribe</h1>
-  <span class="meta">Stapelverarbeitung: Ordner waehlen, Dateien ankreuzen, transkribieren</span>
+  <nav class="tabs">
+    <button data-tab="Trans" class="active">Transkription</button>
+    <button data-tab="Ana">KI-Analyse</button>
+  </nav>
+  <span class="meta" id="tabMeta">Stapelverarbeitung: Ordner waehlen, Dateien ankreuzen, transkribieren</span>
 </header>
 
-<div class="wrap">
+<div class="wrap" id="tabTrans">
   <div class="left">
     <div class="card">
       <p class="section-title">Ordner</p>
@@ -142,6 +177,77 @@
       <div class="row" style="margin:10px 0 0">
         <button class="danger" id="cancel" disabled>■ Abbrechen</button>
         <span class="hint">Der Lauf laeuft im Server weiter – der Tab darf geschlossen werden.</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="wrap" id="tabAna" hidden>
+  <div class="left">
+    <div class="card">
+      <p class="section-title">
+        Quelle
+        <span class="hint">fertige Transkriptionen im Ausgangsordner</span>
+        <span style="flex:1"></span>
+        <button class="link" id="anaRefresh">↻ Aktualisieren</button>
+      </p>
+      <div class="files" id="anaSources"><p class="hint">…</p></div>
+      <p class="hint" id="anaSourceDir"></p>
+    </div>
+
+    <div class="card">
+      <p class="section-title">Auftrag</p>
+      <div class="field"><label for="anaName">Prozessname</label></div>
+      <div class="row"><input type="text" id="anaName" placeholder="z. B. Rechnungspruefung Kreditoren" /></div>
+      <div class="field"><label for="anaOut">Ausgabeordner</label></div>
+      <div class="row">
+        <input type="text" id="anaOut" />
+        <button class="secondary" id="pickAna">📁 Waehlen</button>
+      </div>
+      <p class="hint" id="anaTarget"></p>
+      <div class="field"><label for="anaContext">Kontext fuer den Agenten</label></div>
+      <textarea id="anaContext" placeholder="Worum geht es, wer ist Zielgruppe, welche Systeme/Begriffe, was soll herauskommen …"></textarea>
+      <div class="field" style="margin-top:8px"><label for="anaFiles">Kontextdateien (optional, ein Pfad je Zeile)</label></div>
+      <textarea id="anaFiles" class="small" placeholder="C:\Users\…\glossar.md"></textarea>
+    </div>
+
+    <div class="card">
+      <p class="section-title">Skills <span class="hint" id="anaSkillsDir"></span></p>
+      <div class="skills" id="anaSkills"></div>
+    </div>
+
+    <div class="card">
+      <p class="section-title">Optionen</p>
+      <div class="grid">
+        <div class="field"><label for="anaModel">Claude-Modell</label><select id="anaModel"></select></div>
+      </div>
+      <div class="checks">
+        <label><input type="checkbox" id="anaBash" checked /> Skill-Skripte ausfuehren (Bash)</label>
+      </div>
+      <p class="hint">Abgerechnet wird ueber die Claude-Code-Anmeldung (Claude-Abo). Ein gesetzter
+        <code>ANTHROPIC_API_KEY</code> hat Vorrang und rechnet ueber die API ab.</p>
+    </div>
+
+    <button class="start" id="anaStart">✦ Analyse starten</button>
+    <div class="err" id="anaErr"></div>
+  </div>
+
+  <div class="right">
+    <div class="card">
+      <p class="section-title">Verlauf <span class="hint" id="anaElapsed"></span></p>
+      <div id="anaResult"></div>
+      <div id="anaProgress" hidden>
+        <div class="status" id="anaStep"></div>
+        <div class="bar big" id="anaBarWrap"><i id="anaBar"></i></div>
+        <div class="chips" id="anaChips"></div>
+        <ul class="todos" id="anaTodos"></ul>
+        <div class="docs" id="anaDocs"></div>
+      </div>
+      <p class="section-title" style="margin-top:4px">Protokoll</p>
+      <pre id="anaLog"></pre>
+      <div class="row" style="margin:10px 0 0">
+        <button class="danger" id="anaCancel" disabled>■ Abbrechen</button>
+        <span class="hint">Der Agent laeuft im Server weiter – der Tab darf geschlossen werden.</span>
       </div>
     </div>
   </div>
@@ -310,11 +416,12 @@ function pick(mode) {
 
 async function openDialog(target) {
   dlgTarget = target;
-  $('dlgTitle').textContent = target === 'in' ? 'Eingangsordner waehlen' : 'Ausgangsordner waehlen';
+  $('dlgTitle').textContent = { in: 'Eingangsordner waehlen', out: 'Ausgangsordner waehlen',
+                                ana: 'Ausgabeordner der Analyse waehlen' }[target];
   $('dlgLinks').innerHTML = defaults.quick_links
     .map((l) => `<a data-path="${esc(l.path)}">${esc(l.label)}</a>`).join('');
   $('overlay').classList.add('open');
-  await showDir(target === 'in' ? $('inDir').value : $('outDir').value);
+  await showDir(dlgInput(target).value);
 }
 
 async function showDir(path) {
@@ -414,10 +521,12 @@ $('pickIn').onclick = () => openDialog('in');
 $('pickOut').onclick = () => openDialog('out');
 $('dlgCancel').onclick = () => $('overlay').classList.remove('open');
 $('overlay').onclick = (e) => { if (e.target === $('overlay')) $('overlay').classList.remove('open'); };
+const dlgInput = (target) => $({ in: 'inDir', out: 'outDir', ana: 'anaOut' }[target]);
 $('dlgOk').onclick = () => {
-  (dlgTarget === 'in' ? $('inDir') : $('outDir')).value = dlgPath;
+  dlgInput(dlgTarget).value = dlgPath;
   $('overlay').classList.remove('open');
-  scan().then(remember);
+  if (dlgTarget === 'ana') updateTarget();
+  else scan().then(remember);
 };
 for (const id of ['dlgList', 'dlgCrumbs', 'dlgLinks']) {
   $(id).onclick = (e) => { const p = e.target.dataset.path; if (p) showDir(p); };
@@ -443,7 +552,191 @@ for (const btn of document.querySelectorAll('[data-pick]')) {
 $('start').onclick = start;
 $('cancel').onclick = () => api('/api/cancel', { method: 'POST' }).catch(() => {});
 
-init();
+// --- KI-Analyse -------------------------------------------------------------
+
+let anaOffset = 0;
+let anaSource = null;     // Pfad der gewaehlten Transkription
+let anaDefaults = null;
+
+/** Wie audioscribe.agent.material.slugify - nur fuer die Vorschau des Zielordners. */
+function slugify(text) {
+  let v = text.trim().toLowerCase()
+    .replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss');
+  v = v.normalize('NFKD').replace(/[^\x00-\x7f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  return v.slice(0, 80).replace(/-+$/, '') || 'analyse';
+}
+
+function updateTarget() {
+  const sep = defaults && defaults.platform === 'windows' ? '\\' : '/';
+  const out = $('anaOut').value.replace(/[\\/]+$/, '');
+  $('anaTarget').textContent = $('anaName').value.trim()
+    ? `Ergebnisse landen in: ${out}${sep}${slugify($('anaName').value)}` : '';
+  $('anaStart').disabled = !anaSource || !$('anaName').value.trim() || anaRunning;
+}
+
+async function initAnalyse() {
+  anaDefaults = await api('/api/agent/defaults');
+  fill($('anaModel'), anaDefaults.models, anaDefaults.model);
+  $('anaOut').value = anaDefaults.output_dir;
+  $('anaBash').checked = anaDefaults.bash !== false;
+  $('anaSkillsDir').textContent = anaDefaults.skills_dir;
+  $('anaSkills').innerHTML = anaDefaults.skills.length
+    ? anaDefaults.skills.map((s) => `<label class="skill">
+         <input type="checkbox" value="${esc(s.name)}" ${s.selected ? 'checked' : ''} />
+         <span><b>${esc(s.name)}</b><span class="desc">${esc(s.description.slice(0, 220))}${s.description.length > 220 ? '…' : ''}</span></span>
+       </label>`).join('')
+    : '<p class="hint">Keine Skills gefunden (AUDIOSCRIBE_AGENT_SKILLS_DIR).</p>';
+  await loadSources();
+  setInterval(pollAnalyse, 1500);
+  pollAnalyse();
+}
+
+async function loadSources() {
+  try {
+    const data = await api('/api/agent/sources?output_dir=' + encodeURIComponent($('outDir').value));
+    $('anaSourceDir').textContent = 'Gesucht in: ' + data.output_dir;
+    if (!data.sources.some((s) => s.path === anaSource)) anaSource = data.sources[0]?.path || null;
+    $('anaSources').innerHTML = data.sources.length
+      ? data.sources.map((s) => `<label class="source">
+           <input type="radio" name="anaSrc" value="${esc(s.path)}" ${s.path === anaSource ? 'checked' : ''} />
+           <span class="name" title="${esc(s.path)}">${esc(s.name)}</span>
+           <span class="badge">${s.frames ? s.frames + ' Bilder' : 'ohne Bilder'}</span>
+           ${s.annotated ? '<span class="badge fertig">annotiert</span>' : ''}</label>`).join('')
+      : '<p class="hint">Noch keine fertigen Transkriptionen im Ausgangsordner.</p>';
+  } catch (err) {
+    $('anaSources').innerHTML = `<p class="err">${esc(err.message)}</p>`;
+    anaSource = null;
+  }
+  updateTarget();
+}
+
+const rememberAnalyse = () => post('/api/state', {
+  agent_output_dir: $('anaOut').value,
+  agent_model: $('anaModel').value,
+  agent_bash: $('anaBash').checked,
+  agent_skills: selectedSkills(),
+}).catch(() => {});
+
+const selectedSkills = () => [...$('anaSkills').querySelectorAll('input:checked')].map((i) => i.value);
+
+async function startAnalyse() {
+  $('anaErr').textContent = '';
+  try {
+    await post('/api/agent/start', {
+      source: anaSource,
+      name: $('anaName').value,
+      output_dir: $('anaOut').value,
+      context_text: $('anaContext').value,
+      context_files: $('anaFiles').value.split('\n').map((l) => l.trim()).filter(Boolean),
+      skills: selectedSkills(),
+      model: $('anaModel').value,
+      bash: $('anaBash').checked,
+    });
+    anaOffset = 0;
+    $('anaLog').textContent = '';
+    $('anaResult').innerHTML = '';
+    pollAnalyse();
+  } catch (err) {
+    $('anaErr').textContent = err.message;
+  }
+}
+
+let anaRunning = false;
+async function pollAnalyse() {
+  let s;
+  try { s = await api('/api/agent/status?offset=' + anaOffset); } catch (e) { return; }
+  anaOffset = s.offset;
+  if (s.lines.length) {
+    const log = $('anaLog');
+    const atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 40;
+    log.textContent += s.lines.join('\n') + '\n';
+    if (atBottom) log.scrollTop = log.scrollHeight;
+  }
+  anaRunning = !!s.running;
+  $('anaCancel').disabled = !s.running;
+  $('anaElapsed').textContent = s.running
+    ? `– ${esc(s.name)} laeuft seit ${hms(s.elapsed_s)}` : '';
+  updateTarget();
+
+  renderProgress(s);
+
+  const r = s.result;
+  if (!s.running && s.workspace && s.returncode !== null && s.returncode !== undefined) {
+    const status = r ? r.status : (s.returncode === 0 ? 'fertig' : 'fehler');
+    const index = r && r.index ? `<br>Uebersicht: <code>${esc(r.index)}</code>` : '';
+    const err = r && r.fehler ? `<br>${esc(r.fehler)}` : '';
+    $('anaResult').innerHTML = `<div class="result ${status === 'fertig' ? '' : 'fehler'}">
+      <b>${esc(status)}</b><br>Ergebnisordner: <code>${esc(s.workspace)}</code>${index}${err}</div>`;
+  }
+}
+
+/**
+ * Fortschritt aus dem Plan des Agenten (TodoWrite) - einen echten Prozentwert kennt er
+ * nicht. Ohne Plan laeuft ein unbestimmter Balken; der Agent kann Schritte nachtragen,
+ * dann darf der Balken auch zuruecklaufen.
+ */
+function renderProgress(s) {
+  const p = s.progress;
+  $('anaProgress').hidden = !p && !s.running;
+  if ($('anaProgress').hidden) return;
+  const total = p ? p.total : 0, done = p ? p.done : 0;
+  const finished = !s.running && s.returncode === 0;
+
+  if (total) {
+    const now = p.current ? ` · jetzt: <span class="stage">${esc(p.current)}</span>` : '';
+    $('anaStep').innerHTML = `Schritt ${Math.min(done + (p.current ? 1 : 0), total)} von ${total}${now}`;
+  } else {
+    $('anaStep').textContent = s.running ? 'Agent liest sich ein und plant …' : '';
+  }
+  $('anaBarWrap').classList.toggle('wait', s.running && !total);
+  $('anaBar').style.width = (finished ? 100 : total ? Math.round((done / total) * 100) : 0) + '%';
+
+  const chips = [];
+  if (p && p.skill) chips.push(`<span class="badge laeuft">Skill: ${esc(p.skill)}</span>`);
+  if (p && p.frames_total) chips.push(`<span class="badge">Standbilder angesehen: ${p.frames_seen} von ${p.frames_total}</span>`);
+  $('anaChips').innerHTML = chips.join('');
+
+  const mark = { completed: '✓', in_progress: '◐', pending: '○' };
+  $('anaTodos').innerHTML = (p ? p.todos : []).map((t) =>
+    `<li class="${esc(t.status)}"><span class="mark">${mark[t.status] || '○'}</span><span>${esc(t.content)}</span></li>`).join('');
+
+  const docs = p ? p.docs : [];
+  $('anaDocs').innerHTML = docs.length
+    ? 'Dokumente: ' + docs.map((d) => `<code>${esc(d)}</code>`).join(', ') : '';
+}
+
+function showTab(name) {
+  for (const btn of document.querySelectorAll('.tabs button')) {
+    btn.classList.toggle('active', btn.dataset.tab === name);
+  }
+  $('tabTrans').hidden = name !== 'Trans';
+  $('tabAna').hidden = name !== 'Ana';
+  $('tabMeta').textContent = name === 'Trans'
+    ? 'Stapelverarbeitung: Ordner waehlen, Dateien ankreuzen, transkribieren'
+    : 'Claude-Agent: Transkription + Standbilder auswerten, Dokumente im Ausgabeordner ablegen';
+  if (name === 'Ana') loadSources();
+}
+
+for (const btn of document.querySelectorAll('.tabs button')) btn.onclick = () => showTab(btn.dataset.tab);
+$('anaSources').onchange = (e) => {
+  if (e.target.name === 'anaSrc') {
+    anaSource = e.target.value;
+    // Den Ordnernamen als Vorschlag fuer den Prozessnamen - nur solange noch leer.
+    if (!$('anaName').value.trim()) $('anaName').value = e.target.closest('.source').querySelector('.name').textContent;
+    updateTarget();
+  }
+};
+$('anaRefresh').onclick = loadSources;
+$('pickAna').onclick = () => openDialog('ana');
+$('anaName').oninput = updateTarget;
+$('anaOut').onchange = () => { updateTarget(); rememberAnalyse(); };
+$('anaModel').onchange = rememberAnalyse;
+$('anaBash').onchange = rememberAnalyse;
+$('anaSkills').onchange = rememberAnalyse;
+$('anaStart').onclick = startAnalyse;
+$('anaCancel').onclick = () => api('/api/agent/cancel', { method: 'POST' }).catch(() => {});
+
+init().then(initAnalyse);
 </script>
 </body>
 </html>

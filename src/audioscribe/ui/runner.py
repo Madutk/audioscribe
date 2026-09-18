@@ -21,8 +21,11 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
+from audioscribe.agent.fortschritt import parse_status_line
 from audioscribe.ui.jobs import (
+    AnalyseOptions,
     JobOptions,
+    build_analyze_argv,
     build_argv,
     child_env,
     parse_duration_line,
@@ -179,18 +182,65 @@ def batch_eta(
     return balance
 
 
-class BatchRunner:
-    """Ein Stapellauf zur Zeit; Status und Log sind jederzeit abfragbar."""
+class _ProcessRunner:
+    """Gemeinsame Basis: Lock, Log-Ringpuffer mit Offset, Start eines Kind-Prozesses."""
 
     def __init__(self, *, max_lines: int = 5000) -> None:
         self._lock = threading.Lock()
-        self._state = _State()
         self._log: deque[str] = deque(maxlen=max_lines)
         # Zahl der bereits aus dem Ringpuffer verdraengten Zeilen: haelt den vom
         # Client mitgefuehrten Offset auch nach dem Ueberlauf konsistent.
         self._dropped = 0
         self._proc: subprocess.Popen[str] | None = None
         self._thread: threading.Thread | None = None
+
+    def _append(self, line: str) -> None:
+        with self._lock:
+            if len(self._log) == self._log.maxlen:
+                self._dropped += 1
+            self._log.append(line)
+
+    def _lines_since(self, offset: int) -> tuple[list[str], int]:
+        """Log-Zeilen ab ``offset`` und der neue Offset. Aufrufer haelt den Lock."""
+        start = max(0, min(len(self._log), offset - self._dropped))
+        return list(self._log)[start:], self._dropped + len(self._log)
+
+    def _reset_log(self) -> None:
+        """Aufrufer haelt den Lock."""
+        self._log.clear()
+        self._dropped = 0
+
+    def _spawn(self, argv: list[str]) -> subprocess.Popen[str] | None:
+        try:
+            proc = subprocess.Popen(  # noqa: S603 - Kommando kommt aus build_*argv
+                argv,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                # Kein Terminal erben: ein Kind, das nachfragt, bekaeme sonst die
+                # Tastatur des Server-Fensters und bliebe haengen.
+                stdin=subprocess.DEVNULL,
+                text=True,
+                bufsize=1,
+                encoding="utf-8",
+                errors="replace",
+                env=child_env(),
+                # eigene Prozessgruppe: der Abbruch erreicht auch ffmpeg-Enkelprozesse
+                start_new_session=True,
+            )
+        except OSError as exc:
+            self._append(f"   Prozessstart fehlgeschlagen: {exc}")
+            return None
+        with self._lock:
+            self._proc = proc
+        return proc
+
+
+class BatchRunner(_ProcessRunner):
+    """Ein Stapellauf zur Zeit; Status und Log sind jederzeit abfragbar."""
+
+    def __init__(self, *, max_lines: int = 5000) -> None:
+        super().__init__(max_lines=max_lines)
+        self._state = _State()
 
     # --- oeffentliche API -------------------------------------------------
 
@@ -224,8 +274,7 @@ class BatchRunner:
                     for f in files
                 ],
             )
-            self._log.clear()
-            self._dropped = 0
+            self._reset_log()
 
         self._append(f"Starte Stapellauf: {len(files)} Datei(en) -> {opts.output_dir}")
         self._append(
@@ -256,9 +305,7 @@ class BatchRunner:
         """Status + alle Log-Zeilen ab ``offset``; ``offset`` der Antwort weiterreichen."""
         with self._lock:
             state = self._state
-            start = max(0, min(len(self._log), offset - self._dropped))
-            lines = list(self._log)[start:]
-            new_offset = self._dropped + len(self._log)
+            lines, new_offset = self._lines_since(offset)
             current = state.current
 
             elapsed_current = (
@@ -288,12 +335,6 @@ class BatchRunner:
             }
 
     # --- Innenleben -------------------------------------------------------
-
-    def _append(self, line: str) -> None:
-        with self._lock:
-            if len(self._log) == self._log.maxlen:
-                self._dropped += 1
-            self._log.append(line)
 
     def _set_file(self, index: int, **changes: object) -> None:
         with self._lock:
@@ -342,25 +383,9 @@ class BatchRunner:
 
     def _run_one(self, argv: list[str], index: int) -> int:
         """Startet einen Kind-Prozess und wertet seine Ausgabe zeilenweise aus."""
-        try:
-            proc = subprocess.Popen(  # noqa: S603 - Kommando kommt aus build_argv
-                argv,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                bufsize=1,
-                encoding="utf-8",
-                errors="replace",
-                env=child_env(),
-                # eigene Prozessgruppe: der Abbruch erreicht auch ffmpeg-Enkelprozesse
-                start_new_session=True,
-            )
-        except OSError as exc:
-            self._append(f"   Prozessstart fehlgeschlagen: {exc}")
+        proc = self._spawn(argv)
+        if proc is None:
             return -1
-
-        with self._lock:
-            self._proc = proc
 
         assert proc.stdout is not None
         logged_progress = -_LOG_PROGRESS_STEP
@@ -430,6 +455,111 @@ class BatchRunner:
             self._state.stage = None
             self._state.file_started = None
         self._append(f"\nZusammenfassung: {summary}")
+
+
+class AnalyseRunner(_ProcessRunner):
+    """Ein Analyse-Lauf (``audioscribe analyze``) zur Zeit - Log per Polling wie beim Stapel."""
+
+    def __init__(self, *, max_lines: int = 5000) -> None:
+        super().__init__(max_lines=max_lines)
+        self._info: dict = {"running": False}
+
+    def start(
+        self,
+        opts: AnalyseOptions,
+        *,
+        argv_builder: Callable[[AnalyseOptions], list[str]] = build_analyze_argv,
+    ) -> Path:
+        """Startet die Analyse; gibt den Ergebnisordner zurueck. ``RuntimeError`` bei Doppelstart."""
+        from audioscribe.agent.material import slugify
+
+        workspace = Path(opts.output_dir) / slugify(opts.name)
+        with self._lock:
+            if self._info.get("running"):
+                raise RuntimeError("Es laeuft bereits eine Analyse.")
+            self._info = {
+                "running": True,
+                "cancelled": False,
+                "name": opts.name,
+                "workspace": str(workspace),
+                "started": time.time(),
+                "returncode": None,
+                "result": None,
+                "progress": None,
+            }
+            self._reset_log()
+        self._thread = threading.Thread(
+            target=self._run,
+            args=(argv_builder(opts), workspace),
+            name="audioscribe-analyse",
+            daemon=True,
+        )
+        self._thread.start()
+        return workspace
+
+    def cancel(self) -> None:
+        with self._lock:
+            if not self._info.get("running"):
+                return
+            self._info["cancelled"] = True
+            proc = self._proc
+        if proc and proc.poll() is None:
+            self._append("Abbruch angefordert - beende den Agenten ...")
+            _terminate(proc)
+
+    def snapshot(self, offset: int = 0) -> dict:
+        with self._lock:
+            lines, new_offset = self._lines_since(offset)
+            info = dict(self._info)
+        if info.get("started") and info.get("running"):
+            info["elapsed_s"] = round(time.time() - info["started"], 1)
+        return {**info, "offset": new_offset, "lines": lines}
+
+    def _run(self, argv: list[str], workspace: Path) -> None:
+        code = -1
+        try:
+            proc = self._spawn(argv)
+            if proc is not None:
+                assert proc.stdout is not None
+                for raw in proc.stdout:
+                    line = raw.rstrip("\n").rstrip("\r")
+                    if not line.strip():
+                        continue
+                    progress = parse_status_line(line)
+                    if progress is not None:
+                        # Fortschritt ersetzt den vorigen Stand; nicht ins Protokoll.
+                        with self._lock:
+                            self._info["progress"] = progress
+                        continue
+                    self._append(line)
+                code = proc.wait()
+        finally:
+            self._finish(code, workspace)
+
+    def _finish(self, code: int, workspace: Path) -> None:
+        from audioscribe.agent.manifest import load_manifest
+
+        manifest = load_manifest(workspace)
+        result = None
+        if manifest is not None:
+            index = workspace / "INDEX.md"
+            # Bewusst ohne kosten_usd: bei Abo-Anmeldung nur ein Gegenwert zu API-Preisen.
+            result = {
+                "status": manifest.status,
+                "session_id": manifest.session_id,
+                "index": str(index) if index.exists() else None,
+                "fehler": manifest.fehler,
+            }
+        with self._lock:
+            self._proc = None
+            self._info.update(running=False, returncode=code, result=result)
+            cancelled = self._info.get("cancelled")
+        if cancelled:
+            self._append("\nAnalyse abgebrochen.")
+        elif code == 0:
+            self._append(f"\nAnalyse fertig: {workspace}")
+        else:
+            self._append(f"\nAnalyse mit Fehler beendet (Exit-Code {code}).")
 
 
 def _terminate(proc: subprocess.Popen[str]) -> None:

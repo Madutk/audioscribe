@@ -27,6 +27,11 @@ STATE_KEYS: tuple[str, ...] = (
     "frames",
     "frame_sensitivity",
     "frame_format",
+    # KI-Analyse
+    "agent_output_dir",
+    "agent_model",
+    "agent_skills",
+    "agent_bash",
 )
 
 _STATE_NAME = "ui-state.json"
@@ -73,8 +78,12 @@ def _clean(values: Mapping[str, object]) -> dict:
         if key not in values:
             continue
         value = values[key]
-        if key in ("diarize", "frames"):
+        if key in ("diarize", "frames", "agent_bash"):
             out[key] = bool(value)
+        elif key == "agent_skills":
+            # Liste von Skill-Namen; eine leere Liste ist eine gueltige, bewusste Wahl.
+            if isinstance(value, (list, tuple)):
+                out[key] = [v.strip() for v in value if isinstance(v, str) and v.strip()]
         elif isinstance(value, str) and value.strip():
             out[key] = value.strip()
     return out

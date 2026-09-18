@@ -17,6 +17,7 @@ models/
 input/
 output/
 work/
+analysen/
 *.mp3
 *.m4a
 *.wav
