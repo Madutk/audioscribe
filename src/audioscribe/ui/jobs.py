@@ -252,3 +252,94 @@ def probe_cuda(*, timeout: float = 120.0) -> bool | None:
     if proc.returncode != 0:
         return None
     return proc.stdout.strip().endswith("1")
+
+
+# --- KI-Analyse (PRD §16) ----------------------------------------------------------
+#
+# Auch der Agent laeuft als Subprozess ('audioscribe analyze'): gleiche Gruende wie oben
+# (Config pro Lauf, Abbruch per Prozessgruppe, Absturz-Isolation), und der Webserver
+# braucht das Agent SDK nicht selbst zu importieren.
+
+# Vorschlaege der Oberflaeche; die CLI akzeptiert jeden Namen, den Claude Code kennt.
+AGENT_MODELS: tuple[str, ...] = ("claude-opus-5", "claude-sonnet-5", "claude-fable-5-1")
+
+
+@dataclass(frozen=True)
+class AnalyseOptions:
+    """Die in der Oberflaeche einstellbaren Optionen eines Analyse-Laufs."""
+
+    source: Path  # Ergebnisordner eines 'run' (output/<stem>)
+    name: str
+    output_dir: Path
+    context_text: str = ""
+    context_files: tuple[Path, ...] = ()
+    skills: tuple[str, ...] = ()
+    skills_dir: Path | None = None
+    model: str = "claude-opus-5"
+    bash: bool = True
+
+
+def build_analyze_argv(opts: AnalyseOptions, *, prefix: Sequence[str] | None = None) -> list[str]:
+    """Baut den vollstaendigen ``audioscribe analyze``-Aufruf."""
+    argv = list(prefix if prefix is not None else cli_prefix())
+    # Werte in der '--option=wert'-Form: ein Prozessname wie "-Test" oder ein Kontext,
+    # der mit "--" beginnt, wuerde sonst von argparse als Option gelesen.
+    argv += [
+        "analyze",
+        str(Path(opts.source)),
+        f"--name={opts.name}",
+        f"--out={Path(opts.output_dir)}",
+        f"--model={opts.model}",
+    ]
+    if opts.context_text.strip():
+        argv.append(f"--context-text={opts.context_text}")
+    for path in opts.context_files:
+        argv.append(f"--context={Path(path)}")
+    if opts.skills_dir is not None:
+        argv.append(f"--skills-dir={Path(opts.skills_dir)}")
+    # Die Auswahl der Oberflaeche gilt exakt: ohne '--skill' griffe in der CLI die
+    # Config-Vorauswahl - eine bewusst leere Auswahl heisst darum '--no-skills'.
+    argv += [f"--skill={name}" for name in opts.skills]
+    if not opts.skills:
+        argv.append("--no-skills")
+    if not opts.bash:
+        argv.append("--no-bash")
+    return argv
+
+
+def scan_results(output_dir: Path) -> list[dict]:
+    """Fertige Transkriptionen unter ``output_dir`` - die moeglichen Analyse-Quellen.
+
+    Ein Unterordner zaehlt, wenn er ``transkript.md`` enthaelt. Juengste zuerst.
+    """
+    folder = Path(output_dir)
+    if not folder.is_dir():
+        raise NotADirectoryError(f"Kein Verzeichnis: {folder}")
+    out: list[tuple[float, dict]] = []
+    with os.scandir(folder) as entries:
+        for entry in entries:
+            if entry.name.startswith("."):
+                continue
+            try:
+                if not entry.is_dir():
+                    continue
+                transcript = Path(entry.path) / "transkript.md"
+                if not transcript.is_file():
+                    continue
+                mtime = transcript.stat().st_mtime
+                frames_dir = Path(entry.path) / "frames"
+                frames = (
+                    sum(1 for p in frames_dir.iterdir() if p.is_file())
+                    if frames_dir.is_dir()
+                    else 0
+                )
+            except OSError:
+                continue
+            annotated = (Path(entry.path) / "transkript.annotiert.md").is_file()
+            out.append(
+                (
+                    mtime,
+                    {"name": entry.name, "path": entry.path, "frames": frames, "annotated": annotated},
+                )
+            )
+    return [item for _, item in sorted(out, key=lambda t: t[0], reverse=True)]

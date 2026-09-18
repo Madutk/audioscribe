@@ -287,6 +287,87 @@ aufgenommen am Ende der Serie, wenn der Bildschirm fertig aufgebaut ist.
 die Erkennung standardmäßig aus. Ein erneuter Lauf ersetzt die automatischen Bilder und
 lässt von Hand gesetzte Markierungen unberührt.
 
+## KI-Analyse per Claude-Agent (Prozessdokumentation u. a.)
+
+Ein Claude-Agent wertet einen fertigen Ergebnisordner aus, also Transkript und Standbilder,
+und legt alle Dokumente in einem Ordner ab, den du selbst wählst. Dafür gibst du ihm einen
+**Prozessnamen**, freien **Kontext** und eine Auswahl an **Skills** mit. Die Skills legen
+Aufbau und Qualitätsmaßstab der Dokumente fest, zum Beispiel `prozessrekonstruktion`,
+`prozessdoku-qs` oder `arbeitsanweisung-ableiten`.
+
+**Abrechnung über das Claude-Abo:** Die Anbindung läuft über das
+[Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk). Es steuert Claude Code und
+benutzt dessen Anmeldung. Wer sich einmal mit `claude` per Pro-/Max-Abo eingeloggt hat,
+braucht keinen API-Key. **Achtung:** Ist `ANTHROPIC_API_KEY` gesetzt (Umgebung oder
+`.env`), hat der Key Vorrang, und die Kosten laufen über das API-Guthaben.
+`audioscribe doctor` zeigt an, welcher Weg aktiv ist.
+
+```bash
+# einmalig: das SDK installieren (zusammen mit dem Rechen-Backend)
+uv sync --extra cu124 --extra review --extra agent
+claude            # einmal starten und mit dem Claude-Abo anmelden, dann beenden
+
+# welche Skills gibt es? (* = Vorauswahl aus AUDIOSCRIBE_AGENT_SKILLS)
+.venv/bin/audioscribe analyze --list-skills
+
+# Analyse starten: Quelle ist der Ergebnisordner eines 'run' (oder der Videopfad)
+.venv/bin/audioscribe analyze output/demo \
+    --name "Rechnungsprüfung Kreditoren" \
+    --out ~/Analysen \
+    --context-text "Zielgruppe: neue Kollegen in der Kreditorenbuchhaltung" \
+    --context glossar.md \
+    --skill transkript-normalisierung --skill prozessrekonstruktion --skill prozessdoku-qs
+```
+
+Fehlen `--name` oder `--out`, fragt der Befehl im Terminal nach. Ohne `--skill` gilt die
+Vorauswahl, mit `--no-skills` arbeitet der Agent ohne Skills. Weitere Schalter:
+`--model` (Default `claude-opus-5`), `--max-turns N`, `--no-bash` (Skill-Skripte nicht
+ausführen) und `--skills-dir` (Default `~/.claude/skills`, rekursiv durchsucht, also
+auch die mit claude.ai synchronisierten Skills).
+
+**In der Browser-Oberfläche** (`audioscribe ui`) steht die Analyse im Reiter
+„KI-Analyse“. Dort wählst du eine fertige Transkription aus dem Ausgangsordner, gibst
+Prozessname, Ausgabeordner und Kontext ein (optional mit Kontextdateien) und kreuzt die
+Skills an. Während des Laufs zeigt die Seite den Fortschritt:
+- den Plan des Agenten als abhakbare Schrittliste mit Balken („Schritt 3 von 7“)
+- den aktiven Skill
+- wie viele Standbilder er schon angesehen hat
+- die bisher geschriebenen Dokumente
+
+Einen Prozentwert gibt es bewusst nicht: Der Balken zählt die Schritte des Agenten, und
+ergänzt er Schritte, läuft der Balken auch zurück. Am Ende stehen Ergebnisordner und
+`INDEX.md` in der Seite.
+
+**Ergebnis** in `<out>/<prozessname>/`:
+
+```
+INDEX.md                  # vom Agenten: Übersicht aller Dokumente, offene Punkte, Annahmen
+prozessdokumentation.md   # … je nach Skills und Kontext
+material/                 # Kopie von Transkript, frames/, marks.json (Dokumente verweisen hierauf)
+kontext/                  # Kopie der Kontextdateien
+analyse.json              # Protokoll: Skills, Modell, Session-ID, Dauer, Token-Gegenwert (kosten_usd)
+agent-log.txt             # vollständiger Verlauf
+.claude/skills/           # die verwendeten Skills (Stand zum Zeitpunkt der Analyse)
+```
+
+**Abgrenzung:** Der Agent schreibt **nur** in diesen Ordner. Schreibversuche außerhalb
+werden abgelehnt und im Protokoll als `[Verweigert]` vermerkt. Der audioscribe-Ergebnisordner
+bleibt unverändert, weil der Agent auf einer Kopie arbeitet. Deine übrigen Claude-Code-Skills,
+MCP-Server und die globale `CLAUDE.md` fließen **nicht** in den Lauf ein.
+
+**Kosten:** Mit Abo-Anmeldung fallen keine zusätzlichen Kosten an; der Lauf zählt auf die
+Nutzungslimits des Abos. `kosten_usd` in `analyse.json` ist nur der Gegenwert zu API-Preisen,
+den Claude Code immer mitliefert. Die Oberfläche zeigt ihn deshalb nicht an.
+
+**Nutzungslimits:** Jedes Standbild, das der Agent ansieht, kostet Tokens. Bei
+Aufnahmen mit Hunderten Bildern kann eine Analyse einen spürbaren Teil des Abo-Kontingents
+belegen. Dann hilft es, mit `--frame-sensitivity grob` oder `--frame-min-gap` weniger Bilder
+zu erzeugen.
+
+**Nachbessern (experimentell):** `analyze … --resume --context-text "Ergänze …"` setzt
+die gespeicherte Sitzung fort; der Agent kennt dabei den bisherigen Verlauf. Das ist die
+Grundlage für einen späteren Dialogmodus.
+
 ## Erster Lauf & Modell-Downloads
 
 Beim ersten `run` werden die Modellgewichte einmalig geladen und danach gecached
@@ -382,4 +463,70 @@ uv run pytest        # Unit-Tests (reine Logik, keine Modell-Downloads)
 Basisstufe gemäß `PRD.md`: eine Datei pro CLI-Aufruf (die Browser-Oberfläche arbeitet ganze
 Ordner nacheinander ab), Markdown-Ausgabe (+ optional PDF), Diarisierung als „Sprecher N"
 (keine echte Personen-Identifikation). AudioScribe ist die Transkriptions-Basisstufe für die
-übergeordnete Meeting-Protokoll-Pipeline.
+übergeordnete Meeting-Protokoll-Pipeline; die Auswertung übernimmt optional der
+Claude-Agent (`audioscribe analyze`, PRD §16).
+
+## Befehle auf einen Blick
+
+Alle Befehle im Projektordner ausführen (`cd ~/develop/git/audioscribe`). Starte sie
+direkt aus `.venv/bin/`, **nicht** mit `uv run`: Ohne Extras würde `uv run` die
+CUDA-Pakete, die Oberfläche und das Agent SDK aus der Umgebung entfernen.
+
+**Einrichten (einmalig bzw. nach Updates)**
+
+```bash
+uv sync --extra cu124 --extra review --extra agent   # GPU-Rechner
+uv sync --extra cpu   --extra review --extra agent   # Rechner ohne NVIDIA-Karte
+claude                                               # einmal mit dem Claude-Abo anmelden (für analyze)
+.venv/bin/audioscribe doctor                         # Umgebung prüfen
+```
+
+**Browser-Oberfläche (Transkription + KI-Analyse)**
+
+```bash
+.venv/bin/audioscribe ui                   # http://127.0.0.1:8766, Reiter „Transkription“ / „KI-Analyse“
+.venv/bin/audioscribe ui --port 9000       # anderer Port
+.venv/bin/audioscribe ui --no-browser      # Browser nicht automatisch öffnen
+```
+
+Beenden mit Strg+C. Unter WSL die Adresse notfalls selbst im Windows-Browser öffnen.
+
+**Transkribieren (einzelne Datei)**
+
+```bash
+.venv/bin/audioscribe run input/meeting.m4a                  # -> output/meeting/transkript.md
+.venv/bin/audioscribe run input/demo.mp4 --frames            # Bildschirmaufnahme: + Standbilder
+.venv/bin/audioscribe run input/demo.mp4 --frames --pdf      # zusätzlich PDF
+.venv/bin/audioscribe run input/x.mp3 --no-diarize --language auto
+.venv/bin/audioscribe run input/x.mp3 --num-speakers 3 --device cpu
+```
+
+**KI-Analyse per Claude-Agent**
+
+```bash
+.venv/bin/audioscribe analyze --list-skills                  # verfügbare Skills (* = Vorauswahl)
+.venv/bin/audioscribe analyze output/demo                    # fragt Prozessname + Ausgabeordner ab
+.venv/bin/audioscribe analyze output/demo --name "Rechnungsprüfung" --out ~/Analysen \
+    --context-text "Zielgruppe: neue Kollegen" --context glossar.md \
+    --skill prozessrekonstruktion --skill prozessdoku-qs
+.venv/bin/audioscribe analyze output/demo --name "Rechnungsprüfung" --out ~/Analysen \
+    --resume --context-text "Ergänze die Ausnahmefälle"      # Sitzung fortsetzen (experimentell)
+```
+
+Weitere Schalter: `--no-skills`, `--skills-dir PFAD`, `--model claude-sonnet-5`,
+`--max-turns N`, `--no-bash`.
+
+**Standbilder von Hand markieren und exportieren**
+
+```bash
+.venv/bin/audioscribe review output/demo                     # http://127.0.0.1:8765
+.venv/bin/audioscribe export output/demo --pdf               # -> transkript.annotiert.md (+ PDF)
+```
+
+**Hilfe und Tests**
+
+```bash
+.venv/bin/audioscribe --help                                 # alle Befehle
+.venv/bin/audioscribe analyze --help                         # alle Optionen eines Befehls
+uv run --extra cu124 --extra review --extra agent pytest     # Unit-Tests
+```

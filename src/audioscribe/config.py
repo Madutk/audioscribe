@@ -110,6 +110,32 @@ class Settings:
     # Mindestabstand zwischen zwei Bildern (Sekunden) - gegen Bilderfluten bei Videos.
     screen_min_gap: float = field(default_factory=lambda: float(_env("SCREEN_MIN_GAP", "4")))
 
+    # --- KI-Analyse per Claude-Agent (PRD §16, FR-28..34) ---
+    # Modell fuer Claude Code; Aliase wie "opus"/"sonnet" funktionieren ebenfalls.
+    agent_model: str = field(default_factory=lambda: _env("AGENT_MODEL", "claude-opus-5"))
+    # Hier wird rekursiv nach SKILL.md gesucht (auch synced/<konto>/<skill>/).
+    agent_skills_dir: Path = field(
+        default_factory=lambda: Path(
+            _env("AGENT_SKILLS_DIR", str(Path.home() / ".claude" / "skills"))
+        ).expanduser()
+    )
+    # Vorauswahl (kommagetrennt); fehlende Skills werden in der Vorauswahl uebergangen.
+    agent_skills: tuple[str, ...] = field(
+        default_factory=lambda: tuple(
+            s.strip()
+            for s in _env(
+                "AGENT_SKILLS",
+                "transkript-normalisierung,prozessrekonstruktion,prozessdoku-qs,"
+                "arbeitsanweisung-ableiten",
+            ).split(",")
+            if s.strip()
+        )
+    )
+    agent_max_turns: int | None = field(default_factory=lambda: _opt_int("AGENT_MAX_TURNS"))
+    agent_output_dir: Path = field(
+        default_factory=lambda: Path(_env("AGENT_OUTPUT_DIR", str(PROJECT_ROOT / "analysen")))
+    )
+
     def ensure_dirs(self) -> None:
         for d in (self.input_dir, self.output_dir, self.work_dir, self.cache_dir):
             d.mkdir(parents=True, exist_ok=True)

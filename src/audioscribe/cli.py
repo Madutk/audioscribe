@@ -6,6 +6,7 @@ Befehle:
   review  - lokale Review-Oberflaeche: Video + Transkript, wichtige Frames markieren (PRD §13)
   export  - Transkript + Markierungen zu annotiertem Markdown/PDF mergen (FR-18)
   ui      - Browser-Oberflaeche: Ein-/Ausgangsordner waehlen, alle Medien darin transkribieren
+  analyze - KI-Analyse eines Ergebnisordners per Claude-Agent (Kontext + Skills, PRD §16)
 """
 
 from __future__ import annotations
@@ -127,6 +128,50 @@ def main(argv: list[str] | None = None) -> int:
     exp.add_argument("target", metavar="ORDNER|VIDEO", help="Ausgabeordner (output/<name>) ODER Videopfad")
     exp.add_argument("--pdf", action="store_true", help="zusaetzlich annotiertes PDF erzeugen")
 
+    ana = sub.add_parser(
+        "analyze",
+        help="Ergebnisordner per Claude-Agent auswerten (Prozessdoku u.a.; nutzt das Claude-Abo)",
+    )
+    ana.add_argument(
+        "target",
+        nargs="?",
+        metavar="ORDNER|VIDEO",
+        help="Ergebnisordner eines 'run' (output/<name>) ODER Videopfad",
+    )
+    ana.add_argument("--name", help="Name des Prozesses (bestimmt auch den Unterordner)")
+    ana.add_argument(
+        "--out", help="Ausgabeordner; Ergebnisse landen in <out>/<name> (Default: ./analysen)"
+    )
+    ana.add_argument(
+        "--context",
+        action="append",
+        metavar="DATEI",
+        help="Kontextdatei fuer den Agenten (mehrfach moeglich; md/txt werden direkt uebergeben)",
+    )
+    ana.add_argument("--context-text", metavar="TEXT", help="Kontext als Freitext")
+    ana.add_argument(
+        "--skill",
+        action="append",
+        metavar="NAME",
+        help="Skill bereitstellen (mehrfach moeglich; Default: AUDIOSCRIBE_AGENT_SKILLS)",
+    )
+    ana.add_argument(
+        "--no-skills", action="store_true", help="keine Skills bereitstellen (auch keine Vorauswahl)"
+    )
+    ana.add_argument("--skills-dir", metavar="PFAD", help="Ordner mit Skills (Default: ~/.claude/skills)")
+    ana.add_argument("--list-skills", action="store_true", help="verfuegbare Skills anzeigen und beenden")
+    ana.add_argument("--model", help="Claude-Modell (Default: claude-opus-5)")
+    ana.add_argument("--max-turns", type=int, metavar="N", help="Obergrenze fuer Agenten-Runden")
+    ana.add_argument(
+        "--no-bash", action="store_true", help="Agent darf keine Befehle/Skill-Skripte ausfuehren"
+    )
+    ana.add_argument(
+        "--resume",
+        action="store_true",
+        help="(experimentell) vorhandene Sitzung in <out>/<name> fortsetzen; "
+        "--context-text ist dann die Folgeanweisung",
+    )
+
     args = parser.parse_args(argv)
 
     if args.command == "doctor":
@@ -232,6 +277,11 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         print(f"Annotiertes Transkript: {out_md}")
         return 0
+
+    if args.command == "analyze":
+        from audioscribe.agent.kommando import analyze
+
+        return analyze(args, _resolve_out_dir)
 
     parser.print_help()
     return 0
