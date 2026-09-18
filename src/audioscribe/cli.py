@@ -7,6 +7,7 @@ Befehle:
   export  - Transkript + Markierungen zu annotiertem Markdown/PDF mergen (FR-18)
   ui      - Browser-Oberflaeche: Ein-/Ausgangsordner waehlen, alle Medien darin transkribieren
   analyze - KI-Analyse eines Ergebnisordners per Claude-Agent (Kontext + Skills, PRD §16)
+  prozessbild - prozessbild.png/.svg aus prozessbild.mmd neu erzeugen (FR-35)
 """
 
 from __future__ import annotations
@@ -166,11 +167,23 @@ def main(argv: list[str] | None = None) -> int:
         "--no-bash", action="store_true", help="Agent darf keine Befehle/Skill-Skripte ausfuehren"
     )
     ana.add_argument(
+        "--no-prozessbild",
+        action="store_true",
+        help="kein prozessbild.png/.svg aus dem Mermaid-Diagramm erzeugen",
+    )
+    ana.add_argument(
         "--resume",
         action="store_true",
         help="(experimentell) vorhandene Sitzung in <out>/<name> fortsetzen; "
         "--context-text ist dann die Folgeanweisung",
     )
+
+    pb = sub.add_parser(
+        "prozessbild",
+        help="prozessbild.png/.svg neu aus prozessbild.mmd erzeugen (z. B. nach Handkorrektur)",
+    )
+    pb.add_argument("target", metavar="ORDNER", help="Ergebnisordner einer Analyse")
+    pb.add_argument("--browser", metavar="PFAD", help="Edge/Chrome/Chromium (Default: automatisch)")
 
     args = parser.parse_args(argv)
 
@@ -282,6 +295,11 @@ def main(argv: list[str] | None = None) -> int:
         from audioscribe.agent.kommando import analyze
 
         return analyze(args, _resolve_out_dir)
+
+    if args.command == "prozessbild":
+        from audioscribe.agent.kommando import prozessbild
+
+        return prozessbild(args, _resolve_out_dir)
 
     parser.print_help()
     return 0

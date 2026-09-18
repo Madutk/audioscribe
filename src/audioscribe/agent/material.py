@@ -45,6 +45,7 @@ class Auftrag:
     model: str | None = None
     max_turns: int | None = None
     bash: bool = True
+    prozessbild: bool = True  # prozessbild.png/.svg aus dem Mermaid-Diagramm (FR-35)
     resume: str | None = None  # Session-ID fuer eine Fortsetzung (Chat-Vorbereitung)
 
     @property

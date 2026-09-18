@@ -1,5 +1,9 @@
 """KI-Analyse (PRD §16): reine Logik - ohne Agent SDK, ohne Netz, ohne Claude."""
 
+import base64
+import json
+import os
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -7,8 +11,14 @@ from pathlib import Path
 import pytest
 
 from audioscribe.agent import guard
+from audioscribe.agent import prozessbild as pb
 from audioscribe.agent.fortschritt import STATUS_PREFIX, Fortschritt, parse_status_line
-from audioscribe.agent.manifest import Manifest, load_manifest, manifest_path, save_manifest
+from audioscribe.agent.manifest import (
+    Manifest,
+    load_manifest,
+    manifest_path,
+    save_manifest,
+)
 from audioscribe.agent.material import Auftrag, copy_material, find_transcript, slugify
 from audioscribe.agent.prompt import build_task_prompt, system_append
 from audioscribe.agent.runner import tool_summary
@@ -200,6 +210,8 @@ def test_task_prompt_ohne_bilder_und_ohne_skills(tmp_path):
 def test_system_append_liegt_im_paket_und_nennt_python():
     text = system_append(python="/venv/bin/python")
     assert "INDEX.md" in text and "TodoWrite" in text
+    # Nummerierung im Prozessbild, damit es sich mit der Schrittliste abgleichen laesst.
+    assert 'S3["S3: ' in text and 'E1{"E1: ' in text
     assert '`"/venv/bin/python"`' in text and "{python}" not in text
     assert sys.executable in system_append()
 
@@ -578,3 +590,149 @@ def test_api_agent_start_prueft_eingaben(client, tmp_path):
     assert client.post("/api/agent/start", json={**base, "source": str(tmp_path)}).status_code == 400
     r = client.post("/api/agent/start", json={**base, "context_files": [str(tmp_path / "fehlt")]})
     assert r.status_code == 400 and "Kontextdatei" in r.json()["detail"]
+
+
+# --- Prozessbild (FR-35) ---
+
+_MERMAID = 'flowchart TD\n    S1["S1: Start"]\n    S2["S2: Ende"]\n    S1 --> S2'
+
+
+def test_extract_mermaid_mehrere_bloecke():
+    md = (
+        "Text\n```mermaid\nflowchart TD\n  A --> B\n```\n\n```python\nprint(1)\n```\n"
+        "```mermaid \n```\n```mermaid\nflowchart LR\n  C --> D\n```\n"
+    )
+    assert pb.extract_mermaid(md) == ["flowchart TD\n  A --> B", "flowchart LR\n  C --> D"]
+
+
+def test_ensure_source_mmd_hat_vorrang_und_reihenfolge(tmp_path):
+    for name in ("prozessbild-10.mmd", "prozessbild-2.mmd", "prozessbild.mmd"):
+        (tmp_path / name).write_text(_MERMAID, encoding="utf-8")
+    (tmp_path / "doku.md").write_text(f"```mermaid\n{_MERMAID}\n```\n", encoding="utf-8")
+    names = [p.name for p in pb.ensure_source(tmp_path, ["doku.md"])]
+    assert names == ["prozessbild.mmd", "prozessbild-2.mmd", "prozessbild-10.mmd"]
+
+
+def test_ensure_source_rueckfall_prozessdoku_zuerst(tmp_path):
+    (tmp_path / "a-index.md").write_text("```mermaid\nflowchart TD\n  X --> Y\n```\n", encoding="utf-8")
+    (tmp_path / "prozessdokumentation.md").write_text(
+        f"# Doku\n```mermaid\n{_MERMAID}\n```\n", encoding="utf-8"
+    )
+    quellen = pb.ensure_source(tmp_path, ["a-index.md", "prozessdokumentation.md", "fehlt.md"])
+    assert [q.name for q in quellen] == ["prozessbild.mmd"]
+    assert (tmp_path / "prozessbild.mmd").read_text(encoding="utf-8").strip() == _MERMAID
+
+
+def test_ensure_source_ohne_diagramm(tmp_path):
+    (tmp_path / "doku.md").write_text("kein Diagramm", encoding="utf-8")
+    assert pb.ensure_source(tmp_path, ["doku.md"]) == []
+    log: list[str] = []
+    assert pb.erzeuge_prozessbilder(tmp_path, ["doku.md"], log=log.append) == []
+    assert "Kein Mermaid-Diagramm" in log[0]
+
+
+def test_erzeuge_ohne_browser_meldet_nur(tmp_path, monkeypatch):
+    (tmp_path / "prozessbild.mmd").write_text(_MERMAID, encoding="utf-8")
+    monkeypatch.setattr(pb, "find_browser", lambda: None)
+    log: list[str] = []
+    assert pb.erzeuge_prozessbilder(tmp_path, log=log.append) == []
+    assert "AUDIOSCRIBE_BROWSER" in log[0]
+
+
+def test_find_browser_reihenfolge():
+    edge_wsl = Path("/mnt/c/Program Files (x86)/Microsoft/Edge/Application/msedge.exe")
+    chrome_win = Path("C:/Program Files/Google/Chrome/Application/chrome.exe")
+    kw = {"which": lambda n: None}
+    assert pb.find_browser(env={"AUDIOSCRIBE_BROWSER": "/x/edge"}, **kw) == Path("/x/edge")
+    assert pb.find_browser(env={}, platform="linux", wsl=True, exists=lambda p: p == edge_wsl, **kw) == edge_wsl
+    assert pb.find_browser(env={}, platform="win32", exists=lambda p: p == chrome_win, **kw) == chrome_win
+    assert pb.find_browser(env={}, platform="win32", exists=lambda p: False, **kw) is None
+    assert (
+        pb.find_browser(env={}, platform="linux", wsl=False, exists=lambda p: True,
+                        which=lambda n: "/usr/bin/chromium" if n == "chromium" else None)
+        == Path("/usr/bin/chromium")
+    )
+    assert pb.find_browser(env={}, platform="linux", wsl=False, **kw) is None
+
+
+def test_browser_argv_und_seite():
+    argv = pb.browser_argv(Path("/b/msedge.exe"), "C:\\x\\render.html", "C:\\tmp\\p")
+    assert argv[0] == "/b/msedge.exe" and argv[-1] == "C:\\x\\render.html"
+    assert "--headless=new" in argv and "--dump-dom" in argv
+    assert "--user-data-dir=C:\\tmp\\p" in argv
+    page = pb.build_page('flowchart TD\n  A["</script><b>"] --> B')
+    assert "</script><b>" not in page.split("const SRC")[1].split(";")[0]
+    assert 'src="mermaid.min.js"' in page
+
+
+def test_parse_dump():
+    ok = '<html><pre id="out">{&quot;svg&quot;: &quot;&lt;svg/&gt;&quot;, &quot;png&quot;: &quot;data:,&quot;}</pre>'
+    assert pb.parse_dump(ok) == {"svg": "<svg/>", "png": "data:,"}
+    assert "keine Ergebnisseite" in pb.parse_dump("<html></html>")["error"]
+    assert "nicht rechtzeitig" in pb.parse_dump('<pre id="out">pending</pre>')["error"]
+    assert "nicht lesbar" in pb.parse_dump('<pre id="out">{kaputt</pre>')["error"]
+    err = '<pre id="out">{"error": "Parse error on line 2"}</pre>'
+    assert pb.parse_dump(err) == {"error": "Parse error on line 2"}
+
+
+def test_render_schreibt_dateien_mit_gefaktem_browser(tmp_path, monkeypatch):
+    mmd = tmp_path / "prozessbild.mmd"
+    mmd.write_text(_MERMAID, encoding="utf-8")
+    png = b"\x89PNG\r\n\x1a\nxyz"
+    payload = {"svg": "<svg>ä</svg>", "png": "data:image/png;base64," + base64.b64encode(png).decode()}
+    seen = {}
+
+    def fake_run(argv, **kw):
+        seen["argv"] = argv
+        seen["page"] = Path(argv[-1]).read_text(encoding="utf-8")
+        assert (Path(argv[-1]).parent / "mermaid.min.js").is_file()
+        dom = '<pre id="out">' + json.dumps(payload).replace('"', "&quot;") + "</pre>"
+        return subprocess.CompletedProcess(argv, 0, dom, "")
+
+    monkeypatch.setattr(pb.subprocess, "run", fake_run)
+    svg_path, png_path = pb.render(mmd, Path("/usr/bin/chromium"))
+    assert svg_path.read_text(encoding="utf-8") == "<svg>ä</svg>"
+    assert png_path.read_bytes() == png
+    assert "S1: Start" in seen["page"]
+    assert not (tmp_path / ".prozessbild-tmp").exists()  # aufgeraeumt
+
+
+def test_render_fehler_wird_runtimeerror(tmp_path, monkeypatch):
+    mmd = tmp_path / "prozessbild.mmd"
+    mmd.write_text(_MERMAID, encoding="utf-8")
+    monkeypatch.setattr(
+        pb.subprocess, "run",
+        lambda argv, **kw: subprocess.CompletedProcess(argv, 0, '<pre id="out">{"error": "Parse error"}</pre>', ""),
+    )
+    with pytest.raises(RuntimeError, match="Mermaid-Fehler in prozessbild.mmd: Parse error"):
+        pb.render(mmd, Path("/usr/bin/chromium"))
+    (tmp_path / "leer.mmd").write_text(" ", encoding="utf-8")
+    with pytest.raises(RuntimeError, match="leer"):
+        pb.render(tmp_path / "leer.mmd", Path("/usr/bin/chromium"))
+
+
+def test_cli_analyze_no_prozessbild_flag(tmp_path, monkeypatch):
+    from audioscribe import cli
+    from audioscribe.agent import kommando
+
+    seen = {}
+    monkeypatch.setattr(kommando, "analyze", lambda args, resolve: seen.update(vars(args)) or 0)
+    assert cli.main(["analyze", str(tmp_path), "--no-prozessbild"]) == 0
+    assert seen["no_prozessbild"] is True
+
+
+@pytest.mark.skipif(
+    not os.environ.get("AUDIOSCRIBE_TEST_BROWSER"),
+    reason="echtes Rendern nur mit AUDIOSCRIBE_TEST_BROWSER=1 (braucht Edge/Chrome)",
+)
+def test_render_echt_mit_browser(tmp_path):
+    browser = pb.find_browser()
+    assert browser is not None
+    mmd = tmp_path / "prozessbild.mmd"
+    mmd.write_text(_MERMAID, encoding="utf-8")
+    svg, png = pb.render(mmd, browser)
+    assert png.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"
+    text = svg.read_text(encoding="utf-8")
+    assert "<svg" in text
+    # Feste Pixelmasse statt width="100%" - sonst zeigen Bildbetrachter eine leere Flaeche.
+    assert 'width="100%"' not in text and 'height="' in text

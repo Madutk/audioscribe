@@ -248,7 +248,23 @@ class AnalyseSitzung:
                         self._fortschritt_melden(plan_geaendert=self._ist_plan(block.tool_use_id))
             elif isinstance(msg, ResultMessage):
                 ok = self._record_result(msg)
+        if ok and self.auftrag.prozessbild:
+            self._prozessbild()
         return ok
+
+    def _prozessbild(self) -> None:
+        """Mermaid-Diagramm -> prozessbild.png/.svg; Probleme nur protokollieren (FR-35)."""
+        from audioscribe.agent.prozessbild import erzeuge_prozessbilder
+
+        try:
+            bilder = erzeuge_prozessbilder(self.workspace, self.fortschritt.docs, log=self.log)
+        except Exception as exc:  # noqa: BLE001 - Zugabe, darf die Analyse nie kippen
+            self.log(f"[Prozessbild] fehlgeschlagen: {type(exc).__name__}: {exc}")
+            return
+        neu = [b.name for b in bilder if b.name not in self.fortschritt.docs]
+        if neu:
+            self.fortschritt.docs.extend(neu)
+            self._fortschritt_melden()
 
     def _record_result(self, msg: Any) -> bool:
         m = self.manifest

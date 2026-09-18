@@ -343,12 +343,25 @@ ergänzt er Schritte, läuft der Balken auch zurück. Am Ende stehen Ergebnisord
 ```
 INDEX.md                  # vom Agenten: Übersicht aller Dokumente, offene Punkte, Annahmen
 prozessdokumentation.md   # … je nach Skills und Kontext
+prozessbild.png / .svg    # das Prozessdiagramm als Bild (für Word, PowerPoint, Confluence)
+prozessbild.mmd           # dessen Mermaid-Quelltext
 material/                 # Kopie von Transkript, frames/, marks.json (Dokumente verweisen hierauf)
 kontext/                  # Kopie der Kontextdateien
 analyse.json              # Protokoll: Skills, Modell, Session-ID, Dauer, Token-Gegenwert (kosten_usd)
 agent-log.txt             # vollständiger Verlauf
 .claude/skills/           # die verwendeten Skills (Stand zum Zeitpunkt der Analyse)
 ```
+
+**Prozessbild:** Enthält die Prozessdoku ein Mermaid-Diagramm, erzeugt audioscribe daraus
+nach dem Lauf `prozessbild.png` (doppelte Auflösung, weißer Hintergrund) und
+`prozessbild.svg`. Bei aufgeteilten Prozessen kommen `prozessbild-2.png` usw. dazu.
+Gerendert wird mit dem vorhandenen **Edge oder Chrome** im Hintergrund, unter WSL mit
+dem Windows-Browser. Es muss nichts installiert werden, und die Mermaid-Bibliothek liegt
+im Paket, funktioniert also auch offline. Hast du das Diagramm in `prozessbild.mmd` von
+Hand korrigiert, erzeugt `audioscribe prozessbild <ordner>` die Bilder neu. Findet
+audioscribe keinen Browser oder enthält das Diagramm einen Syntaxfehler, steht das im
+Protokoll, und die Analyse gilt trotzdem als fertig. Ein anderer Browser lässt sich mit
+`AUDIOSCRIBE_BROWSER=<pfad>` festlegen, `--no-prozessbild` schaltet die Bilder ab.
 
 **Abgrenzung:** Der Agent schreibt **nur** in diesen Ordner. Schreibversuche außerhalb
 werden abgelehnt und im Protokoll als `[Verweigert]` vermerkt. Der audioscribe-Ergebnisordner
@@ -514,7 +527,13 @@ Beenden mit Strg+C. Unter WSL die Adresse notfalls selbst im Windows-Browser öf
 ```
 
 Weitere Schalter: `--no-skills`, `--skills-dir PFAD`, `--model claude-sonnet-5`,
-`--max-turns N`, `--no-bash`.
+`--max-turns N`, `--no-bash`, `--no-prozessbild`.
+
+**Prozessbild neu erzeugen (nach Handkorrektur von prozessbild.mmd)**
+
+```bash
+.venv/bin/audioscribe prozessbild ~/Analysen/rechnungspruefung   # -> prozessbild.png + .svg
+```
 
 **Standbilder von Hand markieren und exportieren**
 
@@ -530,3 +549,13 @@ Weitere Schalter: `--no-skills`, `--skills-dir PFAD`, `--model claude-sonnet-5`,
 .venv/bin/audioscribe analyze --help                         # alle Optionen eines Befehls
 uv run --extra cu124 --extra review --extra agent pytest     # Unit-Tests
 ```
+
+**Schnellstart: Oberfläche starten**
+
+```bash
+cd ~/develop/git/audioscribe
+.venv/bin/audioscribe ui
+```
+
+Danach öffnet sich http://127.0.0.1:8766 mit den Reitern „Transkription“ und „KI-Analyse“.
+Unter WSL die Adresse notfalls selbst im Windows-Browser öffnen, beenden mit Strg+C.

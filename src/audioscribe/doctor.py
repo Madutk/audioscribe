@@ -218,6 +218,14 @@ def _check_agent() -> CheckResult:
     if fehlend:
         status = "WARN"
         teile.append("Vorauswahl fehlt: " + ", ".join(fehlend))
+    from audioscribe.agent.prozessbild import find_browser
+
+    browser = find_browser()
+    if browser is None:
+        status = "WARN"
+        teile.append("Prozessbild: kein Edge/Chrome gefunden (AUDIOSCRIBE_BROWSER setzen)")
+    else:
+        teile.append(f"Prozessbild via {browser.name}")
     if os.environ.get("ANTHROPIC_API_KEY"):
         status = "WARN"
         teile.append("ANTHROPIC_API_KEY gesetzt -> Abrechnung ueber die API statt ueber das Abo")
