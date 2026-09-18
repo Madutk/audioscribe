@@ -99,6 +99,7 @@ def analyze(args: argparse.Namespace, resolve_out_dir: Callable[[str], Path]) ->
         model=args.model or settings.agent_model,
         max_turns=args.max_turns if args.max_turns is not None else settings.agent_max_turns,
         bash=not args.no_bash,
+        prozessbild=settings.agent_prozessbild and not args.no_prozessbild,
         resume=resume,
     )
 
@@ -130,3 +131,24 @@ def analyze(args: argparse.Namespace, resolve_out_dir: Callable[[str], Path]) ->
     except KeyboardInterrupt:
         print("Analyse abgebrochen.")
         return 130
+
+
+def prozessbild(args: argparse.Namespace, resolve_out_dir: Callable[[str], Path]) -> int:
+    """``audioscribe prozessbild ORDNER``: Bilder neu aus prozessbild*.mmd (ohne Agent)."""
+    from audioscribe.agent.prozessbild import erzeuge_prozessbilder, find_browser
+
+    ordner = Path(args.target).expanduser()
+    if not ordner.is_dir():
+        ordner = resolve_out_dir(args.target)
+    if not ordner.is_dir():
+        print(f"Kein Ordner: {ordner}")
+        return 1
+    browser = Path(args.browser) if args.browser else find_browser()
+    # Rueckfallebene ohne Agent-Protokoll: alle Markdown-Dokumente des Ordners.
+    docs = [
+        p.relative_to(ordner).as_posix()
+        for p in sorted(ordner.rglob("*.md"))
+        if p.relative_to(ordner).parts[0] not in ("material", "kontext", ".claude")
+    ]
+    bilder = erzeuge_prozessbilder(ordner, docs, log=print, browser=browser)
+    return 0 if bilder else 1

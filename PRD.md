@@ -447,6 +447,7 @@ eine Auswahl an Skills. Abgerechnet wird über das **Claude-Abo** des Nutzers.
 | FR-32 | Der Agent schließt mit `INDEX.md` ab (Dokumente, Zweck, offene Punkte, Annahmen). `analyse.json` protokolliert Status, Skills, Modell, Session-ID, Dauer und rechnerische Kosten, `agent-log.txt` den Verlauf. |
 | FR-33 | Die Browser-Oberfläche bietet einen Reiter „KI-Analyse“ mit Quellenauswahl, Prozessname, Ausgabeordner, Kontext, Kontextdateien, Skills, Modell, Live-Protokoll und Abbruch. Ausgabeordner, Modell und Skill-Auswahl werden gemerkt. Der Fortschritt wird aus den Werkzeugaufrufen abgeleitet, nicht geschätzt: Plan des Agenten (TaskCreate/TaskUpdate bzw. TodoWrite) als Schrittliste mit Balken, aktiver Skill, angesehene Standbilder und geschriebene Dokumente. Der Token-Gegenwert in USD wird nicht angezeigt, weil bei Abo-Anmeldung nichts abgerechnet wird. |
 | FR-34 | `audioscribe doctor` prüft SDK, Claude Code und Skill-Ordner und warnt, wenn `ANTHROPIC_API_KEY` die Abo-Abrechnung übersteuert. |
+| FR-35 | Enthält die Prozessdoku ein Mermaid-Diagramm, entstehen daraus `prozessbild.png` und `prozessbild.svg`. Die Quelle `prozessbild.mmd` schreibt der Agent; fehlt sie, übernimmt audioscribe den ersten Mermaid-Block aus den Dokumenten. Gerendert wird über den vorhandenen Edge oder Chrome headless (unter WSL die Windows-Exe) mit lokal mitgelieferter Mermaid-Bibliothek, ohne Playwright und ohne zusätzlichen Download. Fehler beim Rendern werden protokolliert und brechen die Analyse nicht ab. `audioscribe prozessbild ORDNER` rendert nach einer Handkorrektur neu, `--no-prozessbild` bzw. `AUDIOSCRIBE_AGENT_PROZESSBILD=0` schaltet die Bilder ab. |
 
 ### 16.4 Nicht-funktionale Anforderungen
 
@@ -460,7 +461,7 @@ eine Auswahl an Skills. Abgerechnet wird über das **Claude-Abo** des Nutzers.
 
 - **Eingabe:** `output/<name>/` (`transkript[.annotiert].md`, `transcript.json`, `marks.json`,
   `frames/`), Kontext, Skills.
-- **Ausgabe:** `<out>/<slug>/` mit den Dokumenten des Agenten, `INDEX.md`, `material/`,
+- **Ausgabe:** `<out>/<slug>/` mit den Dokumenten des Agenten, `prozessbild.{mmd,png,svg}`, `INDEX.md`, `material/`,
   `kontext/`, `analyse.json`, `agent-log.txt` und `.claude/skills/`.
 - **Konfiguration:** `AUDIOSCRIBE_AGENT_{MODEL, SKILLS_DIR, SKILLS, MAX_TURNS, OUTPUT_DIR}`.
 
