@@ -1,8 +1,8 @@
 """Lokaler Webserver der Stapel-Oberflaeche: Ordner waehlen, alle Medien transkribieren.
 
 Optionale Komponente (Extra-Gruppe ``review``): benoetigt ``fastapi`` + ``uvicorn``.
-Bindet ausschliesslich an ``localhost`` (NFR-8); kein Upload, keine Auslieferung von
-Dateiinhalten. fastapi/uvicorn werden erst INNERHALB der Funktionen importiert, damit
+Bindet ausschliesslich an ``localhost`` (NFR-8); kein Upload. Dateiinhalte liefert nur
+der Live-Reiter aus - die Standbilder der eigenen Sitzung. fastapi/uvicorn werden erst INNERHALB der Funktionen importiert, damit
 der Kern-CLI ohne diese Pakete lauffaehig bleibt.
 
 Der Fortschritt wird per Polling geholt (``GET /api/status?offset=N`` liefert Status
@@ -24,7 +24,7 @@ from pathlib import Path
 from audioscribe.config import settings
 from audioscribe.pipeline.media import probe_duration
 from audioscribe.ui import browse, jobs, state
-from audioscribe.ui.runner import AnalyseRunner, BatchRunner
+from audioscribe.ui.runner import AnalyseRunner, BatchRunner, LiveRunner
 
 _STATIC_DIR = Path(__file__).parent / "static"
 
@@ -126,12 +126,31 @@ def _folder_info(raw: str, *, default: Path) -> dict:
 def create_app():
     """Baut die FastAPI-App der Stapel-Oberflaeche (haelt genau einen BatchRunner)."""
     from fastapi import FastAPI, HTTPException, Query, Request
-    from fastapi.responses import HTMLResponse, JSONResponse
+    from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
     from pydantic import BaseModel
 
     app = FastAPI(title="AudioScribe UI")
     runner = BatchRunner()
     analyse = AnalyseRunner()
+    live = LiveRunner()
+
+    class LiveStartIn(BaseModel):
+        output_dir: str
+        monitor: int = 1
+        # Geraeteindex | "default" | "none"; die Namen dienen nur dem Merken der Auswahl.
+        mic: str = "default"
+        loopback: str = "default"
+        mic_name: str = ""
+        loopback_name: str = ""
+        model: str = "auto"
+        language: str = "de"
+        device: str = "auto"
+        sensitivity: str = "mittel"
+        format: str = "jpg-1600"
+        partials: bool = True
+        speakers: bool = True
+        refine: bool = True
+        refine_model: str = "large-v3"
 
     class StateIn(BaseModel):
         input_dir: str | None = None
@@ -455,6 +474,123 @@ def create_app():
     def api_agent_cancel():
         analyse.cancel()
         return JSONResponse({"ok": True})
+
+    # --- Live-Transkription (PRD §17) ------------------------------------------
+
+    @app.get("/api/live/defaults")
+    def api_live_defaults():
+        from audioscribe.live.kommando import inventory
+
+        saved = state.load_state()
+        return JSONResponse(
+            {
+                **inventory(),
+                "models": list(jobs.LIVE_WHISPER_MODELS),
+                "refine_models": list(jobs.WHISPER_MODELS),
+                "monitor": saved.get("live_monitor", "1"),
+                "mic": saved.get("live_mic", "default"),
+                "loopback": saved.get("live_loopback", "default"),
+                "model": saved.get("live_model", "auto"),
+                "language": saved.get("live_language", settings.whisper_language),
+                "device": saved.get("live_device", settings.device),
+                "sensitivity": saved.get("live_sensitivity", settings.screen_sensitivity),
+                "format": saved.get("live_format", settings.screen_format),
+                "partials": saved.get("live_partials", True),
+                "speakers": saved.get("live_speakers", True),
+                "refine": saved.get("live_refine", True),
+                "refine_model": saved.get("live_refine_model", settings.whisper_model),
+            }
+        )
+
+    @app.get("/api/live/monitor/{index}")
+    def api_live_monitor(index: int):
+        """Vorschaubild eines Monitors fuer die Monitorwahl."""
+        from audioscribe.live.screen import preview_jpeg
+
+        try:
+            return Response(preview_jpeg(index), media_type="image/jpeg")
+        except (ImportError, IndexError) as exc:
+            raise HTTPException(404, str(exc)) from exc
+
+    @app.post("/api/live/start")
+    def api_live_start(body: LiveStartIn):
+        if body.device not in jobs.DEVICES:
+            raise HTTPException(400, f"Unbekanntes Geraet: {body.device}")
+        if body.sensitivity not in jobs.SENSITIVITIES:
+            raise HTTPException(400, f"Unbekannte Empfindlichkeit: {body.sensitivity}")
+        if body.format not in jobs.FRAME_FORMATS:
+            raise HTTPException(400, f"Unbekanntes Bildformat: {body.format}")
+        # Alle Werte wandern als argv in den Subprozess - nur harmlose Zeichen zulassen.
+        for wert in (body.model, body.refine_model, body.language, body.mic, body.loopback):
+            if not wert or wert.startswith("-") or not all(c.isalnum() or c in "-_." for c in wert):
+                raise HTTPException(400, f"Ungueltiger Wert: {wert}")
+        if body.monitor < 0:
+            raise HTTPException(400, "Ungueltiger Monitor.")
+        if not body.monitor and body.mic == "none" and body.loopback == "none":
+            raise HTTPException(400, "Weder Audio noch Monitor gewaehlt.")
+
+        out_dir = browse.normalize_path(body.output_dir, default=settings.output_dir)
+        try:
+            out_dir.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            raise HTTPException(400, f"Ausgangsordner nicht anlegbar: {exc}") from exc
+
+        opts = jobs.LiveJobOptions(
+            output_dir=out_dir,
+            monitor=body.monitor,
+            mic=body.mic,
+            loopback=body.loopback,
+            model=body.model,
+            language=body.language,
+            device=body.device,
+            frame_sensitivity=body.sensitivity,
+            frame_format=body.format,
+            partials=body.partials,
+            speakers=body.speakers,
+            refine=body.refine,
+            refine_model=body.refine_model,
+        )
+        state.save_state(
+            {
+                "live_monitor": str(body.monitor),
+                "live_mic": body.mic_name or body.mic,
+                "live_loopback": body.loopback_name or body.loopback,
+                "live_model": body.model,
+                "live_language": body.language,
+                "live_device": body.device,
+                "live_sensitivity": body.sensitivity,
+                "live_format": body.format,
+                "live_partials": body.partials,
+                "live_speakers": body.speakers,
+                "live_refine": body.refine,
+                "live_refine_model": body.refine_model,
+            }
+        )
+        try:
+            live.start(opts)
+        except RuntimeError as exc:
+            raise HTTPException(409, str(exc)) from exc
+        return JSONResponse({"ok": True})
+
+    @app.get("/api/live/status")
+    def api_live_status(offset: int = Query(0, ge=0), ev_offset: int = Query(0, ge=0)):
+        return JSONResponse(live.snapshot(offset, ev_offset))
+
+    @app.post("/api/live/stop")
+    def api_live_stop():
+        live.stop()
+        return JSONResponse({"ok": True})
+
+    @app.get("/api/live/frame/{name}")
+    def api_live_frame(name: str):
+        """Standbild der laufenden bzw. letzten Sitzung - nur aus deren ``frames/``."""
+        session = live.session_dir()
+        if session is None or Path(name).name != name:
+            raise HTTPException(404, "Kein solches Standbild.")
+        path = session / "frames" / name
+        if not path.is_file():
+            raise HTTPException(404, "Kein solches Standbild.")
+        return FileResponse(path)
 
     return app
 

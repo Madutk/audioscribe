@@ -9,6 +9,8 @@ Befehle:
   analyze - KI-Analyse eines Ergebnisordners per Claude-Agent (Kontext + Skills, PRD §16)
   prozessbild - prozessbild.png/.svg aus prozessbild.mmd neu erzeugen (FR-35)
   bpmn    - BPMN-Modell mit Lanes aus bpmn-modell.json erzeugen/pruefen (FR-36)
+  live    - Live-Transkription: Monitor + System-Audio + Mikrofon mitschneiden (PRD §17)
+  refine  - Live-Sitzung mit der Offline-Pipeline nachschaerfen (FR-43)
 """
 
 from __future__ import annotations
@@ -38,6 +40,101 @@ def _resolve_out_dir(target: str) -> Path:
     from audioscribe.config import settings
 
     return settings.output_dir / p.stem
+
+
+def _prepare_backend() -> tuple[str, str] | None:
+    """Loest Geraet/compute_type auf und macht ctranslate2 + cuDNN ladbar.
+
+    Liefert ``(device, compute_type)`` oder ``None`` (Fehler bereits ausgegeben). Muss VOR
+    dem ersten whisperx-/faster-whisper-Import laufen.
+    """
+    # Geraet aufloesen (auto -> cuda|cpu) und das Ergebnis in die Env zurueckschreiben:
+    # so gilt nach dem os.execv-Re-Exec des cuDNN-Bootstraps dieselbe Entscheidung.
+    from audioscribe.config import resolve_compute_type, resolve_device, settings
+
+    try:
+        device = resolve_device(settings.device)
+    except RuntimeError as exc:
+        print(str(exc))
+        return None
+    compute_type = resolve_compute_type(settings.whisper_compute_type, device)
+    _set("DEVICE", device)
+    _set("WHISPER_COMPUTE_TYPE", compute_type)
+    print(f"Device: {device}, compute_type: {compute_type}")
+
+    # ctranslate2 importierbar machen (beide Pfade, vor dem whisperx-Import):
+    # Wheel-Reparatur fuer neuere glibc (Linux) bzw. pkg_resources-Ersatz (Windows).
+    from audioscribe.compat import ensure_ctranslate2_loadable, ensure_pkg_resources
+
+    ensure_ctranslate2_loadable(log=print)
+    ensure_pkg_resources(log=print)
+
+    # cuDNN-8-Libs fuer ctranslate2 bereitstellen und auffindbar machen: unter Linux
+    # ueber LD_LIBRARY_PATH samt Prozess-Neustart, unter Windows ueber
+    # os.add_dll_directory (wirkt sofort). Muss vor dem whisperx-Import geschehen;
+    # nur im CUDA-Pfad.
+    if device.startswith("cuda"):
+        from audioscribe.compat import ensure_native_libs
+
+        ensure_native_libs(log=print)
+    return device, compute_type
+
+
+def _live(args: argparse.Namespace) -> int:
+    _set("WHISPER_LANGUAGE", args.language)
+    _set("WHISPER_COMPUTE_TYPE", args.compute_type)
+    _set("DEVICE", args.device)
+    backend = _prepare_backend()
+    if backend is None:
+        return 1
+    device, compute_type = backend
+
+    from audioscribe.config import settings
+    from audioscribe.live.asr import default_model
+    from audioscribe.live.session import LiveOptions, LiveSession
+
+    model = args.model if args.model and args.model != "auto" else default_model(device)
+    opts = LiveOptions(
+        output_dir=Path(args.output) if args.output else settings.output_dir,
+        model=model,
+        device=device,
+        compute_type=compute_type,
+        language=settings.whisper_language,
+        monitor=args.monitor,
+        mic=args.mic,
+        loopback=args.loopback,
+        sensitivity=args.frame_sensitivity or settings.screen_sensitivity,
+        bildformat=args.frame_format or settings.screen_format,
+        partials=not args.no_partials,
+        speakers=not args.no_speakers,
+        hf_token=settings.hf_token,
+        sentences_per_timestamp=settings.sentences_per_timestamp,
+    )
+    try:
+        return LiveSession(opts).run()
+    except RuntimeError as exc:
+        print(str(exc))
+        return 1
+
+
+def _refine(args: argparse.Namespace) -> int:
+    if args.no_diarize:
+        _set("DIARIZATION", 0)
+    _set("WHISPER_LANGUAGE", args.language)
+    _set("WHISPER_MODEL", args.model)
+    _set("DEVICE", args.device)
+    if _prepare_backend() is None:
+        return 1
+
+    from audioscribe.live.refine import refine_session
+
+    try:
+        out = refine_session(_resolve_out_dir(args.target))
+    except FileNotFoundError as exc:
+        print(str(exc))
+        return 1
+    print(f"\nFertig. Transkript: {out}")
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -205,7 +302,51 @@ def main(argv: list[str] | None = None) -> int:
     bp.add_argument("--name", help="Name des Pools (Default: Prozessname aus analyse.json)")
     bp.add_argument("--browser", metavar="PFAD", help="Edge/Chrome/Chromium fuer das PNG")
 
+    live = sub.add_parser(
+        "live",
+        help="Live-Transkription: Monitor, System-Audio und Mikrofon mitschneiden (nur Windows)",
+    )
+    live.add_argument("--output", help="Ausgabeverzeichnis; die Sitzung landet in <output>/live-...")
+    live.add_argument(
+        "--monitor", type=int, default=1, metavar="N", help="Monitor fuer Standbilder (1 = erster; 0 = aus)"
+    )
+    live.add_argument("--mic", default="default", help="Mikrofon: default | none | Geraeteindex")
+    live.add_argument(
+        "--loopback", default="default", help="System-Audio (WASAPI-Loopback): default | none | Geraeteindex"
+    )
+    live.add_argument("--list-devices", action="store_true", help="Audio-Geraete und Monitore anzeigen")
+    live.add_argument("--model", help="Whisper-Modell (Default: large-v3-turbo auf CUDA, small auf CPU)")
+    live.add_argument("--language", help="Sprachcode (z.B. 'de') oder 'auto'")
+    live.add_argument("--device", help="auto | cuda | cpu")
+    live.add_argument("--compute-type", help="auto | float16 | int8_float16 | int8")
+    live.add_argument("--frame-sensitivity", choices=("grob", "mittel", "fein"))
+    live.add_argument("--frame-format", choices=("jpg-1600", "jpg-1280", "png"))
+    live.add_argument("--no-partials", action="store_true", help="keinen vorlaeufigen Text ausgeben")
+    live.add_argument(
+        "--no-speakers", action="store_true", help="System-Spur nicht in 'Sprecher N' trennen"
+    )
+
+    ref = sub.add_parser(
+        "refine", help="Live-Sitzung mit der Offline-Pipeline nachschaerfen (Live-Fassung bleibt erhalten)"
+    )
+    ref.add_argument("target", metavar="ORDNER", help="Sitzungsordner (output/live-...)")
+    ref.add_argument("--model", help="Whisper-Modell (Default: large-v3)")
+    ref.add_argument("--language", help="Sprachcode (z.B. 'de') oder 'auto'")
+    ref.add_argument("--device", help="auto | cuda | cpu")
+    ref.add_argument("--no-diarize", action="store_true", help="System-Spur nicht diarisieren")
+
     args = parser.parse_args(argv)
+
+    if args.command == "live":
+        if args.list_devices:
+            from audioscribe.live.kommando import list_devices_text
+
+            print(list_devices_text())
+            return 0
+        return _live(args)
+
+    if args.command == "refine":
+        return _refine(args)
 
     if args.command == "doctor":
         from audioscribe.doctor import run_doctor
@@ -233,35 +374,8 @@ def main(argv: list[str] | None = None) -> int:
         _set("SCREEN_FPS", args.frame_fps)
         _set("SCREEN_MIN_GAP", args.frame_min_gap)
 
-        # Geraet aufloesen (auto -> cuda|cpu) und das Ergebnis in die Env zurueckschreiben:
-        # so gilt nach dem os.execv-Re-Exec des cuDNN-Bootstraps dieselbe Entscheidung.
-        from audioscribe.config import resolve_compute_type, resolve_device, settings
-
-        try:
-            device = resolve_device(settings.device)
-        except RuntimeError as exc:
-            print(str(exc))
+        if _prepare_backend() is None:
             return 1
-        compute_type = resolve_compute_type(settings.whisper_compute_type, device)
-        _set("DEVICE", device)
-        _set("WHISPER_COMPUTE_TYPE", compute_type)
-        print(f"Device: {device}, compute_type: {compute_type}")
-
-        # ctranslate2 importierbar machen (beide Pfade, vor dem whisperx-Import):
-        # Wheel-Reparatur fuer neuere glibc (Linux) bzw. pkg_resources-Ersatz (Windows).
-        from audioscribe.compat import ensure_ctranslate2_loadable, ensure_pkg_resources
-
-        ensure_ctranslate2_loadable(log=print)
-        ensure_pkg_resources(log=print)
-
-        # cuDNN-8-Libs fuer ctranslate2 bereitstellen und auffindbar machen: unter Linux
-        # ueber LD_LIBRARY_PATH samt Prozess-Neustart, unter Windows ueber
-        # os.add_dll_directory (wirkt sofort). Muss vor dem whisperx-Import geschehen;
-        # nur im CUDA-Pfad.
-        if device.startswith("cuda"):
-            from audioscribe.compat import ensure_native_libs
-
-            ensure_native_libs(log=print)
 
         from audioscribe.pipeline.orchestrator import run_pipeline
 
