@@ -32,7 +32,23 @@ STATE_KEYS: tuple[str, ...] = (
     "agent_model",
     "agent_skills",
     "agent_bash",
+    # Live-Transkription; Geraete nach NAME gemerkt - die Indizes wechseln mit jedem
+    # an- oder abgesteckten Headset.
+    "live_monitor",
+    "live_mic",
+    "live_loopback",
+    "live_model",
+    "live_language",
+    "live_device",
+    "live_sensitivity",
+    "live_format",
+    "live_partials",
+    "live_speakers",
+    "live_refine",
+    "live_refine_model",
 )
+
+_BOOL_KEYS = ("diarize", "frames", "agent_bash", "live_partials", "live_speakers", "live_refine")
 
 _STATE_NAME = "ui-state.json"
 
@@ -78,7 +94,7 @@ def _clean(values: Mapping[str, object]) -> dict:
         if key not in values:
             continue
         value = values[key]
-        if key in ("diarize", "frames", "agent_bash"):
+        if key in _BOOL_KEYS:
             out[key] = bool(value)
         elif key == "agent_skills":
             # Liste von Skill-Namen; eine leere Liste ist eine gueltige, bewusste Wahl.

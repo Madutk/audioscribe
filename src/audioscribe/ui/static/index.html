@@ -48,7 +48,7 @@
   .bar > i { display:block; height:100%; background:var(--accent); width:0; transition:width .4s linear; }
   .file .bar { width:70px; flex:none; }
   .bar.big { height:10px; border-radius:5px; }
-  pre#log, pre#anaLog { background:#16161b; border-radius:6px; padding:10px; margin:0; height:300px; overflow:auto;
+  pre#log, pre#anaLog, pre#liveLog { background:#16161b; border-radius:6px; padding:10px; margin:0; height:300px; overflow:auto;
             font:12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; white-space:pre-wrap; word-break:break-word; }
   .status { margin:10px 0 6px; font-size:13px; }
   .status .stage { color:var(--accent); }
@@ -99,13 +99,45 @@
   .todos li.in_progress { color:#a9c4ff; font-weight:600; }
   .docs { font-size:12px; color:var(--muted); margin-bottom:12px; word-break:break-all; }
   .docs code { color:var(--fg); }
+  /* Live Transcription */
+  .live-side { flex:.8; min-width:300px; }
+  .live-main { flex:2; min-width:380px; }
+  .live-shots { flex:1; min-width:240px; }
+  .monitors { display:flex; gap:8px; flex-wrap:wrap; }
+  .monitor { border:2px solid transparent; border-radius:6px; padding:3px; cursor:pointer; background:var(--track);
+             font-size:12px; color:var(--muted); text-align:center; }
+  .monitor.active { border-color:var(--accent); color:var(--fg); }
+  .monitor img { display:block; width:150px; border-radius:3px; }
+  .monitor .none { width:150px; padding:22px 0; }
+  .gauges { display:flex; gap:18px; flex-wrap:wrap; align-items:center; margin-bottom:10px; font-variant-numeric:tabular-nums; }
+  .gauge b { font-size:18px; font-weight:600; }
+  .gauge.ok b { color:var(--ok); } .gauge.warn b { color:var(--warn); } .gauge.err b { color:var(--err); }
+  .gauge span { display:block; font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; }
+  .level { width:90px; }
+  #liveText { background:#16161b; border-radius:6px; padding:10px; height:460px; overflow:auto; }
+  .seg { margin:0 0 8px; }
+  .seg .who { font-weight:600; color:#a9c4ff; }
+  .seg.mic .who { color:var(--ok); }
+  .seg .ts { color:var(--muted); font-size:12px; font-variant-numeric:tabular-nums; margin-right:6px; }
+  .seg .lag { color:var(--muted); font-size:11px; margin-left:6px; }
+  .seg.partial { color:var(--muted); font-style:italic; }
+  .shotmark { color:var(--muted); font-size:12px; margin:0 0 8px; cursor:pointer; }
+  .shotmark:hover { color:var(--accent); }
+  .thumbs { display:grid; grid-template-columns:repeat(auto-fill, minmax(120px, 1fr)); gap:8px; max-height:520px; overflow:auto; }
+  .thumb { cursor:pointer; font-size:11px; color:var(--muted); text-align:center; }
+  .thumb img { width:100%; border-radius:4px; display:block; border:1px solid #3a3a48; }
+  .thumb:hover img { border-color:var(--accent); }
+  #lightbox { flex-direction:column; gap:10px; }
+  #lightbox img { max-width:96vw; max-height:86vh; border-radius:6px; }
+  #lightbox .cap { color:var(--fg); display:flex; gap:14px; align-items:center; }
 </style>
 </head>
 <body>
 <header>
   <h1>AudioScribe</h1>
   <nav class="tabs">
-    <button data-tab="Trans" class="active">Transkription</button>
+    <button data-tab="Trans" class="active">Offline Transcription</button>
+    <button data-tab="Live">Live Transcription</button>
     <button data-tab="Ana">KI-Analyse</button>
   </nav>
   <span class="meta" id="tabMeta">Stapelverarbeitung: Ordner waehlen, Dateien ankreuzen, transkribieren</span>
@@ -179,6 +211,86 @@
         <span class="hint">Der Lauf laeuft im Server weiter – der Tab darf geschlossen werden.</span>
       </div>
     </div>
+  </div>
+</div>
+
+<div class="wrap" id="tabLive" hidden>
+  <div class="live-side">
+    <div class="card">
+      <p class="section-title">Monitor <span style="flex:1"></span>
+        <button class="link" id="liveRefresh">↻ Aktualisieren</button></p>
+      <div class="monitors" id="liveMonitors"><p class="hint">…</p></div>
+      <p class="hint" style="margin-top:8px">Diese Oberfläche gehört nicht auf den überwachten Monitor –
+        neue Thumbnails würden sonst selbst Bildwechsel auslösen.</p>
+    </div>
+
+    <div class="card">
+      <p class="section-title">Audio</p>
+      <div class="field"><label for="liveMic">Mikrofon (Eingabe, „Ich“)</label><select id="liveMic"></select></div>
+      <div class="field" style="margin-top:10px"><label for="liveLoop">System-Audio (Ausgabe, Gegenseite)</label>
+        <select id="liveLoop"></select></div>
+      <p class="hint" style="margin-top:8px">Headset empfohlen: über Lautsprecher hört das Mikrofon die Gegenseite mit.</p>
+      <div class="err" id="liveProblems"></div>
+    </div>
+
+    <div class="card">
+      <p class="section-title">Optionen</p>
+      <div class="grid">
+        <div class="field"><label for="liveModel">Modell (live)</label><select id="liveModel"></select></div>
+        <div class="field"><label for="liveLang">Sprache</label><select id="liveLang"></select></div>
+        <div class="field"><label for="liveDevice">Gerät</label><select id="liveDevice"></select></div>
+        <div class="field"><label for="liveSens">Bildwechsel</label><select id="liveSens"></select></div>
+        <div class="field"><label for="liveFmt">Bildformat</label><select id="liveFmt"></select></div>
+        <div class="field"><label for="liveRefineModel">Modell (Nachschärfen)</label><select id="liveRefineModel"></select></div>
+      </div>
+      <div class="checks">
+        <label><input type="checkbox" id="livePartials" checked /> Vorschautext</label>
+        <label><input type="checkbox" id="liveSpeakers" checked /> Sprecher trennen</label>
+        <label><input type="checkbox" id="liveRefine" checked /> nach Stopp nachschärfen</label>
+      </div>
+      <p class="hint" id="liveTarget" style="margin-top:8px"></p>
+    </div>
+
+    <button class="start" id="liveStart">● Aufnahme starten</button>
+    <button class="start danger" id="liveStop" hidden>■ Stoppen</button>
+    <div class="err" id="liveErr"></div>
+  </div>
+
+  <div class="live-main">
+    <div class="card">
+      <div class="gauges">
+        <span class="badge" id="livePhase">bereit</span>
+        <div class="gauge"><b id="liveElapsed">–</b><span>Laufzeit</span></div>
+        <div class="gauge" id="liveDelayBox"><b id="liveDelay">–</b><span>Verzögerung</span></div>
+        <div class="gauge" id="liveBacklogBox"><b id="liveBacklog">–</b><span>Rückstand</span></div>
+        <div class="gauge level"><div class="bar"><i id="liveLevelMic"></i></div><span>Mikrofon</span></div>
+        <div class="gauge level"><div class="bar"><i id="liveLevelSys"></i></div><span>System</span></div>
+      </div>
+      <div id="liveRefineBox" hidden>
+        <div class="status" id="liveRefineStep"></div>
+        <div class="bar big"><i id="liveRefineBar"></i></div>
+      </div>
+      <div id="liveResult"></div>
+      <div id="liveText"><p class="hint">Noch keine Sitzung.</p></div>
+      <p class="section-title" style="margin-top:14px">Protokoll</p>
+      <pre id="liveLog" style="height:120px"></pre>
+    </div>
+  </div>
+
+  <div class="live-shots">
+    <div class="card">
+      <p class="section-title">Screenshots <span class="hint" id="liveShotCount"></span></p>
+      <div class="thumbs" id="liveThumbs"><p class="hint">Bildwechsel erscheinen hier.</p></div>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="lightbox">
+  <img id="lightboxImg" alt="" />
+  <div class="cap">
+    <button class="secondary" id="lightboxPrev">◀</button>
+    <span id="lightboxCap"></span>
+    <button class="secondary" id="lightboxNext">▶</button>
   </div>
 </div>
 
@@ -705,16 +817,256 @@ function renderProgress(s) {
     ? 'Dokumente: ' + docs.map((d) => `<code>${esc(d)}</code>`).join(', ') : '';
 }
 
+// --- Live Transcription -----------------------------------------------------
+
+let liveDefaults = null;
+let liveOffset = 0;        // gelesene Protokollzeilen
+let liveEvOffset = 0;      // gelesene Ereignisse (Segmente, Standbilder)
+let liveMonitor = 1;       // 0 = ohne Bildschirm
+let liveShots = [];        // {id, t, file}
+let liveSession = null;
+let lightboxIndex = 0;
+
+const tc = (seconds) => {
+  const s = Math.max(0, Math.round(seconds)), pad = (n) => String(n).padStart(2, '0');
+  return `${pad(Math.floor(s / 3600))}:${pad(Math.floor((s % 3600) / 60))}:${pad(s % 60)}`;
+};
+const secs = (v) => (v === null || v === undefined) ? '–' : v.toFixed(1).replace('.', ',') + ' s';
+
+function fillDevices(sel, devices, chosen) {
+  const opts = [['default', 'Standardgerät'],
+    ...devices.map((d) => [String(d.index), d.name + (d.default ? ' (Standard)' : '')]), ['none', 'aus']];
+  sel.innerHTML = opts.map(([v, l]) => `<option value="${esc(v)}">${esc(l)}</option>`).join('');
+  // Gemerkt wird der NAME: die Indizes wechseln mit jedem an- oder abgesteckten Geraet.
+  const byName = devices.find((d) => d.name === chosen);
+  sel.value = byName ? String(byName.index) : (chosen === 'none' ? 'none' : 'default');
+}
+
+const deviceName = (sel, devices) => {
+  const d = devices.find((x) => String(x.index) === sel.value);
+  return d ? d.name : sel.value;
+};
+
+async function initLive() {
+  await loadLiveDefaults();
+  setInterval(pollLive, 500);
+  pollLive();
+}
+
+async function loadLiveDefaults() {
+  const d = liveDefaults = await api('/api/live/defaults');
+  fillDevices($('liveMic'), d.mics, d.mic);
+  fillDevices($('liveLoop'), d.loopbacks, d.loopback);
+  fill($('liveModel'), d.models, d.model);
+  fill($('liveRefineModel'), d.refine_models, d.refine_model);
+  fill($('liveLang'), defaults.languages, d.language);
+  fill($('liveDevice'), defaults.devices, d.device);
+  fill($('liveSens'), defaults.sensitivities, d.sensitivity);
+  fill($('liveFmt'), defaults.frame_formats, d.format);
+  $('livePartials').checked = d.partials !== false;
+  $('liveSpeakers').checked = d.speakers !== false;
+  $('liveRefine').checked = d.refine !== false;
+  $('liveProblems').textContent = d.problems.join(' · ');
+  liveMonitor = d.monitors.some((m) => String(m.index) === String(d.monitor)) ? Number(d.monitor)
+    : (String(d.monitor) === '0' || !d.monitors.length ? 0 : d.monitors[0].index);
+  renderMonitors();
+}
+
+function renderMonitors() {
+  const stamp = Date.now();  // Vorschaubild nie aus dem Browser-Cache
+  $('liveMonitors').innerHTML = liveDefaults.monitors.map((m) =>
+    `<div class="monitor ${m.index === liveMonitor ? 'active' : ''}" data-monitor="${m.index}">
+       <img src="/api/live/monitor/${m.index}?t=${stamp}" alt="" />Monitor ${m.index} · ${m.width}×${m.height}</div>`).join('')
+    + `<div class="monitor ${liveMonitor === 0 ? 'active' : ''}" data-monitor="0"><div class="none">ohne Bildschirm</div>nur Ton</div>`;
+}
+
+function updateLiveTarget() {
+  const sep = defaults && defaults.platform === 'windows' ? '\\' : '/';
+  $('liveTarget').textContent = `Gespeichert wird unter: ${$('outDir').value.replace(/[\\/]+$/, '')}${sep}live-JJJJ-MM-TT_hh-mm-ss`;
+}
+
+function resetLiveView() {
+  liveOffset = 0; liveEvOffset = 0; liveShots = [];
+  $('liveText').innerHTML = '';
+  $('liveThumbs').innerHTML = '<p class="hint">Bildwechsel erscheinen hier.</p>';
+  $('liveLog').textContent = '';
+  $('liveResult').innerHTML = '';
+  $('liveShotCount').textContent = '';
+}
+
+async function startLive() {
+  $('liveErr').textContent = '';
+  try {
+    await post('/api/live/start', {
+      output_dir: $('outDir').value,
+      monitor: liveMonitor,
+      mic: $('liveMic').value,
+      loopback: $('liveLoop').value,
+      mic_name: deviceName($('liveMic'), liveDefaults.mics),
+      loopback_name: deviceName($('liveLoop'), liveDefaults.loopbacks),
+      model: $('liveModel').value,
+      language: $('liveLang').value,
+      device: $('liveDevice').value,
+      sensitivity: $('liveSens').value,
+      format: $('liveFmt').value,
+      partials: $('livePartials').checked,
+      speakers: $('liveSpeakers').checked,
+      refine: $('liveRefine').checked,
+      refine_model: $('liveRefineModel').value,
+    });
+    resetLiveView();
+    pollLive();
+  } catch (err) {
+    $('liveErr').textContent = err.message;
+  }
+}
+
+/** Beide Spuren melden unabhaengig - eingefuegt wird darum nach Zeit, nicht nach Ankunft. */
+function insertByTime(el, t) {
+  el.dataset.t = t;
+  const box = $('liveText');
+  let after = null;
+  for (const node of [...box.children].reverse()) {
+    if (node.classList.contains('partial')) continue;
+    if (Number(node.dataset.t) <= t) { after = node; break; }
+  }
+  if (after) after.after(el);
+  else box.prepend(el);
+}
+
+function addLiveEvent(ev) {
+  const el = document.createElement('p');
+  if (ev.type === 'segment') {
+    el.className = 'seg ' + (ev.track === 'mic' ? 'mic' : 'system');
+    el.innerHTML = `<span class="ts">[${tc(ev.start)}]</span><span class="who">${esc(ev.speaker)}:</span> `
+      + `${esc(ev.text)}<span class="lag" title="Verzögerung bis zur Anzeige">${secs(ev.delay)}</span>`;
+    insertByTime(el, ev.start);
+  } else if (ev.type === 'shot') {
+    const index = liveShots.push(ev) - 1;
+    const label = `Bild #${String(ev.id).padStart(4, '0')} – ${tc(ev.t)}`;
+    el.className = 'shotmark';
+    el.dataset.shot = index;
+    el.textContent = '📷 ' + label;
+    insertByTime(el, ev.t);
+    if (index === 0) $('liveThumbs').innerHTML = '';
+    $('liveThumbs').insertAdjacentHTML('beforeend',
+      `<div class="thumb" data-shot="${index}"><img loading="lazy" src="${shotUrl(ev)}" alt="" />${esc(label)}</div>`);
+    $('liveShotCount').textContent = `– ${liveShots.length}`;
+  }
+}
+
+const shotUrl = (shot) => `/api/live/frame/${encodeURIComponent(shot.file)}?s=${encodeURIComponent(liveSession || '')}`;
+
+const PHASES = {
+  startet: 'startet …', laden: 'Modell wird geladen …', laeuft: '● Aufnahme läuft', stoppt: 'wird abgeschlossen …',
+  fertig: 'gespeichert', nachschaerfen: 'Nachschärfen …', beendet: 'beendet', fehler: 'Fehler',
+};
+
+function gauge(boxId, valueId, value, warn, bad) {
+  $(valueId).textContent = secs(value);
+  $(boxId).className = 'gauge ' + (value === null || value === undefined ? '' : value < warn ? 'ok' : value < bad ? 'warn' : 'err');
+}
+
+async function pollLive() {
+  let s;
+  try { s = await api(`/api/live/status?offset=${liveOffset}&ev_offset=${liveEvOffset}`); } catch (e) { return; }
+  if (s.ev_offset < liveEvOffset || s.offset < liveOffset) { resetLiveView(); return; }  // neue Sitzung
+  liveSession = s.session || liveSession;
+  liveOffset = s.offset;
+  liveEvOffset = s.ev_offset;
+
+  const box = $('liveText');
+  const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 60;
+  for (const node of box.querySelectorAll('.partial')) node.remove();
+  if (s.events.length && box.querySelector('.hint')) box.innerHTML = '';
+  for (const ev of s.events) addLiveEvent(ev);
+  for (const p of Object.values(s.partials || {})) {
+    box.insertAdjacentHTML('beforeend', `<p class="seg partial"><span class="ts">[${tc(p.start)}]</span>${esc(p.text)} …</p>`);
+  }
+  if (atBottom) box.scrollTop = box.scrollHeight;
+
+  if (s.lines.length) {
+    const log = $('liveLog');
+    log.textContent += s.lines.join('\n') + '\n';
+    log.scrollTop = log.scrollHeight;
+  }
+
+  const running = !!s.running;
+  $('liveStart').hidden = running;
+  $('liveStop').hidden = !running;
+  $('liveStop').textContent = s.phase === 'nachschaerfen' ? '■ Nachschärfen abbrechen'
+    : s.stopping ? '■ Sofort abbrechen' : '■ Stoppen';
+  $('livePhase').textContent = PHASES[s.phase] || 'bereit';
+  $('livePhase').className = 'badge ' + ({ laeuft: 'laeuft', fehler: 'fehler', beendet: 'fertig' }[s.phase] || '');
+
+  const st = s.stats;
+  $('liveElapsed').textContent = st ? hms(st.elapsed) : '–';
+  gauge('liveDelayBox', 'liveDelay', st ? st.delay : null, 5, 10);
+  gauge('liveBacklogBox', 'liveBacklog', st ? st.backlog : null, 3, 10);
+  $('liveBacklog').title = st && st.partials_paused ? 'Vorschautext pausiert, bis der Rückstand abgebaut ist' : '';
+  $('liveLevelMic').style.width = Math.min(100, (st && running ? st.level_mic || 0 : 0) * 150) + '%';
+  $('liveLevelSys').style.width = Math.min(100, (st && running ? st.level_sys || 0 : 0) * 150) + '%';
+
+  const r = s.refine;
+  $('liveRefineBox').hidden = s.phase !== 'nachschaerfen';
+  if (r && r.index) {
+    $('liveRefineStep').innerHTML = `Nachschärfen – <span class="stage">Stufe ${r.index}/${r.total}: ${esc(r.name)}</span>`;
+    $('liveRefineBar').style.width = Math.round(((r.index - 1) + (r.percent || 0) / 100) / r.total * 100) + '%';
+  }
+
+  $('liveResult').innerHTML = !running && s.dir
+    ? `<div class="result ${s.phase === 'fehler' ? 'fehler' : ''}">Sitzungsordner: <code>${esc(s.dir)}</code><br>
+       Erscheint im Reiter „KI-Analyse“ als Quelle. Die Live-Fassung liegt als <code>transkript.live.md</code> daneben.</div>` : '';
+}
+
+function openLightbox(index) {
+  if (!liveShots.length) return;
+  lightboxIndex = (index + liveShots.length) % liveShots.length;
+  const shot = liveShots[lightboxIndex];
+  $('lightboxImg').src = shotUrl(shot);
+  $('lightboxCap').textContent = `Bild #${String(shot.id).padStart(4, '0')} – ${tc(shot.t)} (${lightboxIndex + 1} von ${liveShots.length})`;
+  $('lightbox').classList.add('open');
+}
+
+$('liveStart').onclick = startLive;
+$('liveStop').onclick = () => api('/api/live/stop', { method: 'POST' }).catch(() => {});
+$('liveRefresh').onclick = () => loadLiveDefaults().catch((err) => { $('liveErr').textContent = err.message; });
+$('liveMonitors').onclick = (e) => {
+  const tile = e.target.closest('.monitor');
+  if (!tile) return;
+  liveMonitor = Number(tile.dataset.monitor);
+  for (const t of $('liveMonitors').children) t.classList.toggle('active', t === tile);
+};
+for (const id of ['liveThumbs', 'liveText']) {
+  $(id).onclick = (e) => {
+    const el = e.target.closest('[data-shot]');
+    if (el) openLightbox(Number(el.dataset.shot));
+  };
+}
+$('lightbox').onclick = (e) => { if (e.target === $('lightbox')) $('lightbox').classList.remove('open'); };
+$('lightboxPrev').onclick = () => openLightbox(lightboxIndex - 1);
+$('lightboxNext').onclick = () => openLightbox(lightboxIndex + 1);
+document.addEventListener('keydown', (e) => {
+  if (!$('lightbox').classList.contains('open')) return;
+  if (e.key === 'Escape') $('lightbox').classList.remove('open');
+  if (e.key === 'ArrowLeft') openLightbox(lightboxIndex - 1);
+  if (e.key === 'ArrowRight') openLightbox(lightboxIndex + 1);
+});
+
+const TAB_META = {
+  Trans: 'Stapelverarbeitung: Ordner waehlen, Dateien ankreuzen, transkribieren',
+  Live: 'Monitor, System-Audio und Mikrofon mitschneiden – Transkript und Screenshots entstehen live',
+  Ana: 'Claude-Agent: Transkription + Standbilder auswerten, Dokumente im Ausgabeordner ablegen',
+};
+
 function showTab(name) {
   for (const btn of document.querySelectorAll('.tabs button')) {
     btn.classList.toggle('active', btn.dataset.tab === name);
   }
-  $('tabTrans').hidden = name !== 'Trans';
-  $('tabAna').hidden = name !== 'Ana';
-  $('tabMeta').textContent = name === 'Trans'
-    ? 'Stapelverarbeitung: Ordner waehlen, Dateien ankreuzen, transkribieren'
-    : 'Claude-Agent: Transkription + Standbilder auswerten, Dokumente im Ausgabeordner ablegen';
+  for (const tab of Object.keys(TAB_META)) $('tab' + tab).hidden = tab !== name;
+  $('tabMeta').textContent = TAB_META[name];
   if (name === 'Ana') loadSources();
+  if (name === 'Live') updateLiveTarget();
 }
 
 for (const btn of document.querySelectorAll('.tabs button')) btn.onclick = () => showTab(btn.dataset.tab);
@@ -736,7 +1088,7 @@ $('anaSkills').onchange = rememberAnalyse;
 $('anaStart').onclick = startAnalyse;
 $('anaCancel').onclick = () => api('/api/agent/cancel', { method: 'POST' }).catch(() => {});
 
-init().then(initAnalyse);
+init().then(initAnalyse).then(initLive).catch((err) => { $('liveErr').textContent = err.message; });
 </script>
 </body>
 </html>

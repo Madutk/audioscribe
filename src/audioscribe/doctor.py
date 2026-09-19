@@ -234,6 +234,23 @@ def _check_agent() -> CheckResult:
     return CheckResult(status, "KI-Analyse", "; ".join(teile))
 
 
+def _check_live() -> CheckResult:
+    """Live-Transkription (optional, daher hoechstens WARN): Plattform, Geraete, Monitore."""
+    if sys.platform != "win32":
+        return CheckResult("WARN", "Live", "nur unter nativem Windows verfuegbar (WASAPI)")
+    from audioscribe.live.kommando import inventory
+
+    inv = inventory()
+    teile = [
+        f"{len(inv['mics'])} Mikrofon(e)",
+        f"{len(inv['loopbacks'])} Loopback-Geraet(e)",
+        f"{len(inv['monitors'])} Monitor(e)",
+        *inv["problems"],
+    ]
+    ok = not inv["problems"] and inv["loopbacks"] and inv["monitors"]
+    return CheckResult("OK" if ok else "WARN", "Live", "; ".join(teile))
+
+
 CHECKS = (
     _check_python,
     _check_ffmpeg,
@@ -242,6 +259,7 @@ CHECKS = (
     _check_diarization,
     _check_dirs,
     _check_agent,
+    _check_live,
 )
 
 _ICON = {"OK": "[ OK ]", "WARN": "[WARN]", "FAIL": "[FAIL]"}

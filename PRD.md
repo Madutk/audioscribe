@@ -485,3 +485,91 @@ Grundlage steht: `AnalyseSitzung` hält einen `ClaudeSDKClient` offen und nimmt 
   langlebigen Sitzungsprozess schickt
 - Rückfragen des Agenten an den Nutzer (derzeit trifft er gekennzeichnete Annahmen)
 - eine Übersicht früherer Analysen aus den `analyse.json`-Dateien
+
+## 17. Ausbaustufe: Live-Transkription
+
+> Status: Proof of Concept · optionales Extra `live` · nur natives Windows (nicht WSL).
+
+### 17.1 Ziel
+
+§4.2 schloss Nah-Echtzeit-Transkription für die Basisstufe aus. Diese Stufe hebt das auf:
+Neben der Offline-Verarbeitung fertiger Dateien schneidet AudioScribe eine laufende Sitzung
+mit – einen gewählten Monitor, das System-Audio (Ausgabe) und das Mikrofon (Eingabe) –,
+zeigt das Transkript mit wenigen Sekunden Verzögerung an, sichert bei jedem Bildwechsel
+einen Screenshot und legt alles im selben Format ab wie ein Offline-Lauf. Die KI-Analyse
+(§16) arbeitet damit unverändert weiter. Privater Proof of Concept ohne
+Compliance-Anforderungen.
+
+### 17.2 Designentscheidungen (festgelegt)
+
+- **Python + Web-Oberfläche, keine native Windows-App.** Aufgenommen wird im lokalen
+  Python-Prozess, der Browser zeigt nur an. Voraussetzung ist natives Windows-Python; WSL
+  hat weder Zugriff auf WASAPI noch auf den Bildschirm. Eine native App wäre erst für
+  Tray-Icon, globale Hotkeys oder ein Overlay nötig.
+- **Subprozess wie `run` und `analyze`.** Die Oberfläche startet `audioscribe live` als
+  Kindprozess. Ereignisse kommen als `[Live] {json}`-Zeilen über stdout, gestoppt wird über
+  stdin (`stop`), damit die Dateien sauber abgeschlossen werden. Das Prozessende gibt den
+  VRAM frei.
+- **Zwei getrennte Audiospuren statt Mix.** Mikrofon und WASAPI-Loopback werden getrennt
+  aufgenommen (PyAudioWPatch). Damit ist „Ich“ gegen „Gegenseite“ ohne Modell und ohne
+  Fehler trennbar. Loopback liefert bei Stille keine Pakete; die Lücken werden anhand der
+  Sitzungsuhr mit Nullen gefüllt, sonst driften die Zeitstempel.
+- **Residentes Modell.** `pipeline.transcribe` lädt und entlädt das Modell je Aufruf
+  (NFR-2) und taugt nicht für Sekunden-Abschnitte. Der Live-Modus hält ein
+  `faster_whisper.WhisperModel` für die ganze Sitzung. Standard: `large-v3-turbo` auf
+  CUDA, `small` auf CPU.
+- **Schnitt an Sprechpausen.** Silero-VAD (liegt faster-whisper bei) schneidet nach
+  ≥ 0,6 s Pause oder spätestens nach 12 s. Stille wird nie transkribiert, das hält
+  Whisper-Halluzinationen fern.
+- **Vorschautext mit niedrigster Priorität.** Der laufende Abschnitt wird etwa alle 2 s
+  vorläufig transkribiert und grau angezeigt. Vorschau-Aufträge laufen nur, wenn kein
+  fertiger Abschnitt wartet, und pausieren ab 3 s Rückstand – wichtig für den CPU-Betrieb.
+- **Sprecher live per Online-Clustering.** Je Abschnitt der System-Spur entsteht ein
+  Stimm-Embedding (pyannote/wespeaker), das per Kosinus-Ähnlichkeit laufenden Zentroiden
+  zugeordnet wird. So bleiben „Sprecher 1/2/3“ über die Sitzung stabil. Abschnitte unter
+  1,5 s erben den letzten Sprecher; Überlappung bleibt Best-Effort.
+- **Bildwechsel mit der Offline-Heuristik.** `mss` tastet den Monitor zweimal je Sekunde
+  ab; verglichen wird mit `block_means`/`changed_blocks` und den Schwellen aus §15. Das
+  Bild entsteht, wenn der Bildschirm wieder ruhig ist.
+- **Beide Fassungen bleiben erhalten.** Beim Stopp wird das Live-Ergebnis zusätzlich als
+  `transkript.live.md`/`transcript.live.json` gesichert. `audioscribe refine` fährt danach
+  die Offline-Pipeline (Transkription, Alignment, Diarisierung) über die aufgenommenen
+  Spuren und ersetzt `transkript.md`; die Screenshots bleiben.
+
+### 17.3 Funktionale Anforderungen
+
+| ID | Anforderung |
+|----|-------------|
+| FR-37 | `audioscribe live` schneidet einen wählbaren Monitor, das System-Audio und das Mikrofon mit, bis `stop` über stdin oder Strg+C eintrifft. Geräte und Monitor sind wählbar (`--mic`, `--loopback`, `--monitor`), jede Quelle ist abschaltbar. |
+| FR-38 | Abgeschlossene Sprechabschnitte erscheinen als Text mit Zeitstempel und Sprecher. Der laufende Abschnitt erscheint als vorläufiger Text (abschaltbar mit `--no-partials`). |
+| FR-39 | Die **Verzögerung** (Ende des Gesprochenen bis zur Anzeige) und der **Rückstand** (aufgenommenes, noch nicht transkribiertes Audio) werden laufend gemeldet und angezeigt. |
+| FR-40 | Sprecher: Mikrofon = „Ich“. Die System-Spur wird per Online-Clustering in „Sprecher N“ getrennt; ohne HF-Token oder mit `--no-speakers` heißt sie „Gegenseite“. |
+| FR-41 | Bildwechsel auf dem gewählten Monitor werden erkannt und als Standbild nach `frames/` gesichert, mit Startbild bei 0 s. Empfindlichkeit und Bildformat wie FR-24/FR-26. |
+| FR-42 | Die Sitzung landet in `<output>/live-JJJJ-MM-TT_hh-mm-ss/` im Format eines Offline-Laufs (`transkript.md`, `transcript.json`, `marks.json`, `frames/`, `transkript.annotiert.md`) plus `audio/mikrofon.wav` und `audio/system.wav` (16 kHz mono). Geschrieben wird alle 30 s und beim Stopp. |
+| FR-43 | `audioscribe refine ORDNER` schärft eine Sitzung nach: je Spur Transkription und Alignment, Diarisierung nur auf der System-Spur. Die Live-Fassung bleibt als `transkript.live.md`/`transcript.live.json` erhalten. |
+| FR-44 | Die Oberfläche bekommt den Reiter „Live Transcription“ mit Monitorwahl samt Vorschau, Gerätewahl, Start/Stopp, laufendem Transkript, Verzögerungsanzeige, Pegeln und einer Thumbnail-Leiste mit Großansicht. Der bisherige Reiter „Transkription“ heißt „Offline Transcription“. |
+| FR-45 | `audioscribe doctor` prüft Plattform, Audio-Geräte (inkl. Loopback) und Monitore. |
+
+### 17.4 Nicht-funktionale Anforderungen
+
+| ID | Anforderung |
+|----|-------------|
+| NFR-15 | Läuft mit NVIDIA-GPU und rein auf CPU. Auf CPU darf die Verzögerung wachsen; sie muss sichtbar sein, und die Vorschau drosselt sich selbst. |
+| NFR-16 | Ohne das Extra `live` bleiben alle übrigen Befehle und Reiter lauffähig; der Reiter nennt dann den Installationsbefehl. |
+| NFR-17 | Ein Absturz verliert höchstens die letzten 30 s Transkript; Audio und Screenshots liegen bis zum Absturz auf der Platte. |
+
+### 17.5 Ein-/Ausgabe
+
+- **Eingabe:** Monitor, Mikrofon, WASAPI-Loopback des Ausgabegeräts.
+- **Ausgabe:** `<output>/live-…/` wie in FR-42, nach `refine` zusätzlich die Live-Fassung.
+- **Hinweise:** Mit Lautsprechern statt Headset hört das Mikrofon die Gegenseite mit
+  (doppelte Textstellen). Die AudioScribe-Oberfläche gehört nicht auf den überwachten
+  Monitor, sonst lösen neue Thumbnails selbst Bildwechsel aus.
+
+### 17.6 Akzeptanzkriterien
+
+- [ ] Eine Sitzung mit Gespräch und Bildschirmwechseln zeigt Text mit wenigen Sekunden
+      Verzögerung (GPU) und sichert die Wechsel als Standbilder.
+- [ ] Der Sitzungsordner erscheint im Reiter „KI-Analyse“ als Quelle.
+- [ ] `refine` ersetzt das Transkript, die Live-Fassung und die Bilder bleiben erhalten.
+- [ ] Rein auf CPU läuft die Sitzung durch; die Anzeige weist den Rückstand aus.

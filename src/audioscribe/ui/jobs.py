@@ -343,3 +343,65 @@ def scan_results(output_dir: Path) -> list[dict]:
                 )
             )
     return [item for _, item in sorted(out, key=lambda t: t[0], reverse=True)]
+
+
+# --- Live-Transkription (PRD §17) --------------------------------------------------
+
+# 'auto' waehlt nach Geraet: large-v3-turbo auf CUDA, small auf CPU (live/asr.default_model).
+LIVE_WHISPER_MODELS: tuple[str, ...] = ("auto", "large-v3-turbo", *WHISPER_MODELS)
+
+
+@dataclass(frozen=True)
+class LiveJobOptions:
+    """Die in der Oberflaeche einstellbaren Optionen einer Live-Sitzung."""
+
+    output_dir: Path
+    monitor: int = 1  # 0 = ohne Bildschirm
+    mic: str = "default"  # "default" | "none" | Geraeteindex
+    loopback: str = "default"
+    model: str = "auto"
+    language: str = "de"
+    device: str = "auto"
+    frame_sensitivity: str = "mittel"
+    frame_format: str = "jpg-1600"
+    partials: bool = True
+    speakers: bool = True
+    refine: bool = True
+    refine_model: str = "large-v3"
+
+
+def build_live_argv(opts: LiveJobOptions, *, prefix: Sequence[str] | None = None) -> list[str]:
+    """Baut den vollstaendigen ``audioscribe live``-Aufruf."""
+    argv = list(prefix if prefix is not None else cli_prefix())
+    argv += [
+        "live",
+        f"--output={Path(opts.output_dir)}",
+        f"--monitor={opts.monitor}",
+        f"--mic={opts.mic}",
+        f"--loopback={opts.loopback}",
+        f"--model={opts.model}",
+        f"--language={opts.language}",
+        f"--device={opts.device}",
+        f"--frame-sensitivity={opts.frame_sensitivity}",
+        f"--frame-format={opts.frame_format}",
+    ]
+    if not opts.partials:
+        argv.append("--no-partials")
+    if not opts.speakers:
+        argv.append("--no-speakers")
+    return argv
+
+
+def build_refine_argv(
+    session_dir: Path, opts: LiveJobOptions, *, prefix: Sequence[str] | None = None
+) -> list[str]:
+    """Baut den ``audioscribe refine``-Aufruf fuer eine beendete Sitzung."""
+    argv = list(prefix if prefix is not None else cli_prefix())
+    return [
+        *argv,
+        "refine",
+        str(Path(session_dir)),
+        f"--model={opts.refine_model}",
+        f"--language={opts.language}",
+        f"--device={opts.device}",
+    ]

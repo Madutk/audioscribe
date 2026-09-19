@@ -405,6 +405,63 @@ zu erzeugen.
 die gespeicherte Sitzung fort; der Agent kennt dabei den bisherigen Verlauf. Das ist die
 Grundlage für einen späteren Dialogmodus.
 
+## Live Transcription (Proof of Concept, nur Windows)
+
+Schneidet eine laufende Sitzung mit: einen Monitor, das System-Audio (was aus den
+Lautsprechern kommt) und das Mikrofon. Das Transkript erscheint mit wenigen Sekunden
+Verzögerung, jeder Bildwechsel wird als Screenshot gesichert, und am Ende liegt ein Ordner
+im selben Format wie nach einem Offline-Lauf, den die KI-Analyse direkt auswerten kann.
+Details und Designentscheidungen stehen in PRD §17.
+
+```powershell
+uv sync --extra cu124 --extra review --extra agent --extra live   # bzw. --extra cpu
+.venv\Scripts\audioscribe.exe doctor                   # Zeile "Live": Mikrofone, Loopback, Monitore
+.venv\Scripts\audioscribe.exe ui                       # Reiter „Live Transcription“
+```
+
+Das funktioniert nur mit nativem Windows-Python. Unter WSL gibt es weder WASAPI noch
+Zugriff auf den Bildschirm.
+
+**Im Reiter:** Monitor anklicken (mit Vorschaubild), Mikrofon und System-Audio wählen,
+„Aufnahme starten“. Oben laufen Laufzeit, **Verzögerung** (Ende des Gesprochenen bis zur
+Anzeige) und **Rückstand** (aufgenommenes, noch nicht transkribiertes Audio) mit. Wächst
+der Rückstand dauerhaft, ist das Modell für den Rechner zu groß. Grauer Kursivtext ist die
+Vorschau des gerade gesprochenen Abschnitts; sie pausiert von selbst ab 3 s Rückstand.
+Screenshots erscheinen rechts als Thumbnails, ein Klick öffnet die Großansicht
+(Pfeiltasten blättern).
+
+**Sprecher:** Das Mikrofon ist „Ich“. Das System-Audio wird per Stimm-Embedding in
+„Sprecher 1/2/3“ getrennt; das braucht denselben `HF_TOKEN` wie die Diarisierung. Ohne
+Token heißt die Spur „Gegenseite“. Sehr kurze Einwürfe und Durcheinanderreden werden live
+nicht sauber getrennt, das korrigiert das Nachschärfen.
+
+**Nach dem Stopp** bleibt die Live-Fassung als `transkript.live.md` erhalten. Ist
+„nach Stopp nachschärfen“ angehakt, läuft danach die Offline-Pipeline (Standard `large-v3`,
+Alignment, Diarisierung der System-Spur) über den Mitschnitt und ersetzt `transkript.md`.
+Die Screenshots bleiben. Ein zweiter Klick auf Stoppen bricht hart ab.
+
+```
+output/live-2026-09-19_14-30-05/
+  transkript.md  transcript.json  transkript.annotiert.md  marks.json  frames/
+  transkript.live.md  transcript.live.json        # Live-Fassung (nach dem Stopp)
+  audio/mikrofon.wav  audio/system.wav            # 16 kHz mono
+```
+
+**Modell:** `auto` nimmt `large-v3-turbo` auf der GPU (etwa 2–5 s Verzögerung) und `small`
+auf der CPU (eher 5–15 s).
+
+**Zwei Fallstricke:** Mit Lautsprechern statt Headset hört das Mikrofon die Gegenseite mit,
+dann stehen Textstellen doppelt im Transkript. Und die AudioScribe-Oberfläche gehört nicht
+auf den überwachten Monitor, sonst lösen neue Thumbnails selbst Bildwechsel aus.
+
+**Ohne Oberfläche:**
+
+```powershell
+.venv\Scripts\audioscribe.exe live --list-devices            # Geräteindizes und Monitore
+.venv\Scripts\audioscribe.exe live --monitor 1 --mic 23      # Ende mit Strg+C oder "stop" + Enter
+.venv\Scripts\audioscribe.exe refine output\live-2026-09-19_14-30-05
+```
+
 ## Erster Lauf & Modell-Downloads
 
 Beim ersten `run` werden die Modellgewichte einmalig geladen und danach gecached
@@ -521,7 +578,7 @@ claude                                               # einmal mit dem Claude-Abo
 **Browser-Oberfläche (Transkription + KI-Analyse)**
 
 ```bash
-.venv/bin/audioscribe ui                   # http://127.0.0.1:8766, Reiter „Transkription“ / „KI-Analyse“
+.venv/bin/audioscribe ui                   # http://127.0.0.1:8766, Reiter „Offline Transcription“ / „Live Transcription“ / „KI-Analyse“
 .venv/bin/audioscribe ui --port 9000       # anderer Port
 .venv/bin/audioscribe ui --no-browser      # Browser nicht automatisch öffnen
 ```
@@ -589,5 +646,5 @@ cd ~/develop/git/audioscribe
 .venv/bin/audioscribe ui
 ```
 
-Danach öffnet sich http://127.0.0.1:8766 mit den Reitern „Transkription“ und „KI-Analyse“.
+Danach öffnet sich http://127.0.0.1:8766 mit den Reitern „Offline Transcription“, „Live Transcription“ und „KI-Analyse“.
 Unter WSL die Adresse notfalls selbst im Windows-Browser öffnen, beenden mit Strg+C.
