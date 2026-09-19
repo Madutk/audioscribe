@@ -6,11 +6,12 @@ import os
 import subprocess
 import sys
 import time
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import pytest
 
-from audioscribe.agent import guard
+from audioscribe.agent import bpmn, guard
 from audioscribe.agent import prozessbild as pb
 from audioscribe.agent.fortschritt import STATUS_PREFIX, Fortschritt, parse_status_line
 from audioscribe.agent.manifest import (
@@ -736,3 +737,191 @@ def test_render_echt_mit_browser(tmp_path):
     assert "<svg" in text
     # Feste Pixelmasse statt width="100%" - sonst zeigen Bildbetrachter eine leere Flaeche.
     assert 'width="100%"' not in text and 'height="' in text
+
+
+# --- BPMN-Modell (FR-36) ---
+
+_BPMN_NS = {
+    "bpmn": "http://www.omg.org/spec/BPMN/20100524/MODEL",
+    "bpmndi": "http://www.omg.org/spec/BPMN/20100524/DI",
+    "di": "http://www.omg.org/spec/DD/20100524/DI",
+}
+
+
+def _bpmn_daten() -> dict:
+    return {
+        "lanes_art": "rolle",
+        "lanes_begruendung": "Freigabe durch den Fachbereich",
+        "lanes": [{"id": "L1", "name": "Sachbearbeitung"}, {"id": "L2", "name": "Fachbereich"}],
+        "knoten": [
+            {"id": "START", "typ": "start", "lane": "L1", "text": "Rechnung da"},
+            {"id": "S1", "typ": "aufgabe", "art": "user", "lane": "L1", "text": "Rechnung prüfen"},
+            {"id": "E1", "typ": "entscheidung", "lane": "L1", "text": "Betrag korrekt?"},
+            {"id": "S2", "typ": "aufgabe", "art": "manual", "lane": "L2", "text": "Freigeben", "unsicher": True},
+            {"id": "S3", "typ": "aufgabe", "lane": "L1", "text": "S3: Buchen"},
+            {"id": "ENDE", "typ": "ende", "lane": "L1", "text": "Gebucht"},
+        ],
+        "fluesse": [
+            {"von": "START", "nach": "S1"},
+            {"von": "S1", "nach": "E1"},
+            {"von": "E1", "nach": "S3", "text": "ja"},
+            {"von": "E1", "nach": "S2", "text": "nein"},
+            {"von": "S2", "nach": "S1", "text": "Korrektur"},  # Schleife
+            {"von": "S3", "nach": "ENDE"},
+        ],
+    }
+
+
+def test_bpmn_modell_gueltig_und_labels():
+    m = bpmn.parse_modell(_bpmn_daten())
+    labels = {k.id: k.label for k in m.knoten}
+    assert labels["S1"] == "S1: Rechnung prüfen"
+    assert labels["S2"] == "S2: ⚠ Freigeben"
+    assert labels["S3"] == "S3: Buchen"  # Nummer im Text wird nicht verdoppelt
+    assert labels["START"] == "Rechnung da"
+
+
+@pytest.mark.parametrize(
+    ("aendern", "erwartet"),
+    [
+        (lambda d: d["knoten"].append({"id": "S1", "typ": "aufgabe", "lane": "L1", "text": "x"}), "doppelte id"),
+        (lambda d: d["knoten"][1].update(lane="LX"), "lane 'LX' unbekannt"),
+        (lambda d: d["knoten"][1].update(typ="task"), "typ 'task' unbekannt"),
+        (lambda d: d["knoten"][1].update(id="1 S"), "ungueltige id"),
+        (lambda d: d["fluesse"].append({"von": "S9", "nach": "S1"}), "unbekannten Knoten"),
+        (lambda d: d["fluesse"].append({"von": "S1", "nach": "S1"}), "sich selbst"),
+        (lambda d: d["fluesse"].pop(3), "mindestens zwei Ausgaenge"),
+        (lambda d: d["knoten"].pop(0), "typ 'start'"),
+        (lambda d: d["knoten"].append({"id": "S9", "typ": "aufgabe", "lane": "L1", "text": "x"}), "Sackgasse"),
+        (lambda d: d["lanes"].clear(), "Mindestens eine Lane"),
+    ],
+)
+def test_bpmn_validierung(aendern, erwartet):
+    d = _bpmn_daten()
+    aendern(d)
+    with pytest.raises(bpmn.ModellFehler) as exc:
+        bpmn.parse_modell(d)
+    assert any(erwartet in f for f in exc.value.fehler), exc.value.fehler
+
+
+def test_bpmn_validierung_ohne_folgefehler():
+    d = _bpmn_daten()
+    d["knoten"][1]["lane"] = "LX"
+    with pytest.raises(bpmn.ModellFehler) as exc:
+        bpmn.parse_modell(d)
+    assert len(exc.value.fehler) == 1
+
+
+def test_bpmn_layout_spalten_zeilen_schleife():
+    m = bpmn.parse_modell(_bpmn_daten())
+    lay = bpmn.layout(m)
+    assert [lay.spalte[k] for k in ("START", "S1", "E1", "S3", "ENDE")] == [0, 1, 2, 3, 4]
+    assert lay.spalte["S2"] == 3
+    assert lay.rueckkanten == {"Flow_5"}  # S2 -> S1
+    # Lanes liegen untereinander, Knoten in ihrer Lane
+    l1, l2 = lay.lanes["L1"], lay.lanes["L2"]
+    assert l2.y == l1.y + l1.h
+    s2 = lay.knoten["S2"]
+    assert l2.y <= s2.y and s2.y + s2.h <= l2.y + l2.h
+    # Gateway-Ausgaenge nutzen verschiedene Anschluesse (kein gemeinsamer erster Punkt)
+    starts = {k.fluss.text: k.punkte[0] for k in lay.kanten if k.fluss.von == "E1"}
+    assert starts["ja"] != starts["nein"]
+
+
+def test_bpmn_layout_stapelt_zweige_in_derselben_lane():
+    d = _bpmn_daten()
+    d["knoten"][3]["lane"] = "L1"  # Freigabe jetzt in derselben Lane
+    lay = bpmn.layout(bpmn.parse_modell(d))
+    assert lay.zeile["S3"] == 0 and lay.zeile["S2"] == 1
+
+
+def test_bpmn_xml_vollstaendig():
+    m = bpmn.parse_modell(_bpmn_daten())
+    xml = bpmn.to_bpmn_xml(m, bpmn.layout(m), "Rechnungsprüfung")
+    root = ET.fromstring(xml)
+    assert root.get("exporter") == "audioscribe"
+    proc = root.find("bpmn:process", _BPMN_NS)
+    assert proc.find("bpmn:userTask[@id='S1']", _BPMN_NS).get("name") == "S1: Rechnung prüfen"
+    assert proc.find("bpmn:manualTask[@id='S2']", _BPMN_NS) is not None
+    assert proc.find("bpmn:task[@id='S3']", _BPMN_NS) is not None
+    assert proc.find("bpmn:exclusiveGateway[@id='E1']", _BPMN_NS) is not None
+    refs = {r.text for r in proc.iter(f"{{{_BPMN_NS['bpmn']}}}flowNodeRef")}
+    assert refs == {k.id for k in m.knoten}
+    flows = proc.findall("bpmn:sequenceFlow", _BPMN_NS)
+    assert len(flows) == 6
+    # Jedes Element hat seine DI-Darstellung.
+    shapes = {s.get("bpmnElement") for s in root.iter(f"{{{_BPMN_NS['bpmndi']}}}BPMNShape")}
+    edges = {e.get("bpmnElement") for e in root.iter(f"{{{_BPMN_NS['bpmndi']}}}BPMNEdge")}
+    assert {k.id for k in m.knoten} | {"Participant_1", "Lane_L1", "Lane_L2"} <= shapes
+    assert edges == {f.get("id") for f in flows}
+    for e in root.iter(f"{{{_BPMN_NS['bpmndi']}}}BPMNEdge"):
+        assert len(e.findall("di:waypoint", _BPMN_NS)) >= 2
+    assert "Freigabe durch den Fachbereich" in xml
+
+
+def test_bpmn_svg():
+    m = bpmn.parse_modell(_bpmn_daten())
+    lay = bpmn.layout(m)
+    svg = bpmn.to_svg(m, lay, "Rechnungsprüfung")
+    assert f'width="{lay.width}"' in svg and f'height="{lay.height}"' in svg
+    for text in ("S1: Rechnung", "Sachbearbeitung", "Fachbereich", "Rechnungsprüfung", "Korrektur"):
+        assert text in svg
+    ET.fromstring(svg)  # wohlgeformt
+
+
+def test_bpmn_wrap():
+    assert bpmn.wrap("Rechnung im Rechnungsportal suchen", 108) == ["Rechnung im", "Rechnungsportal", "suchen"]
+    assert all(len(z) <= 24 for z in bpmn.wrap("x" * 60, 100))
+
+
+def test_erzeuge_bpmn_und_schutz_bearbeiteter_datei(tmp_path, monkeypatch):
+    (tmp_path / bpmn.JSON_NAME).write_text(json.dumps(_bpmn_daten()), encoding="utf-8")
+    monkeypatch.setattr(pb, "find_browser", lambda: None)
+    log: list[str] = []
+    dateien = bpmn.erzeuge_bpmn(tmp_path, "Test", log=log.append)
+    assert [d.name for d in dateien] == [bpmn.BPMN_NAME, bpmn.SVG_NAME]
+    assert any("PNG fehlt" in z for z in log)
+    # In Camunda gespeichert -> fremder exporter -> nicht ueberschreiben (ausser --neu)
+    ziel = tmp_path / bpmn.BPMN_NAME
+    ziel.write_text(ziel.read_text(encoding="utf-8").replace('exporter="audioscribe"', 'exporter="Camunda Modeler"'), encoding="utf-8")
+    log.clear()
+    assert bpmn.erzeuge_bpmn(tmp_path, "Test", log=log.append) == []
+    assert "bearbeitet" in log[0]
+    assert bpmn.erzeuge_bpmn(tmp_path, "Test", log=log.append, neu=True)
+    assert bpmn.ist_von_audioscribe(ziel)
+
+
+def test_erzeuge_bpmn_ohne_json_und_mit_fehlern(tmp_path):
+    log: list[str] = []
+    assert bpmn.erzeuge_bpmn(tmp_path, "x", log=log.append) == []
+    assert "Kein bpmn-modell.json" in log[0]
+    (tmp_path / bpmn.JSON_NAME).write_text("{kaputt", encoding="utf-8")
+    log.clear()
+    assert bpmn.erzeuge_bpmn(tmp_path, "x", log=log.append) == []
+    assert "kein gueltiges JSON" in log[0]
+    assert bpmn.pruefe(tmp_path)
+
+
+def test_cli_bpmn_pruefen(tmp_path, capsys):
+    from audioscribe.cli import main
+
+    (tmp_path / bpmn.JSON_NAME).write_text(json.dumps(_bpmn_daten()), encoding="utf-8")
+    assert main(["bpmn", str(tmp_path), "--pruefen"]) == 0
+    assert "gueltig" in capsys.readouterr().out
+    assert not (tmp_path / bpmn.BPMN_NAME).exists()  # --pruefen schreibt nichts
+    d = _bpmn_daten()
+    d["knoten"][1]["lane"] = "LX"
+    (tmp_path / bpmn.JSON_NAME).write_text(json.dumps(d), encoding="utf-8")
+    assert main(["bpmn", str(tmp_path), "--pruefen"]) == 1
+    assert "FEHLER" in capsys.readouterr().out
+
+
+@pytest.mark.skipif(
+    not os.environ.get("AUDIOSCRIBE_TEST_BROWSER"),
+    reason="echtes Rendern nur mit AUDIOSCRIBE_TEST_BROWSER=1 (braucht Edge/Chrome)",
+)
+def test_bpmn_png_echt(tmp_path):
+    (tmp_path / bpmn.JSON_NAME).write_text(json.dumps(_bpmn_daten()), encoding="utf-8")
+    dateien = bpmn.erzeuge_bpmn(tmp_path, "Test", log=lambda _: None)
+    png = tmp_path / bpmn.PNG_NAME
+    assert png in dateien and png.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"

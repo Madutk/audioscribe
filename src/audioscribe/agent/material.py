@@ -46,6 +46,7 @@ class Auftrag:
     max_turns: int | None = None
     bash: bool = True
     prozessbild: bool = True  # prozessbild.png/.svg aus dem Mermaid-Diagramm (FR-35)
+    bpmn: bool = True  # bpmn-modell.bpmn/.svg/.png aus bpmn-modell.json (FR-36)
     resume: str | None = None  # Session-ID fuer eine Fortsetzung (Chat-Vorbereitung)
 
     @property
