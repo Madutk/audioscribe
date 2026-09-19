@@ -100,6 +100,7 @@ def analyze(args: argparse.Namespace, resolve_out_dir: Callable[[str], Path]) ->
         max_turns=args.max_turns if args.max_turns is not None else settings.agent_max_turns,
         bash=not args.no_bash,
         prozessbild=settings.agent_prozessbild and not args.no_prozessbild,
+        bpmn=settings.agent_bpmn and not args.no_bpmn,
         resume=resume,
     )
 
@@ -152,3 +153,32 @@ def prozessbild(args: argparse.Namespace, resolve_out_dir: Callable[[str], Path]
     ]
     bilder = erzeuge_prozessbilder(ordner, docs, log=print, browser=browser)
     return 0 if bilder else 1
+
+
+def bpmn(args: argparse.Namespace, resolve_out_dir: Callable[[str], Path]) -> int:
+    """``audioscribe bpmn ORDNER``: BPMN-Modell aus bpmn-modell.json (ohne Agent).
+
+    ``--pruefen`` validiert nur (so prueft der Agent seine Datei vor dem Abschluss).
+    """
+    from audioscribe.agent import bpmn as bpmn_mod
+    from audioscribe.agent.manifest import load_manifest
+
+    ordner = Path(args.target).expanduser()
+    if not ordner.is_dir():
+        ordner = resolve_out_dir(args.target)
+    if not ordner.is_dir():
+        print(f"Kein Ordner: {ordner}")
+        return 1
+    if args.pruefen:
+        fehler = bpmn_mod.pruefe(ordner)
+        if fehler:
+            for f in fehler:
+                print(f"FEHLER: {f}")
+            return 1
+        print(f"OK: {bpmn_mod.JSON_NAME} ist gueltig.")
+        return 0
+    manifest = load_manifest(ordner)
+    name = args.name or (manifest.name if manifest else ordner.name)
+    browser = Path(args.browser) if args.browser else None
+    dateien = bpmn_mod.erzeuge_bpmn(ordner, name, log=print, browser=browser, neu=args.neu)
+    return 0 if dateien else 1

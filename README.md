@@ -345,6 +345,9 @@ INDEX.md                  # vom Agenten: Übersicht aller Dokumente, offene Punk
 prozessdokumentation.md   # … je nach Skills und Kontext
 prozessbild.png / .svg    # das Prozessdiagramm als Bild (für Word, PowerPoint, Confluence)
 prozessbild.mmd           # dessen Mermaid-Quelltext
+bpmn-modell.bpmn          # BPMN 2.0 mit Lanes, bearbeitbar in Camunda Modeler, bpmn.io, Signavio …
+bpmn-modell.png / .svg    # das BPMN-Modell als Bild
+bpmn-modell.json          # dessen Fachlogik (Lanes, Schritte, Flüsse) vom Agenten
 material/                 # Kopie von Transkript, frames/, marks.json (Dokumente verweisen hierauf)
 kontext/                  # Kopie der Kontextdateien
 analyse.json              # Protokoll: Skills, Modell, Session-ID, Dauer, Token-Gegenwert (kosten_usd)
@@ -362,6 +365,27 @@ Hand korrigiert, erzeugt `audioscribe prozessbild <ordner>` die Bilder neu. Find
 audioscribe keinen Browser oder enthält das Diagramm einen Syntaxfehler, steht das im
 Protokoll, und die Analyse gilt trotzdem als fertig. Ein anderer Browser lässt sich mit
 `AUDIOSCRIBE_BROWSER=<pfad>` festlegen, `--no-prozessbild` schaltet die Bilder ab.
+
+**BPMN-Modell mit Lanes:** Zusätzlich entsteht `bpmn-modell.bpmn`, ein BPMN-2.0-Modell,
+das du in jedem gängigen BPMN-Werkzeug öffnen und weiterbearbeiten kannst:
+[Camunda Modeler](https://camunda.com/download/modeler/) (kostenlos), https://demo.bpmn.io
+im Browser, Signavio, ADONIS. Dazu kommen `bpmn-modell.png` und `.svg` als Bild.
+
+- **Lanes:** Sie sind **Rollen**, wenn mehrere Beteiligte erkennbar sind, etwa aus deinem
+  Kontext („Freigabe durch die Teamleitung“), und sonst die verwendeten **Systeme**. Die
+  Begründung steht in der Doku.
+- **Nummern:** Die Schritte tragen dieselben Nummern (S1, E1 …) wie Doku und Prozessbild.
+- **Arbeitsteilung:** Der Agent liefert nur die Fachlogik (`bpmn-modell.json`).
+  Layout, BPMN-XML und Bild erzeugt audioscribe, der Agent prüft seine Datei vorher mit
+  `audioscribe bpmn . --pruefen`.
+- **Grenzen:** Das Layout ist automatisch und sauber, aber nicht perfekt; Feinschliff machst
+  du im BPMN-Werkzeug. Es gibt ein Modell je Prozess, ohne Unterprozesse und ohne parallele
+  Gateways.
+- **Nach dem Bearbeiten:** Hast du die `.bpmn` in einem Werkzeug gespeichert, ist sie ab
+  dann maßgeblich. `audioscribe bpmn <ordner>` baut sie nur mit `--neu` aus dem JSON neu
+  auf.
+
+`--no-bpmn` bzw. `AUDIOSCRIBE_AGENT_BPMN=0` schaltet das Modell ab.
 
 **Abgrenzung:** Der Agent schreibt **nur** in diesen Ordner. Schreibversuche außerhalb
 werden abgelehnt und im Protokoll als `[Verweigert]` vermerkt. Der audioscribe-Ergebnisordner
@@ -527,12 +551,20 @@ Beenden mit Strg+C. Unter WSL die Adresse notfalls selbst im Windows-Browser öf
 ```
 
 Weitere Schalter: `--no-skills`, `--skills-dir PFAD`, `--model claude-sonnet-5`,
-`--max-turns N`, `--no-bash`, `--no-prozessbild`.
+`--max-turns N`, `--no-bash`, `--no-prozessbild`, `--no-bpmn`.
 
 **Prozessbild neu erzeugen (nach Handkorrektur von prozessbild.mmd)**
 
 ```bash
 .venv/bin/audioscribe prozessbild ~/Analysen/rechnungspruefung   # -> prozessbild.png + .svg
+```
+
+**BPMN-Modell prüfen bzw. neu erzeugen (nach Korrektur von bpmn-modell.json)**
+
+```bash
+.venv/bin/audioscribe bpmn ~/Analysen/rechnungspruefung --pruefen   # nur prüfen
+.venv/bin/audioscribe bpmn ~/Analysen/rechnungspruefung             # -> .bpmn + .png + .svg
+.venv/bin/audioscribe bpmn ~/Analysen/rechnungspruefung --neu       # auch bearbeitete .bpmn ersetzen
 ```
 
 **Standbilder von Hand markieren und exportieren**

@@ -8,6 +8,7 @@ Befehle:
   ui      - Browser-Oberflaeche: Ein-/Ausgangsordner waehlen, alle Medien darin transkribieren
   analyze - KI-Analyse eines Ergebnisordners per Claude-Agent (Kontext + Skills, PRD §16)
   prozessbild - prozessbild.png/.svg aus prozessbild.mmd neu erzeugen (FR-35)
+  bpmn    - BPMN-Modell mit Lanes aus bpmn-modell.json erzeugen/pruefen (FR-36)
 """
 
 from __future__ import annotations
@@ -172,6 +173,11 @@ def main(argv: list[str] | None = None) -> int:
         help="kein prozessbild.png/.svg aus dem Mermaid-Diagramm erzeugen",
     )
     ana.add_argument(
+        "--no-bpmn",
+        action="store_true",
+        help="kein BPMN-Modell (bpmn-modell.bpmn/.svg/.png) erzeugen",
+    )
+    ana.add_argument(
         "--resume",
         action="store_true",
         help="(experimentell) vorhandene Sitzung in <out>/<name> fortsetzen; "
@@ -184,6 +190,20 @@ def main(argv: list[str] | None = None) -> int:
     )
     pb.add_argument("target", metavar="ORDNER", help="Ergebnisordner einer Analyse")
     pb.add_argument("--browser", metavar="PFAD", help="Edge/Chrome/Chromium (Default: automatisch)")
+
+    bp = sub.add_parser(
+        "bpmn",
+        help="BPMN-Modell mit Lanes aus bpmn-modell.json erzeugen bzw. pruefen (FR-36)",
+    )
+    bp.add_argument("target", metavar="ORDNER", help="Ergebnisordner einer Analyse")
+    bp.add_argument("--pruefen", action="store_true", help="nur validieren, nichts schreiben")
+    bp.add_argument(
+        "--neu",
+        action="store_true",
+        help="auch eine in einem BPMN-Werkzeug bearbeitete .bpmn ueberschreiben",
+    )
+    bp.add_argument("--name", help="Name des Pools (Default: Prozessname aus analyse.json)")
+    bp.add_argument("--browser", metavar="PFAD", help="Edge/Chrome/Chromium fuer das PNG")
 
     args = parser.parse_args(argv)
 
@@ -295,6 +315,11 @@ def main(argv: list[str] | None = None) -> int:
         from audioscribe.agent.kommando import analyze
 
         return analyze(args, _resolve_out_dir)
+
+    if args.command == "bpmn":
+        from audioscribe.agent.kommando import bpmn
+
+        return bpmn(args, _resolve_out_dir)
 
     if args.command == "prozessbild":
         from audioscribe.agent.kommando import prozessbild

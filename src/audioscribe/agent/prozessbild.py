@@ -47,12 +47,16 @@ _PAGE = """<!DOCTYPE html>
 <html><head><meta charset="utf-8"><script src="mermaid.min.js"></script></head>
 <body><pre id="out">pending</pre><script>
 const SRC = __SRC__;
+const MODE = __MODE__;  // 'mermaid': Quelltext rendern | 'svg': fertiges SVG nur nach PNG
 (async () => {
   const out = document.getElementById('out');
   try {
-    // htmlLabels:false -> reine SVG-Texte: Word/PowerPoint-tauglich, kein foreignObject.
-    mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', flowchart: { htmlLabels: false } });
-    const { svg } = await mermaid.render('prozessbild', SRC);
+    let svg = SRC;
+    if (MODE === 'mermaid') {
+      // htmlLabels:false -> reine SVG-Texte: Word/PowerPoint-tauglich, kein foreignObject.
+      mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', flowchart: { htmlLabels: false } });
+      svg = (await mermaid.render('prozessbild', SRC)).svg;
+    }
     const box = document.createElement('div');
     box.innerHTML = svg;
     document.body.appendChild(box);
@@ -221,9 +225,13 @@ def browser_argv(browser: Path, url: str, profile_dir: str) -> list[str]:
 # --- Rendern -----------------------------------------------------------------------
 
 
-def build_page(source: str) -> str:
+def build_page(source: str, mode: str = "mermaid") -> str:
+    """Render-Seite: ``mode="mermaid"`` rendert Quelltext, ``"svg"`` wandelt fertiges SVG um."""
     # JSON ist gueltiges JS; "</" entschaerfen, damit der Quelltext das <script> nicht schliesst.
-    return _PAGE.replace("__SRC__", json.dumps(source).replace("</", "<\\/"))
+    def js(value: str) -> str:
+        return json.dumps(value).replace("</", "<\\/")
+
+    return _PAGE.replace("__SRC__", js(source)).replace("__MODE__", js(mode))
 
 
 def parse_dump(dom: str) -> dict:
@@ -241,21 +249,19 @@ def parse_dump(dom: str) -> dict:
     return data if isinstance(data, dict) else {"error": "Ergebnis nicht lesbar."}
 
 
-def render(mmd: Path, browser: Path) -> tuple[Path, Path]:
-    """``prozessbild.mmd`` -> ``prozessbild.svg`` + ``prozessbild.png`` daneben.
+def run_page(page_html: str, workdir: Path, browser: Path) -> dict:
+    """Render-Seite im Browser ausfuehren und ihr Ergebnis-JSON liefern.
 
-    ``RuntimeError`` mit lesbarer Meldung, wenn es nicht klappt.
+    Die Seite liegt dabei kurz in ``<workdir>/.prozessbild-tmp/``. ``RuntimeError``, wenn
+    der Browser nicht startet oder nicht antwortet; Render-Fehler stehen als ``error``
+    im Ergebnis.
     """
-    mmd = Path(mmd)
-    source = mmd.read_text(encoding="utf-8").strip()
-    if not source:
-        raise RuntimeError(f"{mmd.name} ist leer.")
-    tmp = mmd.parent / _TMP_DIR
+    tmp = Path(workdir) / _TMP_DIR
     tmp.mkdir(exist_ok=True)
     try:
         shutil.copy2(ASSETS / "mermaid.min.js", tmp / "mermaid.min.js")
         page = tmp / "render.html"
-        page.write_text(build_page(source), encoding="utf-8")
+        page.write_text(page_html, encoding="utf-8")
         argv = browser_argv(browser, to_browser_path(page, browser), _profile_dir(browser))
         try:
             proc = subprocess.run(  # noqa: S603 - fester Aufruf, Pfade aus dem Programm
@@ -270,16 +276,41 @@ def render(mmd: Path, browser: Path) -> tuple[Path, Path]:
             raise RuntimeError(f"Browser antwortet nicht ({_TIMEOUT_S}s).") from exc
         except OSError as exc:
             raise RuntimeError(f"Browser nicht startbar: {exc}") from exc
-        data = parse_dump(proc.stdout)
+        return parse_dump(proc.stdout)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
+
+def _write_png(data_url: str, path: Path) -> None:
+    path.write_bytes(base64.b64decode(data_url.split(",", 1)[1]))
+
+
+def render(mmd: Path, browser: Path) -> tuple[Path, Path]:
+    """``prozessbild.mmd`` -> ``prozessbild.svg`` + ``prozessbild.png`` daneben.
+
+    ``RuntimeError`` mit lesbarer Meldung, wenn es nicht klappt.
+    """
+    mmd = Path(mmd)
+    source = mmd.read_text(encoding="utf-8").strip()
+    if not source:
+        raise RuntimeError(f"{mmd.name} ist leer.")
+    data = run_page(build_page(source), mmd.parent, browser)
     if "error" in data:
         raise RuntimeError(f"Mermaid-Fehler in {mmd.name}: {data['error']}")
     svg_path, png_path = mmd.with_suffix(".svg"), mmd.with_suffix(".png")
     svg_path.write_text(data["svg"], encoding="utf-8")
-    png_path.write_bytes(base64.b64decode(data["png"].split(",", 1)[1]))
+    _write_png(data["png"], png_path)
     return svg_path, png_path
+
+
+def svg_to_png(svg: str, png_path: Path, browser: Path) -> Path:
+    """Fertiges SVG (z. B. das BPMN-Bild) ueber den Browser als PNG speichern."""
+    png_path = Path(png_path)
+    data = run_page(build_page(svg, mode="svg"), png_path.parent, browser)
+    if "error" in data:
+        raise RuntimeError(f"PNG-Umwandlung fehlgeschlagen: {data['error']}")
+    _write_png(data["png"], png_path)
+    return png_path
 
 
 def erzeuge_prozessbilder(

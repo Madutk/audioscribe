@@ -134,6 +134,8 @@ class Settings:
     # prozessbild.png/.svg aus dem Mermaid-Diagramm (FR-35); Browser-Override ueber
     # AUDIOSCRIBE_BROWSER (wird direkt in agent/prozessbild.find_browser gelesen).
     agent_prozessbild: bool = field(default_factory=lambda: _flag("AGENT_PROZESSBILD", "1"))
+    # BPMN-Modell mit Lanes aus bpmn-modell.json (FR-36)
+    agent_bpmn: bool = field(default_factory=lambda: _flag("AGENT_BPMN", "1"))
     agent_max_turns: int | None = field(default_factory=lambda: _opt_int("AGENT_MAX_TURNS"))
     agent_output_dir: Path = field(
         default_factory=lambda: Path(_env("AGENT_OUTPUT_DIR", str(PROJECT_ROOT / "analysen")))

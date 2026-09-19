@@ -250,7 +250,23 @@ class AnalyseSitzung:
                 ok = self._record_result(msg)
         if ok and self.auftrag.prozessbild:
             self._prozessbild()
+        if ok and self.auftrag.bpmn:
+            self._bpmn()
         return ok
+
+    def _bpmn(self) -> None:
+        """bpmn-modell.json -> .bpmn/.svg/.png; Probleme nur protokollieren (FR-36)."""
+        from audioscribe.agent.bpmn import erzeuge_bpmn
+
+        try:
+            dateien = erzeuge_bpmn(self.workspace, self.auftrag.name, log=self.log)
+        except Exception as exc:  # noqa: BLE001 - Zugabe, darf die Analyse nie kippen
+            self.log(f"[BPMN] fehlgeschlagen: {type(exc).__name__}: {exc}")
+            return
+        neu = [d.name for d in dateien if d.name not in self.fortschritt.docs]
+        if neu:
+            self.fortschritt.docs.extend(neu)
+            self._fortschritt_melden()
 
     def _prozessbild(self) -> None:
         """Mermaid-Diagramm -> prozessbild.png/.svg; Probleme nur protokollieren (FR-35)."""
