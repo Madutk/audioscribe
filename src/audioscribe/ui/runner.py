@@ -22,11 +22,15 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 from audioscribe.agent.fortschritt import parse_status_line
+from audioscribe.live.events import parse_event
 from audioscribe.ui.jobs import (
     AnalyseOptions,
     JobOptions,
+    LiveJobOptions,
     build_analyze_argv,
     build_argv,
+    build_live_argv,
+    build_refine_argv,
     child_env,
     parse_duration_line,
     parse_progress,
@@ -210,15 +214,16 @@ class _ProcessRunner:
         self._log.clear()
         self._dropped = 0
 
-    def _spawn(self, argv: list[str]) -> subprocess.Popen[str] | None:
+    def _spawn(self, argv: list[str], *, stdin: int = subprocess.DEVNULL) -> subprocess.Popen[str] | None:
         try:
             proc = subprocess.Popen(  # noqa: S603 - Kommando kommt aus build_*argv
                 argv,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 # Kein Terminal erben: ein Kind, das nachfragt, bekaeme sonst die
-                # Tastatur des Server-Fensters und bliebe haengen.
-                stdin=subprocess.DEVNULL,
+                # Tastatur des Server-Fensters und bliebe haengen. Nur die Live-Sitzung
+                # bekommt eine Pipe - ueber sie kommt das saubere "stop".
+                stdin=stdin,
                 text=True,
                 bufsize=1,
                 encoding="utf-8",
@@ -562,8 +567,172 @@ class AnalyseRunner(_ProcessRunner):
             self._append(f"\nAnalyse mit Fehler beendet (Exit-Code {code}).")
 
 
+class LiveRunner(_ProcessRunner):
+    """Eine Live-Sitzung (``audioscribe live``) zur Zeit, danach optional ``refine``.
+
+    Anders als Stapel und Analyse liefert das Kind neben dem Protokoll strukturierte
+    Ereignisse (``[Live] {json}``): Segmente und Standbilder werden gesammelt und per
+    eigenem Offset abgeholt, Vorschautext und Messwerte ersetzen jeweils den Vorstand.
+    """
+
+    def __init__(self, *, max_lines: int = 5000) -> None:
+        super().__init__(max_lines=max_lines)
+        self._info: dict = {"running": False}
+        self._events: list[dict] = []
+
+    def start(
+        self,
+        opts: LiveJobOptions,
+        *,
+        argv_builder: Callable[[LiveJobOptions], list[str]] = build_live_argv,
+        refine_builder: Callable[[Path, LiveJobOptions], list[str]] = build_refine_argv,
+    ) -> None:
+        with self._lock:
+            if self._info.get("running"):
+                raise RuntimeError("Es laeuft bereits eine Live-Sitzung.")
+            self._info = {
+                "running": True,
+                "phase": "startet",
+                "stopping": False,
+                "session": None,
+                "dir": None,
+                "model": None,
+                "device": None,
+                "stats": None,
+                "partials": {},
+                "refine": None,
+                "returncode": None,
+            }
+            self._events = []
+            self._reset_log()
+        self._thread = threading.Thread(
+            target=self._run,
+            args=(argv_builder(opts), opts, refine_builder),
+            name="audioscribe-live",
+            daemon=True,
+        )
+        self._thread.start()
+
+    def stop(self) -> None:
+        """Erster Aufruf: sauberes ``stop`` ueber stdin. Zweiter Aufruf oder waehrend des
+        Nachschaerfens: Prozess beenden (die Live-Fassung liegt dann schon auf der Platte)."""
+        with self._lock:
+            if not self._info.get("running"):
+                return
+            hard = self._info["stopping"] or self._info["phase"] == "nachschaerfen"
+            self._info["stopping"] = True
+            proc = self._proc
+        if proc is None or proc.poll() is not None:
+            return
+        if hard:
+            self._append("Abbruch - beende den Prozess ...")
+            _terminate(proc)
+            return
+        self._append("Stopp angefordert - Sitzung wird abgeschlossen ...")
+        try:
+            assert proc.stdin is not None
+            proc.stdin.write("stop\n")
+            proc.stdin.flush()
+        except (OSError, ValueError):
+            _terminate(proc)
+
+    def session_dir(self) -> Path | None:
+        with self._lock:
+            raw = self._info.get("dir")
+        return Path(raw) if raw else None
+
+    def snapshot(self, offset: int = 0, ev_offset: int = 0) -> dict:
+        with self._lock:
+            lines, new_offset = self._lines_since(offset)
+            info = dict(self._info)
+            info["partials"] = dict(info.get("partials") or {})
+            new_events = self._events[max(0, ev_offset) :]
+            total = len(self._events)
+        return {**info, "offset": new_offset, "lines": lines, "events": new_events, "ev_offset": total}
+
+    def _run(
+        self,
+        argv: list[str],
+        opts: LiveJobOptions,
+        refine_builder: Callable[[Path, LiveJobOptions], list[str]],
+    ) -> None:
+        code = -1
+        try:
+            code = self._pump(self._spawn(argv, stdin=subprocess.PIPE), self._on_live_line)
+            with self._lock:
+                session = self._info.get("dir")
+                aborted = self._info["stopping"] and self._info["phase"] != "fertig"
+            if code == 0 and opts.refine and session and not aborted:
+                with self._lock:
+                    self._info.update(phase="nachschaerfen", stopping=False, partials={})
+                self._append(f"\nNachschaerfen mit {opts.refine_model} ...")
+                code = self._pump(self._spawn(refine_builder(Path(session), opts)), self._on_refine_line)
+        finally:
+            with self._lock:
+                self._proc = None
+                self._info.update(
+                    running=False, returncode=code, phase="beendet" if code == 0 else "fehler", partials={}
+                )
+            self._append("\nSitzung beendet." if code == 0 else f"\nBeendet mit Exit-Code {code}.")
+
+    def _pump(self, proc: subprocess.Popen[str] | None, on_line: Callable[[str], None]) -> int:
+        if proc is None:
+            return -1
+        assert proc.stdout is not None
+        for raw in proc.stdout:
+            line = raw.rstrip("\n").rstrip("\r")
+            if line.strip():
+                on_line(line)
+        return proc.wait()
+
+    def _on_live_line(self, line: str) -> None:
+        event = parse_event(line)
+        if event is None:
+            self._append(line)
+            return
+        typ = event.pop("type")
+        with self._lock:
+            if typ == "state":
+                self._info.update({k: event.get(k) for k in ("phase", "session", "dir", "model", "device")})
+            elif typ == "stats":
+                self._info["stats"] = event
+            elif typ == "partial":
+                if event.get("text"):
+                    self._info["partials"][event["track"]] = event
+                else:
+                    self._info["partials"].pop(event.get("track"), None)
+            elif typ in ("segment", "shot"):
+                if typ == "segment":
+                    self._info["partials"].pop(event.get("track"), None)
+                self._events.append({"type": typ, **event})
+
+    def _on_refine_line(self, line: str) -> None:
+        percent = parse_progress(line)
+        stage = parse_stage(line)
+        with self._lock:
+            refine = dict(self._info.get("refine") or {})
+            if stage:
+                refine.update(index=stage[0], total=stage[1], name=stage[2], percent=None)
+            elif percent is not None:
+                refine["percent"] = percent
+            self._info["refine"] = refine or None
+        if percent is None:
+            self._append(line)
+
+
 def _terminate(proc: subprocess.Popen[str]) -> None:
     """Beendet die Prozessgruppe des Kindes, notfalls hart."""
+    if os.name == "nt":
+        # os.killpg/getpgid gibt es unter Windows nicht. taskkill /T nimmt die Enkel
+        # (ffmpeg) mit; ein sanftes Signal kennt ein Konsolenprozess ohne Fenster nicht.
+        subprocess.run(  # noqa: S603, S607 - festes Kommando
+            ["taskkill", "/PID", str(proc.pid), "/T", "/F"], capture_output=True, check=False
+        )
+        try:
+            proc.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+        return
     try:
         os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
     except (OSError, ProcessLookupError):

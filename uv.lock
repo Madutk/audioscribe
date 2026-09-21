@@ -178,6 +178,13 @@ cu124 = [
     { name = "torch", version = "2.6.0+cu124", source = { registry = "https://download.pytorch.org/whl/cu124" } },
     { name = "torchaudio", version = "2.6.0+cu124", source = { registry = "https://download.pytorch.org/whl/cu124" } },
 ]
+live = [
+    { name = "mss" },
+    { name = "numpy" },
+    { name = "pillow" },
+    { name = "pyaudiowpatch", marker = "sys_platform == 'win32' or (extra == 'extra-11-audioscribe-cpu' and extra == 'extra-11-audioscribe-cu124')" },
+    { name = "scipy" },
+]
 review = [
     { name = "fastapi" },
     { name = "uvicorn" },
@@ -194,6 +201,11 @@ requires-dist = [
     { name = "fastapi", marker = "extra == 'review'", specifier = ">=0.110" },
     { name = "fpdf2", specifier = ">=2.7" },
     { name = "imageio-ffmpeg", specifier = ">=0.5" },
+    { name = "mss", marker = "extra == 'live'", specifier = ">=9" },
+    { name = "numpy", marker = "extra == 'live'" },
+    { name = "pillow", marker = "extra == 'live'" },
+    { name = "pyaudiowpatch", marker = "sys_platform == 'win32' and extra == 'live'", specifier = ">=0.2.12" },
+    { name = "scipy", marker = "extra == 'live'" },
     { name = "torch", marker = "extra == 'cpu'", specifier = ">=2.4,<2.7", index = "https://download.pytorch.org/whl/cpu", conflict = { package = "audioscribe", extra = "cpu" } },
     { name = "torch", marker = "extra == 'cu124'", specifier = ">=2.4,<2.7", index = "https://download.pytorch.org/whl/cu124", conflict = { package = "audioscribe", extra = "cu124" } },
     { name = "torchaudio", marker = "extra == 'cpu'", specifier = ">=2.4,<2.7", index = "https://download.pytorch.org/whl/cpu", conflict = { package = "audioscribe", extra = "cpu" } },
@@ -201,7 +213,7 @@ requires-dist = [
     { name = "uvicorn", marker = "extra == 'review'", specifier = ">=0.29" },
     { name = "whisperx", specifier = ">=3.3" },
 ]
-provides-extras = ["cpu", "cu124", "review", "agent"]
+provides-extras = ["cpu", "cu124", "review", "agent", "live"]
 
 [package.metadata.requires-dev]
 dev = [{ name = "pytest", specifier = ">=8" }]
@@ -988,6 +1000,15 @@ wheels = [
 ]
 
 [[package]]
+name = "mss"
+version = "10.2.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/e5/5d/eee782a6d674f562c946ae6a026f4c595ea2b7b031f290bf9fbf60da09b5/mss-10.2.0.tar.gz", hash = "sha256:ab271860775545e62f29d7b11f82f279ac1048f5bbdd26cfad84830208dbd393", size = 200317, upload-time = "2026-04-23T10:44:57.305Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f2/c3/313e14f245c79b4c05bd0f3a84a4813aa26fa10f8993aebd91d04c5fad3f/mss-10.2.0-py3-none-any.whl", hash = "sha256:e79f428899280e7e64e38365b5bfed683851ebea807eeaeadaf06eb8e0d67197", size = 67106, upload-time = "2026-04-23T10:44:56.266Z" },
+]
+
+[[package]]
 name = "multidict"
 version = "6.7.1"
 source = { registry = "https://pypi.org/simple" }
@@ -1480,6 +1501,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/35/04/4bcfe0dd588577a188328b806f3a7213d8cead0ce5fe5784d01fd57df93f/pyannote.pipeline-3.0.1.tar.gz", hash = "sha256:021794e26a2cf5d8fb5bb1835951e71f5fac33eb14e23dfb7468e16b1b805151", size = 34486, upload-time = "2023-09-22T20:16:49.951Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/83/42/1bf7cbf061ed05c580bfb63bffdd3f3474cbd5c02bee4fac518eea9e9d9e/pyannote.pipeline-3.0.1-py3-none-any.whl", hash = "sha256:819bde4c4dd514f740f2373dfec794832b9fc8e346a35e43a7681625ee187393", size = 31517, upload-time = "2023-09-22T20:16:48.153Z" },
+]
+
+[[package]]
+name = "pyaudiowpatch"
+version = "0.2.12.8"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/88/4e/ba7c938033fb25ba25f35e9f125f5c270e60c7789e65662d37424a5d9c0c/pyaudiowpatch-0.2.12.8-cp312-cp312-win32.whl", hash = "sha256:5c6f54cbee50ed3c971767cc8e85f45e94012aa3c4363b7cdd8541e9f9496d01", size = 96800, upload-time = "2026-01-14T18:19:29.01Z" },
+    { url = "https://files.pythonhosted.org/packages/e5/e1/c25c239737386a3fd85354ce35a00fbe83e993a7e51d76791022850ca12c/pyaudiowpatch-0.2.12.8-cp312-cp312-win_amd64.whl", hash = "sha256:fd163a6531c4e4969925e687ef1bc57fae8ecc1a95de7ba707a436622552d7fa", size = 99319, upload-time = "2026-01-14T18:19:31.063Z" },
 ]
 
 [[package]]

@@ -47,6 +47,17 @@ agent = [
     "claude-agent-sdk>=0.2.156",
 ]
 
+# Live-Transkription ('audioscribe live', PRD §17): WASAPI-Loopback + Mikrofon und
+# Bildschirmabgriff. Nur natives Windows - unter WSL/Linux bleibt das Extra wirkungslos.
+# Installation: uv sync --extra cu124 --extra review --extra live
+live = [
+    "PyAudioWPatch>=0.2.12; sys_platform == 'win32'",
+    "mss>=9",
+    "numpy",
+    "scipy",
+    "pillow",
+]
+
 [project.scripts]
 audioscribe = "audioscribe.cli:main"
 
