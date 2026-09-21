@@ -648,3 +648,7 @@ cd ~/develop/git/audioscribe
 
 Danach öffnet sich http://127.0.0.1:8766 mit den Reitern „Offline Transcription“, „Live Transcription“ und „KI-Analyse“.
 Unter WSL die Adresse notfalls selbst im Windows-Browser öffnen, beenden mit Strg+C.
+
+```bash
+uv run --extra cu124 --extra review --extra agent audioscribe ui
+```
