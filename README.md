@@ -652,3 +652,9 @@ Unter WSL die Adresse notfalls selbst im Windows-Browser öffnen, beenden mit St
 ```bash
 uv run --extra cu124 --extra review --extra agent audioscribe ui
 ```
+
+Unter Windows (PowerShell) erledigt das `start.ps1` – es wählt `cpu` oder `cu124` selbst und nimmt alle Extras mit (review, agent, live):
+
+```powershell
+.\start.ps1                                  # Optionen: -Torch cpu|cu124  -Port 8800  -NoBrowser
+```
