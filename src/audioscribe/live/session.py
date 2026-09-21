@@ -76,7 +76,15 @@ class LiveSession:
         o = self.opts
         self._state("laden")
         events.log(f"Lade Modell {o.model} ({o.device}, {o.compute_type}) ...")
-        self._asr = LiveTranscriber(o.model, o.device, o.compute_type, o.language)
+        self._asr = LiveTranscriber(
+            o.model,
+            o.device,
+            o.compute_type,
+            o.language,
+            on_progress=lambda done, total: events.emit(
+                events.DOWNLOAD, model=o.model, done=done, total=total
+            ),
+        )
         self._labeler = SpeakerLabeler(self._load_embedder())
         vad = silero_vad()
 

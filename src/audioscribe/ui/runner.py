@@ -599,6 +599,7 @@ class LiveRunner(_ProcessRunner):
                 "model": None,
                 "device": None,
                 "stats": None,
+                "download": None,
                 "partials": {},
                 "refine": None,
                 "returncode": None,
@@ -694,6 +695,10 @@ class LiveRunner(_ProcessRunner):
         with self._lock:
             if typ == "state":
                 self._info.update({k: event.get(k) for k in ("phase", "session", "dir", "model", "device")})
+                if event.get("phase") != "laden":
+                    self._info["download"] = None
+            elif typ == "download":
+                self._info["download"] = event
             elif typ == "stats":
                 self._info["stats"] = event
             elif typ == "partial":

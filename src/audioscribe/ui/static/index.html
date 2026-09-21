@@ -266,6 +266,10 @@
         <div class="gauge level"><div class="bar"><i id="liveLevelMic"></i></div><span>Mikrofon</span></div>
         <div class="gauge level"><div class="bar"><i id="liveLevelSys"></i></div><span>System</span></div>
       </div>
+      <div id="liveLoadBox" hidden>
+        <div class="status" id="liveLoadStep"></div>
+        <div class="bar big" id="liveLoadBarBox"><i id="liveLoadBar"></i></div>
+      </div>
       <div id="liveRefineBox" hidden>
         <div class="status" id="liveRefineStep"></div>
         <div class="bar big"><i id="liveRefineBar"></i></div>
@@ -1006,6 +1010,16 @@ async function pollLive() {
   $('liveBacklog').title = st && st.partials_paused ? 'Vorschautext pausiert, bis der Rückstand abgebaut ist' : '';
   $('liveLevelMic').style.width = Math.min(100, (st && running ? st.level_mic || 0 : 0) * 150) + '%';
   $('liveLevelSys').style.width = Math.min(100, (st && running ? st.level_sys || 0 : 0) * 150) + '%';
+
+  // Beim ersten Start wird das Modell heruntergeladen; aus dem Cache gibt es keine Byte-Meldung.
+  const dl = s.download;
+  const mb = (bytes) => Math.round(bytes / 1048576);
+  $('liveLoadBox').hidden = s.phase !== 'laden';
+  $('liveLoadBarBox').classList.toggle('wait', !dl);
+  $('liveLoadStep').textContent = dl
+    ? `Modell ${dl.model} wird heruntergeladen – ${mb(dl.done)} von ${mb(dl.total)} MB (${Math.floor(dl.done / dl.total * 100)} %)`
+    : `Modell ${s.model || ''} wird geladen …`;
+  $('liveLoadBar').style.width = dl ? (dl.done / dl.total * 100) + '%' : '';
 
   const r = s.refine;
   $('liveRefineBox').hidden = s.phase !== 'nachschaerfen';
