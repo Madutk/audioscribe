@@ -44,6 +44,9 @@ def silero_vad() -> Vad:
     def vad(audio: np.ndarray) -> list[tuple[int, int]]:
         return [(int(d["start"]), int(d["end"])) for d in get_speech_timestamps(audio, options)]
 
+    # Einmal vorab: onnxruntime lädt erst beim ersten Aufruf, und das soll nicht mitten
+    # in die laufende Aufnahme fallen.
+    vad(np.zeros(SAMPLE_RATE, dtype=np.float32))
     return vad
 
 

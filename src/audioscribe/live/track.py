@@ -37,17 +37,24 @@ class Resampler:
         self.down = int(rate_in) // g
         self._ctx = 32 * self.down
         self._buf = np.zeros(self._ctx, dtype=np.float32)
+        # Hier laden, nicht erst in process(): das läuft im Audio-Callback, und ein
+        # DLL-Import dort verklemmt sich unter Windows mit Importen anderer Threads
+        # (onnxruntime der VAD) - die Spur bliebe für immer stumm.
+        self._poly = None
+        if self.up != self.down:
+            from scipy.signal import resample_poly
+
+            self._poly = resample_poly
 
     def process(self, x: np.ndarray) -> np.ndarray:
-        if self.up == self.down:
+        if self._poly is None:
             return x.astype(np.float32, copy=False)
-        from scipy.signal import resample_poly
 
         self._buf = np.concatenate([self._buf, x.astype(np.float32, copy=False)])
         payload = ((len(self._buf) - 2 * self._ctx) // self.down) * self.down
         if payload <= 0:
             return np.zeros(0, dtype=np.float32)
-        y = resample_poly(self._buf[: payload + 2 * self._ctx], self.up, self.down)
+        y = self._poly(self._buf[: payload + 2 * self._ctx], self.up, self.down)
         head = self._ctx * self.up // self.down
         out = y[head : head + payload * self.up // self.down]
         self._buf = self._buf[payload:]
