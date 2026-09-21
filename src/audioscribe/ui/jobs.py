@@ -191,6 +191,8 @@ _STAGE_RE = re.compile(r"^\[Stufe (\d+)/(\d+)\]\s*(.*)$")
 # "[Fortschritt] 42.5%" aus progress.emit_progress. Beide VERANKERT, damit keine fremde
 # Bibliotheksausgabe versehentlich als Fortschritt gedeutet wird.
 _PROGRESS_RE = re.compile(r"^(?:Progress: (\d+(?:\.\d+)?)%\.\.\.|\[Fortschritt\] (\d+(?:\.\d+)?)%)$")
+# Aus progress.emit_download: "[Download] <geladen> <gesamt>" in Bytes.
+_DOWNLOAD_RE = re.compile(r"^\[Download\] (\d+) (\d+)$")
 # Aus pipeline/audio.py: "   - meeting.16k.wav: 00:06:58 (419s)"
 _DURATION_LINE_RE = re.compile(r"^\s*-\s.*:\s*\d+:\d\d:\d\d\s*\((\d+(?:\.\d+)?)s\)\s*$")
 
@@ -212,6 +214,14 @@ def parse_progress(line: str) -> float | None:
     if not match:
         return None
     return float(match.group(1) or match.group(2))
+
+
+def parse_download(line: str) -> tuple[int, int] | None:
+    """``(geladen, gesamt)`` eines Modell-Downloads in Bytes, sonst ``None``."""
+    match = _DOWNLOAD_RE.match(line.strip())
+    if not match or not int(match.group(2)):
+        return None
+    return int(match.group(1)), int(match.group(2))
 
 
 def parse_duration_line(line: str) -> float | None:

@@ -7,9 +7,10 @@ Modelle laufen sequenziell).
 from __future__ import annotations
 
 import gc
+import os
 
 from audioscribe.config import resolve_compute_type, resolve_device, settings
-from audioscribe.progress import Reporter
+from audioscribe.progress import Reporter, emit_download
 
 
 def _free_vram() -> None:
@@ -21,6 +22,18 @@ def _free_vram() -> None:
             torch.cuda.empty_cache()
     except Exception:  # noqa: BLE001 - best effort
         pass
+
+
+# Auf der CPU bringt Batching kaum Durchsatz, WhisperX meldet Fortschritt aber nur je
+# fertigem Stapel: mit 8 Abschnitten (~4 min Audio) stuende der Balken minutenlang still.
+_CPU_BATCH_SIZE = 2
+
+
+def _batch_size(device: str) -> int:
+    """Ein ausdruecklich gesetztes ``AUDIOSCRIBE_BATCH_SIZE`` gewinnt immer."""
+    if device == "cpu" and "AUDIOSCRIBE_BATCH_SIZE" not in os.environ:
+        return min(settings.batch_size, _CPU_BATCH_SIZE)
+    return settings.batch_size
 
 
 def transcribe(audio, reporter: Reporter | None = None) -> dict:
@@ -37,17 +50,27 @@ def transcribe(audio, reporter: Reporter | None = None) -> dict:
 
     language = None if settings.whisper_language.lower() == "auto" else settings.whisper_language
     device = resolve_device(settings.device)
+    whisper_model = settings.whisper_model
+    if settings.emit_progress:
+        # Der erste Lauf laedt bis zu 3 GB; ohne Meldung wirkt die Stufe eingefroren.
+        from audioscribe.pipeline.models import fetch_model
+
+        whisper_model = fetch_model(whisper_model, emit_download)
+    if reporter:
+        reporter.info("Modell wird geladen ...")
     model = whisperx.load_model(
-        settings.whisper_model,
+        whisper_model,
         device=device,
         compute_type=resolve_compute_type(settings.whisper_compute_type, device),
         language=language,
     )
+    if reporter:
+        reporter.info("Transkribiere ...")
     try:
         # print_progress: WhisperX druckt je VAD-Abschnitt (~30 s Audio) "Progress: N%..." -
         # die Fortschrittsquelle fuer die Oberflaeche. Im Terminal standardmaessig aus.
         result = model.transcribe(
-            audio, batch_size=settings.batch_size, print_progress=settings.emit_progress
+            audio, batch_size=_batch_size(device), print_progress=settings.emit_progress
         )
     except IndexError:
         # WhisperX/transformers wirft IndexError, wenn die VAD keine Sprache findet

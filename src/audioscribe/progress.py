@@ -33,3 +33,8 @@ def emit_progress(percent: float) -> None:
     damit die Oberflaeche beide Quellen mit einem Ausdruck lesen kann.
     """
     print(f"[Fortschritt] {max(0.0, min(100.0, percent)):.1f}%", flush=True)
+
+
+def emit_download(done: int, total: int) -> None:
+    """Maschinenlesbarer Stand eines Modell-Downloads in Bytes (siehe ``emit_progress``)."""
+    print(f"[Download] {int(done)} {int(total)}", flush=True)
