@@ -1030,7 +1030,10 @@ function openLightbox(index) {
 
 $('liveStart').onclick = startLive;
 $('liveStop').onclick = () => api('/api/live/stop', { method: 'POST' }).catch(() => {});
-$('liveRefresh').onclick = () => loadLiveDefaults().catch((err) => { $('liveErr').textContent = err.message; });
+// Erst nach init(): vorher ist 'defaults' noch null (der CUDA-Test kann auf CPU-Rechnern dauern).
+$('liveRefresh').onclick = () => ready.then(loadLiveDefaults)
+  .then(() => { $('liveErr').textContent = ''; })
+  .catch((err) => { $('liveErr').textContent = err.message; });
 $('liveMonitors').onclick = (e) => {
   const tile = e.target.closest('.monitor');
   if (!tile) return;
@@ -1088,7 +1091,8 @@ $('anaSkills').onchange = rememberAnalyse;
 $('anaStart').onclick = startAnalyse;
 $('anaCancel').onclick = () => api('/api/agent/cancel', { method: 'POST' }).catch(() => {});
 
-init().then(initAnalyse).then(initLive).catch((err) => { $('liveErr').textContent = err.message; });
+const ready = init();
+ready.then(initAnalyse).then(initLive).catch((err) => { $('liveErr').textContent = err.message; });
 </script>
 </body>
 </html>
