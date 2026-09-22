@@ -1,65 +1,144 @@
 <!DOCTYPE html>
+<!-- Der Server ergaenzt data-theme="system|light|dark" im <html>-Tag (ui/server.py: inject_theme). -->
 <html lang="de">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>AudioScribe Review</title>
 <style>
-  :root { --bg:#1e1e24; --panel:#26262e; --fg:#e8e8ec; --muted:#9a9aa8; --accent:#5b8def; --hot:#3a3a48; }
+/* Tokens: Kopie aus ui/static/style.css - dort ist die Quelle, hier synchron halten. */
+
+:root {
+  color-scheme: light;
+  --bg: #f4f5f8;          --surface: #ffffff;      --surface-2: #eef0f4;
+  --input-bg: #ffffff;    --code-bg: #f0f2f5;
+  --border: #e1e4ea;      --border-strong: #c9ced8;
+  --fg: #171a20;          --fg-muted: #5f6673;     --fg-faint: #8a919e;
+  --accent: #2f6be6;      --accent-hover: #2559c4; --accent-fg: #ffffff; --accent-soft: #e6eefc;
+  --ok: #1c7f47;   --ok-soft: #e2f4e9;
+  --warn: #9a5b00; --warn-soft: #fff0d6;
+  --err: #c22e4a;  --err-soft: #fce6ea;
+  --focus: 0 0 0 3px rgba(47, 107, 230, .35);
+  --shadow-sm: 0 1px 2px rgba(16, 20, 28, .06);
+  --shadow-md: 0 8px 24px rgba(16, 20, 28, .12);
+  --backdrop: rgba(18, 22, 30, .45);
+  --radius-sm: 6px; --radius: 10px; --radius-lg: 14px; --radius-pill: 999px;
+  --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px; --s6: 32px;
+  --dur: 160ms; --ease: cubic-bezier(.2, .7, .2, 1);
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #111317;          --surface: #1a1d23;      --surface-2: #22262e;
+    --input-bg: #14171c;    --code-bg: #0e1013;
+    --border: #2c313b;      --border-strong: #3b414d;
+    --fg: #e7e9ee;          --fg-muted: #9aa1ad;     --fg-faint: #6c7380;
+    --accent: #6f9dff;      --accent-hover: #88afff; --accent-fg: #0b1426; --accent-soft: #1c2942;
+    --ok: #4fd08a;   --ok-soft: #153524;
+    --warn: #f0b657; --warn-soft: #3a2c10;
+    --err: #ff7b93;  --err-soft: #44202a;
+    --focus: 0 0 0 3px rgba(111, 157, 255, .45);
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, .4);
+    --shadow-md: 0 8px 24px rgba(0, 0, 0, .5);
+    --backdrop: rgba(0, 0, 0, .6);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #111317;          --surface: #1a1d23;      --surface-2: #22262e;
+  --input-bg: #14171c;    --code-bg: #0e1013;
+  --border: #2c313b;      --border-strong: #3b414d;
+  --fg: #e7e9ee;          --fg-muted: #9aa1ad;     --fg-faint: #6c7380;
+  --accent: #6f9dff;      --accent-hover: #88afff; --accent-fg: #0b1426; --accent-soft: #1c2942;
+  --ok: #4fd08a;   --ok-soft: #153524;
+  --warn: #f0b657; --warn-soft: #3a2c10;
+  --err: #ff7b93;  --err-soft: #44202a;
+  --focus: 0 0 0 3px rgba(111, 157, 255, .45);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, .4);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, .5);
+  --backdrop: rgba(0, 0, 0, .6);
+}
+
   * { box-sizing: border-box; }
-  body { margin:0; font:14px/1.5 system-ui, sans-serif; background:var(--bg); color:var(--fg); }
-  header { padding:10px 16px; background:var(--panel); display:flex; gap:16px; align-items:center; flex-wrap:wrap; }
-  header h1 { font-size:15px; margin:0; font-weight:600; }
-  header .meta { color:var(--muted); font-size:12px; }
-  .wrap { display:flex; gap:16px; padding:16px; align-items:flex-start; }
-  .left { flex:2; min-width:0; }
-  .right { flex:1; min-width:280px; max-height:calc(100vh - 120px); overflow:auto; }
-  video { width:100%; background:#000; border-radius:6px; }
-  .controls { margin-top:10px; display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
-  button { background:var(--accent); color:#fff; border:0; padding:9px 14px; border-radius:6px; cursor:pointer; font-weight:600; }
-  button.secondary { background:var(--hot); }
-  button:disabled { opacity:.5; cursor:default; }
-  input, label { font:inherit; }
-  input[type=number] { width:60px; }
-  input[type=text] { flex:1; min-width:120px; padding:8px; border-radius:6px; border:1px solid #3a3a48; background:#1b1b22; color:var(--fg); }
-  .section-title { font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin:4px 0 8px; }
-  .transcript { background:var(--panel); border-radius:6px; padding:8px; max-height:300px; overflow:auto; }
-  .para { padding:4px 8px; border-radius:4px; cursor:pointer; }
-  .para:hover { background:var(--hot); }
-  .para.active { background:#34406a; }
-  .para .ts { color:var(--accent); font-variant-numeric:tabular-nums; margin-right:6px; }
-  .para .spk { color:var(--muted); }
-  .mark { display:flex; gap:10px; background:var(--panel); border-radius:6px; padding:8px; margin-bottom:8px; align-items:flex-start; }
-  .mark img { width:120px; border-radius:4px; cursor:pointer; background:#000; }
-  .mark .info { flex:1; min-width:0; }
-  .mark .info .ts { color:var(--accent); font-variant-numeric:tabular-nums; }
-  .mark .info .note { color:var(--muted); font-size:12px; word-break:break-word; }
-  .mark .del { background:transparent; color:#e0708a; padding:2px 6px; }
-  .empty { color:var(--muted); font-size:13px; padding:8px; }
-  .hint { color:var(--muted); font-size:12px; }
+  body { margin: 0; font: 15px/1.5 var(--font); background: var(--bg); color: var(--fg); -webkit-font-smoothing: antialiased; }
+  h1, h2, p { margin: 0; }
+  :focus-visible { outline: none; box-shadow: var(--focus); }
+  .ic { width: 1em; height: 1em; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+        vertical-align: -.15em; flex: none; pointer-events: none; }
+  header { display: flex; align-items: center; gap: 16px; padding: 12px 24px; background: var(--surface); border-bottom: 1px solid var(--border);
+            flex-wrap: wrap; }
+  .brand { display: flex; align-items: center; gap: 8px; }
+  .brand .ic { width: 26px; height: 26px; color: var(--accent); stroke-width: 2.2; }
+  header h1 { font-size: 17px; font-weight: 700; letter-spacing: -.01em; }
+  header .meta { color: var(--fg-muted); font-size: 13px; }
+  .wrap { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 16px; padding: 16px 24px 32px; align-items: start; }
+  .left, .right { min-width: 0; }
+  .right { max-height: calc(100vh - 110px); overflow: auto; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; box-shadow: var(--shadow-sm); }
+  video { width: 100%; background: #000; border-radius: var(--radius-sm); display: block; }
+  .controls { margin-top: 12px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  button { display: inline-flex; align-items: center; gap: 7px; background: var(--accent); color: var(--accent-fg); border: 1px solid transparent;
+            padding: 8px 14px; border-radius: var(--radius-sm); cursor: pointer; font: inherit; font-weight: 600; min-height: 36px;
+            transition: background var(--dur) var(--ease), color var(--dur), border-color var(--dur); }
+  button:hover { background: var(--accent-hover); }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  button.del { background: transparent; color: var(--fg-muted); padding: 0; width: 30px; height: 30px; justify-content: center; border-radius: 50%; min-height: 0; }
+  button.del:hover { background: var(--err-soft); color: var(--err); }
+  input, label { font: inherit; }
+  input[type=number], input[type=text] { padding: 8px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--input-bg);
+                                          color: var(--fg); min-height: 38px; transition: border-color var(--dur), box-shadow var(--dur); }
+  input[type=number] { width: 70px; }
+  input[type=text] { flex: 1; min-width: 160px; }
+  input:hover { border-color: var(--border-strong); }
+  input:focus-visible { border-color: var(--accent); }
+  .section-title { font-size: 14px; font-weight: 600; margin: 16px 0 10px; }
+  .right .section-title { margin-top: 0; }
+  .transcript { background: var(--code-bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 6px; max-height: 320px; overflow: auto; }
+  .para { padding: 6px 10px; border-radius: var(--radius-sm); cursor: pointer; transition: background var(--dur); }
+  .para:hover { background: var(--surface-2); }
+  .para.active { background: var(--accent-soft); }
+  .para .ts { color: var(--accent); font-family: var(--mono); font-size: 12px; margin-right: 6px; }
+  .para .spk { color: var(--fg-muted); font-weight: 600; }
+  .mark { display: flex; gap: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px;
+           margin-bottom: 8px; align-items: flex-start; }
+  .mark img { width: 120px; border-radius: 4px; cursor: pointer; background: #000; }
+  .mark .info { flex: 1; min-width: 0; }
+  .mark .info .ts { color: var(--accent); font-family: var(--mono); font-size: 12px; }
+  .mark .info .note { color: var(--fg-muted); font-size: 12px; word-break: break-word; }
+  .empty { color: var(--fg-muted); font-size: 13px; padding: 8px; }
+  .hint { color: var(--fg-muted); font-size: 12px; }
+  @media (max-width: 860px) { .wrap { grid-template-columns: 1fr; padding: 16px; } .right { max-height: none; } }
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition-duration: .01ms !important; } }
 </style>
 </head>
 <body>
+<svg style="position:absolute;width:0;height:0;overflow:hidden" aria-hidden="true" focusable="false">
+  <symbol id="i-wave" viewBox="0 0 24 24"><path d="M2 10v3"/><path d="M6 6v11"/><path d="M10 3v18"/><path d="M14 8v7"/><path d="M18 5v13"/><path d="M22 10v3"/></symbol>
+  <symbol id="i-camera" viewBox="0 0 24 24"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+</svg>
 <header>
-  <h1>AudioScribe&nbsp;Review</h1>
+  <div class="brand"><svg class="ic" aria-hidden="true"><use href="#i-wave"/></svg><h1>AudioScribe Review</h1></div>
   <span class="meta" id="meta"></span>
 </header>
 
 <div class="wrap">
-  <div class="left">
+  <div class="left card">
     <video id="player" controls preload="metadata" src="/video"></video>
     <div class="controls">
-      <button id="markBtn">📸 Frame markieren</button>
-      <label class="hint">Lag&nbsp;−<input type="number" id="lag" value="2.5" step="0.5" min="0" />s</label>
+      <button id="markBtn"><svg class="ic" aria-hidden="true"><use href="#i-camera"/></svg><span id="markLabel">Frame markieren</span></button>
+      <label class="hint">Lag&nbsp;−<input type="number" id="lag" value="2.5" step="0.5" min="0" />&nbsp;s</label>
       <input type="text" id="note" placeholder="Notiz (optional, z. B. „Folie 3 – Quartalszahlen“)" />
     </div>
-    <p class="hint">Tipp: Leertaste = Play/Pause · Klick auf eine Transkriptzeile springt im Video dorthin · Klick auf ein Thumbnail springt zur Markierung.</p>
+    <p class="hint" style="margin-top:8px">Tipp: Leertaste = Play/Pause · Klick auf eine Transkriptzeile springt im Video dorthin · Klick auf ein Thumbnail springt zur Markierung.</p>
 
     <div class="section-title">Transkript</div>
     <div class="transcript" id="transcript"></div>
   </div>
 
-  <div class="right">
+  <div class="right card">
     <div class="section-title">Markierungen (<span id="markCount">0</span>)</div>
     <div id="marks"></div>
   </div>
@@ -107,10 +186,10 @@ async function loadMarks() {
     const el = document.createElement('div');
     el.className = 'mark';
     el.innerHTML =
-      `<img src="/${m.png}" title="Zur Markierung springen" />
+      `<img src="/${m.png}" title="Zur Markierung springen" alt="" />
        <div class="info"><div class="ts">${fmt(m.t)}</div>
        <div class="note">${(m.note||'').replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]))}</div></div>
-       <button class="del" title="Markierung löschen">✕</button>`;
+       <button class="del" title="Markierung löschen" aria-label="Markierung löschen"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>`;
     el.querySelector('img').onclick = () => { player.currentTime = m.t; };
     el.querySelector('.del').onclick = async () => {
       await fetch('/api/mark', { method:'DELETE', headers:{'Content-Type':'application/json'},
@@ -125,14 +204,14 @@ document.getElementById('markBtn').onclick = async () => {
   const lag = parseFloat(document.getElementById('lag').value) || 0;
   const noteEl = document.getElementById('note');
   const t = Math.max(0, player.currentTime - lag);
-  const btn = document.getElementById('markBtn');
-  btn.disabled = true; btn.textContent = '⏳ Extrahiere …';
+  const btn = document.getElementById('markBtn'), label = document.getElementById('markLabel');
+  btn.disabled = true; label.textContent = 'Extrahiere …';
   try {
     const r = await fetch('/api/mark', { method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ t, note: noteEl.value.trim() || null }) });
     if (!r.ok) alert('Fehler: ' + (await r.text()));
     else { noteEl.value = ''; loadMarks(); }
-  } finally { btn.disabled = false; btn.textContent = '📸 Frame markieren'; }
+  } finally { btn.disabled = false; label.textContent = 'Frame markieren'; }
 };
 
 player.addEventListener('timeupdate', highlightActive);

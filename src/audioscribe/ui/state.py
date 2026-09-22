@@ -46,7 +46,11 @@ STATE_KEYS: tuple[str, ...] = (
     "live_speakers",
     "live_refine",
     "live_refine_model",
+    # Darstellung der Oberflaeche: "system" folgt der Betriebssystem-Einstellung.
+    "theme",
 )
+
+THEMES: tuple[str, ...] = ("system", "light", "dark")
 
 _BOOL_KEYS = ("diarize", "frames", "agent_bash", "live_partials", "live_speakers", "live_refine")
 
@@ -96,6 +100,10 @@ def _clean(values: Mapping[str, object]) -> dict:
         value = values[key]
         if key in _BOOL_KEYS:
             out[key] = bool(value)
+        elif key == "theme":
+            # Landet unescaped im HTML-Attribut - darum nur die drei bekannten Werte.
+            if value in THEMES:
+                out[key] = value
         elif key == "agent_skills":
             # Liste von Skill-Namen; eine leere Liste ist eine gueltige, bewusste Wahl.
             if isinstance(value, (list, tuple)):

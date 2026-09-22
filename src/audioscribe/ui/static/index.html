@@ -1,240 +1,154 @@
 <!DOCTYPE html>
+<!-- Der Server ergaenzt data-theme="system|light|dark" im <html>-Tag (ui/server.py: inject_theme). -->
 <html lang="de">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>AudioScribe</title>
-<style>
-  :root { --bg:#1e1e24; --panel:#26262e; --fg:#e8e8ec; --muted:#9a9aa8; --accent:#5b8def; --hot:#3a3a48;
-          --ok:#5fd08a; --err:#e0708a; --warn:#e0b070; --track:#1b1b22; }
-  * { box-sizing: border-box; }
-  body { margin:0; font:14px/1.5 system-ui, sans-serif; background:var(--bg); color:var(--fg); }
-  header { padding:10px 16px; background:var(--panel); display:flex; gap:16px; align-items:center; flex-wrap:wrap; }
-  header h1 { font-size:15px; margin:0; font-weight:600; }
-  header .meta { color:var(--muted); font-size:12px; }
-  .wrap { display:flex; gap:16px; padding:16px; align-items:flex-start; flex-wrap:wrap; }
-  .left { flex:1; min-width:340px; }
-  .right { flex:1.2; min-width:340px; }
-  .card { background:var(--panel); border-radius:6px; padding:12px; margin-bottom:16px; }
-  .section-title { font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin:0 0 8px;
-                   display:flex; gap:8px; align-items:baseline; flex-wrap:wrap; }
-  .section-title .hint { text-transform:none; letter-spacing:normal; }
-  button { background:var(--accent); color:#fff; border:0; padding:9px 14px; border-radius:6px; cursor:pointer; font:inherit; font-weight:600; }
-  button.secondary { background:var(--hot); }
-  button.danger { background:#8a3a4c; }
-  button.link { background:transparent; color:var(--accent); padding:2px 6px; font-weight:500; }
-  button:disabled { opacity:.5; cursor:default; }
-  button.start { width:100%; padding:12px; font-size:15px; }
-  input, select, label { font:inherit; }
-  input[type=text] { width:100%; padding:8px; border-radius:6px; border:1px solid #3a3a48; background:var(--track); color:var(--fg); }
-  select { padding:8px; border-radius:6px; border:1px solid #3a3a48; background:var(--track); color:var(--fg); width:100%; }
-  .row { display:flex; gap:8px; align-items:center; margin-bottom:10px; }
-  .row > input[type=text] { flex:1; min-width:0; }
-  .grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
-  .field label { display:block; font-size:12px; color:var(--muted); margin-bottom:4px; }
-  .checks { display:flex; gap:16px; flex-wrap:wrap; margin-top:12px; }
-  .checks label { display:flex; gap:6px; align-items:center; cursor:pointer; }
-  .files { max-height:300px; overflow:auto; }
-  .file { display:flex; gap:8px; align-items:center; padding:4px 6px; border-radius:4px; }
-  .file:nth-child(odd) { background:#2c2c36; }
-  .file .name { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; cursor:pointer; }
-  .file .len, .file .size { color:var(--muted); font-size:12px; font-variant-numeric:tabular-nums; }
-  .badge { font-size:11px; padding:1px 7px; border-radius:10px; background:var(--hot); color:var(--muted); white-space:nowrap; }
-  .badge.fertig { background:#1f4a33; color:var(--ok); }
-  .badge.laeuft { background:#274070; color:#a9c4ff; }
-  .badge.fehler { background:#4a2030; color:var(--err); }
-  .badge.abgebrochen { background:#4a3a20; color:var(--warn); }
-  .bar { height:6px; border-radius:3px; background:var(--track); overflow:hidden; }
-  .bar > i { display:block; height:100%; background:var(--accent); width:0; transition:width .4s linear; }
-  .file .bar { width:70px; flex:none; }
-  .bar.big { height:10px; border-radius:5px; }
-  pre#log, pre#anaLog, pre#liveLog { background:#16161b; border-radius:6px; padding:10px; margin:0; height:300px; overflow:auto;
-            font:12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; white-space:pre-wrap; word-break:break-word; }
-  .status { margin:10px 0 6px; font-size:13px; }
-  .status .stage { color:var(--accent); }
-  .eta { color:var(--muted); font-size:12px; margin-top:6px; font-variant-numeric:tabular-nums; }
-  .summary { padding:10px; border-radius:6px; background:#1f3350; margin-bottom:12px; }
-  .hint { color:var(--muted); font-size:12px; }
-  .err { color:var(--err); font-size:13px; min-height:18px; }
-  /* Ordner-Dialog */
-  .overlay { position:fixed; inset:0; background:rgba(0,0,0,.6); display:none; align-items:center; justify-content:center; padding:20px; }
-  .overlay.open { display:flex; }
-  .dialog { background:var(--panel); border-radius:8px; width:min(680px,100%); max-height:80vh; display:flex; flex-direction:column; padding:14px; }
-  .crumbs { display:flex; flex-wrap:wrap; gap:2px; font-size:12px; margin-bottom:8px; }
-  .crumbs a, .links a { color:var(--accent); cursor:pointer; text-decoration:none; }
-  .links { display:flex; gap:10px; flex-wrap:wrap; font-size:12px; margin-bottom:10px; }
-  .dirlist { flex:1; overflow:auto; background:var(--track); border-radius:6px; padding:4px; min-height:180px; }
-  .dirlist div { padding:5px 8px; border-radius:4px; cursor:pointer; }
-  .dirlist div:hover { background:var(--hot); }
-  .dialog footer { display:flex; gap:10px; align-items:center; margin-top:10px; }
-  .dialog footer .hint { flex:1; }
-  /* Reiter */
-  .tabs { display:flex; gap:4px; }
-  .tabs button { background:transparent; color:var(--muted); padding:6px 12px; font-weight:500; }
-  .tabs button.active { background:var(--hot); color:var(--fg); }
-  [hidden] { display:none !important; }
-  /* KI-Analyse */
-  textarea { width:100%; min-height:110px; padding:8px; border-radius:6px; border:1px solid #3a3a48;
-             background:var(--track); color:var(--fg); font:inherit; resize:vertical; }
-  textarea.small { min-height:56px; font:12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; }
-  .skills { max-height:260px; overflow:auto; }
-  .skill { display:flex; gap:8px; align-items:flex-start; padding:5px 6px; border-radius:4px; cursor:pointer; }
-  .skill:nth-child(odd) { background:#2c2c36; }
-  .skill b { font-weight:600; }
-  .skill .desc { color:var(--muted); font-size:12px; display:block; }
-  .source { display:flex; gap:8px; align-items:center; padding:4px 6px; border-radius:4px; cursor:pointer; }
-  .source:nth-child(odd) { background:#2c2c36; }
-  .source .name { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .result { padding:10px; border-radius:6px; background:#1f3350; margin-bottom:12px; word-break:break-all; }
-  .result.fehler { background:#4a2030; }
-  /* Fortschritt der KI-Analyse */
-  .bar.wait > i { width:30% !important; animation:wait 1.6s ease-in-out infinite; }
-  @keyframes wait { 0% { margin-left:-30%; } 100% { margin-left:100%; } }
-  .chips { display:flex; gap:6px; flex-wrap:wrap; margin:8px 0; }
-  .todos { list-style:none; margin:8px 0 12px; padding:0; font-size:13px; }
-  .todos li { display:flex; gap:8px; padding:2px 0; }
-  .todos li .mark { flex:none; width:16px; text-align:center; }
-  .todos li.completed { color:var(--muted); }
-  .todos li.completed .mark { color:var(--ok); }
-  .todos li.in_progress { color:#a9c4ff; font-weight:600; }
-  .docs { font-size:12px; color:var(--muted); margin-bottom:12px; word-break:break-all; }
-  .docs code { color:var(--fg); }
-  /* Live Transcription */
-  .live-side { flex:.8; min-width:300px; }
-  .live-main { flex:2; min-width:380px; }
-  .live-shots { flex:1; min-width:240px; }
-  .monitors { display:flex; gap:8px; flex-wrap:wrap; }
-  .monitor { border:2px solid transparent; border-radius:6px; padding:3px; cursor:pointer; background:var(--track);
-             font-size:12px; color:var(--muted); text-align:center; }
-  .monitor.active { border-color:var(--accent); color:var(--fg); }
-  .monitor img { display:block; width:150px; border-radius:3px; }
-  .monitor .none { width:150px; padding:22px 0; }
-  .gauges { display:flex; gap:18px; flex-wrap:wrap; align-items:center; margin-bottom:10px; font-variant-numeric:tabular-nums; }
-  .gauge b { font-size:18px; font-weight:600; }
-  .gauge.ok b { color:var(--ok); } .gauge.warn b { color:var(--warn); } .gauge.err b { color:var(--err); }
-  .gauge span { display:block; font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; }
-  .level { width:90px; }
-  #liveText { background:#16161b; border-radius:6px; padding:10px; height:460px; overflow:auto; }
-  .seg { margin:0 0 8px; }
-  .seg .who { font-weight:600; color:#a9c4ff; }
-  .seg.mic .who { color:var(--ok); }
-  .seg .ts { color:var(--muted); font-size:12px; font-variant-numeric:tabular-nums; margin-right:6px; }
-  .seg .lag { color:var(--muted); font-size:11px; margin-left:6px; }
-  .seg.partial { color:var(--muted); font-style:italic; }
-  .shotmark { color:var(--muted); font-size:12px; margin:0 0 8px; cursor:pointer; }
-  .shotmark:hover { color:var(--accent); }
-  .thumbs { display:grid; grid-template-columns:repeat(auto-fill, minmax(120px, 1fr)); gap:8px; max-height:520px; overflow:auto; }
-  .thumb { cursor:pointer; font-size:11px; color:var(--muted); text-align:center; }
-  .thumb img { width:100%; border-radius:4px; display:block; border:1px solid #3a3a48; }
-  .thumb:hover img { border-color:var(--accent); }
-  #lightbox { flex-direction:column; gap:10px; }
-  #lightbox img { max-width:96vw; max-height:86vh; border-radius:6px; }
-  #lightbox .cap { color:var(--fg); display:flex; gap:14px; align-items:center; }
-</style>
+<link rel="stylesheet" href="/static/style.css" />
 </head>
 <body>
-<header>
-  <h1>AudioScribe</h1>
-  <nav class="tabs">
-    <button data-tab="Trans" class="active">Offline Transcription</button>
-    <button data-tab="Live">Live Transcription</button>
-    <button data-tab="Ana">KI-Analyse</button>
-  </nav>
-  <span class="meta" id="tabMeta">Stapelverarbeitung: Ordner waehlen, Dateien ankreuzen, transkribieren</span>
-</header>
+<!-- Icon-Sprite (Lucide-Linien). Bewusst nicht 'hidden': [hidden] wuerde die <use>-Verweise leeren. -->
+<svg style="position:absolute;width:0;height:0;overflow:hidden" aria-hidden="true" focusable="false">
+  <symbol id="i-wave" viewBox="0 0 24 24"><path d="M2 10v3"/><path d="M6 6v11"/><path d="M10 3v18"/><path d="M14 8v7"/><path d="M18 5v13"/><path d="M22 10v3"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></symbol>
+  <symbol id="i-arrow-up" viewBox="0 0 24 24"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><polygon points="6 3 20 12 6 21 6 3" fill="currentColor"/></symbol>
+  <symbol id="i-square" viewBox="0 0 24 24"><rect width="14" height="14" x="5" y="5" rx="2" fill="currentColor"/></symbol>
+  <symbol id="i-record" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4" fill="currentColor"/></symbol>
+  <symbol id="i-mic" viewBox="0 0 24 24"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></symbol>
+  <symbol id="i-sparkles" viewBox="0 0 24 24"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/><path d="M20 3v4"/><path d="M22 5h-4"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></symbol>
+  <symbol id="i-chevron-left" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
+  <symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+  <symbol id="i-camera" viewBox="0 0 24 24"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+  <symbol id="i-loader" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></symbol>
+  <symbol id="i-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></symbol>
+  <symbol id="i-monitor" viewBox="0 0 24 24"><rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/></symbol>
+  <symbol id="i-file-audio" viewBox="0 0 24 24"><path d="M17.5 22h.5a2 2 0 0 0 2-2V7l-5-5H6a2 2 0 0 0-2 2v3"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M2 19a2 2 0 1 1 4 0v1a2 2 0 1 1-4 0v-4a6 6 0 0 1 12 0v4a2 2 0 1 1-4 0v-1a2 2 0 1 1 4 0"/></symbol>
+  <symbol id="i-image" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></symbol>
+</svg>
 
-<div class="wrap" id="tabTrans">
+<header class="top">
+  <div class="brand"><svg class="ic" aria-hidden="true"><use href="#i-wave"/></svg><h1>AudioScribe</h1></div>
+  <nav class="tabs" role="tablist" aria-label="Bereiche">
+    <button role="tab" data-tab="Trans" class="active" aria-selected="true" aria-controls="tabTrans">Offline Transcription</button>
+    <button role="tab" data-tab="Live" aria-selected="false" aria-controls="tabLive">Live Transcription</button>
+    <button role="tab" data-tab="Ana" aria-selected="false" aria-controls="tabAna">KI-Analyse</button>
+  </nav>
+  <span class="spacer"></span>
+  <button class="icon-btn" id="themeToggle" type="button" aria-label="Design: System – klicken zum Wechseln" title="Design wechseln">
+    <svg class="ic sys" aria-hidden="true"><use href="#i-monitor"/></svg>
+    <svg class="ic sun" aria-hidden="true"><use href="#i-sun"/></svg>
+    <svg class="ic moon" aria-hidden="true"><use href="#i-moon"/></svg>
+  </button>
+</header>
+<p class="pagehint" id="tabMeta">Stapelverarbeitung: Ordner wählen, Dateien ankreuzen, transkribieren</p>
+
+<div class="wrap" id="tabTrans" role="tabpanel">
   <div class="left">
     <div class="card">
-      <p class="section-title">Ordner</p>
-      <div class="field"><label for="inDir">Eingangsordner</label></div>
-      <div class="row">
-        <input type="text" id="inDir" placeholder="/home/... oder C:\Users\..." />
-        <button class="secondary" id="pickIn">📁 Waehlen</button>
+      <h2 class="card-title"><span class="step">1</span>Ordner</h2>
+      <div class="field"><label for="inDir">Eingangsordner</label>
+        <div class="input-group">
+          <input type="text" id="inDir" placeholder="/home/... oder C:\Users\..." />
+          <button class="secondary" id="pickIn"><svg class="ic" aria-hidden="true"><use href="#i-folder"/></svg>Wählen</button>
+        </div>
       </div>
-      <div class="field"><label for="outDir">Ausgangsordner</label></div>
-      <div class="row">
-        <input type="text" id="outDir" placeholder="C:\Users\...\output" />
-        <button class="secondary" id="pickOut">📁 Waehlen</button>
+      <div class="field"><label for="outDir">Ausgangsordner</label>
+        <div class="input-group">
+          <input type="text" id="outDir" placeholder="C:\Users\...\output" />
+          <button class="secondary" id="pickOut"><svg class="ic" aria-hidden="true"><use href="#i-folder"/></svg>Wählen</button>
+        </div>
       </div>
       <p class="hint" id="pathHint"></p>
-      <div class="err" id="pathErr"></div>
+      <div class="err" id="pathErr" role="alert"></div>
     </div>
 
     <div class="card">
-      <p class="section-title">
-        Dateien
+      <h2 class="card-title"><span class="step">2</span>Dateien
         <span class="hint" id="fileCount"></span>
-        <span style="flex:1"></span>
-        <button class="link" data-pick="all">Alle</button>
-        <button class="link" data-pick="open">Nur offene</button>
-        <button class="link" data-pick="none">Keine</button>
-      </p>
-      <div class="files" id="files"><p class="hint">Ordner waehlen …</p></div>
+        <span class="spacer"></span>
+        <button class="ghost sm" data-pick="all">Alle</button>
+        <button class="ghost sm" data-pick="open">Nur offene</button>
+        <button class="ghost sm" data-pick="none">Keine</button>
+      </h2>
+      <div class="files" id="files"><div class="empty"><svg class="ic" aria-hidden="true"><use href="#i-folder"/></svg>Ordner wählen …</div></div>
     </div>
 
     <div class="card">
-      <p class="section-title">Optionen</p>
+      <h2 class="card-title"><span class="step">3</span>Optionen</h2>
       <div class="grid">
         <div class="field"><label for="model">Modell</label><select id="model"></select></div>
         <div class="field"><label for="language">Sprache</label><select id="language"></select></div>
-        <div class="field"><label for="device">Geraet</label><select id="device"></select></div>
+        <div class="field"><label for="device">Gerät</label><select id="device"></select></div>
       </div>
       <div class="checks">
-        <label><input type="checkbox" id="diarize" checked /> Sprecher-Diarisierung</label>
-        <label><input type="checkbox" id="frames" /> Bildwechsel erkennen (Bildschirmaufnahmen)</label>
+        <label><input type="checkbox" id="diarize" checked /><span>Sprecher-Diarisierung<small>Sprecher 1 / 2 / 3 im Transkript trennen (braucht den HF-Token)</small></span></label>
+        <label><input type="checkbox" id="frames" /><span>Bildwechsel erkennen<small>Für Bildschirmaufnahmen: Standbilder bei jedem Bildschirmwechsel</small></span></label>
       </div>
-      <div class="grid" id="frameOpts" style="margin-top:8px">
-        <div class="field"><label for="frameSens">Empfindlichkeit</label><select id="frameSens"></select></div>
-        <div class="field"><label for="frameFmt">Bildformat</label><select id="frameFmt"></select></div>
+      <div class="subopts" id="frameOpts">
+        <div class="grid">
+          <div class="field"><label for="frameSens">Empfindlichkeit</label><select id="frameSens"></select></div>
+          <div class="field"><label for="frameFmt">Bildformat</label><select id="frameFmt"></select></div>
+        </div>
+        <p class="hint" id="frameHint">Sichert bei jedem Bildschirmwechsel ein Standbild und legt ein
+          <code>transkript.annotiert.md</code> mit den Bildern an. Mausbewegungen lösen nichts aus;
+          der Lauf dauert grob ein Achtel der Videolänge länger.</p>
       </div>
-      <p class="hint" id="frameHint">Sichert bei jedem Bildschirmwechsel ein Standbild und legt ein
-        <code>transkript.annotiert.md</code> mit den Bildern an. Mausbewegungen loesen nichts aus;
-        der Lauf dauert grob ein Achtel der Videolaenge laenger.</p>
     </div>
 
-    <button class="start" id="start">▶ Transkription starten</button>
-    <div class="status" id="status"></div>
-    <div class="err" id="startErr"></div>
+    <div class="actionbar">
+      <button class="start" id="start"><svg class="ic" aria-hidden="true"><use href="#i-play"/></svg>Transkription starten</button>
+      <div class="status" id="status" aria-live="polite"></div>
+      <div class="err" id="startErr" role="alert"></div>
+    </div>
   </div>
 
   <div class="right">
     <div class="card">
-      <p class="section-title">Fortschritt</p>
+      <h2 class="card-title">Fortschritt
+        <span class="spacer"></span>
+        <button class="danger sm" id="cancel" disabled><svg class="ic" aria-hidden="true"><use href="#i-square"/></svg>Abbrechen</button>
+      </h2>
       <div id="summary"></div>
       <div class="bar big"><i id="overallBar"></i></div>
-      <div class="eta" id="eta">–</div>
-      <p class="section-title" style="margin-top:14px">Protokoll</p>
-      <pre id="log"></pre>
-      <div class="row" style="margin:10px 0 0">
-        <button class="danger" id="cancel" disabled>■ Abbrechen</button>
-        <span class="hint">Der Lauf laeuft im Server weiter – der Tab darf geschlossen werden.</span>
-      </div>
+      <div class="eta" id="eta" aria-live="polite">–</div>
+      <p class="hint" style="margin-top:8px">Der Lauf läuft im Server weiter – der Tab darf geschlossen werden.</p>
+      <details class="log" id="logBox">
+        <summary><svg class="ic" aria-hidden="true"><use href="#i-chevron-right"/></svg>Protokoll anzeigen</summary>
+        <pre id="log"></pre>
+      </details>
     </div>
   </div>
 </div>
 
-<div class="wrap" id="tabLive" hidden>
+<div class="wrap" id="tabLive" role="tabpanel" hidden>
   <div class="live-side">
     <div class="card">
-      <p class="section-title">Monitor <span style="flex:1"></span>
-        <button class="link" id="liveRefresh">↻ Aktualisieren</button></p>
+      <h2 class="card-title"><span class="step">1</span>Monitor <span class="spacer"></span>
+        <button class="ghost sm" id="liveRefresh"><svg class="ic" aria-hidden="true"><use href="#i-refresh"/></svg>Aktualisieren</button></h2>
       <div class="monitors" id="liveMonitors"><p class="hint">…</p></div>
       <p class="hint" style="margin-top:8px">Diese Oberfläche gehört nicht auf den überwachten Monitor –
         neue Thumbnails würden sonst selbst Bildwechsel auslösen.</p>
     </div>
 
     <div class="card">
-      <p class="section-title">Audio</p>
+      <h2 class="card-title"><span class="step">2</span>Audio</h2>
       <div class="field"><label for="liveMic">Mikrofon (Eingabe, „Ich“)</label><select id="liveMic"></select></div>
-      <div class="field" style="margin-top:10px"><label for="liveLoop">System-Audio (Ausgabe, Gegenseite)</label>
-        <select id="liveLoop"></select></div>
-      <p class="hint" style="margin-top:8px">Headset empfohlen: über Lautsprecher hört das Mikrofon die Gegenseite mit.</p>
-      <div class="err" id="liveProblems"></div>
+      <div class="field"><label for="liveLoop">System-Audio (Ausgabe, Gegenseite)</label><select id="liveLoop"></select></div>
+      <p class="hint">Headset empfohlen: über Lautsprecher hört das Mikrofon die Gegenseite mit.</p>
+      <div class="err" id="liveProblems" role="alert"></div>
     </div>
 
     <div class="card">
-      <p class="section-title">Optionen</p>
+      <h2 class="card-title"><span class="step">3</span>Optionen</h2>
       <div class="grid">
         <div class="field"><label for="liveModel">Modell (live)</label><select id="liveModel"></select></div>
         <div class="field"><label for="liveLang">Sprache</label><select id="liveLang"></select></div>
@@ -244,22 +158,24 @@
         <div class="field"><label for="liveRefineModel">Modell (Nachschärfen)</label><select id="liveRefineModel"></select></div>
       </div>
       <div class="checks">
-        <label><input type="checkbox" id="livePartials" checked /> Vorschautext</label>
-        <label><input type="checkbox" id="liveSpeakers" checked /> Sprecher trennen</label>
-        <label><input type="checkbox" id="liveRefine" checked /> nach Stopp nachschärfen</label>
+        <label><input type="checkbox" id="livePartials" checked /><span>Vorschautext</span></label>
+        <label><input type="checkbox" id="liveSpeakers" checked /><span>Sprecher trennen</span></label>
+        <label><input type="checkbox" id="liveRefine" checked /><span>Nach Stopp nachschärfen</span></label>
       </div>
       <p class="hint" id="liveTarget" style="margin-top:8px"></p>
     </div>
 
-    <button class="start" id="liveStart">● Aufnahme starten</button>
-    <button class="start danger" id="liveStop" hidden>■ Stoppen</button>
-    <div class="err" id="liveErr"></div>
+    <div class="actionbar">
+      <button class="start" id="liveStart"><svg class="ic" aria-hidden="true"><use href="#i-record"/></svg>Aufnahme starten</button>
+      <button class="start danger" id="liveStop" hidden><svg class="ic" aria-hidden="true"><use href="#i-square"/></svg><span id="liveStopLabel">Stoppen</span></button>
+      <div class="err" id="liveErr" role="alert"></div>
+    </div>
   </div>
 
   <div class="live-main">
     <div class="card">
       <div class="gauges">
-        <span class="badge" id="livePhase">bereit</span>
+        <span class="badge" id="livePhase" aria-live="polite">bereit</span>
         <div class="gauge"><b id="liveElapsed">–</b><span>Laufzeit</span></div>
         <div class="gauge" id="liveDelayBox"><b id="liveDelay">–</b><span>Verzögerung</span></div>
         <div class="gauge" id="liveBacklogBox"><b id="liveBacklog">–</b><span>Rückstand</span></div>
@@ -267,846 +183,128 @@
         <div class="gauge level"><div class="bar"><i id="liveLevelSys"></i></div><span>System</span></div>
       </div>
       <div id="liveLoadBox" hidden>
-        <div class="status" id="liveLoadStep"></div>
+        <div class="status" id="liveLoadStep" aria-live="polite"></div>
         <div class="bar big" id="liveLoadBarBox"><i id="liveLoadBar"></i></div>
       </div>
       <div id="liveRefineBox" hidden>
-        <div class="status" id="liveRefineStep"></div>
+        <div class="status" id="liveRefineStep" aria-live="polite"></div>
         <div class="bar big"><i id="liveRefineBar"></i></div>
       </div>
       <div id="liveResult"></div>
-      <div id="liveText"><p class="hint">Noch keine Sitzung.</p></div>
-      <p class="section-title" style="margin-top:14px">Protokoll</p>
-      <pre id="liveLog" style="height:120px"></pre>
+      <div id="liveText"><div class="empty"><svg class="ic" aria-hidden="true"><use href="#i-mic"/></svg>Noch keine Sitzung.</div></div>
+      <details class="log">
+        <summary><svg class="ic" aria-hidden="true"><use href="#i-chevron-right"/></svg>Protokoll anzeigen</summary>
+        <pre id="liveLog"></pre>
+      </details>
     </div>
   </div>
 
   <div class="live-shots">
     <div class="card">
-      <p class="section-title">Screenshots <span class="hint" id="liveShotCount"></span></p>
-      <div class="thumbs" id="liveThumbs"><p class="hint">Bildwechsel erscheinen hier.</p></div>
+      <h2 class="card-title">Screenshots <span class="hint" id="liveShotCount"></span></h2>
+      <div class="thumbs" id="liveThumbs"><div class="empty"><svg class="ic" aria-hidden="true"><use href="#i-image"/></svg>Bildwechsel erscheinen hier.</div></div>
     </div>
   </div>
 </div>
 
-<div class="overlay" id="lightbox">
+<div class="overlay" id="lightbox" role="dialog" aria-modal="true" aria-label="Standbild">
   <img id="lightboxImg" alt="" />
   <div class="cap">
-    <button class="secondary" id="lightboxPrev">◀</button>
+    <button class="icon-btn" id="lightboxPrev" aria-label="Vorheriges Bild"><svg class="ic" aria-hidden="true"><use href="#i-chevron-left"/></svg></button>
     <span id="lightboxCap"></span>
-    <button class="secondary" id="lightboxNext">▶</button>
+    <button class="icon-btn" id="lightboxNext" aria-label="Nächstes Bild"><svg class="ic" aria-hidden="true"><use href="#i-chevron-right"/></svg></button>
   </div>
 </div>
 
-<div class="wrap" id="tabAna" hidden>
+<div class="wrap" id="tabAna" role="tabpanel" hidden>
   <div class="left">
     <div class="card">
-      <p class="section-title">
-        Quelle
+      <h2 class="card-title"><span class="step">1</span>Quelle
         <span class="hint">fertige Transkriptionen im Ausgangsordner</span>
-        <span style="flex:1"></span>
-        <button class="link" id="anaRefresh">↻ Aktualisieren</button>
-      </p>
+        <span class="spacer"></span>
+        <button class="ghost sm" id="anaRefresh"><svg class="ic" aria-hidden="true"><use href="#i-refresh"/></svg>Aktualisieren</button>
+      </h2>
       <div class="files" id="anaSources"><p class="hint">…</p></div>
-      <p class="hint" id="anaSourceDir"></p>
+      <p class="hint" id="anaSourceDir" style="margin-top:8px"></p>
     </div>
 
     <div class="card">
-      <p class="section-title">Auftrag</p>
-      <div class="field"><label for="anaName">Prozessname</label></div>
-      <div class="row"><input type="text" id="anaName" placeholder="z. B. Rechnungspruefung Kreditoren" /></div>
-      <div class="field"><label for="anaOut">Ausgabeordner</label></div>
-      <div class="row">
-        <input type="text" id="anaOut" />
-        <button class="secondary" id="pickAna">📁 Waehlen</button>
+      <h2 class="card-title"><span class="step">2</span>Auftrag</h2>
+      <div class="field"><label for="anaName">Prozessname</label>
+        <input type="text" id="anaName" placeholder="z. B. Rechnungsprüfung Kreditoren" /></div>
+      <div class="field"><label for="anaOut">Ausgabeordner</label>
+        <div class="input-group" style="margin-bottom:0">
+          <input type="text" id="anaOut" />
+          <button class="secondary" id="pickAna"><svg class="ic" aria-hidden="true"><use href="#i-folder"/></svg>Wählen</button>
+        </div>
+        <p class="hint" id="anaTarget" style="margin-top:6px"></p>
       </div>
-      <p class="hint" id="anaTarget"></p>
-      <div class="field"><label for="anaContext">Kontext fuer den Agenten</label></div>
-      <textarea id="anaContext" placeholder="Worum geht es, wer ist Zielgruppe, welche Systeme/Begriffe, was soll herauskommen …"></textarea>
-      <div class="field" style="margin-top:8px"><label for="anaFiles">Kontextdateien (optional, ein Pfad je Zeile)</label></div>
-      <textarea id="anaFiles" class="small" placeholder="C:\Users\…\glossar.md"></textarea>
+      <div class="field"><label for="anaContext">Kontext für den Agenten</label>
+        <textarea id="anaContext" placeholder="Worum geht es, wer ist Zielgruppe, welche Systeme/Begriffe, was soll herauskommen …"></textarea></div>
+      <div class="field"><label for="anaFiles">Kontextdateien (optional, ein Pfad je Zeile)</label>
+        <textarea id="anaFiles" class="small" placeholder="C:\Users\…\glossar.md"></textarea></div>
     </div>
 
     <div class="card">
-      <p class="section-title">Skills <span class="hint" id="anaSkillsDir"></span></p>
+      <h2 class="card-title"><span class="step">3</span>Skills <span class="hint" id="anaSkillsDir"></span></h2>
       <div class="skills" id="anaSkills"></div>
     </div>
 
     <div class="card">
-      <p class="section-title">Optionen</p>
+      <h2 class="card-title"><span class="step">4</span>Optionen</h2>
       <div class="grid">
         <div class="field"><label for="anaModel">Claude-Modell</label><select id="anaModel"></select></div>
       </div>
       <div class="checks">
-        <label><input type="checkbox" id="anaBash" checked /> Skill-Skripte ausfuehren (Bash)</label>
+        <label><input type="checkbox" id="anaBash" checked /><span>Skill-Skripte ausführen (Bash)</span></label>
       </div>
-      <p class="hint">Abgerechnet wird ueber die Claude-Code-Anmeldung (Claude-Abo). Ein gesetzter
-        <code>ANTHROPIC_API_KEY</code> hat Vorrang und rechnet ueber die API ab.</p>
+      <p class="hint" style="margin-top:8px">Abgerechnet wird über die Claude-Code-Anmeldung (Claude-Abo). Ein gesetzter
+        <code>ANTHROPIC_API_KEY</code> hat Vorrang und rechnet über die API ab.</p>
     </div>
 
-    <button class="start" id="anaStart">✦ Analyse starten</button>
-    <div class="err" id="anaErr"></div>
+    <div class="actionbar">
+      <button class="start" id="anaStart"><svg class="ic" aria-hidden="true"><use href="#i-sparkles"/></svg>Analyse starten</button>
+      <div class="err" id="anaErr" role="alert"></div>
+    </div>
   </div>
 
   <div class="right">
     <div class="card">
-      <p class="section-title">Verlauf <span class="hint" id="anaElapsed"></span></p>
+      <h2 class="card-title">Verlauf <span class="hint" id="anaElapsed"></span>
+        <span class="spacer"></span>
+        <button class="danger sm" id="anaCancel" disabled><svg class="ic" aria-hidden="true"><use href="#i-square"/></svg>Abbrechen</button>
+      </h2>
       <div id="anaResult"></div>
       <div id="anaProgress" hidden>
-        <div class="status" id="anaStep"></div>
+        <div class="status" id="anaStep" aria-live="polite" style="margin:0 0 8px"></div>
         <div class="bar big" id="anaBarWrap"><i id="anaBar"></i></div>
         <div class="chips" id="anaChips"></div>
         <ul class="todos" id="anaTodos"></ul>
         <div class="docs" id="anaDocs"></div>
       </div>
-      <p class="section-title" style="margin-top:4px">Protokoll</p>
-      <pre id="anaLog"></pre>
-      <div class="row" style="margin:10px 0 0">
-        <button class="danger" id="anaCancel" disabled>■ Abbrechen</button>
-        <span class="hint">Der Agent laeuft im Server weiter – der Tab darf geschlossen werden.</span>
-      </div>
+      <p class="hint">Der Agent läuft im Server weiter – der Tab darf geschlossen werden.</p>
+      <details class="log">
+        <summary><svg class="ic" aria-hidden="true"><use href="#i-chevron-right"/></svg>Protokoll anzeigen</summary>
+        <pre id="anaLog"></pre>
+      </details>
     </div>
   </div>
 </div>
 
 <div class="overlay" id="overlay">
-  <div class="dialog">
-    <p class="section-title" id="dlgTitle">Ordner waehlen</p>
+  <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="dlgTitle">
+    <h2 class="card-title" id="dlgTitle">Ordner wählen</h2>
     <div class="links" id="dlgLinks"></div>
     <div class="crumbs" id="dlgCrumbs"></div>
     <div class="dirlist" id="dlgList"></div>
     <footer>
       <span class="hint" id="dlgInfo"></span>
       <button class="secondary" id="dlgCancel">Abbrechen</button>
-      <button id="dlgOk">Diesen Ordner waehlen</button>
+      <button id="dlgOk"><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg>Diesen Ordner wählen</button>
     </footer>
   </div>
 </div>
 
-<script>
-const $ = (id) => document.getElementById(id);
-const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-
-let defaults = null;      // /api/defaults
-let scanned = [];         // zuletzt gescannte Dateien
-let offset = 0;           // gelesene Log-Zeilen
-let dlgTarget = null;     // 'in' | 'out'
-let dlgPath = '';         // aktuell im Dialog gezeigter Ordner
-
-async function api(path, opts) {
-  const res = await fetch(path, opts);
-  let data = null;
-  try { data = await res.json(); } catch (e) { /* leer */ }
-  if (!res.ok) throw new Error((data && data.detail) || res.statusText);
-  return data;
-}
-
-const post = (path, body) => api(path, {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify(body),
-});
-
-/** Sekunden -> "1:23:45" bzw. "4:05". */
-function hms(seconds) {
-  if (!seconds && seconds !== 0) return '–';
-  const s = Math.round(seconds), h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
-  const pad = (n) => String(n).padStart(2, '0');
-  return h ? `${h}:${pad(m)}:${pad(s % 60)}` : `${m}:${pad(s % 60)}`;
-}
-
-/** Restzeit bewusst grob: unter 30 min auf Minuten, darueber auf 5 min gerundet. */
-function coarse(seconds) {
-  const min = Math.max(1, Math.round(seconds / 60));
-  if (min < 30) return `${min} min`;
-  const rounded = Math.round(min / 5) * 5;
-  return rounded < 60 ? `${rounded} min` : `${Math.floor(rounded / 60)} h ${rounded % 60 || ''}`.trim();
-}
-
-// --- Start ------------------------------------------------------------------
-
-async function init() {
-  defaults = await api('/api/defaults');
-  fill($('model'), defaults.models, defaults.model);
-  fill($('language'), defaults.languages, defaults.language);
-  fill($('device'), defaults.devices, defaults.device);
-  if (defaults.cuda === false) {
-    const opt = [...$('device').options].find((o) => o.value === 'cuda');
-    if (opt) { opt.disabled = true; opt.textContent = 'cuda (nicht verfuegbar)'; }
-    if ($('device').value === 'cuda') $('device').value = 'auto';
-  }
-  $('diarize').checked = defaults.diarize !== false;
-  fill($('frameSens'), defaults.sensitivities, defaults.frame_sensitivity);
-  fill($('frameFmt'), defaults.frame_formats, defaults.frame_format);
-  $('frames').checked = defaults.frames === true;
-  toggleFrameOpts();
-  $('pathHint').innerHTML = defaults.platform === 'windows'
-    ? 'Pfade aus dem Explorer koennen direkt eingefuegt werden – <code>C:\\Users\\…</code>. ' +
-      'WSL-Pfade (<code>/mnt/c/…</code>) werden mit umgesetzt.'
-    : 'Windows-Pfade koennen direkt eingefuegt werden – <code>C:\\Users\\…</code> wird zu <code>/mnt/c/Users/…</code>.';
-  $('inDir').value = defaults.input_dir;
-  $('outDir').value = defaults.output_dir;
-  await scan();
-  setInterval(poll, 1000);
-  poll();
-}
-
-/** Die beiden Auswahlfelder sind nur sinnvoll, wenn die Erkennung ueberhaupt laeuft. */
-function toggleFrameOpts() {
-  const an = $('frames').checked;
-  $('frameOpts').style.display = an ? '' : 'none';
-  $('frameHint').style.display = an ? '' : 'none';
-}
-
-function fill(sel, values, chosen) {
-  const all = values.includes(chosen) ? values : [chosen, ...values];
-  sel.innerHTML = all.map((v) => `<option value="${esc(v)}">${esc(v)}</option>`).join('');
-  sel.value = chosen;
-}
-
-/** Ordner und Optionen serverseitig merken (ueberlebt Neustart und Adresswechsel). */
-const remember = () => post('/api/state', {
-  frames: $('frames').checked,
-  frame_sensitivity: $('frameSens').value,
-  frame_format: $('frameFmt').value,
-  input_dir: $('inDir').value,
-  output_dir: $('outDir').value,
-  model: $('model').value,
-  language: $('language').value,
-  device: $('device').value,
-  diarize: $('diarize').checked,
-}).catch(() => {});
-
-// --- Dateiliste -------------------------------------------------------------
-
-async function scan() {
-  $('pathErr').textContent = '';
-  try {
-    const data = await api(`/api/scan?input_dir=${encodeURIComponent($('inDir').value)}`
-      + `&output_dir=${encodeURIComponent($('outDir').value)}`);
-    $('inDir').value = data.input_dir;
-    $('outDir').value = data.output_dir;
-    scanned = data.files;
-    $('files').innerHTML = data.count
-      ? data.files.map((f) => `<div class="file" data-name="${esc(f.name)}">
-           <input type="checkbox" class="sel" ${f.done ? '' : 'checked'} />
-           <span class="name" title="${esc(f.name)}">${esc(f.name)}</span>
-           <span class="len">${f.seconds ? hms(f.seconds) : '?'}</span>
-           <span class="size">${f.mb} MB</span>
-           <span class="bar"><i></i></span>
-           <span class="badge">${f.done ? 'bereits transkribiert' : 'offen'}</span></div>`).join('')
-      : '<p class="hint">Keine Medien-Dateien in diesem Ordner.</p>';
-    updateCount();
-  } catch (err) {
-    $('pathErr').textContent = err.message;
-    $('files').innerHTML = '';
-    scanned = [];
-    updateCount();
-  }
-}
-
-const selectedNames = () => [...$('files').querySelectorAll('.file')]
-  .filter((row) => row.querySelector('.sel').checked)
-  .map((row) => row.dataset.name);
-
-function updateCount() {
-  const names = selectedNames();
-  const seconds = scanned
-    .filter((f) => names.includes(f.name))
-    .reduce((sum, f) => sum + (f.seconds || 0), 0);
-  $('fileCount').textContent = scanned.length
-    ? `– ${names.length} von ${scanned.length} ausgewaehlt${seconds ? ' · ' + hms(seconds) + ' Audio' : ''}`
-    : '';
-  $('start').disabled = names.length === 0;
-}
-
-function pick(mode) {
-  for (const row of $('files').querySelectorAll('.file')) {
-    const done = scanned.find((f) => f.name === row.dataset.name)?.done;
-    row.querySelector('.sel').checked = mode === 'all' || (mode === 'open' && !done);
-  }
-  updateCount();
-}
-
-// --- Ordner-Dialog ----------------------------------------------------------
-
-async function openDialog(target) {
-  dlgTarget = target;
-  $('dlgTitle').textContent = { in: 'Eingangsordner waehlen', out: 'Ausgangsordner waehlen',
-                                ana: 'Ausgabeordner der Analyse waehlen' }[target];
-  $('dlgLinks').innerHTML = defaults.quick_links
-    .map((l) => `<a data-path="${esc(l.path)}">${esc(l.label)}</a>`).join('');
-  $('overlay').classList.add('open');
-  await showDir(dlgInput(target).value);
-}
-
-async function showDir(path) {
-  try {
-    const data = await api('/api/browse?path=' + encodeURIComponent(path));
-    dlgPath = data.path;
-    const sep = defaults.platform === 'windows' ? '\\' : '/';
-    $('dlgCrumbs').innerHTML = data.crumbs
-      .map((c) => `<a data-path="${esc(c.path)}">${esc(c.name)}</a>`).join(`<span>${sep}</span>`);
-    const up = data.parent ? `<div data-path="${esc(data.parent)}">⬆ ..</div>` : '';
-    $('dlgList').innerHTML = up + (data.dirs.length
-      ? data.dirs.map((d) => `<div data-path="${esc(d.path)}">📁 ${esc(d.name)}</div>`).join('')
-      : '<p class="hint">Keine Unterordner.</p>');
-    $('dlgInfo').textContent = `${data.path} – ${data.media_count} Medien-Datei(en)`;
-  } catch (err) {
-    $('dlgInfo').textContent = err.message;
-  }
-}
-
-// --- Lauf -------------------------------------------------------------------
-
-async function start() {
-  $('startErr').textContent = '';
-  try {
-    await post('/api/start', {
-      input_dir: $('inDir').value,
-      output_dir: $('outDir').value,
-      files: selectedNames(),
-      model: $('model').value,
-      language: $('language').value,
-      device: $('device').value,
-      diarize: $('diarize').checked,
-      frames: $('frames').checked,
-      frame_sensitivity: $('frameSens').value,
-      frame_format: $('frameFmt').value,
-    });
-    offset = 0;
-    $('log').textContent = '';
-    $('summary').innerHTML = '';
-    poll();
-  } catch (err) {
-    $('startErr').textContent = err.message;
-  }
-}
-
-async function poll() {
-  let s;
-  try { s = await api('/api/status?offset=' + offset); } catch (e) { return; }
-  offset = s.offset;
-
-  if (s.lines.length) {
-    const log = $('log');
-    const atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 40;
-    log.textContent += s.lines.join('\n') + '\n';
-    if (atBottom) log.scrollTop = log.scrollHeight;
-  }
-
-  $('start').disabled = s.running || selectedNames().length === 0;
-  $('cancel').disabled = !s.running;
-
-  if (s.running && s.current) {
-    const stage = s.stage
-      ? ` · <span class="stage">Stufe ${s.stage.index}/${s.stage.total}: ${esc(s.stage.name)}</span>` : '';
-    $('status').innerHTML = `Datei ${s.current.index} von ${s.total}: <b>${esc(s.current.name)}</b>${stage}`;
-  } else if (!s.running) {
-    $('status').textContent = '';
-  }
-
-  // Die Marken und Balken der Dateiliste bleiben nach dem Lauf stehen; erst ein
-  // Ordnerwechsel liest sie ueber /api/scan neu ein.
-  for (const f of s.files) {
-    const row = $('files').querySelector(`.file[data-name="${CSS.escape(f.name)}"]`);
-    if (!row) continue;
-    const badge = row.querySelector('.badge');
-    badge.textContent = f.state;
-    badge.className = 'badge ' + f.state;
-    row.querySelector('.bar > i').style.width = Math.round((f.fraction || 0) * 100) + '%';
-  }
-
-  const e = s.eta;
-  $('overallBar').style.width =
-    (e && e.audio_total_s ? Math.round((e.audio_done_s / e.audio_total_s) * 100) : 0) + '%';
-  if (e && e.audio_total_s) {
-    const rest = e.eta_s === null ? 'Restzeit wird geschaetzt …' : `noch ca. ${coarse(e.eta_s)}`;
-    const unknown = e.unknown_count ? ` (+${e.unknown_count} ohne bekannte Laenge)` : '';
-    $('eta').textContent = `${hms(e.audio_done_s)} von ${hms(e.audio_total_s)} Audio · ${rest}${unknown}`;
-  } else {
-    $('eta').textContent = s.running ? 'laeuft …' : '–';
-  }
-
-  $('summary').innerHTML = s.summary ? `<div class="summary">${esc(s.summary)}</div>` : '';
-}
-
-// --- Verdrahtung ------------------------------------------------------------
-
-$('pickIn').onclick = () => openDialog('in');
-$('pickOut').onclick = () => openDialog('out');
-$('dlgCancel').onclick = () => $('overlay').classList.remove('open');
-$('overlay').onclick = (e) => { if (e.target === $('overlay')) $('overlay').classList.remove('open'); };
-const dlgInput = (target) => $({ in: 'inDir', out: 'outDir', ana: 'anaOut' }[target]);
-$('dlgOk').onclick = () => {
-  dlgInput(dlgTarget).value = dlgPath;
-  $('overlay').classList.remove('open');
-  if (dlgTarget === 'ana') updateTarget();
-  else scan().then(remember);
-};
-for (const id of ['dlgList', 'dlgCrumbs', 'dlgLinks']) {
-  $(id).onclick = (e) => { const p = e.target.dataset.path; if (p) showDir(p); };
-}
-for (const id of ['inDir', 'outDir']) {
-  $(id).onchange = () => scan().then(remember);
-}
-for (const id of ['model', 'language', 'device', 'diarize', 'frameSens', 'frameFmt']) {
-  $(id).onchange = remember;
-}
-$('frames').onchange = () => { toggleFrameOpts(); remember(); };
-$('files').onclick = (e) => {
-  if (e.target.classList.contains('sel')) updateCount();
-  else if (e.target.classList.contains('name')) {
-    const box = e.target.closest('.file').querySelector('.sel');
-    box.checked = !box.checked;
-    updateCount();
-  }
-};
-for (const btn of document.querySelectorAll('[data-pick]')) {
-  btn.onclick = () => pick(btn.dataset.pick);
-}
-$('start').onclick = start;
-$('cancel').onclick = () => api('/api/cancel', { method: 'POST' }).catch(() => {});
-
-// --- KI-Analyse -------------------------------------------------------------
-
-let anaOffset = 0;
-let anaSource = null;     // Pfad der gewaehlten Transkription
-let anaDefaults = null;
-
-/** Wie audioscribe.agent.material.slugify - nur fuer die Vorschau des Zielordners. */
-function slugify(text) {
-  let v = text.trim().toLowerCase()
-    .replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss');
-  v = v.normalize('NFKD').replace(/[^\x00-\x7f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
-  return v.slice(0, 80).replace(/-+$/, '') || 'analyse';
-}
-
-function updateTarget() {
-  const sep = defaults && defaults.platform === 'windows' ? '\\' : '/';
-  const out = $('anaOut').value.replace(/[\\/]+$/, '');
-  $('anaTarget').textContent = $('anaName').value.trim()
-    ? `Ergebnisse landen in: ${out}${sep}${slugify($('anaName').value)}` : '';
-  $('anaStart').disabled = !anaSource || !$('anaName').value.trim() || anaRunning;
-}
-
-async function initAnalyse() {
-  anaDefaults = await api('/api/agent/defaults');
-  fill($('anaModel'), anaDefaults.models, anaDefaults.model);
-  $('anaOut').value = anaDefaults.output_dir;
-  $('anaBash').checked = anaDefaults.bash !== false;
-  $('anaSkillsDir').textContent = anaDefaults.skills_dir;
-  $('anaSkills').innerHTML = anaDefaults.skills.length
-    ? anaDefaults.skills.map((s) => `<label class="skill">
-         <input type="checkbox" value="${esc(s.name)}" ${s.selected ? 'checked' : ''} />
-         <span><b>${esc(s.name)}</b><span class="desc">${esc(s.description.slice(0, 220))}${s.description.length > 220 ? '…' : ''}</span></span>
-       </label>`).join('')
-    : '<p class="hint">Keine Skills gefunden (AUDIOSCRIBE_AGENT_SKILLS_DIR).</p>';
-  await loadSources();
-  setInterval(pollAnalyse, 1500);
-  pollAnalyse();
-}
-
-async function loadSources() {
-  try {
-    const data = await api('/api/agent/sources?output_dir=' + encodeURIComponent($('outDir').value));
-    $('anaSourceDir').textContent = 'Gesucht in: ' + data.output_dir;
-    if (!data.sources.some((s) => s.path === anaSource)) anaSource = data.sources[0]?.path || null;
-    $('anaSources').innerHTML = data.sources.length
-      ? data.sources.map((s) => `<label class="source">
-           <input type="radio" name="anaSrc" value="${esc(s.path)}" ${s.path === anaSource ? 'checked' : ''} />
-           <span class="name" title="${esc(s.path)}">${esc(s.name)}</span>
-           <span class="badge">${s.frames ? s.frames + ' Bilder' : 'ohne Bilder'}</span>
-           ${s.annotated ? '<span class="badge fertig">annotiert</span>' : ''}</label>`).join('')
-      : '<p class="hint">Noch keine fertigen Transkriptionen im Ausgangsordner.</p>';
-  } catch (err) {
-    $('anaSources').innerHTML = `<p class="err">${esc(err.message)}</p>`;
-    anaSource = null;
-  }
-  updateTarget();
-}
-
-const rememberAnalyse = () => post('/api/state', {
-  agent_output_dir: $('anaOut').value,
-  agent_model: $('anaModel').value,
-  agent_bash: $('anaBash').checked,
-  agent_skills: selectedSkills(),
-}).catch(() => {});
-
-const selectedSkills = () => [...$('anaSkills').querySelectorAll('input:checked')].map((i) => i.value);
-
-async function startAnalyse() {
-  $('anaErr').textContent = '';
-  try {
-    await post('/api/agent/start', {
-      source: anaSource,
-      name: $('anaName').value,
-      output_dir: $('anaOut').value,
-      context_text: $('anaContext').value,
-      context_files: $('anaFiles').value.split('\n').map((l) => l.trim()).filter(Boolean),
-      skills: selectedSkills(),
-      model: $('anaModel').value,
-      bash: $('anaBash').checked,
-    });
-    anaOffset = 0;
-    $('anaLog').textContent = '';
-    $('anaResult').innerHTML = '';
-    pollAnalyse();
-  } catch (err) {
-    $('anaErr').textContent = err.message;
-  }
-}
-
-let anaRunning = false;
-async function pollAnalyse() {
-  let s;
-  try { s = await api('/api/agent/status?offset=' + anaOffset); } catch (e) { return; }
-  anaOffset = s.offset;
-  if (s.lines.length) {
-    const log = $('anaLog');
-    const atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 40;
-    log.textContent += s.lines.join('\n') + '\n';
-    if (atBottom) log.scrollTop = log.scrollHeight;
-  }
-  anaRunning = !!s.running;
-  $('anaCancel').disabled = !s.running;
-  $('anaElapsed').textContent = s.running
-    ? `– ${esc(s.name)} laeuft seit ${hms(s.elapsed_s)}` : '';
-  updateTarget();
-
-  renderProgress(s);
-
-  const r = s.result;
-  if (!s.running && s.workspace && s.returncode !== null && s.returncode !== undefined) {
-    const status = r ? r.status : (s.returncode === 0 ? 'fertig' : 'fehler');
-    const index = r && r.index ? `<br>Uebersicht: <code>${esc(r.index)}</code>` : '';
-    const err = r && r.fehler ? `<br>${esc(r.fehler)}` : '';
-    $('anaResult').innerHTML = `<div class="result ${status === 'fertig' ? '' : 'fehler'}">
-      <b>${esc(status)}</b><br>Ergebnisordner: <code>${esc(s.workspace)}</code>${index}${err}</div>`;
-  }
-}
-
-/**
- * Fortschritt aus dem Plan des Agenten (TodoWrite) - einen echten Prozentwert kennt er
- * nicht. Ohne Plan laeuft ein unbestimmter Balken; der Agent kann Schritte nachtragen,
- * dann darf der Balken auch zuruecklaufen.
- */
-function renderProgress(s) {
-  const p = s.progress;
-  $('anaProgress').hidden = !p && !s.running;
-  if ($('anaProgress').hidden) return;
-  const total = p ? p.total : 0, done = p ? p.done : 0;
-  const finished = !s.running && s.returncode === 0;
-
-  if (total) {
-    const now = p.current ? ` · jetzt: <span class="stage">${esc(p.current)}</span>` : '';
-    $('anaStep').innerHTML = `Schritt ${Math.min(done + (p.current ? 1 : 0), total)} von ${total}${now}`;
-  } else {
-    $('anaStep').textContent = s.running ? 'Agent liest sich ein und plant …' : '';
-  }
-  $('anaBarWrap').classList.toggle('wait', s.running && !total);
-  $('anaBar').style.width = (finished ? 100 : total ? Math.round((done / total) * 100) : 0) + '%';
-
-  const chips = [];
-  if (p && p.skill) chips.push(`<span class="badge laeuft">Skill: ${esc(p.skill)}</span>`);
-  if (p && p.frames_total) chips.push(`<span class="badge">Standbilder angesehen: ${p.frames_seen} von ${p.frames_total}</span>`);
-  $('anaChips').innerHTML = chips.join('');
-
-  const mark = { completed: '✓', in_progress: '◐', pending: '○' };
-  $('anaTodos').innerHTML = (p ? p.todos : []).map((t) =>
-    `<li class="${esc(t.status)}"><span class="mark">${mark[t.status] || '○'}</span><span>${esc(t.content)}</span></li>`).join('');
-
-  const docs = p ? p.docs : [];
-  $('anaDocs').innerHTML = docs.length
-    ? 'Dokumente: ' + docs.map((d) => `<code>${esc(d)}</code>`).join(', ') : '';
-}
-
-// --- Live Transcription -----------------------------------------------------
-
-let liveDefaults = null;
-let liveOffset = 0;        // gelesene Protokollzeilen
-let liveEvOffset = 0;      // gelesene Ereignisse (Segmente, Standbilder)
-let liveMonitor = 1;       // 0 = ohne Bildschirm
-let liveShots = [];        // {id, t, file}
-let liveSession = null;
-let lightboxIndex = 0;
-
-const tc = (seconds) => {
-  const s = Math.max(0, Math.round(seconds)), pad = (n) => String(n).padStart(2, '0');
-  return `${pad(Math.floor(s / 3600))}:${pad(Math.floor((s % 3600) / 60))}:${pad(s % 60)}`;
-};
-const secs = (v) => (v === null || v === undefined) ? '–' : v.toFixed(1).replace('.', ',') + ' s';
-
-function fillDevices(sel, devices, chosen) {
-  const opts = [['default', 'Standardgerät'],
-    ...devices.map((d) => [String(d.index), d.name + (d.default ? ' (Standard)' : '')]), ['none', 'aus']];
-  sel.innerHTML = opts.map(([v, l]) => `<option value="${esc(v)}">${esc(l)}</option>`).join('');
-  // Gemerkt wird der NAME: die Indizes wechseln mit jedem an- oder abgesteckten Geraet.
-  const byName = devices.find((d) => d.name === chosen);
-  sel.value = byName ? String(byName.index) : (chosen === 'none' ? 'none' : 'default');
-}
-
-const deviceName = (sel, devices) => {
-  const d = devices.find((x) => String(x.index) === sel.value);
-  return d ? d.name : sel.value;
-};
-
-async function initLive() {
-  await loadLiveDefaults();
-  setInterval(pollLive, 500);
-  pollLive();
-}
-
-async function loadLiveDefaults() {
-  const d = liveDefaults = await api('/api/live/defaults');
-  fillDevices($('liveMic'), d.mics, d.mic);
-  fillDevices($('liveLoop'), d.loopbacks, d.loopback);
-  fill($('liveModel'), d.models, d.model);
-  fill($('liveRefineModel'), d.refine_models, d.refine_model);
-  fill($('liveLang'), defaults.languages, d.language);
-  fill($('liveDevice'), defaults.devices, d.device);
-  fill($('liveSens'), defaults.sensitivities, d.sensitivity);
-  fill($('liveFmt'), defaults.frame_formats, d.format);
-  $('livePartials').checked = d.partials !== false;
-  $('liveSpeakers').checked = d.speakers !== false;
-  $('liveRefine').checked = d.refine !== false;
-  $('liveProblems').textContent = d.problems.join(' · ');
-  liveMonitor = d.monitors.some((m) => String(m.index) === String(d.monitor)) ? Number(d.monitor)
-    : (String(d.monitor) === '0' || !d.monitors.length ? 0 : d.monitors[0].index);
-  renderMonitors();
-}
-
-function renderMonitors() {
-  const stamp = Date.now();  // Vorschaubild nie aus dem Browser-Cache
-  $('liveMonitors').innerHTML = liveDefaults.monitors.map((m) =>
-    `<div class="monitor ${m.index === liveMonitor ? 'active' : ''}" data-monitor="${m.index}">
-       <img src="/api/live/monitor/${m.index}?t=${stamp}" alt="" />Monitor ${m.index} · ${m.width}×${m.height}</div>`).join('')
-    + `<div class="monitor ${liveMonitor === 0 ? 'active' : ''}" data-monitor="0"><div class="none">ohne Bildschirm</div>nur Ton</div>`;
-}
-
-function updateLiveTarget() {
-  const sep = defaults && defaults.platform === 'windows' ? '\\' : '/';
-  $('liveTarget').textContent = `Gespeichert wird unter: ${$('outDir').value.replace(/[\\/]+$/, '')}${sep}live-JJJJ-MM-TT_hh-mm-ss`;
-}
-
-function resetLiveView() {
-  liveOffset = 0; liveEvOffset = 0; liveShots = [];
-  $('liveText').innerHTML = '';
-  $('liveThumbs').innerHTML = '<p class="hint">Bildwechsel erscheinen hier.</p>';
-  $('liveLog').textContent = '';
-  $('liveResult').innerHTML = '';
-  $('liveShotCount').textContent = '';
-}
-
-async function startLive() {
-  $('liveErr').textContent = '';
-  try {
-    await post('/api/live/start', {
-      output_dir: $('outDir').value,
-      monitor: liveMonitor,
-      mic: $('liveMic').value,
-      loopback: $('liveLoop').value,
-      mic_name: deviceName($('liveMic'), liveDefaults.mics),
-      loopback_name: deviceName($('liveLoop'), liveDefaults.loopbacks),
-      model: $('liveModel').value,
-      language: $('liveLang').value,
-      device: $('liveDevice').value,
-      sensitivity: $('liveSens').value,
-      format: $('liveFmt').value,
-      partials: $('livePartials').checked,
-      speakers: $('liveSpeakers').checked,
-      refine: $('liveRefine').checked,
-      refine_model: $('liveRefineModel').value,
-    });
-    resetLiveView();
-    pollLive();
-  } catch (err) {
-    $('liveErr').textContent = err.message;
-  }
-}
-
-/** Beide Spuren melden unabhaengig - eingefuegt wird darum nach Zeit, nicht nach Ankunft. */
-function insertByTime(el, t) {
-  el.dataset.t = t;
-  const box = $('liveText');
-  let after = null;
-  for (const node of [...box.children].reverse()) {
-    if (node.classList.contains('partial')) continue;
-    if (Number(node.dataset.t) <= t) { after = node; break; }
-  }
-  if (after) after.after(el);
-  else box.prepend(el);
-}
-
-function addLiveEvent(ev) {
-  const el = document.createElement('p');
-  if (ev.type === 'segment') {
-    el.className = 'seg ' + (ev.track === 'mic' ? 'mic' : 'system');
-    el.innerHTML = `<span class="ts">[${tc(ev.start)}]</span><span class="who">${esc(ev.speaker)}:</span> `
-      + `${esc(ev.text)}<span class="lag" title="Verzögerung bis zur Anzeige">${secs(ev.delay)}</span>`;
-    insertByTime(el, ev.start);
-  } else if (ev.type === 'shot') {
-    const index = liveShots.push(ev) - 1;
-    const label = `Bild #${String(ev.id).padStart(4, '0')} – ${tc(ev.t)}`;
-    el.className = 'shotmark';
-    el.dataset.shot = index;
-    el.textContent = '📷 ' + label;
-    insertByTime(el, ev.t);
-    if (index === 0) $('liveThumbs').innerHTML = '';
-    $('liveThumbs').insertAdjacentHTML('beforeend',
-      `<div class="thumb" data-shot="${index}"><img loading="lazy" src="${shotUrl(ev)}" alt="" />${esc(label)}</div>`);
-    $('liveShotCount').textContent = `– ${liveShots.length}`;
-  }
-}
-
-const shotUrl = (shot) => `/api/live/frame/${encodeURIComponent(shot.file)}?s=${encodeURIComponent(liveSession || '')}`;
-
-const PHASES = {
-  startet: 'startet …', laden: 'Modell wird geladen …', laeuft: '● Aufnahme läuft', stoppt: 'wird abgeschlossen …',
-  fertig: 'gespeichert', nachschaerfen: 'Nachschärfen …', beendet: 'beendet', fehler: 'Fehler',
-};
-
-function gauge(boxId, valueId, value, warn, bad) {
-  $(valueId).textContent = secs(value);
-  $(boxId).className = 'gauge ' + (value === null || value === undefined ? '' : value < warn ? 'ok' : value < bad ? 'warn' : 'err');
-}
-
-async function pollLive() {
-  let s;
-  try { s = await api(`/api/live/status?offset=${liveOffset}&ev_offset=${liveEvOffset}`); } catch (e) { return; }
-  if (s.ev_offset < liveEvOffset || s.offset < liveOffset) { resetLiveView(); return; }  // neue Sitzung
-  liveSession = s.session || liveSession;
-  liveOffset = s.offset;
-  liveEvOffset = s.ev_offset;
-
-  const box = $('liveText');
-  const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 60;
-  for (const node of box.querySelectorAll('.partial')) node.remove();
-  if (s.events.length && box.querySelector('.hint')) box.innerHTML = '';
-  for (const ev of s.events) addLiveEvent(ev);
-  for (const p of Object.values(s.partials || {})) {
-    box.insertAdjacentHTML('beforeend', `<p class="seg partial"><span class="ts">[${tc(p.start)}]</span>${esc(p.text)} …</p>`);
-  }
-  if (atBottom) box.scrollTop = box.scrollHeight;
-
-  if (s.lines.length) {
-    const log = $('liveLog');
-    log.textContent += s.lines.join('\n') + '\n';
-    log.scrollTop = log.scrollHeight;
-  }
-
-  const running = !!s.running;
-  $('liveStart').hidden = running;
-  $('liveStop').hidden = !running;
-  $('liveStop').textContent = s.phase === 'nachschaerfen' ? '■ Nachschärfen abbrechen'
-    : s.stopping ? '■ Sofort abbrechen' : '■ Stoppen';
-  $('livePhase').textContent = PHASES[s.phase] || 'bereit';
-  $('livePhase').className = 'badge ' + ({ laeuft: 'laeuft', fehler: 'fehler', beendet: 'fertig' }[s.phase] || '');
-
-  const st = s.stats;
-  $('liveElapsed').textContent = st ? hms(st.elapsed) : '–';
-  gauge('liveDelayBox', 'liveDelay', st ? st.delay : null, 5, 10);
-  gauge('liveBacklogBox', 'liveBacklog', st ? st.backlog : null, 3, 10);
-  $('liveBacklog').title = st && st.partials_paused ? 'Vorschautext pausiert, bis der Rückstand abgebaut ist' : '';
-  $('liveLevelMic').style.width = Math.min(100, (st && running ? st.level_mic || 0 : 0) * 150) + '%';
-  $('liveLevelSys').style.width = Math.min(100, (st && running ? st.level_sys || 0 : 0) * 150) + '%';
-
-  // Beim ersten Start wird das Modell heruntergeladen; aus dem Cache gibt es keine Byte-Meldung.
-  const dl = s.download;
-  const mb = (bytes) => Math.round(bytes / 1048576);
-  $('liveLoadBox').hidden = s.phase !== 'laden';
-  $('liveLoadBarBox').classList.toggle('wait', !dl);
-  $('liveLoadStep').textContent = dl
-    ? `Modell ${dl.model} wird heruntergeladen – ${mb(dl.done)} von ${mb(dl.total)} MB (${Math.floor(dl.done / dl.total * 100)} %)`
-    : `Modell ${s.model || ''} wird geladen …`;
-  $('liveLoadBar').style.width = dl ? (dl.done / dl.total * 100) + '%' : '';
-
-  const r = s.refine;
-  $('liveRefineBox').hidden = s.phase !== 'nachschaerfen';
-  if (r && r.index) {
-    $('liveRefineStep').innerHTML = `Nachschärfen – <span class="stage">Stufe ${r.index}/${r.total}: ${esc(r.name)}</span>`;
-    $('liveRefineBar').style.width = Math.round(((r.index - 1) + (r.percent || 0) / 100) / r.total * 100) + '%';
-  }
-
-  $('liveResult').innerHTML = !running && s.dir
-    ? `<div class="result ${s.phase === 'fehler' ? 'fehler' : ''}">Sitzungsordner: <code>${esc(s.dir)}</code><br>
-       Erscheint im Reiter „KI-Analyse“ als Quelle. Die Live-Fassung liegt als <code>transkript.live.md</code> daneben.</div>` : '';
-}
-
-function openLightbox(index) {
-  if (!liveShots.length) return;
-  lightboxIndex = (index + liveShots.length) % liveShots.length;
-  const shot = liveShots[lightboxIndex];
-  $('lightboxImg').src = shotUrl(shot);
-  $('lightboxCap').textContent = `Bild #${String(shot.id).padStart(4, '0')} – ${tc(shot.t)} (${lightboxIndex + 1} von ${liveShots.length})`;
-  $('lightbox').classList.add('open');
-}
-
-$('liveStart').onclick = startLive;
-$('liveStop').onclick = () => api('/api/live/stop', { method: 'POST' }).catch(() => {});
-// Erst nach init(): vorher ist 'defaults' noch null (der CUDA-Test kann auf CPU-Rechnern dauern).
-$('liveRefresh').onclick = () => ready.then(loadLiveDefaults)
-  .then(() => { $('liveErr').textContent = ''; })
-  .catch((err) => { $('liveErr').textContent = err.message; });
-$('liveMonitors').onclick = (e) => {
-  const tile = e.target.closest('.monitor');
-  if (!tile) return;
-  liveMonitor = Number(tile.dataset.monitor);
-  for (const t of $('liveMonitors').children) t.classList.toggle('active', t === tile);
-};
-for (const id of ['liveThumbs', 'liveText']) {
-  $(id).onclick = (e) => {
-    const el = e.target.closest('[data-shot]');
-    if (el) openLightbox(Number(el.dataset.shot));
-  };
-}
-$('lightbox').onclick = (e) => { if (e.target === $('lightbox')) $('lightbox').classList.remove('open'); };
-$('lightboxPrev').onclick = () => openLightbox(lightboxIndex - 1);
-$('lightboxNext').onclick = () => openLightbox(lightboxIndex + 1);
-document.addEventListener('keydown', (e) => {
-  if (!$('lightbox').classList.contains('open')) return;
-  if (e.key === 'Escape') $('lightbox').classList.remove('open');
-  if (e.key === 'ArrowLeft') openLightbox(lightboxIndex - 1);
-  if (e.key === 'ArrowRight') openLightbox(lightboxIndex + 1);
-});
-
-const TAB_META = {
-  Trans: 'Stapelverarbeitung: Ordner waehlen, Dateien ankreuzen, transkribieren',
-  Live: 'Monitor, System-Audio und Mikrofon mitschneiden – Transkript und Screenshots entstehen live',
-  Ana: 'Claude-Agent: Transkription + Standbilder auswerten, Dokumente im Ausgabeordner ablegen',
-};
-
-function showTab(name) {
-  for (const btn of document.querySelectorAll('.tabs button')) {
-    btn.classList.toggle('active', btn.dataset.tab === name);
-  }
-  for (const tab of Object.keys(TAB_META)) $('tab' + tab).hidden = tab !== name;
-  $('tabMeta').textContent = TAB_META[name];
-  if (name === 'Ana') loadSources();
-  if (name === 'Live') updateLiveTarget();
-}
-
-for (const btn of document.querySelectorAll('.tabs button')) btn.onclick = () => showTab(btn.dataset.tab);
-$('anaSources').onchange = (e) => {
-  if (e.target.name === 'anaSrc') {
-    anaSource = e.target.value;
-    // Den Ordnernamen als Vorschlag fuer den Prozessnamen - nur solange noch leer.
-    if (!$('anaName').value.trim()) $('anaName').value = e.target.closest('.source').querySelector('.name').textContent;
-    updateTarget();
-  }
-};
-$('anaRefresh').onclick = loadSources;
-$('pickAna').onclick = () => openDialog('ana');
-$('anaName').oninput = updateTarget;
-$('anaOut').onchange = () => { updateTarget(); rememberAnalyse(); };
-$('anaModel').onchange = rememberAnalyse;
-$('anaBash').onchange = rememberAnalyse;
-$('anaSkills').onchange = rememberAnalyse;
-$('anaStart').onclick = startAnalyse;
-$('anaCancel').onclick = () => api('/api/agent/cancel', { method: 'POST' }).catch(() => {});
-
-const ready = init();
-ready.then(initAnalyse).then(initLive).catch((err) => { $('liveErr').textContent = err.message; });
-</script>
+<script src="/static/app.js" defer></script>
 </body>
 </html>

@@ -126,12 +126,12 @@ uv run --extra cu124 --extra review audioscribe ui        # öffnet http://127.0
 uv run --extra cu124 --extra review audioscribe ui --port 9000 --no-browser
 
 # Ohne uv (synchronisiert nichts, kürzer):
-.venv/bin/audioscribe ui                  # Windows: .venv\Scripts\audioscribe.exe ui
+.venv/bin/audioscribe ui                  # Windows: .venv-win\Scripts\audioscribe.exe ui (siehe start.ps1)
 ```
 
 **Ablauf in der Oberfläche:**
 
-1. **Eingangs- und Ausgangsordner** wählen – entweder über „📁 Waehlen" (Ordner-Browser mit
+1. **Eingangs- und Ausgangsordner** wählen – entweder über „Wählen" (Ordner-Browser mit
    Schnellzielen für Projekt, Home und Windows-Laufwerke) oder direkt ins Textfeld getippt.
    Die zuletzt benutzten Ordner und Optionen werden **serverseitig gemerkt** und stehen nach
    einem Neustart wieder da – unabhängig von Browser und Adresse.
@@ -142,13 +142,20 @@ uv run --extra cu124 --extra review audioscribe ui --port 9000 --no-browser
 3. **Optionen**: Modell, Sprache, Gerät (`cuda` ist ausgegraut, wenn keine GPU verfügbar ist),
    Sprecher-Diarisierung an/aus und **Bildwechsel-Erkennung** für Bildschirmaufnahmen
    (mit Empfindlichkeit und Bildformat, s. u.).
-4. **„▶ Transkription starten"** – je Datei ein Fortschrittsbalken, dazu ein Gesamtbalken über
+4. **„Transkription starten"** – je Datei ein Fortschrittsbalken, dazu ein Gesamtbalken über
    die Audio-Gesamtlänge und eine **Restzeit**. Schlägt eine Datei fehl, läuft der Stapel mit
-   der nächsten weiter. Am Ende steht eine Zusammenfassung.
+   der nächsten weiter. Am Ende steht eine Zusammenfassung. Das ausführliche **Protokoll** ist
+   eingeklappt („Protokoll anzeigen") und öffnet sich von selbst, sobald eine Datei fehlschlägt.
+
+Die Karten sind als Schritte 1–3 nummeriert; die drei Bereiche liegen als Reiter oben
+(auch direkt per Adresse erreichbar: `#trans`, `#live`, `#ana`). Der Knopf rechts im
+Kopfbereich schaltet das **Design** um – „System" folgt der Betriebssystem-Einstellung,
+„Hell" und „Dunkel" erzwingen eine Variante. Die Wahl wird wie die anderen Einstellungen
+serverseitig gemerkt und gilt auch für die Review-Oberfläche.
 
 Ergebnisse landen wie gewohnt unter `<Ausgangsordner>/<Dateiname>/transkript.md`. Jede Datei
 läuft als eigener `audioscribe run`-Subprozess – der Lauf hängt also **nicht** am Browser-Tab
-und läuft weiter, wenn er geschlossen wird (Beenden per „■ Abbrechen" oder Strg+C im Terminal).
+und läuft weiter, wenn er geschlossen wird (Beenden per „Abbrechen" oder Strg+C im Terminal).
 
 **Woher der Fortschritt kommt:** WhisperX meldet während der Transkription den Anteil der
 bereits verarbeiteten Audio-Abschnitte, pyannote während der Diarisierung den Anteil der
@@ -165,7 +172,7 @@ AUDIOSCRIBE_PROGRESS=1 uv run audioscribe run input/meeting.mp4
 ```
 
 **Ordner wählen:** Ein aus dem Explorer kopierter Pfad wie `C:\Users\user\Videos` kann in
-beide Felder direkt eingefügt werden; der Knopf **📁 Wählen** blättert serverseitig durch
+beide Felder direkt eingefügt werden; der Knopf **Wählen** blättert serverseitig durch
 das Dateisystem. Die Schnellziele über der Ordnerliste führen zu den Laufwerken (`C:`, `D:`
 …) sowie zu Home, Desktop, Downloads und Videos – unter Windows gibt es keine gemeinsame
 Wurzel `/`, aus der man sich zu allen Ordnern durchklicken könnte. Versteckte Ordner und
@@ -234,7 +241,7 @@ uv run audioscribe export output/meeting --pdf
 
 1. Das Video ist scrub-/suchbar; das Transkript läuft synchron mit (Klick auf eine Zeile
    springt im Video dorthin, Klick auf ein Thumbnail zur Markierung).
-2. **„📸 Frame markieren"** greift den aktuellen Wiedergabe-Zeitpunkt – abzüglich eines
+2. **„Frame markieren"** greift den aktuellen Wiedergabe-Zeitpunkt – abzüglich eines
    **Lag-Offsets** (Default −2,5 s, in der UI justierbar) – extrahiert per ffmpeg ein
    **framegenaues PNG** und legt es als Markierung an (optional mit Notiz).
 3. Markierungen erscheinen rechts als **Thumbnail-Liste** und lassen sich einzeln löschen.
@@ -414,10 +421,15 @@ im selben Format wie nach einem Offline-Lauf, den die KI-Analyse direkt auswerte
 Details und Designentscheidungen stehen in PRD §17.
 
 ```powershell
-uv sync --extra cu124 --extra review --extra agent --extra live   # bzw. --extra cpu
-.venv\Scripts\audioscribe.exe doctor                   # Zeile "Live": Mikrofone, Loopback, Monitore
-.venv\Scripts\audioscribe.exe ui                       # Reiter „Live Transcription“
+.\start.ps1                                                # synct .venv-win und startet die Oberfläche
+.venv-win\Scripts\audioscribe.exe doctor               # Zeile "Live": Mikrofone, Loopback, Monitore
+.venv-win\Scripts\audioscribe.exe ui                   # Reiter „Live Transcription“
 ```
+
+`start.ps1` legt die Windows-Umgebung bewusst in `.venv-win` an: Liegt das Repo unter
+`C:\Users\…` und wird auch aus WSL benutzt, gehört `.venv` dem Linux-Python. Windows-`uv`
+kann dessen Symlink `lib64 -> lib` nicht löschen und bricht mit „Zugriff verweigert“ ab.
+Wer `uv sync` von Hand aufruft, setzt vorher `$env:UV_PROJECT_ENVIRONMENT = '.venv-win'`.
 
 Das funktioniert nur mit nativem Windows-Python. Unter WSL gibt es weder WASAPI noch
 Zugriff auf den Bildschirm.
@@ -457,9 +469,9 @@ auf den überwachten Monitor, sonst lösen neue Thumbnails selbst Bildwechsel au
 **Ohne Oberfläche:**
 
 ```powershell
-.venv\Scripts\audioscribe.exe live --list-devices            # Geräteindizes und Monitore
-.venv\Scripts\audioscribe.exe live --monitor 1 --mic 23      # Ende mit Strg+C oder "stop" + Enter
-.venv\Scripts\audioscribe.exe refine output\live-2026-09-19_14-30-05
+.venv-win\Scripts\audioscribe.exe live --list-devices        # Geräteindizes und Monitore
+.venv-win\Scripts\audioscribe.exe live --monitor 1 --mic 23  # Ende mit Strg+C oder "stop" + Enter
+.venv-win\Scripts\audioscribe.exe refine output\live-2026-09-19_14-30-05
 ```
 
 ## Erster Lauf & Modell-Downloads

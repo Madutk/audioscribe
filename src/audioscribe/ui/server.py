@@ -123,6 +123,17 @@ def _folder_info(raw: str, *, default: Path) -> dict:
     }
 
 
+def inject_theme(html: str) -> str:
+    """Gemerktes Design (system/light/dark) in das <html>-Tag schreiben.
+
+    Das Attribut steht damit schon vor dem ersten Zeichnen - kein Aufblitzen des
+    falschen Designs. Der Wert kommt gefiltert aus ``state._clean`` und ist einer von
+    ``state.THEMES``; er braucht kein Escaping.
+    """
+    theme = state.load_state().get("theme", "system")
+    return html.replace('<html lang="de">', f'<html lang="de" data-theme="{theme}">', 1)
+
+
 def create_app():
     """Baut die FastAPI-App der Stapel-Oberflaeche (haelt genau einen BatchRunner)."""
     from fastapi import FastAPI, HTTPException, Query, Request
@@ -162,6 +173,7 @@ def create_app():
         frames: bool | None = None
         frame_sensitivity: str | None = None
         frame_format: str | None = None
+        theme: str | None = None
 
     class StartIn(BaseModel):
         input_dir: str
@@ -204,7 +216,19 @@ def create_app():
 
     @app.get("/", response_class=HTMLResponse)
     def index() -> str:
-        return (_STATIC_DIR / "index.html").read_text(encoding="utf-8")
+        return inject_theme((_STATIC_DIR / "index.html").read_text(encoding="utf-8"))
+
+    # Nur diese beiden Dateien werden ausgeliefert - kein Verzeichnis-Mount, keine
+    # Pfadspiele. no-cache: der Browser fragt per ETag nach, nach einem Update ist das
+    # CSS sofort aktuell.
+    _ASSETS = {"style.css": "text/css; charset=utf-8", "app.js": "text/javascript; charset=utf-8"}
+
+    @app.api_route("/static/{name}", methods=["GET", "HEAD"])
+    def static_asset(name: str):
+        media = _ASSETS.get(name)
+        if media is None:
+            raise HTTPException(404, "Unbekannte Datei.")
+        return FileResponse(_STATIC_DIR / name, media_type=media, headers={"Cache-Control": "no-cache"})
 
     @app.get("/api/defaults")
     def api_defaults():
@@ -220,6 +244,7 @@ def create_app():
                 "frames": settings.enable_screens,
                 "frame_sensitivity": settings.screen_sensitivity,
                 "frame_format": settings.screen_format,
+                "theme": "system",
             },
             state.load_state(),
         )

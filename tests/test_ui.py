@@ -631,3 +631,44 @@ def test_cuda_probe_wird_kurz_gecacht_und_laeuft_dann_neu(monkeypatch):
     uhr[0] += 2  # TTL abgelaufen
     assert server._cuda() is True
     assert len(proben) == 2
+
+
+def test_state_theme_nur_bekannte_werte(tmp_path):
+    state.save_state({"theme": "dark"}, tmp_path)
+    assert state.load_state(tmp_path)["theme"] == "dark"
+    state.save_state({"theme": "neon"}, tmp_path)  # unbekannt -> bleibt bei dark
+    assert state.load_state(tmp_path)["theme"] == "dark"
+    assert "theme" not in state.load_state(tmp_path / "leer")
+    state.save_state({"theme": ""}, tmp_path / "leer")
+    assert "theme" not in state.load_state(tmp_path / "leer")
+
+
+# --- Routen der Oberflaeche ---
+
+
+@pytest.fixture
+def ui_client(tmp_path, monkeypatch):
+    pytest.importorskip("fastapi")
+    pytest.importorskip("httpx")
+    from fastapi.testclient import TestClient
+
+    from audioscribe.ui import server
+
+    monkeypatch.setattr(state, "state_path", lambda cache_dir=None: tmp_path / "ui-state.json")
+    return TestClient(server.create_app())
+
+
+def test_index_injiziert_theme(ui_client):
+    assert 'data-theme="system"' in ui_client.get("/").text
+    assert ui_client.post("/api/state", json={"theme": "dark"}).status_code == 200
+    assert 'data-theme="dark"' in ui_client.get("/").text
+    assert ui_client.get("/api/defaults").json()["theme"] == "dark"
+
+
+def test_static_assets(ui_client):
+    css = ui_client.get("/static/style.css")
+    assert css.status_code == 200 and css.headers["content-type"].startswith("text/css")
+    assert css.headers["cache-control"] == "no-cache"
+    assert ui_client.get("/static/app.js").status_code == 200
+    assert ui_client.get("/static/server.py").status_code == 404
+    assert ui_client.get("/static/..%2Fserver.py").status_code == 404

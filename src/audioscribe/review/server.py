@@ -69,7 +69,10 @@ def create_app(out_dir: str | Path):
 
     @app.get("/", response_class=HTMLResponse)
     def index() -> str:
-        return (_STATIC_DIR / "index.html").read_text(encoding="utf-8")
+        # Gleiches Design wie die Stapel-Oberflaeche (dort umschaltbar, hier nur gelesen).
+        from audioscribe.ui.server import inject_theme
+
+        return inject_theme((_STATIC_DIR / "index.html").read_text(encoding="utf-8"))
 
     @app.get("/api/transcript")
     def api_transcript():

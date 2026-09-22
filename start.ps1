@@ -5,6 +5,10 @@
 .DESCRIPTION
     'uv run' gleicht die Umgebung vor dem Start ab - fehlende Pakete (PyAudioWPatch, mss, ...)
     werden dabei nachinstalliert. Ohne NVIDIA-Karte kommen die schlanken CPU-Wheels von torch.
+    Die Windows-Umgebung liegt in .venv-win, nicht in .venv: Wird das Repo auch aus WSL
+    genutzt, steht dort ein Linux-venv mit Symlinks (lib64 -> lib), die Windows weder
+    nutzen noch loeschen kann ("Zugriff verweigert" beim uv sync). Getrennte Ordner
+    vermeiden das. UV_PROJECT_ENVIRONMENT in der Shell hat Vorrang.
     Nur ASCII in dieser Datei: Windows PowerShell 5.1 liest UTF-8 ohne BOM falsch.
 
 .PARAMETER Torch
@@ -30,6 +34,10 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-Location $PSScriptRoot
 
+if (-not $env:UV_PROJECT_ENVIRONMENT) {
+    $env:UV_PROJECT_ENVIRONMENT = Join-Path $PSScriptRoot '.venv-win'
+}
+
 if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
     Write-Error "uv fehlt -> winget install astral-sh.uv"
 }
@@ -45,6 +53,6 @@ if ($Torch -eq 'auto') {
 $uiArgs = @('ui', '--port', $Port)
 if ($NoBrowser) { $uiArgs += '--no-browser' }
 
-Write-Host "AudioScribe: torch=$Torch, Extras review/agent/live, Port $Port (beenden mit Strg+C)"
+Write-Host "AudioScribe: torch=$Torch, Extras review/agent/live, Port $Port, venv $env:UV_PROJECT_ENVIRONMENT (beenden mit Strg+C)"
 & uv run --extra $Torch --extra review --extra agent --extra live audioscribe @uiArgs
 exit $LASTEXITCODE
