@@ -467,7 +467,7 @@ function renderProgress(s) {
 let liveDefaults = null;
 let liveOffset = 0;        // gelesene Protokollzeilen
 let liveEvOffset = 0;      // gelesene Ereignisse (Segmente, Standbilder)
-let liveMonitor = 1;       // 0 = ohne Bildschirm
+let liveSource = { kind: 'monitor', id: 1 };  // kind: monitor | window (id = HWND) | none
 let liveShots = [];        // {id, t, file}
 let liveSession = null;
 let liveRunning = false;
@@ -513,17 +513,57 @@ async function loadLiveDefaults() {
   $('liveSpeakers').checked = d.speakers !== false;
   $('liveRefine').checked = d.refine !== false;
   $('liveProblems').textContent = d.problems.join(' · ');
-  liveMonitor = d.monitors.some((m) => String(m.index) === String(d.monitor)) ? Number(d.monitor)
-    : (String(d.monitor) === '0' || !d.monitors.length ? 0 : d.monitors[0].index);
-  renderMonitors();
+  d.windows = d.windows || [];
+  liveSource = pickLiveSource(d);
+  renderSources();
 }
 
-function renderMonitors() {
+const windowLabel = (w) => `${w.process} – ${w.title}`;
+
+/** Gemerkte Quelle wiederfinden: Fenster ueber "Prozess – Titel" (ersatzweise nur den
+ *  Prozess - Titel wechseln mit dem Inhalt), Monitore ueber den Index. */
+function pickLiveSource(d) {
+  if (d.source === 'window' && d.windows.length) {
+    const genau = d.windows.find((w) => windowLabel(w) === d.window);
+    const prozess = genau || d.windows.find((w) => d.window.startsWith(`${w.process} – `));
+    if (prozess) return { kind: 'window', id: prozess.hwnd };
+  }
+  if (d.source === 'none') return { kind: 'none', id: 0 };
+  if (d.monitors.some((m) => String(m.index) === String(d.monitor))) return { kind: 'monitor', id: Number(d.monitor) };
+  if (String(d.monitor) === '0' || !d.monitors.length) return { kind: 'none', id: 0 };
+  return { kind: 'monitor', id: d.monitors[0].index };
+}
+
+const isActive = (kind, id) => liveSource.kind === kind && liveSource.id === id;
+
+function renderSources() {
   const stamp = Date.now();  // Vorschaubild nie aus dem Browser-Cache
-  $('liveMonitors').innerHTML = liveDefaults.monitors.map((m) =>
-    `<div class="monitor ${m.index === liveMonitor ? 'active' : ''}" data-monitor="${m.index}">
-       <img src="/api/live/monitor/${m.index}?t=${stamp}" alt="" />Monitor ${m.index} · ${m.width}×${m.height}</div>`).join('')
-    + `<div class="monitor ${liveMonitor === 0 ? 'active' : ''}" data-monitor="0"><div class="none">ohne Bildschirm</div>nur Ton</div>`;
+  const tile = (kind, id, inner) =>
+    `<div class="monitor ${isActive(kind, id) ? 'active' : ''}" data-kind="${kind}" data-id="${id}">${inner}</div>`;
+  const monitors = liveDefaults.monitors.map((m) =>
+    tile('monitor', m.index, `<img src="/api/live/monitor/${m.index}?t=${stamp}" alt="" />Monitor ${m.index} · ${m.width}×${m.height}`))
+    .join('') + tile('none', 0, '<div class="none">ohne Bildschirm</div>nur Ton');
+  // Fenster nach Anwendung gebuendelt; Reihenfolge = Z-Order, also zuletzt benutzte zuerst.
+  const groups = new Map();
+  for (const w of liveDefaults.windows) (groups.get(w.process) || groups.set(w.process, []).get(w.process)).push(w);
+  const windows = [...groups].map(([process, ws]) =>
+    `<div class="source-group"><div class="source-title">${esc(process)}</div><div class="monitors">${ws.map((w) =>
+      tile('window', w.hwnd, `<img src="/api/live/window/${w.hwnd}?t=${stamp}" alt="" />`
+        + `<span class="title" title="${esc(w.title)}">${esc(w.title)}</span>`)).join('')}</div></div>`).join('');
+  $('liveMonitors').innerHTML = `<div class="monitors">${monitors}</div>${windows}`;
+  // Minimierte Fenster liefern kein Vorschaubild - Platzhalter statt kaputtem Bild.
+  for (const img of $('liveMonitors').querySelectorAll('.monitor[data-kind="window"] img')) {
+    img.onerror = () => { img.replaceWith(Object.assign(document.createElement('div'), { className: 'none', textContent: 'minimiert' })); };
+  }
+  updateSourceHint();
+}
+
+function updateSourceHint() {
+  $('liveSourceHint').textContent = liveSource.kind === 'window'
+    ? 'Nur das gewählte Fenster wird abgetastet – diese Oberfläche darf auf demselben Monitor liegen.'
+    : liveSource.kind === 'monitor'
+      ? 'Diese Oberfläche gehört nicht auf den überwachten Monitor – neue Thumbnails würden sonst selbst Bildwechsel auslösen.'
+      : '';
 }
 
 function updateLiveTarget() {
@@ -576,7 +616,10 @@ async function startLive() {
   try {
     await post('/api/live/start', {
       output_dir: $('outDir').value,
-      monitor: liveMonitor,
+      monitor: liveSource.kind === 'monitor' ? liveSource.id : 0,
+      window: liveSource.kind === 'window' ? liveSource.id : 0,
+      window_label: liveSource.kind === 'window'
+        ? windowLabel(liveDefaults.windows.find((w) => w.hwnd === liveSource.id) || { process: '', title: '' }) : '',
       mic: $('liveMic').value,
       loopback: $('liveLoop').value,
       mic_name: deviceName($('liveMic'), liveDefaults.mics),
@@ -729,8 +772,9 @@ $('liveRefresh').onclick = () => ready.then(loadLiveDefaults)
 $('liveMonitors').onclick = (e) => {
   const tile = e.target.closest('.monitor');
   if (!tile) return;
-  liveMonitor = Number(tile.dataset.monitor);
-  for (const t of $('liveMonitors').children) t.classList.toggle('active', t === tile);
+  liveSource = { kind: tile.dataset.kind, id: Number(tile.dataset.id) };
+  for (const t of $('liveMonitors').querySelectorAll('.monitor')) t.classList.toggle('active', t === tile);
+  updateSourceHint();
 };
 for (const id of ['liveThumbs', 'liveText']) {
   $(id).onclick = (e) => {

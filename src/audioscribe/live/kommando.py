@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from audioscribe.live.fenster import group_by_process
+
 
 def inventory() -> dict:
-    """Audio-Geräte und Monitore; fehlende Teile stehen als Klartext in ``problems``."""
-    out: dict = {"mics": [], "loopbacks": [], "monitors": [], "problems": []}
+    """Audio-Geräte, Monitore und Fenster; fehlende Teile stehen als Klartext in ``problems``."""
+    out: dict = {"mics": [], "loopbacks": [], "monitors": [], "windows": [], "problems": []}
     try:
         from audioscribe.live.devices import list_devices
 
@@ -22,6 +24,12 @@ def inventory() -> dict:
         out["problems"].append(f"mss fehlt -> {INSTALL_HINT}")
     except Exception as exc:  # noqa: BLE001
         out["problems"].append(f"Monitore nicht lesbar: {exc}")
+    try:
+        from audioscribe.live.fenster import list_windows
+
+        out["windows"] = list_windows()  # leer außerhalb von Windows
+    except Exception as exc:  # noqa: BLE001
+        out["problems"].append(f"Fenster nicht lesbar: {exc}")
     return out
 
 
@@ -36,5 +44,13 @@ def list_devices_text() -> str:
         ] or ["  -"]
     lines.append("Monitore:")
     lines += [f"  [{m['index']}] {m['width']}x{m['height']}" for m in inv["monitors"]] or ["  -"]
+    lines.append("Fenster (--window HWND):")
+    for gruppe in group_by_process(inv["windows"]):
+        lines.append(f"  {gruppe['process']}")
+        lines += [
+            f"    [{w['hwnd']}] {w['title']}  ({w['width']}x{w['height']})" for w in gruppe["windows"]
+        ]
+    if not inv["windows"]:
+        lines.append("  -")
     lines += [f"! {p}" for p in inv["problems"]]
     return "\n".join(lines)

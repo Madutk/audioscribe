@@ -276,8 +276,12 @@ pre#liveLog { height: 120px; }
 .monitor.active { border-color: var(--accent); color: var(--fg); }
 .monitor.active::after { content: ""; position: absolute; top: 6px; right: 6px; width: 10px; height: 10px; border-radius: 50%;
                          background: var(--accent); box-shadow: 0 0 0 2px var(--surface); }
-.monitor img { display: block; width: 150px; border-radius: 3px; }
+.monitor img { display: block; width: 150px; max-height: 110px; object-fit: cover; object-position: top; border-radius: 3px; }
 .monitor .none { width: 150px; padding: 24px 0; }
+.monitor .title { display: block; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Anwendungsfenster, nach Prozess gebuendelt, unter den Monitorkacheln */
+.source-group { margin-top: var(--s3); }
+.source-title { font-size: 12px; font-weight: 600; color: var(--fg-muted); margin-bottom: 4px; }
 .gauges { display: flex; gap: var(--s2); flex-wrap: wrap; align-items: stretch; margin-bottom: var(--s3);
           font-variant-numeric: tabular-nums; }
 .gauges > .badge { align-self: center; }
@@ -324,7 +328,7 @@ pre#liveLog { height: 120px; }
   .tabs button { flex: 1; padding: 6px 10px; font-size: 13px; }
   .brand { flex: 1; }
   .grid { grid-template-columns: 1fr; }
-  .monitor img, .monitor .none { width: 120px; }
+  .monitor img, .monitor .none, .monitor .title { width: 120px; max-width: 120px; }
   .gauge { min-width: calc(50% - var(--s2)); }
   #liveText { height: 320px; }
   #lightbox .cap { flex-wrap: wrap; justify-content: center; }

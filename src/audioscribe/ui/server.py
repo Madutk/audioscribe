@@ -148,11 +148,13 @@ def create_app():
     class LiveStartIn(BaseModel):
         output_dir: str
         monitor: int = 1
+        window: int = 0  # HWND; hat Vorrang vor monitor
         # Geraeteindex | "default" | "none"; die Namen dienen nur dem Merken der Auswahl.
         mic: str = "default"
         loopback: str = "default"
         mic_name: str = ""
         loopback_name: str = ""
+        window_label: str = ""
         model: str = "auto"
         language: str = "de"
         device: str = "auto"
@@ -512,7 +514,9 @@ def create_app():
                 **inventory(),
                 "models": list(jobs.LIVE_WHISPER_MODELS),
                 "refine_models": list(jobs.WHISPER_MODELS),
+                "source": saved.get("live_source", "monitor"),
                 "monitor": saved.get("live_monitor", "1"),
+                "window": saved.get("live_window", ""),  # "Prozess – Titel", kein HWND
                 "mic": saved.get("live_mic", "default"),
                 "loopback": saved.get("live_loopback", "default"),
                 "model": saved.get("live_model", "auto"),
@@ -537,6 +541,21 @@ def create_app():
         except (ImportError, IndexError) as exc:
             raise HTTPException(404, str(exc)) from exc
 
+    @app.get("/api/live/window/{hwnd}")
+    def api_live_window(hwnd: int):
+        """Vorschaubild eines Anwendungsfensters; 404 wenn weg oder minimiert."""
+        from audioscribe.live.fenster import WindowGone, preview_window_jpeg
+
+        if not 0 < hwnd < 2**32:
+            raise HTTPException(404, "Kein solches Fenster.")
+        try:
+            data = preview_window_jpeg(hwnd)
+        except (ImportError, RuntimeError, WindowGone) as exc:
+            raise HTTPException(404, str(exc)) from exc
+        if data is None:
+            raise HTTPException(404, "Fenster ist minimiert.")
+        return Response(data, media_type="image/jpeg")
+
     @app.post("/api/live/start")
     def api_live_start(body: LiveStartIn):
         if body.device not in jobs.DEVICES:
@@ -549,10 +568,11 @@ def create_app():
         for wert in (body.model, body.refine_model, body.language, body.mic, body.loopback):
             if not wert or wert.startswith("-") or not all(c.isalnum() or c in "-_." for c in wert):
                 raise HTTPException(400, f"Ungueltiger Wert: {wert}")
-        if body.monitor < 0:
-            raise HTTPException(400, "Ungueltiger Monitor.")
-        if not body.monitor and body.mic == "none" and body.loopback == "none":
-            raise HTTPException(400, "Weder Audio noch Monitor gewaehlt.")
+        # Das HWND wandert als reiner int in argv; 32 Bit sind fuer Fenster-Handles signifikant.
+        if body.monitor < 0 or not 0 <= body.window < 2**32:
+            raise HTTPException(400, "Ungueltige Bildquelle.")
+        if not (body.monitor or body.window) and body.mic == "none" and body.loopback == "none":
+            raise HTTPException(400, "Weder Audio noch Bildquelle gewaehlt.")
 
         out_dir = browse.normalize_path(body.output_dir, default=settings.output_dir)
         try:
@@ -562,7 +582,8 @@ def create_app():
 
         opts = jobs.LiveJobOptions(
             output_dir=out_dir,
-            monitor=body.monitor,
+            monitor=0 if body.window else body.monitor,
+            window=body.window,
             mic=body.mic,
             loopback=body.loopback,
             model=body.model,
@@ -575,9 +596,13 @@ def create_app():
             refine=body.refine,
             refine_model=body.refine_model,
         )
+        # Bei Fensterwahl den zuletzt gemerkten Monitor stehen lassen.
+        gemerkt = {"live_monitor": str(body.monitor)} if body.monitor else {}
         state.save_state(
             {
-                "live_monitor": str(body.monitor),
+                **gemerkt,
+                "live_source": "window" if body.window else ("monitor" if body.monitor else "none"),
+                "live_window": body.window_label.strip()[:200],
                 "live_mic": body.mic_name or body.mic,
                 "live_loopback": body.loopback_name or body.loopback,
                 "live_model": body.model,

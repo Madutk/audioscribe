@@ -101,6 +101,7 @@ def _live(args: argparse.Namespace) -> int:
         compute_type=compute_type,
         language=settings.whisper_language,
         monitor=args.monitor,
+        window=args.window,
         mic=args.mic,
         loopback=args.loopback,
         sensitivity=args.frame_sensitivity or settings.screen_sensitivity,
@@ -310,11 +311,20 @@ def main(argv: list[str] | None = None) -> int:
     live.add_argument(
         "--monitor", type=int, default=1, metavar="N", help="Monitor fuer Standbilder (1 = erster; 0 = aus)"
     )
+    live.add_argument(
+        "--window",
+        type=int,
+        default=0,
+        metavar="HWND",
+        help="Fenster-Handle fuer Standbilder (hat Vorrang vor --monitor; siehe --list-devices)",
+    )
     live.add_argument("--mic", default="default", help="Mikrofon: default | none | Geraeteindex")
     live.add_argument(
         "--loopback", default="default", help="System-Audio (WASAPI-Loopback): default | none | Geraeteindex"
     )
-    live.add_argument("--list-devices", action="store_true", help="Audio-Geraete und Monitore anzeigen")
+    live.add_argument(
+        "--list-devices", action="store_true", help="Audio-Geraete, Monitore und Fenster anzeigen"
+    )
     live.add_argument("--model", help="Whisper-Modell (Default: large-v3-turbo auf CUDA, small auf CPU)")
     live.add_argument("--language", help="Sprachcode (z.B. 'de') oder 'auto'")
     live.add_argument("--device", help="auto | cuda | cpu")

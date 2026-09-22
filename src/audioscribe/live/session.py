@@ -37,6 +37,7 @@ class LiveOptions:
     compute_type: str
     language: str = "de"
     monitor: int = 1  # 0 = ohne Bildschirm
+    window: int = 0  # HWND eines Anwendungsfensters; hat Vorrang vor monitor
     mic: str = "default"  # "default" | "none" | Geräteindex
     loopback: str = "default"
     sensitivity: str = "mittel"
@@ -104,8 +105,8 @@ class LiveSession:
                     continue
                 tracks[name] = audio.open(name, device, self.dir / wav)
                 events.log(f"Spur '{name}': {device['name']} ({device['rate']} Hz)")
-            if not tracks and not o.monitor:
-                events.log("Weder Audio noch Monitor gewählt - nichts aufzunehmen.")
+            if not tracks and not (o.monitor or o.window):
+                events.log("Weder Audio noch Bildquelle gewählt - nichts aufzunehmen.")
                 return 1
 
             chunkers = {name: Chunker(vad) for name in tracks}
@@ -291,7 +292,7 @@ class LiveSession:
             return None
 
     def _start_screen(self):
-        if not self.opts.monitor:
+        if not (self.opts.monitor or self.opts.window):
             return None
         try:
             from audioscribe.live.screen import ScreenWatcher
@@ -301,6 +302,7 @@ class LiveSession:
                 self.dir,
                 self.clock,
                 self._on_shot,
+                window=self.opts.window,
                 sensitivity=self.opts.sensitivity,
                 bildformat=self.opts.bildformat,
                 log=events.log,

@@ -133,11 +133,10 @@
 <div class="wrap" id="tabLive" role="tabpanel" hidden>
   <div class="live-side">
     <div class="card">
-      <h2 class="card-title"><span class="step">1</span>Monitor <span class="spacer"></span>
+      <h2 class="card-title"><span class="step">1</span>Bildquelle <span class="spacer"></span>
         <button class="ghost sm" id="liveRefresh"><svg class="ic" aria-hidden="true"><use href="#i-refresh"/></svg>Aktualisieren</button></h2>
-      <div class="monitors" id="liveMonitors"><p class="hint">…</p></div>
-      <p class="hint" style="margin-top:8px">Diese Oberfläche gehört nicht auf den überwachten Monitor –
-        neue Thumbnails würden sonst selbst Bildwechsel auslösen.</p>
+      <div id="liveMonitors"><p class="hint">…</p></div>
+      <p class="hint" id="liveSourceHint" style="margin-top:8px"></p>
     </div>
 
     <div class="card">

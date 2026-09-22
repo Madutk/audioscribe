@@ -468,15 +468,25 @@ output/live-2026-09-19_14-30-05/
 **Modell:** `auto` nimmt `large-v3-turbo` auf der GPU (etwa 2–5 s Verzögerung) und `small`
 auf der CPU (eher 5–15 s).
 
+**Bildquelle:** Statt eines ganzen Monitors lässt sich auch ein einzelnes **Anwendungsfenster**
+wählen (Kacheln unter den Monitoren, nach Anwendung gebündelt). Aufgenommen wird dann nur
+dieses Fenster – auch wenn andere Fenster davor liegen, und die Oberfläche darf auf demselben
+Monitor bleiben. Minimiert pausieren die Standbilder, geschlossen endet nur die Bildaufnahme;
+der Ton läuft weiter. Grenzen: Erhöhte (Admin-)Prozesse und exklusive DirectX-Vollbilder
+liefern kein Fensterbild – dann fällt AudioScribe auf den Bildschirmausschnitt am
+Fensterrechteck zurück, inklusive allem, was davor liegt.
+
 **Zwei Fallstricke:** Mit Lautsprechern statt Headset hört das Mikrofon die Gegenseite mit,
-dann stehen Textstellen doppelt im Transkript. Und die AudioScribe-Oberfläche gehört nicht
-auf den überwachten Monitor, sonst lösen neue Thumbnails selbst Bildwechsel aus.
+dann stehen Textstellen doppelt im Transkript. Und bei Monitoraufnahme gehört die
+AudioScribe-Oberfläche nicht auf den überwachten Monitor, sonst lösen neue Thumbnails selbst
+Bildwechsel aus.
 
 **Ohne Oberfläche:**
 
 ```powershell
-.venv-win\Scripts\audioscribe.exe live --list-devices        # Geräteindizes und Monitore
+.venv-win\Scripts\audioscribe.exe live --list-devices        # Geräteindizes, Monitore, Fenster (HWND)
 .venv-win\Scripts\audioscribe.exe live --monitor 1 --mic 23  # Ende mit Strg+C oder "stop" + Enter
+.venv-win\Scripts\audioscribe.exe live --window 592902       # nur dieses Fenster statt eines Monitors
 .venv-win\Scripts\audioscribe.exe refine output\live-2026-09-19_14-30-05
 ```
 

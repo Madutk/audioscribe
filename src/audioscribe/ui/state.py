@@ -33,8 +33,11 @@ STATE_KEYS: tuple[str, ...] = (
     "agent_skills",
     "agent_bash",
     # Live-Transkription; Geraete nach NAME gemerkt - die Indizes wechseln mit jedem
-    # an- oder abgesteckten Headset.
+    # an- oder abgesteckten Headset. Fenster ebenso nach "Prozess – Titel", weil ein
+    # HWND den naechsten Start der Anwendung nicht ueberlebt.
+    "live_source",
     "live_monitor",
+    "live_window",
     "live_mic",
     "live_loopback",
     "live_model",
@@ -51,6 +54,7 @@ STATE_KEYS: tuple[str, ...] = (
 )
 
 THEMES: tuple[str, ...] = ("system", "light", "dark")
+LIVE_SOURCES: tuple[str, ...] = ("monitor", "window", "none")
 
 _BOOL_KEYS = ("diarize", "frames", "agent_bash", "live_partials", "live_speakers", "live_refine")
 
@@ -103,6 +107,9 @@ def _clean(values: Mapping[str, object]) -> dict:
         elif key == "theme":
             # Landet unescaped im HTML-Attribut - darum nur die drei bekannten Werte.
             if value in THEMES:
+                out[key] = value
+        elif key == "live_source":
+            if value in LIVE_SOURCES:
                 out[key] = value
         elif key == "agent_skills":
             # Liste von Skill-Namen; eine leere Liste ist eine gueltige, bewusste Wahl.

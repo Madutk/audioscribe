@@ -540,7 +540,7 @@ Compliance-Anforderungen.
 
 | ID | Anforderung |
 |----|-------------|
-| FR-37 | `audioscribe live` schneidet einen wählbaren Monitor, das System-Audio und das Mikrofon mit, bis `stop` über stdin oder Strg+C eintrifft. Geräte und Monitor sind wählbar (`--mic`, `--loopback`, `--monitor`), jede Quelle ist abschaltbar. |
+| FR-37 | `audioscribe live` schneidet einen wählbaren Monitor **oder ein einzelnes Anwendungsfenster**, das System-Audio und das Mikrofon mit, bis `stop` über stdin oder Strg+C eintrifft. Geräte und Bildquelle sind wählbar (`--mic`, `--loopback`, `--monitor`, `--window HWND`), jede Quelle ist abschaltbar. Ein Fenster wird per `PrintWindow` auch verdeckt aufgenommen; minimiert pausieren die Standbilder, geschlossen endet nur die Bildaufnahme. |
 | FR-38 | Abgeschlossene Sprechabschnitte erscheinen als Text mit Zeitstempel und Sprecher. Der laufende Abschnitt erscheint als vorläufiger Text (abschaltbar mit `--no-partials`). |
 | FR-39 | Die **Verzögerung** (Ende des Gesprochenen bis zur Anzeige) und der **Rückstand** (aufgenommenes, noch nicht transkribiertes Audio) werden laufend gemeldet und angezeigt. |
 | FR-40 | Sprecher: Mikrofon = „Ich“. Die System-Spur wird per Online-Clustering in „Sprecher N“ getrennt; ohne HF-Token oder mit `--no-speakers` heißt sie „Gegenseite“. |

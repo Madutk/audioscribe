@@ -367,6 +367,7 @@ class LiveJobOptions:
 
     output_dir: Path
     monitor: int = 1  # 0 = ohne Bildschirm
+    window: int = 0  # HWND eines Anwendungsfensters; hat Vorrang vor monitor
     mic: str = "default"  # "default" | "none" | Geraeteindex
     loopback: str = "default"
     model: str = "auto"
@@ -395,6 +396,8 @@ def build_live_argv(opts: LiveJobOptions, *, prefix: Sequence[str] | None = None
         f"--frame-sensitivity={opts.frame_sensitivity}",
         f"--frame-format={opts.frame_format}",
     ]
+    if opts.window:
+        argv.append(f"--window={opts.window}")
     if not opts.partials:
         argv.append("--no-partials")
     if not opts.speakers:

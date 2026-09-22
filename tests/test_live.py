@@ -2,14 +2,16 @@
 
 import json
 import threading
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
 
-from audioscribe.live import events
+from audioscribe.live import events, fenster
 from audioscribe.live.board import Job, JobBoard
 from audioscribe.live.chunker import Chunker, Utterance
 from audioscribe.live.devices import pick
+from audioscribe.live.fenster import WindowGone
 from audioscribe.live.screen import ChangeDetector
 from audioscribe.live.speakers import GEGENSEITE, ICH, OnlineClusterer, SpeakerLabeler
 from audioscribe.live.store import keep_live_copy, session_name, write_transcript
@@ -296,6 +298,129 @@ def test_detector_continuous_motion_still_yields_images():
     assert len(shots) == 3 and shots[1] == pytest.approx(20.5)
 
 
+# --- Anwendungsfenster als Bildquelle ---------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "kw, erwartet",
+    [
+        ({}, True),
+        ({"title": "  "}, False),
+        ({"cloaked": 1}, False),  # virtueller Desktop / UWP im Hintergrund
+        ({"width": 0}, False),
+        ({"class_name": "Progman"}, False),
+        ({"style_ex": fenster.WS_EX_TOOLWINDOW}, False),
+        ({"style_ex": fenster.WS_EX_TOOLWINDOW | fenster.WS_EX_APPWINDOW}, True),
+        ({"has_owner": True}, False),  # Dialog eines anderen Fensters
+        ({"has_owner": True, "style_ex": fenster.WS_EX_APPWINDOW}, True),
+    ],
+)
+def test_wanted_follows_alt_tab_rules(kw, erwartet):
+    basis = {"title": "Editor", "class_name": "Chrome_WidgetWin_1", "style_ex": 0, "cloaked": 0,
+             "has_owner": False, "width": 800, "height": 600}
+    assert fenster._wanted(**{**basis, **kw}) is erwartet
+
+
+def test_group_by_process_keeps_first_seen_order():
+    ws = [
+        {"hwnd": 1, "process": "chrome", "title": "A"},
+        {"hwnd": 2, "process": "code", "title": "B"},
+        {"hwnd": 3, "process": "chrome", "title": "C"},
+    ]
+    gruppen = fenster.group_by_process(ws)
+    assert [g["process"] for g in gruppen] == ["chrome", "code"]
+    assert [w["hwnd"] for w in gruppen[0]["windows"]] == [1, 3]
+    assert fenster.group_by_process([]) == []
+    assert fenster.window_label(ws[0]) == "chrome – A"
+
+
+def test_list_windows_is_empty_off_windows(monkeypatch):
+    monkeypatch.setattr(fenster, "_api", lambda: None)
+    assert fenster.list_windows() == []
+    assert fenster.is_window(4711) is False
+
+
+class FakeSource:
+    """Bildquelle aus einer festen Folge: PIL-Bild, ``None`` (pausiert) oder Ausnahme."""
+
+    label = "Attrappe"
+
+    def __init__(self, folge):
+        self._folge = list(folge)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return None
+
+    def grab(self):
+        if not self._folge:
+            raise WindowGone("zu Ende")
+        item = self._folge.pop(0)
+        if isinstance(item, Exception):
+            raise item
+        return item
+
+
+def run_watcher(tmp_path, source, **kw):
+    from itertools import count
+
+    from audioscribe.live.screen import ScreenWatcher
+
+    takt = count()
+    marks, log = [], []
+    watcher = ScreenWatcher(
+        1, tmp_path, lambda: next(takt) * 5.0, marks.append, fps=500.0, log=log.append,
+        source_factory=lambda: source, **kw,
+    )
+    watcher.start()
+    watcher.join(timeout=5)
+    assert not watcher.is_alive()
+    return marks, log
+
+
+def test_screen_watcher_pauses_and_ends_with_window(tmp_path):
+    Image = pytest.importorskip("PIL.Image")
+    weiss = Image.new("RGB", (64, 36), (255, 255, 255))
+    schwarz = Image.new("RGB", (64, 36), (0, 0, 0))
+    marks, log = run_watcher(tmp_path, FakeSource([weiss, weiss, None, None, schwarz, WindowGone("weg")]))
+
+    assert [m.id for m in marks] == [1]  # Startbild; der Wechsel auf Schwarz ist noch nicht ruhig
+    assert (tmp_path / "frames" / marks[0].png.split("/")[1]).exists()
+    assert log == [
+        "Standbilder: Attrappe",
+        "Fenster minimiert oder ausgeblendet - Standbilder pausieren",
+        "Fenster wieder sichtbar",
+        "Fenster geschlossen - keine weiteren Standbilder",
+    ]
+
+
+def test_screen_watcher_reports_missing_source(tmp_path):
+    from audioscribe.live.screen import SourceUnavailable
+
+    class Kaputt:
+        def __enter__(self):
+            raise SourceUnavailable("Monitor 7 gibt es nicht")
+
+        def __exit__(self, *exc):
+            return None
+
+    marks, log = run_watcher(tmp_path, Kaputt())
+    assert marks == [] and log == ["Monitor 7 gibt es nicht - keine Standbilder"]
+
+
+def test_window_source_region_clips_to_virtual_screen(monkeypatch):
+    from audioscribe.live.screen import WindowSource
+
+    # Zweiter Monitor links vom Hauptmonitor -> negative Koordinaten im virtuellen Bildschirm.
+    monkeypatch.setattr("audioscribe.live.screen.grab_image", lambda sct, region: region)
+    src = WindowSource(1)
+    src._sct = SimpleNamespace(monitors=[{"left": -1920, "top": 0, "width": 3840, "height": 1080}])
+    assert src._region((-2000, -50, 100, 500)) == {"left": -1920, "top": 0, "width": 2020, "height": 500}
+    assert src._region((5000, 0, 5100, 100)) is None  # ganz außerhalb
+
+
 # --- Ablage ------------------------------------------------------------------------
 
 
@@ -453,9 +578,12 @@ def test_build_live_argv_and_refine_argv(tmp_path):
     assert argv[:2] == ["audioscribe", "live"]
     assert {"--monitor=2", "--mic=23", "--loopback=none", "--model=auto", "--no-partials"} <= set(argv)
     assert "--no-speakers" not in argv
+    assert not any(a.startswith("--window") for a in argv)
     assert build_refine_argv(tmp_path / "live-x", opts, prefix=["audioscribe"])[:3] == [
         "audioscribe", "refine", str(tmp_path / "live-x")
     ]
+    fenster_argv = build_live_argv(LiveJobOptions(output_dir=tmp_path, monitor=0, window=4711), prefix=["x"])
+    assert {"--monitor=0", "--window=4711"} <= set(fenster_argv)
 
 
 # --- Routen ------------------------------------------------------------------------
@@ -472,7 +600,7 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr(state, "state_path", lambda cache_dir=None: tmp_path / "ui-state.json")
     monkeypatch.setattr(
         "audioscribe.live.kommando.inventory",
-        lambda: {"mics": [], "loopbacks": [], "monitors": [], "problems": ["Attrappe"]},
+        lambda: {"mics": [], "loopbacks": [], "monitors": [], "windows": [], "problems": ["Attrappe"]},
     )
     return TestClient(server.create_app())
 
@@ -489,6 +617,31 @@ def test_live_start_rejects_bad_input(client, tmp_path):
     assert client.post("/api/live/start", json={**base, "device": "tpu"}).status_code == 400
     nothing = {**base, "monitor": 0, "mic": "none", "loopback": "none"}
     assert client.post("/api/live/start", json=nothing).status_code == 400
+    assert client.post("/api/live/start", json={**base, "window": -1}).status_code == 400
+    assert client.post("/api/live/start", json={**base, "window": 2**40}).status_code == 400
+
+
+def test_live_start_with_window_remembers_label(client, tmp_path, monkeypatch):
+    from audioscribe.ui import state
+    from audioscribe.ui.runner import LiveRunner
+
+    gestartet = []
+    monkeypatch.setattr(LiveRunner, "start", lambda self, opts: gestartet.append(opts))
+    state.save_state({"live_monitor": "2"})
+    body = {"output_dir": str(tmp_path), "monitor": 0, "window": 4711, "window_label": "chrome – Jira",
+            "mic": "none", "loopback": "none"}
+    assert client.post("/api/live/start", json=body).status_code == 200
+    assert gestartet[0].window == 4711 and gestartet[0].monitor == 0
+    saved = state.load_state()
+    assert saved["live_source"] == "window" and saved["live_window"] == "chrome – Jira"
+    assert saved["live_monitor"] == "2"  # Fensterwahl ueberschreibt den gemerkten Monitor nicht
+    data = client.get("/api/live/defaults").json()
+    assert data["source"] == "window" and data["window"] == "chrome – Jira"
+
+
+def test_live_window_preview_rejects_bad_handles(client):
+    assert client.get("/api/live/window/0").status_code == 404
+    assert client.get("/api/live/window/99999999999").status_code == 404
 
 
 def test_live_reset_route_without_session(client):
