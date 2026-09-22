@@ -412,6 +412,39 @@ def test_live_runner_second_stop_kills_and_skips_refine(tmp_path):
     assert done["phase"] == "fehler" and done["refine"] is None
 
 
+def test_live_runner_reset_discards_running_session(tmp_path):
+    runner = start_runner(tmp_path, refine=True)
+    wait_for(lambda: runner.snapshot()["stats"])
+    assert runner.reset() == tmp_path  # Ordner der verworfenen Sitzung
+    snap = runner.snapshot()
+    assert snap["running"] is False and "phase" not in snap and "dir" not in snap
+    assert snap["events"] == [] and snap["lines"] == [] and snap["offset"] == 0 and snap["ev_offset"] == 0
+    assert snap.get("refine") is None  # kein Nachschaerfen nach dem Verwerfen
+    assert runner.session_dir() is None
+    # danach geht ein Neustart, als waere nie etwas gewesen
+    import sys
+
+    from audioscribe.ui.jobs import LiveJobOptions
+
+    runner.start(
+        LiveJobOptions(output_dir=tmp_path, refine=False),
+        argv_builder=lambda opts: [sys.executable, "-c", CHILD, str(tmp_path)],
+    )
+    wait_for(lambda: runner.snapshot()["stats"])
+    runner.stop()
+    assert wait_for(lambda: (s := runner.snapshot()) and not s["running"] and s)["phase"] == "beendet"
+
+
+def test_live_runner_reset_after_end_clears_state(tmp_path):
+    runner = start_runner(tmp_path, refine=False)
+    wait_for(lambda: runner.snapshot()["stats"])
+    runner.stop()
+    wait_for(lambda: not runner.snapshot()["running"])
+    assert runner.reset() == tmp_path
+    assert runner.snapshot() == {"running": False, "offset": 0, "lines": [], "events": [], "ev_offset": 0, "partials": {}}
+    assert runner.reset() is None  # ein zweites Mal ist harmlos
+
+
 def test_build_live_argv_and_refine_argv(tmp_path):
     from audioscribe.ui.jobs import LiveJobOptions, build_live_argv, build_refine_argv
 
@@ -456,6 +489,10 @@ def test_live_start_rejects_bad_input(client, tmp_path):
     assert client.post("/api/live/start", json={**base, "device": "tpu"}).status_code == 400
     nothing = {**base, "monitor": 0, "mic": "none", "loopback": "none"}
     assert client.post("/api/live/start", json=nothing).status_code == 400
+
+
+def test_live_reset_route_without_session(client):
+    assert client.post("/api/live/reset").json() == {"ok": True, "discarded": None}
 
 
 def test_live_frame_route_without_session(client):

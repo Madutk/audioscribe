@@ -579,6 +579,7 @@ class LiveRunner(_ProcessRunner):
         super().__init__(max_lines=max_lines)
         self._info: dict = {"running": False}
         self._events: list[dict] = []
+        self._discard = False  # Reset unterwegs: kein Nachschaerfen mehr anstossen
 
     def start(
         self,
@@ -605,6 +606,7 @@ class LiveRunner(_ProcessRunner):
                 "returncode": None,
             }
             self._events = []
+            self._discard = False
             self._reset_log()
         self._thread = threading.Thread(
             target=self._run,
@@ -637,6 +639,34 @@ class LiveRunner(_ProcessRunner):
         except (OSError, ValueError):
             _terminate(proc)
 
+    def reset(self, *, timeout: float = 15.0) -> Path | None:
+        """Alles auf Anfang: eine laufende Sitzung wird hart beendet (ohne Nachschaerfen),
+        danach sind Zustand, Ereignisse und Protokoll leer wie vor dem ersten Start.
+
+        Die Dateien der verworfenen Sitzung bleiben auf der Platte; ihr Ordner wird
+        zurueckgegeben, damit die Oberflaeche ihn nennen kann.
+        """
+        with self._lock:
+            old_dir = self._info.get("dir")
+            running = self._info.get("running")
+            if running:
+                self._discard = True
+                self._info["stopping"] = True
+            proc, thread = self._proc, self._thread
+        if running:
+            if proc is not None and proc.poll() is None:
+                _terminate(proc)
+            if thread is not None:
+                thread.join(timeout)
+                if thread.is_alive():
+                    raise RuntimeError("Die Live-Sitzung liess sich nicht beenden.")
+        with self._lock:
+            self._info = {"running": False}
+            self._events = []
+            self._discard = False
+            self._reset_log()
+        return Path(old_dir) if old_dir else None
+
     def session_dir(self) -> Path | None:
         with self._lock:
             raw = self._info.get("dir")
@@ -662,7 +692,7 @@ class LiveRunner(_ProcessRunner):
             code = self._pump(self._spawn(argv, stdin=subprocess.PIPE), self._on_live_line)
             with self._lock:
                 session = self._info.get("dir")
-                aborted = self._info["stopping"] and self._info["phase"] != "fertig"
+                aborted = self._discard or (self._info["stopping"] and self._info["phase"] != "fertig")
             if code == 0 and opts.refine and session and not aborted:
                 with self._lock:
                     self._info.update(phase="nachschaerfen", stopping=False, partials={})

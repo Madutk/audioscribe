@@ -470,6 +470,7 @@ let liveEvOffset = 0;      // gelesene Ereignisse (Segmente, Standbilder)
 let liveMonitor = 1;       // 0 = ohne Bildschirm
 let liveShots = [];        // {id, t, file}
 let liveSession = null;
+let liveRunning = false;
 let lightboxIndex = 0;
 
 const tc = (seconds) => {
@@ -531,12 +532,32 @@ function updateLiveTarget() {
 }
 
 function resetLiveView() {
-  liveOffset = 0; liveEvOffset = 0; liveShots = [];
-  $('liveText').innerHTML = '';
+  liveOffset = 0; liveEvOffset = 0; liveShots = []; liveSession = null; lightboxIndex = 0;
+  $('liveText').innerHTML = empty('mic', 'Noch keine Sitzung.');
   $('liveThumbs').innerHTML = empty('image', 'Bildwechsel erscheinen hier.');
   $('liveLog').textContent = '';
   $('liveResult').innerHTML = '';
   $('liveShotCount').textContent = '';
+  $('lightbox').classList.remove('open');
+}
+
+/** Alles auf Anfang. Laeuft gerade eine Sitzung, wird sie verworfen und sofort neu begonnen. */
+async function resetLive() {
+  const restart = liveRunning;
+  if (restart && !confirm('Die laufende Sitzung wird abgebrochen und verworfen. Neu beginnen?')) return;
+  $('liveErr').textContent = '';
+  $('liveReset').disabled = true;
+  try {
+    const r = await post('/api/live/reset', {});
+    resetLiveView();
+    if (restart) await startLive();
+    else await pollLive();
+    if (r.discarded) $('liveLog').textContent = `Verworfene Sitzung liegt noch unter: ${r.discarded}\n` + $('liveLog').textContent;
+  } catch (err) {
+    $('liveErr').textContent = err.message;
+  } finally {
+    $('liveReset').disabled = false;
+  }
 }
 
 async function startLive() {
@@ -623,9 +644,10 @@ async function pollLive() {
   const box = $('liveText');
   const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 60;
   for (const node of box.querySelectorAll('.partial')) node.remove();
-  if (s.events.length && box.querySelector('.empty')) box.innerHTML = '';
+  const partials = Object.values(s.partials || {});
+  if ((s.events.length || partials.length) && box.querySelector('.empty')) box.innerHTML = '';
   for (const ev of s.events) addLiveEvent(ev);
-  for (const p of Object.values(s.partials || {})) {
+  for (const p of partials) {
     box.insertAdjacentHTML('beforeend', `<p class="seg partial"><span class="ts">[${tc(p.start)}]</span>${esc(p.text)} …</p>`);
   }
   if (atBottom) box.scrollTop = box.scrollHeight;
@@ -636,11 +658,14 @@ async function pollLive() {
     log.scrollTop = log.scrollHeight;
   }
 
-  const running = !!s.running;
+  const running = liveRunning = !!s.running;
   $('liveStart').hidden = running;
   $('liveStop').hidden = !running;
   $('liveStopLabel').textContent = s.phase === 'nachschaerfen' ? 'Nachschärfen abbrechen'
     : s.stopping ? 'Sofort abbrechen' : 'Stoppen';
+  // Erst sichtbar, wenn es etwas zurueckzusetzen gibt; waehrend der Aufnahme heisst es "Neu beginnen".
+  $('liveReset').hidden = !running && !s.dir && !s.phase;
+  $('liveResetLabel').textContent = running ? 'Verwerfen und neu beginnen' : 'Zurücksetzen';
   $('livePhase').textContent = PHASES[s.phase] || 'bereit';
   $('livePhase').className = 'badge ' + ({ laeuft: 'laeuft', fehler: 'fehler', beendet: 'fertig' }[s.phase] || '');
 
@@ -685,6 +710,7 @@ function openLightbox(index) {
 
 $('liveStart').onclick = startLive;
 $('liveStop').onclick = () => api('/api/live/stop', { method: 'POST' }).catch(() => {});
+$('liveReset').onclick = resetLive;
 // Erst nach init(): vorher ist 'defaults' noch null (der CUDA-Test kann auf CPU-Rechnern dauern).
 $('liveRefresh').onclick = () => ready.then(loadLiveDefaults)
   .then(() => { $('liveErr').textContent = ''; })

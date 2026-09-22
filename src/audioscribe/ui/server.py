@@ -606,6 +606,15 @@ def create_app():
         live.stop()
         return JSONResponse({"ok": True})
 
+    @app.post("/api/live/reset")
+    def api_live_reset():
+        """Alles auf Anfang - eine laufende Sitzung wird dabei verworfen."""
+        try:
+            discarded = live.reset()
+        except RuntimeError as exc:
+            raise HTTPException(409, str(exc)) from exc
+        return JSONResponse({"ok": True, "discarded": str(discarded) if discarded else None})
+
     @app.get("/api/live/frame/{name}")
     def api_live_frame(name: str):
         """Standbild der laufenden bzw. letzten Sitzung - nur aus deren ``frames/``."""

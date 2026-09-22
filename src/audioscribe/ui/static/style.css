@@ -172,6 +172,8 @@ textarea.small { min-height: 60px; font: 12px/1.5 var(--mono); }
 .empty .ic { width: 28px; height: 28px; color: var(--fg-faint); stroke-width: 1.6; }
 .actionbar { position: sticky; bottom: var(--s3); background: var(--surface); border: 1px solid var(--border);
              border-radius: var(--radius); padding: var(--s3); box-shadow: var(--shadow-md); }
+.actionbar .reset { width: 100%; margin-top: var(--s2); color: var(--fg-muted); }
+.actionbar .reset:hover { color: var(--err); background: var(--err-soft); }
 
 /* --- Listen (Dateien, Quellen, Skills) -------------------------------------- */
 .files, .skills { max-height: 320px; overflow: auto; margin: 0 calc(var(--s2) * -1); }
