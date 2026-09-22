@@ -246,6 +246,9 @@ pre#liveLog { height: 120px; }
 .dirlist .ic { color: var(--fg-muted); }
 .dialog footer { display: flex; gap: var(--s2); align-items: center; margin-top: var(--s3); flex-wrap: wrap; }
 .dialog footer .hint { flex: 1; min-width: 160px; word-break: break-all; }
+.dialog.confirm { width: min(440px, 100%); }
+.dialog.confirm .card-title .ic { color: var(--err); }
+.dialog.confirm p { margin: 0; color: var(--fg-muted); line-height: 1.5; }
 #lightbox { flex-direction: column; gap: var(--s3); }
 #lightbox img { max-width: 96vw; max-height: 84vh; border-radius: var(--radius); box-shadow: var(--shadow-md); }
 #lightbox .cap { color: #fff; display: flex; gap: var(--s3); align-items: center; font-size: 13px; }

@@ -544,7 +544,18 @@ function resetLiveView() {
 /** Alles auf Anfang. Laeuft gerade eine Sitzung, wird sie verworfen und sofort neu begonnen. */
 async function resetLive() {
   const restart = liveRunning;
-  if (restart && !confirm('Die laufende Sitzung wird abgebrochen und verworfen. Neu beginnen?')) return;
+  const ok = await askConfirm(restart ? {
+    title: 'Laufende Sitzung verwerfen?',
+    text: 'Die Aufnahme wird sofort abgebrochen, ohne Nachschärfen. Anschließend beginnt eine neue Sitzung '
+      + 'mit denselben Einstellungen. Die bisherigen Dateien bleiben im Sitzungsordner liegen.',
+    ok: 'Verwerfen und neu beginnen',
+  } : {
+    title: 'Ansicht zurücksetzen?',
+    text: 'Transkript, Screenshots und Protokoll verschwinden aus der Oberfläche. '
+      + 'Der Sitzungsordner auf der Platte bleibt unverändert.',
+    ok: 'Zurücksetzen',
+  });
+  if (!ok) return;
   $('liveErr').textContent = '';
   $('liveReset').disabled = true;
   try {
@@ -730,7 +741,33 @@ for (const id of ['liveThumbs', 'liveText']) {
 $('lightbox').onclick = (e) => { if (e.target === $('lightbox')) $('lightbox').classList.remove('open'); };
 $('lightboxPrev').onclick = () => openLightbox(lightboxIndex - 1);
 $('lightboxNext').onclick = () => openLightbox(lightboxIndex + 1);
+// --- Bestaetigungsdialog ----------------------------------------------------
+
+let confirmResolve = null;
+
+/** Modale Rueckfrage; loest mit true (bestaetigt) oder false (abgebrochen) auf. */
+function askConfirm({ title, text, ok }) {
+  $('confirmTitle').lastElementChild.textContent = title;
+  $('confirmText').textContent = text;
+  $('confirmOk').textContent = ok;
+  $('confirm').classList.add('open');
+  $('confirmCancel').focus();  // Enter allein loest also nichts Unwiderrufliches aus
+  return new Promise((resolve) => { confirmResolve = resolve; });
+}
+
+function closeConfirm(answer) {
+  $('confirm').classList.remove('open');
+  const resolve = confirmResolve;
+  confirmResolve = null;
+  if (resolve) resolve(answer);
+}
+
+$('confirmOk').onclick = () => closeConfirm(true);
+$('confirmCancel').onclick = () => closeConfirm(false);
+$('confirm').onclick = (e) => { if (e.target === $('confirm')) closeConfirm(false); };
+
 document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && $('confirm').classList.contains('open')) { closeConfirm(false); return; }
   if (e.key === 'Escape' && $('overlay').classList.contains('open')) { $('overlay').classList.remove('open'); return; }
   if (!$('lightbox').classList.contains('open')) return;
   if (e.key === 'Escape') $('lightbox').classList.remove('open');

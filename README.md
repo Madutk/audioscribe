@@ -452,9 +452,9 @@ nicht sauber getrennt, das korrigiert das Nachschärfen.
 Alignment, Diarisierung der System-Spur) über den Mitschnitt und ersetzt `transkript.md`.
 Die Screenshots bleiben. Ein zweiter Klick auf Stoppen bricht hart ab.
 
-**Von vorn:** „Zurücksetzen“ unter den Start-/Stopp-Knöpfen leert Transkript, Screenshots
-und Protokoll und bringt den Reiter in den Ausgangszustand. Während einer Aufnahme heißt
-der Knopf „Verwerfen und neu beginnen“: Nach Rückfrage wird die laufende Sitzung hart
+**Von vorn:** „Zurücksetzen“ unter den Start-/Stopp-Knöpfen leert nach Rückfrage Transkript,
+Screenshots und Protokoll und bringt den Reiter in den Ausgangszustand. Während einer Aufnahme
+heißt der Knopf „Verwerfen und neu beginnen“: Nach Rückfrage wird die laufende Sitzung hart
 beendet (ohne Nachschärfen) und mit denselben Einstellungen sofort eine neue gestartet.
 Der Ordner der verworfenen Sitzung wird nicht gelöscht; das Protokoll nennt seinen Pfad.
 
