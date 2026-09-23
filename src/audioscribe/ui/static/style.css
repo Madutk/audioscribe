@@ -124,11 +124,12 @@ button .ic { width: 16px; height: 16px; }
 
 /* --- Formulare -------------------------------------------------------------- */
 input, select, textarea, label { font: inherit; }
-input[type=text], select, textarea { width: 100%; padding: 8px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border);
+input[type=text], input[type=search], select, textarea { width: 100%; padding: 8px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border);
       background: var(--input-bg); color: var(--fg); min-height: 38px;
       transition: border-color var(--dur), box-shadow var(--dur); }
-input[type=text]:hover, select:hover, textarea:hover { border-color: var(--border-strong); }
-input[type=text]:focus-visible, select:focus-visible, textarea:focus-visible { border-color: var(--accent); box-shadow: var(--focus); }
+input[type=text]:hover, input[type=search]:hover, select:hover, textarea:hover { border-color: var(--border-strong); }
+input[type=text]:focus-visible, input[type=search]:focus-visible, select:focus-visible, textarea:focus-visible {
+  border-color: var(--accent); box-shadow: var(--focus); }
 input::placeholder, textarea::placeholder { color: var(--fg-faint); }
 input[type=checkbox], input[type=radio] { accent-color: var(--accent); width: 16px; height: 16px; margin: 0; flex: none; cursor: pointer; }
 textarea { min-height: 110px; resize: vertical; line-height: 1.45; }
@@ -249,6 +250,17 @@ pre#liveLog { height: 120px; }
 .dialog.confirm { width: min(440px, 100%); }
 .dialog.confirm .card-title .ic { color: var(--err); }
 .dialog.confirm p { margin: 0; color: var(--fg-muted); line-height: 1.5; }
+/* Fensterwahl: Suchfeld, darunter die scrollbare Liste der Anwendungsfenster */
+.dialog.winpick { width: min(960px, 100%); }
+.dialog.winpick .card-title .hint { font-weight: 400; margin-left: var(--s1); }
+.dialog.winpick input[type=search] { margin-bottom: var(--s3); }
+.winlist { flex: 1; overflow: auto; min-height: 200px; padding: var(--s1); }
+.winlist .source-group { margin: 0 0 var(--s3); }
+.winlist .source-group:last-of-type { margin-bottom: 0; }
+.winlist .source-title { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 6px;
+                         padding: 4px 0 6px; background: var(--surface); font-size: 12px; font-weight: 600; color: var(--fg-muted); }
+.winlist .source-title .count { font-weight: 500; color: var(--fg-faint); font-variant-numeric: tabular-nums; }
+.winlist .monitor { max-width: 100%; }
 #lightbox { flex-direction: column; gap: var(--s3); }
 #lightbox img { max-width: 96vw; max-height: 84vh; border-radius: var(--radius); box-shadow: var(--shadow-md); }
 #lightbox .cap { color: #fff; display: flex; gap: var(--s3); align-items: center; font-size: 13px; }
@@ -277,11 +289,19 @@ pre#liveLog { height: 120px; }
 .monitor.active::after { content: ""; position: absolute; top: 6px; right: 6px; width: 10px; height: 10px; border-radius: 50%;
                          background: var(--accent); box-shadow: 0 0 0 2px var(--surface); }
 .monitor img { display: block; width: 150px; max-height: 110px; object-fit: cover; object-position: top; border-radius: 3px; }
-.monitor .none { width: 150px; padding: 24px 0; }
+.monitor .none { width: 150px; min-height: 64px; display: flex; flex-direction: column; align-items: center; justify-content: center;
+                 gap: 4px; padding: 0; }
+.monitor .none .ic { width: 22px; height: 22px; color: var(--fg-faint); stroke-width: 1.6; }
 .monitor .title { display: block; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* Anwendungsfenster, nach Prozess gebuendelt, unter den Monitorkacheln */
-.source-group { margin-top: var(--s3); }
-.source-title { font-size: 12px; font-weight: 600; color: var(--fg-muted); margin-bottom: 4px; }
+/* Kachel "Anwendungsfenster": zeigt das gewaehlte Fenster und oeffnet den Auswahldialog */
+.monitor.pick .sub { display: block; font-size: 11px; color: var(--fg-faint); transition: color var(--dur); }
+.monitor.pick:hover .sub, .monitor.pick:focus-visible .sub { color: var(--accent); }
+.monitor.pick:not(.active) .none { color: var(--accent); }
+.monitor.pick:not(.active) .none .ic { color: var(--accent); }
+@media (min-width: 561px) {
+  .winlist .monitor img, .winlist .monitor .none, .winlist .monitor .title { width: 200px; max-width: 200px; }
+  .winlist .monitor img { max-height: 140px; }
+}
 .gauges { display: flex; gap: var(--s2); flex-wrap: wrap; align-items: stretch; margin-bottom: var(--s3);
           font-variant-numeric: tabular-nums; }
 .gauges > .badge { align-self: center; }

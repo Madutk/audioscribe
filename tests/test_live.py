@@ -644,6 +644,21 @@ def test_live_window_preview_rejects_bad_handles(client):
     assert client.get("/api/live/window/99999999999").status_code == 404
 
 
+def test_live_windows_route_lists_only_windows(client, monkeypatch):
+    fenster = [{"hwnd": 4711, "title": "Jira", "process": "chrome", "pid": 7, "width": 800, "height": 600}]
+    monkeypatch.setattr("audioscribe.live.fenster.list_windows", lambda: fenster)
+    assert client.get("/api/live/windows").json() == {"windows": fenster}
+
+
+def test_index_has_window_picker_dialog():
+    from pathlib import Path
+
+    from audioscribe.ui import server
+
+    html = (Path(server.__file__).parent / "static" / "index.html").read_text(encoding="utf-8")
+    assert 'id="winPick"' in html and 'id="winFilter"' in html and 'id="winList"' in html
+
+
 def test_live_reset_route_without_session(client):
     assert client.post("/api/live/reset").json() == {"ok": True, "discarded": None}
 

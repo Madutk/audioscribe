@@ -536,25 +536,50 @@ function pickLiveSource(d) {
 
 const isActive = (kind, id) => liveSource.kind === kind && liveSource.id === id;
 
+/** Vorschaubild, das bei 404 (Fenster weg oder minimiert) zu einem Platzhalter wird. */
+function fallbackOnError(root, text) {
+  for (const img of root.querySelectorAll('img[data-fallback]')) {
+    img.onerror = () => { img.replaceWith(Object.assign(document.createElement('div'), { className: 'none', textContent: text })); };
+  }
+}
+
+const sourceTile = (kind, id, inner) =>
+  `<div class="monitor ${isActive(kind, id) ? 'active' : ''}" data-kind="${kind}" data-id="${id}" tabindex="0" role="button">${inner}</div>`;
+
+/** Die eine Kachel "Anwendungsfenster" in der Karte: gewaehltes Fenster mit Vorschau oder Platzhalter.
+ *  Sie oeffnet den Auswahldialog und traegt darum KEIN data-kind. */
+function windowTileHtml(stamp) {
+  const chosen = liveSource.kind === 'window' && liveDefaults.windows.find((w) => w.hwnd === liveSource.id);
+  if (!chosen && !liveDefaults.windows.length && liveSource.kind !== 'window') return '';  // z. B. ausserhalb von Windows
+  const attrs = 'data-winpick="window" tabindex="0" role="button" aria-haspopup="dialog" title="Anwendungsfenster wählen"';
+  if (!chosen) {
+    return `<div class="monitor pick" ${attrs}><div class="none">${icon('image')}Fenster wählen …</div>Anwendungsfenster</div>`;
+  }
+  return `<div class="monitor pick active" ${attrs}><img src="/api/live/window/${chosen.hwnd}?t=${stamp}" alt="" data-fallback />`
+    + `<span class="title" title="${esc(chosen.title)}">${esc(chosen.title)}</span>`
+    + `<span class="sub">${esc(chosen.process)} · ändern</span></div>`;
+}
+
 function renderSources() {
   const stamp = Date.now();  // Vorschaubild nie aus dem Browser-Cache
-  const tile = (kind, id, inner) =>
-    `<div class="monitor ${isActive(kind, id) ? 'active' : ''}" data-kind="${kind}" data-id="${id}">${inner}</div>`;
   const monitors = liveDefaults.monitors.map((m) =>
-    tile('monitor', m.index, `<img src="/api/live/monitor/${m.index}?t=${stamp}" alt="" />Monitor ${m.index} · ${m.width}×${m.height}`))
-    .join('') + tile('none', 0, '<div class="none">ohne Bildschirm</div>nur Ton');
-  // Fenster nach Anwendung gebuendelt; Reihenfolge = Z-Order, also zuletzt benutzte zuerst.
-  const groups = new Map();
-  for (const w of liveDefaults.windows) (groups.get(w.process) || groups.set(w.process, []).get(w.process)).push(w);
-  const windows = [...groups].map(([process, ws]) =>
-    `<div class="source-group"><div class="source-title">${esc(process)}</div><div class="monitors">${ws.map((w) =>
-      tile('window', w.hwnd, `<img src="/api/live/window/${w.hwnd}?t=${stamp}" alt="" />`
-        + `<span class="title" title="${esc(w.title)}">${esc(w.title)}</span>`)).join('')}</div></div>`).join('');
-  $('liveMonitors').innerHTML = `<div class="monitors">${monitors}</div>${windows}`;
-  // Minimierte Fenster liefern kein Vorschaubild - Platzhalter statt kaputtem Bild.
-  for (const img of $('liveMonitors').querySelectorAll('.monitor[data-kind="window"] img')) {
-    img.onerror = () => { img.replaceWith(Object.assign(document.createElement('div'), { className: 'none', textContent: 'minimiert' })); };
+    sourceTile('monitor', m.index, `<img src="/api/live/monitor/${m.index}?t=${stamp}" alt="" />Monitor ${m.index} · ${m.width}×${m.height}`))
+    .join('') + sourceTile('none', 0, '<div class="none">ohne Bildschirm</div>nur Ton');
+  $('liveMonitors').innerHTML = `<div class="monitors">${monitors}${windowTileHtml(stamp)}</div>`;
+  fallbackOnError($('liveMonitors'), 'kein Bild');
+  updateSourceHint();
+}
+
+/** Nur die Fenster-Kachel neu zeichnen und die Markierung setzen - Monitorbilder bleiben stehen. */
+function renderWindowTile() {
+  const old = $('liveMonitors').querySelector('[data-winpick]');
+  const html = windowTileHtml(Date.now());
+  if (old) old.outerHTML = html;
+  else if (html) $('liveMonitors').querySelector('.monitors').insertAdjacentHTML('beforeend', html);
+  for (const t of $('liveMonitors').querySelectorAll('.monitor[data-kind]')) {
+    t.classList.toggle('active', isActive(t.dataset.kind, Number(t.dataset.id)));
   }
+  fallbackOnError($('liveMonitors'), 'kein Bild');
   updateSourceHint();
 }
 
@@ -772,10 +797,17 @@ $('liveRefresh').onclick = () => ready.then(loadLiveDefaults)
 $('liveMonitors').onclick = (e) => {
   const tile = e.target.closest('.monitor');
   if (!tile) return;
+  if (tile.dataset.winpick) { openWinPick(tile); return; }
   liveSource = { kind: tile.dataset.kind, id: Number(tile.dataset.id) };
-  for (const t of $('liveMonitors').querySelectorAll('.monitor')) t.classList.toggle('active', t === tile);
-  updateSourceHint();
+  renderWindowTile();
 };
+// Kacheln sind fokussierbar: Enter/Leertaste wirken wie ein Klick.
+const clickOnKey = (e) => {
+  if (e.key !== 'Enter' && e.key !== ' ') return;
+  const tile = e.target.closest('.monitor');
+  if (tile) { e.preventDefault(); tile.click(); }
+};
+$('liveMonitors').onkeydown = clickOnKey;
 for (const id of ['liveThumbs', 'liveText']) {
   $(id).onclick = (e) => {
     const el = e.target.closest('[data-shot]');
@@ -785,6 +817,108 @@ for (const id of ['liveThumbs', 'liveText']) {
 $('lightbox').onclick = (e) => { if (e.target === $('lightbox')) $('lightbox').classList.remove('open'); };
 $('lightboxPrev').onclick = () => openLightbox(lightboxIndex - 1);
 $('lightboxNext').onclick = () => openLightbox(lightboxIndex + 1);
+// --- Fensterwahl-Dialog -----------------------------------------------------
+// Die Fensterliste wird erst beim Oeffnen gezeichnet (frische Vorschaubilder, und ein
+// Aktualisieren der Karte zieht nicht fuer jedes offene Fenster einen Screenshot).
+
+let winOpener = null;  // Kachel, die den Dialog geoeffnet hat - bekommt den Fokus zurueck
+let winGen = 0;        // Generationszaehler gegen verspaetete Antworten von "Aktualisieren"
+
+const winTile = (w, stamp) =>
+  `<div class="monitor ${isActive('window', w.hwnd) ? 'active' : ''}" data-kind="window" data-id="${w.hwnd}" data-search="${esc(`${w.process} ${w.title}`.toLowerCase())}"`
+  + ` tabindex="0" role="button"><img src="/api/live/window/${w.hwnd}?t=${stamp}" alt="" loading="lazy" data-fallback />`
+  + `<span class="title" title="${esc(w.title)}">${esc(w.title)}</span></div>`;
+
+function renderWinList() {
+  const stamp = Date.now();
+  // Nach Anwendung gebuendelt; Reihenfolge = Z-Order, also zuletzt benutzte zuerst.
+  const groups = new Map();
+  for (const w of liveDefaults.windows) (groups.get(w.process) || groups.set(w.process, []).get(w.process)).push(w);
+  $('winList').innerHTML = groups.size
+    ? [...groups].map(([process, ws]) =>
+      `<div class="source-group"><div class="source-title">${esc(process)}<span class="count">${ws.length}</span></div>`
+      + `<div class="monitors">${ws.map((w) => winTile(w, stamp)).join('')}</div></div>`).join('')
+      + `<div class="empty" id="winNoMatch" hidden>${icon('monitor')}Kein Fenster passt zum Filter.</div>`
+    : empty('monitor', 'Keine Anwendungsfenster gefunden.');
+  fallbackOnError($('winList'), 'kein Bild');
+  applyWinFilter();
+}
+
+function applyWinFilter() {
+  const q = $('winFilter').value.trim().toLowerCase();
+  const tiles = [...$('winList').querySelectorAll('.monitor')];
+  let shown = 0;
+  for (const tile of tiles) {
+    tile.hidden = !!q && !tile.dataset.search.includes(q);
+    if (!tile.hidden) shown++;
+  }
+  for (const group of $('winList').querySelectorAll('.source-group')) {
+    group.hidden = ![...group.querySelectorAll('.monitor')].some((t) => !t.hidden);
+  }
+  const noMatch = $('winNoMatch');
+  if (noMatch) noMatch.hidden = shown > 0;
+  $('winCount').textContent = tiles.length
+    ? (q ? `${shown} von ${tiles.length} Fenstern` : `${tiles.length} Fenster`) : '';
+}
+
+function openWinPick(opener) {
+  winOpener = opener || null;
+  $('winFilter').value = '';
+  renderWinList();
+  $('winPick').classList.add('open');
+  $('winFilter').focus();
+}
+
+function closeWinPick() {
+  $('winPick').classList.remove('open');
+  $('winList').innerHTML = '';  // keine weiteren Bildanfragen, keine veralteten Vorschauen
+  winGen++;
+  const back = (winOpener && winOpener.isConnected) ? winOpener : $('liveMonitors').querySelector('[data-winpick]');
+  winOpener = null;
+  if (back) back.focus();
+}
+
+function chooseWindow(hwnd) {
+  liveSource = { kind: 'window', id: hwnd };
+  closeWinPick();
+  renderWindowTile();  // ersetzt die Kachel, die eben noch den Fokus hatte
+  const tile = $('liveMonitors').querySelector('[data-winpick]');
+  if (tile) tile.focus();
+}
+
+/** Nur die Fensterliste neu holen. NICHT loadLiveDefaults(): das setzt Quelle und
+ *  alle Auswahlfelder auf den gespeicherten Stand zurueck. */
+async function refreshWindows() {
+  const gen = ++winGen;
+  $('winRefresh').disabled = true;
+  try {
+    const d = await api('/api/live/windows');
+    if (gen !== winGen || !$('winPick').classList.contains('open')) return;
+    liveDefaults.windows = d.windows || [];
+    renderWinList();
+    if (liveSource.kind === 'window' && !liveDefaults.windows.some((w) => w.hwnd === liveSource.id)) renderWindowTile();
+  } catch (err) {
+    $('winCount').textContent = err.message;
+  } finally {
+    $('winRefresh').disabled = false;
+  }
+}
+
+$('winList').onclick = (e) => {
+  const tile = e.target.closest('.monitor[data-kind="window"]');
+  if (tile) chooseWindow(Number(tile.dataset.id));
+};
+$('winList').onkeydown = clickOnKey;
+$('winFilter').oninput = applyWinFilter;  // auch das native "x" des Suchfelds feuert nur input
+$('winFilter').onkeydown = (e) => {
+  if (e.key !== 'Enter') return;
+  const visible = [...$('winList').querySelectorAll('.monitor')].filter((t) => !t.hidden);
+  if (visible.length === 1) { e.preventDefault(); visible[0].click(); }
+};
+$('winRefresh').onclick = refreshWindows;
+$('winCancel').onclick = closeWinPick;
+$('winPick').onclick = (e) => { if (e.target === $('winPick')) closeWinPick(); };
+
 // --- Bestaetigungsdialog ----------------------------------------------------
 
 let confirmResolve = null;
@@ -812,6 +946,7 @@ $('confirm').onclick = (e) => { if (e.target === $('confirm')) closeConfirm(fals
 
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && $('confirm').classList.contains('open')) { closeConfirm(false); return; }
+  if (e.key === 'Escape' && $('winPick').classList.contains('open')) { closeWinPick(); return; }
   if (e.key === 'Escape' && $('overlay').classList.contains('open')) { $('overlay').classList.remove('open'); return; }
   if (!$('lightbox').classList.contains('open')) return;
   if (e.key === 'Escape') $('lightbox').classList.remove('open');

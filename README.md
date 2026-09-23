@@ -469,7 +469,8 @@ output/live-2026-09-19_14-30-05/
 auf der CPU (eher 5–15 s).
 
 **Bildquelle:** Statt eines ganzen Monitors lässt sich auch ein einzelnes **Anwendungsfenster**
-wählen (Kacheln unter den Monitoren, nach Anwendung gebündelt). Aufgenommen wird dann nur
+wählen: Die Kachel **Anwendungsfenster** neben den Monitoren öffnet eine Auswahl mit
+Vorschaubildern, nach Anwendung gebündelt und per Suchfeld filterbar. Aufgenommen wird dann nur
 dieses Fenster – auch wenn andere Fenster davor liegen, und die Oberfläche darf auf demselben
 Monitor bleiben. Minimiert pausieren die Standbilder, geschlossen endet nur die Bildaufnahme;
 der Ton läuft weiter. Grenzen: Erhöhte (Admin-)Prozesse und exklusive DirectX-Vollbilder

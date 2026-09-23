@@ -318,6 +318,20 @@
   </div>
 </div>
 
+<div class="overlay" id="winPick">
+  <div class="dialog winpick" role="dialog" aria-modal="true" aria-labelledby="winPickTitle">
+    <h2 class="card-title" id="winPickTitle"><svg class="ic" aria-hidden="true"><use href="#i-monitor"/></svg>Fenster wählen
+      <span class="hint" id="winCount"></span><span class="spacer"></span>
+      <button class="ghost sm" id="winRefresh" type="button"><svg class="ic" aria-hidden="true"><use href="#i-refresh"/></svg>Aktualisieren</button></h2>
+    <input type="search" id="winFilter" placeholder="Anwendung oder Titel filtern …" aria-label="Fenster filtern" autocomplete="off" />
+    <div class="winlist" id="winList"></div>
+    <footer>
+      <span class="hint">Klick wählt das Fenster. Minimierte Fenster liefern kein Vorschaubild.</span>
+      <button class="secondary" id="winCancel" type="button">Abbrechen</button>
+    </footer>
+  </div>
+</div>
+
 <script src="/static/app.js" defer></script>
 </body>
 </html>

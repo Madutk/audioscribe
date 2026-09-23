@@ -556,6 +556,16 @@ def create_app():
             raise HTTPException(404, "Fenster ist minimiert.")
         return Response(data, media_type="image/jpeg")
 
+    @app.get("/api/live/windows")
+    def api_live_windows():
+        """Nur die Fensterliste - fuer den Aktualisieren-Knopf im Auswahldialog."""
+        from audioscribe.live.fenster import list_windows
+
+        try:
+            return JSONResponse({"windows": list_windows()})
+        except Exception as exc:  # noqa: BLE001
+            raise HTTPException(500, f"Fenster nicht lesbar: {exc}") from exc
+
     @app.post("/api/live/start")
     def api_live_start(body: LiveStartIn):
         if body.device not in jobs.DEVICES:
