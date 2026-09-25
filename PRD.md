@@ -559,6 +559,7 @@ Compliance-Anforderungen.
 | FR-43 | `audioscribe refine ORDNER` schärft eine Sitzung nach: je Spur Transkription und Alignment, Diarisierung nur auf der System-Spur. Die Live-Fassung bleibt als `transkript.live.md`/`transcript.live.json` erhalten. |
 | FR-44 | Die Oberfläche bekommt den Reiter „Live Transcription“ mit Monitorwahl samt Vorschau, Gerätewahl, Start/Stopp, laufendem Transkript, Verzögerungsanzeige, Pegeln und einer Thumbnail-Leiste mit Großansicht. Der bisherige Reiter „Transkription“ heißt „Offline Transcription“. |
 | FR-45 | `audioscribe doctor` prüft Plattform, Audio-Geräte (inkl. Loopback) und Monitore. |
+| FR-46 | Jede Live-Sitzung und jedes Nachschärfen hinterlassen ein Fazit: Ladezeit der Modelle, Aufnahmedauer, Rechenzeit und Tempo (Rechenzeit je Audiosekunde), Verzögerung Ø/Median/max, Abschnitte (davon zusammengelegt), Zeit im Aufholmodus bzw. Dauer je Stufe. Es steht als `bilanz.json` im Sitzungsordner, als Zeile im Protokoll und als Kasten „Fazit“ im Reiter. |
 
 ### 17.4 Nicht-funktionale Anforderungen
 

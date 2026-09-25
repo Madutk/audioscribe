@@ -604,6 +604,7 @@ class LiveRunner(_ProcessRunner):
                 "download": None,
                 "partials": {},
                 "refine": None,
+                "fazit": None,  # {"live": {...}, "nachschaerfen": {...}} nach dem jeweiligen Ende
                 "returncode": None,
             }
             self._events = []
@@ -734,6 +735,8 @@ class LiveRunner(_ProcessRunner):
                 self._info["download"] = event
             elif typ == "stats":
                 self._info["stats"] = event
+            elif typ == "fazit":
+                self._note_fazit(event)
             elif typ == "partial":
                 if event.get("text"):
                     self._info["partials"][event["track"]] = event
@@ -744,7 +747,19 @@ class LiveRunner(_ProcessRunner):
                     self._info["partials"].pop(event.get("track"), None)
                 self._events.append({"type": typ, **event})
 
+    def _note_fazit(self, event: dict) -> None:
+        """Fazit eines Teils (live | nachschaerfen) ablegen; Aufruf unter ``_lock``."""
+        fazit = dict(self._info.get("fazit") or {})
+        fazit[str(event.pop("teil", "live"))] = event
+        self._info["fazit"] = fazit
+
     def _on_refine_line(self, line: str) -> None:
+        event = parse_event(line)
+        if event is not None:
+            if event.pop("type") == "fazit":
+                with self._lock:
+                    self._note_fazit(event)
+            return
         percent = parse_progress(line)
         stage = parse_stage(line)
         with self._lock:

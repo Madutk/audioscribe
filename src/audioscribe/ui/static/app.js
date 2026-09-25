@@ -602,6 +602,7 @@ function resetLiveView() {
   $('liveThumbs').innerHTML = empty('image', 'Bildwechsel erscheinen hier.');
   $('liveLog').textContent = '';
   $('liveResult').innerHTML = '';
+  $('liveFazit').innerHTML = ''; $('liveFazit').hidden = true;
   $('liveShotCount').textContent = '';
   $('lightbox').classList.remove('open');
 }
@@ -778,9 +779,40 @@ async function pollLive() {
     $('liveRefineBar').style.width = Math.round(((r.index - 1) + (r.percent || 0) / 100) / r.total * 100) + '%';
   }
 
+  renderFazit(s.fazit);
   $('liveResult').innerHTML = !running && s.dir
     ? `<div class="result ${s.phase === 'fehler' ? 'fehler' : ''}">Sitzungsordner: <code>${esc(s.dir)}</code><br>
        Erscheint im Reiter „KI-Analyse“ als Quelle. Die Live-Fassung liegt als <code>transkript.live.md</code> daneben.</div>` : '';
+}
+
+/** Fazit (Rechendauer, Latenz) der Live-Aufnahme und des Nachschaerfens - erscheint,
+ *  sobald der jeweilige Teil fertig ist, und bleibt bis zum Zuruecksetzen stehen. */
+function renderFazit(f) {
+  const box = $('liveFazit');
+  if (!f || (!f.live && !f.nachschaerfen)) { box.hidden = true; box.innerHTML = ''; return; }
+  const tempo = (v) => (v === null || v === undefined) ? '' : ` (${v.toLocaleString('de-DE')}× Echtzeit)`;
+  const rows = [];
+  const l = f.live;
+  if (l) {
+    rows.push(['Aufnahme', `${hms(l.aufnahme_s)} · Modelle geladen in ${secs(l.laden_s)} · Abschluss ${secs(l.abschluss_s)}`]);
+    let rechnen = `${secs(l.rechenzeit_s)}${tempo(l.tempo)} für ${l.abschnitte} Abschnitte`;
+    if (l.zusammengelegt) rechnen += ` (${l.zusammengelegt} zusammengelegt)`;
+    if (l.vorschau_n) rechnen += ` · ${l.vorschau_n} Vorschauen ${secs(l.vorschau_s)}`;
+    rows.push(['Rechenzeit', rechnen]);
+    if (l.abschnitte) {
+      let lag = `Ø ${secs(l.verzoegerung_mittel_s)} · Median ${secs(l.verzoegerung_median_s)} · max ${secs(l.verzoegerung_max_s)}`;
+      lag += ` · Rückstand max ${secs(l.rueckstand_max_s)}`;
+      if (l.aufholmodus_s) lag += ` · Aufholmodus ${secs(l.aufholmodus_s)}`;
+      rows.push(['Verzögerung', lag]);
+    }
+  }
+  const n = f.nachschaerfen;
+  if (n) {
+    const stufen = (n.stufen || []).map((st) => `${st.name} ${secs(st.dauer_s)}`).join(' · ');
+    rows.push(['Nachschärfen', `${hms(n.gesamt_s)}${tempo(n.tempo)}${stufen ? ' · ' + stufen : ''}`]);
+  }
+  box.innerHTML = `<div class="result fazit"><b>Fazit</b><dl>${rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl></div>`;
+  box.hidden = false;
 }
 
 function openLightbox(index) {

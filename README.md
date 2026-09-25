@@ -472,7 +472,14 @@ output/live-2026-09-19_14-30-05/
   transkript.md  transcript.json  transkript.annotiert.md  marks.json  frames/
   transkript.live.md  transcript.live.json        # Live-Fassung (nach dem Stopp)
   audio/mikrofon.wav  audio/system.wav            # 16 kHz mono
+  bilanz.json                                     # Fazit: Rechendauer und Latenz (live + nachschaerfen)
 ```
+
+**Fazit:** Nach dem Stopp erscheint im Reiter ein Kasten „Fazit“ mit Aufnahmedauer,
+Ladezeit der Modelle, Rechenzeit und Tempo (Rechenzeit je Audiosekunde), Verzögerung
+(Ø, Median, max), Zahl der Abschnitte und Zeit im Aufholmodus; nach dem Nachschärfen kommt
+die Dauer je Stufe dazu. Dieselben Zahlen stehen im Protokoll („Fazit: …“) und in
+`bilanz.json` im Sitzungsordner.
 
 **Modell:** `auto` nimmt `large-v3-turbo` auf der GPU (etwa 2–5 s Verzögerung) und `small`
 auf der CPU (eher 5–15 s).

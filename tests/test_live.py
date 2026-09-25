@@ -394,6 +394,8 @@ def test_do_final_switches_to_eco_only_while_behind(tmp_path, monkeypatch):
     assert session._asr.calls == [True]
     assert any("Aufholmodus" in line for line in logged)
     assert session.rtf() is not None
+    zaehler = session._zaehler
+    assert (zaehler._abschnitte, zaehler._zusammengelegt) == (1, 1) and zaehler._audio_s == 8.0
     (typ, seg) = emitted[-1]
     assert typ == events.SEGMENT and (seg["start"], seg["end"], seg["speaker"]) == (0.0, 8.0, GEGENSEITE)
 
@@ -402,6 +404,124 @@ def test_do_final_switches_to_eco_only_while_behind(tmp_path, monkeypatch):
     session._do_final(job)  # 1 s Rueckstand -> volle Qualitaet, Wechsel wird protokolliert
     assert session._asr.calls == [True, False]
     assert any("abgebaut" in line for line in logged)
+
+
+# --- Fazit (FR-46) -----------------------------------------------------------------
+
+
+def test_zaehler_summarises_latency_and_compute():
+    from audioscribe.live.bilanz import Zaehler
+
+    z = Zaehler()
+    z.final(2.0, 0.5, 1.0)
+    z.final(4.0, 1.0, 3.0, parts=3)
+    z.final(1.0, 0.3, None)  # leerer Abschnitt: nur Rechenzeit
+    z.final(2.0, 0.2, 2.0)
+    z.partial(0.1)
+    z.partial(0.2)
+    z.rueckstand(1.0)
+    z.rueckstand(6.5)
+    z.rueckstand(2.0)
+    z.aufholmodus(True, 100.0)
+    z.aufholmodus(False, 104.0)
+    z.aufholmodus(True, 110.0)  # noch an - laeuft bis "now"
+    b = z.bilanz(laden_s=3.04, aufnahme_s=60.0, abschluss_s=1.0, gesamt_s=65.0, now=112.0)
+    assert (b.abschnitte, b.zusammengelegt) == (3, 1)
+    assert (b.audio_s, b.rechenzeit_s, b.tempo) == (9.0, 2.0, 0.22)
+    assert (b.verzoegerung_mittel_s, b.verzoegerung_median_s, b.verzoegerung_max_s) == (2.0, 2.0, 3.0)
+    assert (b.vorschau_n, b.vorschau_s) == (2, 0.3)
+    assert (b.rueckstand_max_s, b.aufholmodus_s, b.laden_s) == (6.5, 6.0, 3.0)
+
+
+def test_zaehler_without_measurements_has_no_tempo_or_latency():
+    from audioscribe.live.bilanz import Zaehler, beschreibe_live
+
+    b = Zaehler().bilanz(laden_s=1.0, aufnahme_s=5.0, abschluss_s=0.0, gesamt_s=6.0, now=0.0)
+    assert b.tempo is None and b.verzoegerung_max_s is None and b.abschnitte == 0
+    text = beschreibe_live(b)
+    assert text.startswith("Fazit: Aufnahme 0:05") and "Verzögerung" not in text and "0 Abschnitte" in text
+
+
+def test_beschreibe_live_mentions_all_the_numbers():
+    from audioscribe.live.bilanz import LiveBilanz, beschreibe_live
+
+    b = LiveBilanz(laden_s=6.2, aufnahme_s=114.0, abschluss_s=2.9, gesamt_s=125.0, abschnitte=27,
+                   zusammengelegt=3, audio_s=100.0, rechenzeit_s=38.4, tempo=0.34,
+                   verzoegerung_mittel_s=2.1, verzoegerung_median_s=1.8, verzoegerung_max_s=4.8,
+                   aufholmodus_s=12.0)
+    assert beschreibe_live(b) == (
+        "Fazit: Aufnahme 1:54 · Modelle 6,2 s · Rechenzeit 38,4 s (0,34× Echtzeit) · "
+        "Verzögerung Ø 2,1 s / max 4,8 s · 27 Abschnitte (3 zusammengelegt) · Aufholmodus 12,0 s · Abschluss 2,9 s"
+    )
+
+
+def test_save_bilanz_merges_parts_and_replaces_broken_file(tmp_path):
+    from audioscribe.live.bilanz import RefineBilanz, load_bilanz, save_bilanz
+
+    save_bilanz(tmp_path, "live", {"aufnahme_s": 3.0})
+    save_bilanz(tmp_path, "nachschaerfen", RefineBilanz(gesamt_s=9.0, audio_s=3.0, tempo=3.0, stufen=[]))
+    data = load_bilanz(tmp_path)
+    assert data["version"] == 1 and data["live"] == {"aufnahme_s": 3.0}
+    assert data["nachschaerfen"]["gesamt_s"] == 9.0 and data["nachschaerfen"]["modell"] is None
+    assert not (tmp_path / "bilanz.tmp").exists()
+
+    (tmp_path / "bilanz.json").write_text("{kaputt", encoding="utf-8")
+    assert load_bilanz(tmp_path) is None
+    save_bilanz(tmp_path, "live", {"aufnahme_s": 1.0})
+    assert load_bilanz(tmp_path) == {"version": 1, "live": {"aufnahme_s": 1.0}}
+
+
+def test_session_finish_writes_bilanz_and_reports_before_fertig(tmp_path, monkeypatch):
+    from audioscribe.live.bilanz import load_bilanz
+
+    emitted, logged = [], []
+    monkeypatch.setattr(events, "emit", lambda typ, **d: emitted.append((typ, d)))
+    monkeypatch.setattr(events, "log", logged.append)
+    session = make_session(tmp_path)
+    session.dir.mkdir()
+    session._segments.append(Segment(0.0, 2.0, "Hallo", ICH))
+    session._zaehler.final(2.0, 0.4, 1.5)
+    session._finish(laden_s=1.0, aufnahme_s=10.0, abschluss_s=0.5, gesamt_s=12.0)
+
+    types = [(typ, d.get("teil") or d.get("phase")) for typ, d in emitted]
+    assert types.index((events.FAZIT, "live")) < types.index((events.STATE, "fertig"))
+    fazit = next(d for typ, d in emitted if typ == events.FAZIT)
+    assert (fazit["aufnahme_s"], fazit["abschnitte"], fazit["verzoegerung_max_s"], fazit["tempo"]) == (10.0, 1, 1.5, 0.2)
+    assert any(line.startswith("Fazit: Aufnahme 0:10") for line in logged)
+    assert load_bilanz(session.dir)["live"]["rechenzeit_s"] == 0.4
+    assert (session.dir / "transkript.live.md").exists()
+
+
+def test_refine_session_times_its_stages(tmp_path, monkeypatch):
+    import wave
+    from dataclasses import replace
+
+    from audioscribe.live import refine
+    from audioscribe.live.bilanz import load_bilanz
+    from audioscribe.live.store import MIC_WAV
+
+    (tmp_path / "audio").mkdir()
+    with wave.open(str(tmp_path / MIC_WAV), "wb") as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(2)
+        wav.setframerate(SR)
+        wav.writeframes(np.zeros(SR * 3, dtype="<i2").tobytes())
+    monkeypatch.setattr(refine, "settings", replace(refine.settings, enable_alignment=True, enable_diarization=True,
+                                                    whisper_model="tiny"))
+    ergebnis = {"language": "de", "segments": [{"start": 0.0, "end": 1.0, "text": "Hallo", "words": []}]}
+    monkeypatch.setattr("audioscribe.pipeline.transcribe.transcribe", lambda audio, reporter: dict(ergebnis))
+    monkeypatch.setattr("audioscribe.pipeline.transcribe.align", lambda audio, result, reporter: result)
+    emitted = []
+    monkeypatch.setattr(events, "emit", lambda typ, **d: emitted.append((typ, d)))
+
+    assert refine.refine_session(tmp_path) == tmp_path / "transkript.md"
+    data = load_bilanz(tmp_path)["nachschaerfen"]
+    assert [st["name"] for st in data["stufen"]] == [
+        "Transkription Mikrofon (faster-whisper tiny)", "Wort-Alignment Mikrofon", "Zusammenführen & Export"
+    ]
+    assert all(st["dauer_s"] >= 0 for st in data["stufen"])
+    assert data["audio_s"] == 3.0 and data["modell"] == "tiny" and data["tempo"] is not None
+    assert emitted[-1][0] == events.FAZIT and emitted[-1][1]["teil"] == "nachschaerfen"
 
 
 # --- Sprecher ----------------------------------------------------------------------
@@ -671,10 +791,14 @@ ev(type="stats", elapsed=3.0, backlog=0.0, delay=1.2, level_mic=0.2, level_sys=N
 for line in sys.stdin:
     if line.strip() == "stop":
         break
+ev(type="fazit", teil="live", aufnahme_s=3.0, rechenzeit_s=0.9, tempo=0.3, abschnitte=1)
 ev(type="state", phase="fertig", **state)
 """
 
-REFINE = "print('[Stufe 1/2] Transkription Mikrofon', flush=True); print('[Fortschritt] 50.0%', flush=True)"
+REFINE = (
+    "print('[Stufe 1/2] Transkription Mikrofon', flush=True); print('[Fortschritt] 50.0%', flush=True); "
+    "print('[Live] {\"type\": \"fazit\", \"teil\": \"nachschaerfen\", \"gesamt_s\": 4.0, \"stufen\": []}', flush=True)"
+)
 
 
 def wait_for(condition, timeout: float = 15.0):
@@ -725,6 +849,11 @@ def test_live_runner_collects_events_and_stops_gracefully(tmp_path):
     assert done["phase"] == "beendet" and done["returncode"] == 0
     assert done["refine"] == {"index": 1, "total": 2, "name": "Transkription Mikrofon", "percent": 50.0}
     assert done["partials"] == {}
+    assert done["fazit"] == {
+        "live": {"aufnahme_s": 3.0, "rechenzeit_s": 0.9, "tempo": 0.3, "abschnitte": 1},
+        "nachschaerfen": {"gesamt_s": 4.0, "stufen": []},
+    }
+    assert not any("fazit" in line for line in runner.snapshot()["lines"])  # Ereigniszeilen bleiben dem Protokoll fern
 
 
 def test_live_runner_second_stop_kills_and_skips_refine(tmp_path):
@@ -857,6 +986,15 @@ def test_index_has_window_picker_dialog():
 
     html = (Path(server.__file__).parent / "static" / "index.html").read_text(encoding="utf-8")
     assert 'id="winPick"' in html and 'id="winFilter"' in html and 'id="winList"' in html
+
+
+def test_index_has_fazit_box_before_result():
+    from pathlib import Path
+
+    from audioscribe.ui import server
+
+    html = (Path(server.__file__).parent / "static" / "index.html").read_text(encoding="utf-8")
+    assert html.index('id="liveFazit"') < html.index('id="liveResult"')
 
 
 def test_live_reset_route_without_session(client):

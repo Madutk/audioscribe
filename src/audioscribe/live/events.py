@@ -18,6 +18,7 @@ PARTIAL = "partial"  # track, start, text (leerer Text = Vorschau zurücknehmen)
 SHOT = "shot"  # id, t, file
 DOWNLOAD = "download"  # model, done, total (Bytes; nur wenn das Modell noch nicht im Cache liegt)
 STATS = "stats"  # elapsed, backlog, delay, level_mic, level_sys, partials_paused, rtf, catchup
+FAZIT = "fazit"  # teil ("live" | "nachschaerfen") + Felder der jeweiligen Bilanz (live/bilanz.py)
 
 
 def event_line(typ: str, **data: object) -> str:

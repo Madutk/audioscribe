@@ -6,9 +6,13 @@ sitzt genau eine Person. Die Standbilder der Sitzung bleiben und werden neu eing
 
 from __future__ import annotations
 
+import time
+from dataclasses import asdict
 from pathlib import Path
 
 from audioscribe.config import settings
+from audioscribe.live import events
+from audioscribe.live.bilanz import TEIL_REFINE, RefineBilanz, beschreibe_refine, save_bilanz
 from audioscribe.live.speakers import GEGENSEITE, ICH
 from audioscribe.live.store import MIC_WAV, SYSTEM_WAV, keep_live_copy, write_transcript
 from audioscribe.live.track import SAMPLE_RATE, load_wav
@@ -37,24 +41,29 @@ def refine_session(session_dir: str | Path) -> Path:
     segments: list[Segment] = []
     dauer = 0.0
     sprache = settings.whisper_language
+    t_start = time.monotonic()
+    stufen = _Stufen()  # Fazit: Dauer je Stufe
+
+    def stage(name: str) -> None:
+        nonlocal step
+        step += 1
+        reporter.stage(step, name)
+        stufen.start(name)
 
     for name, wav in spuren:
         audio = load_wav(wav)
         dauer = max(dauer, len(audio) / SAMPLE_RATE)
-        step += 1
-        reporter.stage(step, f"Transkription {name} (faster-whisper {settings.whisper_model})")
+        stage(f"Transkription {name} (faster-whisper {settings.whisper_model})")
         result = transcribe(audio, reporter)
         sprache = result.get("language") or sprache
         if do_align:
-            step += 1
-            reporter.stage(step, f"Wort-Alignment {name}")
+            stage(f"Wort-Alignment {name}")
             result = align(audio, result, reporter)
 
         ist_system = wav.name == Path(SYSTEM_WAV).name
         diarisiert = False
         if ist_system and do_diar:
-            step += 1
-            reporter.stage(step, "Diarisierung System-Audio (pyannote)")
+            stage("Diarisierung System-Audio (pyannote)")
             try:
                 result = diarize(audio, result, reporter)
                 diarisiert = True
@@ -73,8 +82,7 @@ def refine_session(session_dir: str | Path) -> Path:
                     word.speaker = label
         segments += teil
 
-    step += 1
-    reporter.stage(step, "Zusammenführen & Export")
+    stage("Zusammenführen & Export")
     keep_live_copy(session_dir, overwrite=False)
     write_transcript(
         session_dir,
@@ -86,4 +94,34 @@ def refine_session(session_dir: str | Path) -> Path:
         sentences_per_timestamp=settings.sentences_per_timestamp,
     )
     reporter.info(f"Markdown: {session_dir / 'transkript.md'}")
+    gesamt = time.monotonic() - t_start
+    bilanz = RefineBilanz(
+        gesamt_s=round(gesamt, 1),
+        audio_s=round(dauer, 1),
+        tempo=round(gesamt / dauer, 2) if dauer > 0 else None,
+        modell=settings.whisper_model,
+        stufen=stufen.close(),
+    )
+    save_bilanz(session_dir, TEIL_REFINE, bilanz)
+    reporter.info(beschreibe_refine(bilanz))
+    events.emit(events.FAZIT, teil=TEIL_REFINE, **asdict(bilanz))
     return session_dir / "transkript.md"
+
+
+class _Stufen:
+    """Stoppuhr je Stufe: ``start`` schließt die vorige, ``close`` die letzte."""
+
+    def __init__(self) -> None:
+        self.liste: list[dict] = []
+        self._seit: float | None = None
+
+    def start(self, name: str) -> None:
+        self.close()
+        self.liste.append({"name": name, "dauer_s": 0.0})
+        self._seit = time.monotonic()
+
+    def close(self) -> list[dict]:
+        if self._seit is not None and self.liste:
+            self.liste[-1]["dauer_s"] = round(time.monotonic() - self._seit, 1)
+            self._seit = None
+        return self.liste

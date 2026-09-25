@@ -12,10 +12,11 @@ import sys
 import threading
 import time
 from collections import deque
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from audioscribe.live import events
+from audioscribe.live.bilanz import TEIL_LIVE, Zaehler, beschreibe_live, save_bilanz
 from audioscribe.live.board import Job, JobBoard
 from audioscribe.live.chunker import Chunker
 from audioscribe.live.store import MIC_WAV, SYSTEM_WAV, keep_live_copy, session_name, write_transcript
@@ -72,6 +73,7 @@ class LiveSession:
         self._timing: deque[tuple[float, float]] = deque(maxlen=_RTF_WINDOW)  # (audio_s, spent_s)
         self._catchup = False
         self._t0 = 0.0
+        self._zaehler = Zaehler()  # Fazit: Rechendauer und Latenz der ganzen Sitzung
 
     def clock(self) -> float:
         return time.monotonic() - self._t0
@@ -85,6 +87,7 @@ class LiveSession:
         from audioscribe.live.speakers import SpeakerLabeler
 
         o = self.opts
+        t_start = time.monotonic()
         self._state("laden", step=f"Whisper {o.model}")
         events.log(f"Lade Modell {o.model} ({o.device}, {o.compute_type}) ...")
         started = time.monotonic()
@@ -141,6 +144,7 @@ class LiveSession:
             self._state("laeuft")  # Maschinenwert wie ui.runner.RUNNING, darum ohne Umlaut
             self._main_loop(tracks)
         finally:
+            aufnahme_s = self.clock()
             self._state("stoppt")
             audio.close()
         if screen is not None:
@@ -153,21 +157,37 @@ class LiveSession:
             chunkers[name].feed(*track.take(self.clock()))
             for utt in chunkers[name].poll(flush=True):
                 self._board.put_final(Job(name, utt, final=True))
+        stopped = time.monotonic()
         self._drain()
         self._threads_stop.set()
+        self._finish(
+            laden_s=self._t0 - t_start, aufnahme_s=aufnahme_s, abschluss_s=time.monotonic() - stopped,
+            gesamt_s=time.monotonic() - t_start,
+        )
+        return 0
 
+    def _finish(self, *, laden_s: float, aufnahme_s: float, abschluss_s: float, gesamt_s: float) -> None:
+        """Transkript und Live-Fassung sichern, Fazit ablegen und melden (FR-46)."""
         self._persist()
+        bilanz = self._zaehler.bilanz(
+            laden_s=laden_s, aufnahme_s=aufnahme_s, abschluss_s=abschluss_s, gesamt_s=gesamt_s,
+            now=time.monotonic(),
+        )
         with self._io_lock:
             keep_live_copy(self.dir, overwrite=True)
+            save_bilanz(self.dir, TEIL_LIVE, bilanz)
+        events.log(beschreibe_live(bilanz))
+        # Vor "fertig": der Runner muss das Fazit haben, bevor er das Nachschärfen anstößt.
+        events.emit(events.FAZIT, teil=TEIL_LIVE, **asdict(bilanz))
         self._state("fertig")
         events.log(f"Sitzung gespeichert: {self.dir}")
-        return 0
 
     def _main_loop(self, tracks: dict) -> None:
         last_persist = time.monotonic()
         try:
             while not self._stop.wait(1.0):
                 backlog = self._board.backlog_s()
+                self._zaehler.rueckstand(backlog)
                 events.emit(
                     events.STATS,
                     elapsed=round(self.clock(), 1),
@@ -258,7 +278,9 @@ class LiveSession:
     def _do_partial(self, job: Job) -> None:
         if not self._still_open(job):
             return
+        started = time.monotonic()
         text = self._asr.transcribe(job.utterance.audio, final=False)
+        self._zaehler.partial(time.monotonic() - started)
         if text and self._still_open(job):
             events.emit(
                 events.PARTIAL, track=job.track, start=round(job.utterance.start_s, 2), text=text
@@ -270,15 +292,18 @@ class LiveSession:
         started = time.monotonic()
         text = self._asr.transcribe(utt.audio, final=True, eco=eco)
         speaker = self._labeler.label(job.track, utt.audio) if text else None
+        spent = time.monotonic() - started
         with self._lock:
-            self._timing.append((utt.duration_s, time.monotonic() - started))
+            self._timing.append((utt.duration_s, spent))
         if not text:
+            self._zaehler.final(utt.duration_s, spent, None)  # nur Rechenzeit, kein Abschnitt
             events.emit(events.PARTIAL, track=job.track, text="")
             return
         with self._lock:
             self._segments.append(Segment(utt.start_s, utt.end_s, text, speaker))
             number = len(self._segments)
             self._last_delay = round(self.clock() - utt.end_s, 1)
+        self._zaehler.final(utt.duration_s, spent, self._last_delay, job.parts)
         events.emit(
             events.SEGMENT,
             id=number,
@@ -306,6 +331,7 @@ class LiveSession:
         catchup = backlog_s > self.opts.catchup_s
         if catchup != self._catchup:
             self._catchup = catchup
+            self._zaehler.aufholmodus(catchup, time.monotonic())
             if catchup:
                 events.log(
                     f"Rückstand {backlog_s:.0f} s - Aufholmodus: Abschnitte zusammenlegen, Beam 1"
