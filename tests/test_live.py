@@ -8,8 +8,9 @@ import numpy as np
 import pytest
 
 from audioscribe.live import events, fenster
+from audioscribe.live.asr import decode_options
 from audioscribe.live.board import Job, JobBoard
-from audioscribe.live.chunker import Chunker, Utterance
+from audioscribe.live.chunker import Chunker, Utterance, merge_utterances
 from audioscribe.live.devices import pick
 from audioscribe.live.fenster import WindowGone
 from audioscribe.live.screen import ChangeDetector
@@ -169,11 +170,74 @@ def test_chunker_flush_closes_open_utterance():
     assert round(utt.duration_s, 1) == 1.0
 
 
+def test_merge_utterances_spans_parts_with_short_gap_of_silence():
+    a = Utterance(SR, 3 * SR, speech(2))
+    b = Utterance(10 * SR, 11 * SR, speech(1))
+    merged = merge_utterances([a, b], gap_s=0.3)
+    assert (merged.start_s, merged.end_s) == (1.0, 11.0)
+    assert len(merged.audio) == int(3.3 * SR)  # 2 s + 0,3 s Stille + 1 s, nicht die echte Luecke
+    assert merge_utterances([a]) is a
+
+
 # --- Auftragsbrett -----------------------------------------------------------------
 
 
 def utt(seconds: float = 2.0, start: int = 0) -> Utterance:
     return Utterance(start, start + int(seconds * SR), np.zeros(1, dtype=np.float32))
+
+
+def utt_at(start_s: float, seconds: float) -> Utterance:
+    return Utterance(int(start_s * SR), int((start_s + seconds) * SR), speech(seconds))
+
+
+def test_board_coalesces_waiting_finals_of_same_track():
+    board = JobBoard(coalesce_s=25.0)
+    for start, dur in ((0, 2), (2.5, 3), (6, 4)):
+        board.put_final(Job("system", utt_at(start, dur), final=True))
+    job = board.get(0)
+    assert job.parts == 3 and job.track == "system"
+    assert (job.utterance.start_s, job.utterance.end_s) == (0.0, 10.0)
+    assert board.backlog_s() == 10.0
+    board.done(job)
+    assert board.get(0) is None and board.backlog_s() == 0.0
+
+
+@pytest.mark.parametrize(
+    "second",
+    [
+        Job("system", utt_at(6.0, 2), final=True),  # Luecke > max_gap_s
+        Job("system", utt_at(2.0, 30), final=True),  # Gesamtdauer > coalesce_s
+        Job("mic", utt_at(2.0, 2), final=True),  # andere Spur
+    ],
+)
+def test_board_stops_coalescing_at_gap_length_or_track_change(second):
+    board = JobBoard(coalesce_s=25.0, max_gap_s=3.0)
+    board.put_final(Job("system", utt_at(0.0, 2), final=True))
+    board.put_final(second)
+    first = board.get(0)
+    assert first.parts == 1 and first.utterance.end_s == 2.0
+    board.done(first)
+    assert board.get(0) is second
+
+
+def test_board_keeps_queue_order_across_tracks():
+    board = JobBoard(coalesce_s=25.0)
+    board.put_final(Job("mic", utt_at(0.0, 1), final=True))
+    board.put_final(Job("system", utt_at(1.0, 1), final=True))
+    board.put_final(Job("mic", utt_at(2.0, 1), final=True))
+    order = []
+    while (job := board.get(0)) is not None:
+        order.append((job.track, job.parts))
+        board.done(job)
+    assert order == [("mic", 1), ("system", 1), ("mic", 1)]
+
+
+def test_board_without_coalescing_returns_finals_one_by_one():
+    board = JobBoard()
+    board.put_final(Job("system", utt_at(0.0, 2), final=True))
+    board.put_final(Job("system", utt_at(2.0, 2), final=True))
+    assert board.get(0).parts == 1
+    assert board.backlog_s() == 4.0
 
 
 def test_board_prefers_finals_and_keeps_only_latest_partial():
@@ -204,6 +268,65 @@ def test_board_wait_idle_wakes_up_when_worker_finishes():
     assert not board.wait_idle(0.01)
     threading.Timer(0.05, board.done, args=(job,)).start()
     assert board.wait_idle(2.0)
+
+
+# --- Dekodieren / Aufholmodus ------------------------------------------------------
+
+
+def test_decode_options_final_vs_preview_vs_eco():
+    full = decode_options(final=True)
+    assert (full["beam_size"], full["best_of"], full["temperature"]) == (5, 5, (0.0, 0.2, 0.4))
+    eco = decode_options(final=True, eco=True)
+    assert (eco["beam_size"], eco["best_of"], eco["temperature"]) == (1, 1, 0.0)
+    preview = decode_options(final=False)
+    assert preview["beam_size"] == 1
+    assert not full["condition_on_previous_text"] and full["without_timestamps"]
+
+
+class FakeAsr:
+    detected = "de"
+
+    def __init__(self):
+        self.calls = []
+
+    def transcribe(self, audio, *, final, eco=False):
+        self.calls.append(eco)
+        return "Text"
+
+
+def make_session(tmp_path, **kw):
+    from audioscribe.live.session import LiveOptions, LiveSession
+
+    session = LiveSession(LiveOptions(output_dir=tmp_path, model="m", device="cpu", compute_type="int8", **kw))
+    session._asr = FakeAsr()
+    session._labeler = SpeakerLabeler(None)
+    return session
+
+
+def test_do_final_switches_to_eco_only_while_behind(tmp_path, monkeypatch):
+    emitted, logged = [], []
+    monkeypatch.setattr(events, "emit", lambda typ, **d: emitted.append((typ, d)))
+    monkeypatch.setattr(events, "log", logged.append)
+    session = make_session(tmp_path, catchup_s=5.0, coalesce_s=25.0)
+    board = session._board
+    for start in (0.0, 2.0, 4.0, 6.0):
+        board.put_final(Job("system", utt_at(start, 2), final=True))
+
+    job = board.get(0)  # alle vier zusammengelegt: 8 s Rueckstand > 5 s -> Sparmodus
+    assert job.parts == 4
+    session._do_final(job)
+    board.done(job)
+    assert session._asr.calls == [True]
+    assert any("Aufholmodus" in line for line in logged)
+    assert session.rtf() is not None
+    (typ, seg) = emitted[-1]
+    assert typ == events.SEGMENT and (seg["start"], seg["end"], seg["speaker"]) == (0.0, 8.0, GEGENSEITE)
+
+    board.put_final(Job("system", utt_at(9.0, 1), final=True))
+    job = board.get(0)
+    session._do_final(job)  # 1 s Rueckstand -> volle Qualitaet, Wechsel wird protokolliert
+    assert session._asr.calls == [True, False]
+    assert any("abgebaut" in line for line in logged)
 
 
 # --- Sprecher ----------------------------------------------------------------------

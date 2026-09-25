@@ -524,6 +524,11 @@ Compliance-Anforderungen.
 - **Vorschautext mit niedrigster Priorität.** Der laufende Abschnitt wird etwa alle 2 s
   vorläufig transkribiert und grau angezeigt. Vorschau-Aufträge laufen nur, wenn kein
   fertiger Abschnitt wartet, und pausieren ab 3 s Rückstand – wichtig für den CPU-Betrieb.
+- **Aufholmodus ab 5 s Rückstand.** Whisper polstert jede Eingabe auf 30 s; kurze
+  Abschnitte kosten also fast so viel wie lange. Wartende Abschnitte derselben Spur werden
+  darum zu Stücken bis 25 s zusammengelegt und mit Beam 1 ohne Temperatur-Fallback
+  dekodiert. Die Segmente werden gröber, der Rückstand wächst aber nicht mehr unbegrenzt.
+  Das gemessene Tempo (Rechenzeit je Audiosekunde) wird mitgemeldet.
 - **Sprecher live per Online-Clustering.** Je Abschnitt der System-Spur entsteht ein
   Stimm-Embedding (pyannote/wespeaker), das per Kosinus-Ähnlichkeit laufenden Zentroiden
   zugeordnet wird. So bleiben „Sprecher 1/2/3“ über die Sitzung stabil. Abschnitte unter
@@ -554,7 +559,7 @@ Compliance-Anforderungen.
 
 | ID | Anforderung |
 |----|-------------|
-| NFR-15 | Läuft mit NVIDIA-GPU und rein auf CPU. Auf CPU darf die Verzögerung wachsen; sie muss sichtbar sein, und die Vorschau drosselt sich selbst. |
+| NFR-15 | Läuft mit NVIDIA-GPU und rein auf CPU. Auf CPU darf die Verzögerung wachsen; sie muss sichtbar sein, die Vorschau drosselt sich selbst, und ab 5 s Rückstand holt die Sitzung durch Zusammenlegen und sparsames Dekodieren auf. |
 | NFR-16 | Ohne das Extra `live` bleiben alle übrigen Befehle und Reiter lauffähig; der Reiter nennt dann den Installationsbefehl. |
 | NFR-17 | Ein Absturz verliert höchstens die letzten 30 s Transkript; Audio und Screenshots liegen bis zum Absturz auf der Platte. |
 

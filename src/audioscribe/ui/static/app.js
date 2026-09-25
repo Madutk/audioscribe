@@ -752,7 +752,12 @@ async function pollLive() {
   $('liveElapsed').textContent = st ? hms(st.elapsed) : '–';
   gauge('liveDelayBox', 'liveDelay', st ? st.delay : null, 5, 10);
   gauge('liveBacklogBox', 'liveBacklog', st ? st.backlog : null, 3, 10);
-  $('liveBacklog').title = st && st.partials_paused ? 'Vorschautext pausiert, bis der Rückstand abgebaut ist' : '';
+  // Tooltip: gemessenes Tempo (Rechenzeit je Audiosekunde) und was die Sitzung gerade drosselt.
+  const hints = [];
+  if (st && st.rtf !== null && st.rtf !== undefined) hints.push(`Tempo ${st.rtf.toLocaleString('de-DE')}× Echtzeit`);
+  if (st && st.catchup) hints.push('Aufholmodus: Abschnitte zusammengelegt, sparsam dekodiert');
+  if (st && st.partials_paused) hints.push('Vorschautext pausiert, bis der Rückstand abgebaut ist');
+  $('liveBacklog').title = hints.join(' · ');
   $('liveLevelMic').style.width = Math.min(100, (st && running ? st.level_mic || 0 : 0) * 150) + '%';
   $('liveLevelSys').style.width = Math.min(100, (st && running ? st.level_sys || 0 : 0) * 150) + '%';
 

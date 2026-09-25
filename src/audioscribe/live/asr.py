@@ -21,6 +21,25 @@ def default_model(device: str) -> str:
     return LIVE_MODEL_CUDA if device.startswith("cuda") else LIVE_MODEL_CPU
 
 
+def decode_options(*, final: bool, eco: bool = False) -> dict:
+    """Dekodier-Parameter je Auftragsart.
+
+    Fertige Abschnitte bekommen Beam 5 mit Temperatur-Fallback. Die Vorschau und der
+    Aufholmodus (``eco``) rechnen billig: Beam 1, kein Fallback - auf der CPU macht das den
+    Decoder um ein Mehrfaches schneller.
+    """
+    cheap = not final or eco
+    return {
+        "beam_size": 1 if cheap else 5,
+        "best_of": 1 if cheap else 5,
+        "temperature": 0.0 if cheap else (0.0, 0.2, 0.4),
+        # Jeder Abschnitt steht für sich: Vortext schleppt Fehler (und Halluzinationen) mit.
+        "condition_on_previous_text": False,
+        "without_timestamps": True,
+        "vad_filter": False,
+    }
+
+
 class LiveTranscriber:
     def __init__(
         self,
@@ -29,6 +48,7 @@ class LiveTranscriber:
         compute_type: str,
         language: str,
         on_progress: Callable[[int, int], None] | None = None,
+        cpu_threads: int = 0,
     ) -> None:
         from faster_whisper import WhisperModel
 
@@ -38,20 +58,17 @@ class LiveTranscriber:
         if on_progress is not None:
             model = fetch_model(model, on_progress)
         self._model = WhisperModel(
-            model, device=name, device_index=int(index or 0), compute_type=compute_type
+            model,
+            device=name,
+            device_index=int(index or 0),
+            compute_type=compute_type,
+            cpu_threads=cpu_threads,  # 0 = Bibliotheks-Default (ctranslate2: 4)
         )
 
-    def transcribe(self, audio: np.ndarray, *, final: bool) -> str:
-        """Text eines Abschnitts. Die Vorschau rechnet billig: Beam 1, kein Temperatur-Fallback."""
+    def transcribe(self, audio: np.ndarray, *, final: bool, eco: bool = False) -> str:
+        """Text eines Abschnitts; ``eco`` = Aufholmodus (billig dekodieren, s. decode_options)."""
         segments, info = self._model.transcribe(
-            audio,
-            language=self.language,
-            beam_size=5 if final else 1,
-            temperature=(0.0, 0.2, 0.4) if final else 0.0,
-            # Jeder Abschnitt steht für sich: Vortext schleppt Fehler (und Halluzinationen) mit.
-            condition_on_previous_text=False,
-            without_timestamps=True,
-            vad_filter=False,
+            audio, language=self.language, **decode_options(final=final, eco=eco)
         )
         text = " ".join(s.text.strip() for s in segments).strip()
         if final and not self.detected:

@@ -11,6 +11,7 @@ from __future__ import annotations
 import sys
 import threading
 import time
+from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -27,6 +28,8 @@ _PARTIAL_MIN_S = 1.0
 _PARTIAL_INTERVAL_S = 2.0
 # Ab diesem Rückstand pausiert die Vorschau: fertige Abschnitte gehen vor.
 _PARTIAL_MAX_BACKLOG_S = 3.0
+# Tempo (Rechenzeit je Audiosekunde) über die letzten fertigen Abschnitte gemittelt.
+_RTF_WINDOW = 10
 
 
 @dataclass(frozen=True)
@@ -46,6 +49,11 @@ class LiveOptions:
     speakers: bool = True
     hf_token: str | None = None
     sentences_per_timestamp: int = 2
+    cpu_threads: int = 0  # 0 = Bibliotheks-Default
+    # Aufholmodus (PRD §17, NFR-15): ab catchup_s Rückstand billig dekodieren, wartende
+    # Abschnitte derselben Spur bis coalesce_s zusammenlegen (0 = nie).
+    catchup_s: float = 5.0
+    coalesce_s: float = 25.0
 
 
 class LiveSession:
@@ -60,7 +68,9 @@ class LiveSession:
         self._marks: list[Mark] = []
         self._open: dict[str, int | None] = {}
         self._last_delay: float | None = None
-        self._board = JobBoard()
+        self._board = JobBoard(coalesce_s=opts.coalesce_s)
+        self._timing: deque[tuple[float, float]] = deque(maxlen=_RTF_WINDOW)  # (audio_s, spent_s)
+        self._catchup = False
         self._t0 = 0.0
 
     def clock(self) -> float:
@@ -85,8 +95,10 @@ class LiveSession:
             on_progress=lambda done, total: events.emit(
                 events.DOWNLOAD, model=o.model, done=done, total=total
             ),
+            cpu_threads=o.cpu_threads,
         )
         self._labeler = SpeakerLabeler(self._load_embedder())
+        self._limit_torch_threads()
         vad = silero_vad()
 
         self.dir.mkdir(parents=True, exist_ok=True)
@@ -157,6 +169,8 @@ class LiveSession:
                     level_mic=round(tracks["mic"].level, 3) if "mic" in tracks else None,
                     level_sys=round(tracks["system"].level, 3) if "system" in tracks else None,
                     partials_paused=self.opts.partials and backlog > _PARTIAL_MAX_BACKLOG_S,
+                    rtf=self.rtf(),
+                    catchup=self._catchup,
                 )
                 if time.monotonic() - last_persist >= _PERSIST_S:
                     self._persist()
@@ -245,11 +259,15 @@ class LiveSession:
 
     def _do_final(self, job: Job) -> None:
         utt = job.utterance
-        text = self._asr.transcribe(utt.audio, final=True)
+        eco = self._enter_catchup(self._board.backlog_s())
+        started = time.monotonic()
+        text = self._asr.transcribe(utt.audio, final=True, eco=eco)
+        speaker = self._labeler.label(job.track, utt.audio) if text else None
+        with self._lock:
+            self._timing.append((utt.duration_s, time.monotonic() - started))
         if not text:
             events.emit(events.PARTIAL, track=job.track, text="")
             return
-        speaker = self._labeler.label(job.track, utt.audio)
         with self._lock:
             self._segments.append(Segment(utt.start_s, utt.end_s, text, speaker))
             number = len(self._segments)
@@ -275,6 +293,37 @@ class LiveSession:
                 return
 
     # --- Hilfen -------------------------------------------------------------
+
+    def _enter_catchup(self, backlog_s: float) -> bool:
+        """Sparmodus an/aus je nach Rückstand; der Wechsel wird einmal protokolliert."""
+        catchup = backlog_s > self.opts.catchup_s
+        if catchup != self._catchup:
+            self._catchup = catchup
+            if catchup:
+                events.log(
+                    f"Rückstand {backlog_s:.0f} s - Aufholmodus: Abschnitte zusammenlegen, Beam 1"
+                )
+            else:
+                events.log("Rückstand abgebaut - wieder volle Qualität")
+        return catchup
+
+    def rtf(self) -> float | None:
+        """Rechenzeit je Audiosekunde über die letzten Abschnitte (None ohne Messung)."""
+        with self._lock:
+            audio_s = sum(a for a, _ in self._timing)
+            spent_s = sum(s for _, s in self._timing)
+        return round(spent_s / audio_s, 2) if audio_s > 0 else None
+
+    def _limit_torch_threads(self) -> None:
+        """torch (Sprecher-Embedding) auf dieselbe Threadzahl wie ctranslate2 begrenzen."""
+        if self.opts.cpu_threads <= 0 or self.opts.device.startswith("cuda"):
+            return
+        try:
+            import torch
+
+            torch.set_num_threads(self.opts.cpu_threads)
+        except Exception:  # noqa: BLE001 - ohne torch (kein Embedder) gibt es nichts zu begrenzen
+            pass
 
     def _load_embedder(self):
         o = self.opts

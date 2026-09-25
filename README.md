@@ -436,9 +436,15 @@ Zugriff auf den Bildschirm.
 
 **Im Reiter:** Monitor anklicken (mit Vorschaubild), Mikrofon und System-Audio wählen,
 „Aufnahme starten“. Oben laufen Laufzeit, **Verzögerung** (Ende des Gesprochenen bis zur
-Anzeige) und **Rückstand** (aufgenommenes, noch nicht transkribiertes Audio) mit. Wächst
-der Rückstand dauerhaft, ist das Modell für den Rechner zu groß. Grauer Kursivtext ist die
-Vorschau des gerade gesprochenen Abschnitts; sie pausiert von selbst ab 3 s Rückstand.
+Anzeige) und **Rückstand** (aufgenommenes, noch nicht transkribiertes Audio) mit. Grauer
+Kursivtext ist die Vorschau des gerade gesprochenen Abschnitts; sie pausiert von selbst ab
+3 s Rückstand. Ab 5 s Rückstand schaltet die Sitzung in den **Aufholmodus**: wartende
+Abschnitte derselben Spur werden zu Stücken bis 25 s zusammengelegt und sparsamer
+dekodiert (Beam 1) – die Segmente sind in dieser Phase gröber, der Rückstand pendelt sich
+aber auch auf der CPU ein. Der Tooltip der Rückstand-Anzeige zeigt das gemessene Tempo
+(Rechenzeit je Audiosekunde); liegt es dauerhaft über 1× Echtzeit, ist das Modell für den
+Rechner zu groß. `AUDIOSCRIBE_CPU_THREADS` (oder `--cpu-threads`) setzt die Rechen-Threads;
+sinnvoll ist die Zahl physischer Kerne.
 Screenshots erscheinen rechts als Thumbnails, ein Klick öffnet die Großansicht
 (Pfeiltasten blättern).
 

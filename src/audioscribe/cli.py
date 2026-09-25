@@ -110,6 +110,7 @@ def _live(args: argparse.Namespace) -> int:
         speakers=not args.no_speakers,
         hf_token=settings.hf_token,
         sentences_per_timestamp=settings.sentences_per_timestamp,
+        cpu_threads=args.cpu_threads if args.cpu_threads is not None else settings.cpu_threads,
     )
     try:
         return LiveSession(opts).run()
@@ -329,6 +330,12 @@ def main(argv: list[str] | None = None) -> int:
     live.add_argument("--language", help="Sprachcode (z.B. 'de') oder 'auto'")
     live.add_argument("--device", help="auto | cuda | cpu")
     live.add_argument("--compute-type", help="auto | float16 | int8_float16 | int8")
+    live.add_argument(
+        "--cpu-threads",
+        type=int,
+        metavar="N",
+        help="Rechen-Threads auf der CPU (Default: AUDIOSCRIBE_CPU_THREADS bzw. Bibliothek)",
+    )
     live.add_argument("--frame-sensitivity", choices=("grob", "mittel", "fein"))
     live.add_argument("--frame-format", choices=("jpg-1600", "jpg-1280", "png"))
     live.add_argument("--no-partials", action="store_true", help="keinen vorlaeufigen Text ausgeben")

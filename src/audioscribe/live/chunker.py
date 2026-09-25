@@ -32,6 +32,23 @@ class Utterance:
         return (self.end - self.start) / SAMPLE_RATE
 
 
+def merge_utterances(parts: list[Utterance], gap_s: float = 0.3) -> Utterance:
+    """Mehrere Abschnitte zu einem Stück (Aufholmodus): ein Encoder-Durchlauf statt vieler.
+
+    Zwischen die Teile kommt ``gap_s`` Stille, damit Whisper die Satzgrenze hört; die echte
+    Lücke wird nicht eingefügt, sonst wüchse das Stück wieder auf Fensterlänge.
+    """
+    if len(parts) == 1:
+        return parts[0]
+    gap = np.zeros(int(gap_s * SAMPLE_RATE), dtype=np.float32)
+    audio: list[np.ndarray] = []
+    for part in parts:
+        if audio:
+            audio.append(gap)
+        audio.append(part.audio)
+    return Utterance(parts[0].start, parts[-1].end, np.concatenate(audio))
+
+
 def silero_vad() -> Vad:
     """Silero-VAD aus faster-whisper (ONNX, läuft auf der CPU)."""
     from faster_whisper.vad import VadOptions, get_speech_timestamps

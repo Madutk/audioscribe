@@ -70,6 +70,9 @@ class Settings:
     # "de" = Deutsch erzwingen (kein Sprach-Detection-Overhead); "auto" = erkennen lassen.
     whisper_language: str = field(default_factory=lambda: _env("WHISPER_LANGUAGE", "de"))
     batch_size: int = field(default_factory=lambda: int(_env("BATCH_SIZE", "8")))
+    # CPU-Threads fuer ctranslate2/torch (nur Live). 0 = Bibliotheks-Default (ctranslate2: 4).
+    # Sinnvoll ist die Zahl physischer Kerne; Hyperthreading-Threads bremsen eher.
+    cpu_threads: int = field(default_factory=lambda: int(_env("CPU_THREADS", "0")))
 
     # --- Stufe 3: Wort-Alignment (wav2vec2) ---
     enable_alignment: bool = field(default_factory=lambda: _flag("ALIGNMENT", "1"))
