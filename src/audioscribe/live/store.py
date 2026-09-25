@@ -20,7 +20,17 @@ MIC_WAV = "audio/mikrofon.wav"
 SYSTEM_WAV = "audio/system.wav"
 
 # transkript.md mit k, transcript.json mit c - wie im Offline-Lauf.
-_LIVE_COPIES = (("transkript.md", "transkript.live.md"), ("transcript.json", "transcript.live.json"))
+_LIVE_COPIES = (
+    ("transkript.md", "transkript.live.md"),
+    ("transcript.json", "transcript.live.json"),
+    ("transkript.txt", "transkript.live.txt"),
+)
+
+
+def render_plain(paragraphs: list) -> str:
+    """Reiner Text ohne Zeitstempel und Sprecher (FR-49) - für WER-Vergleiche gegen eine
+    Referenz. Ein Absatz je Zeile, wie ``build_paragraphs`` sie schneidet."""
+    return "\n".join(p.text.strip() for p in paragraphs if p.text.strip()) + "\n"
 
 
 def session_name(now: datetime | None = None) -> str:
@@ -37,9 +47,11 @@ def write_transcript(
     mode: str,
     sentences_per_timestamp: int = 2,
 ) -> None:
-    """Schreibt ``transkript.md``, ``transcript.json`` und ``transkript.annotiert.md``."""
+    """Schreibt ``transkript.md``, ``transkript.txt``, ``transcript.json`` und
+    ``transkript.annotiert.md``."""
     session_dir = Path(session_dir)
     paragraphs = build_paragraphs(segments, sentences_per_timestamp)
+    (session_dir / "transkript.txt").write_text(render_plain(paragraphs), encoding="utf-8")
     meta = TranscriptMeta(
         source=Path(session_dir.name),
         duration_s=duration_s,

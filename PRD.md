@@ -548,6 +548,10 @@ Compliance-Anforderungen.
 - **Bildwechsel mit der Offline-Heuristik.** `mss` tastet den Monitor zweimal je Sekunde
   ab; verglichen wird mit `block_means`/`changed_blocks` und den Schwellen aus §15. Das
   Bild entsteht, wenn der Bildschirm wieder ruhig ist.
+- **Messläufe per WAV-Replay.** Die Aufnahme ist hinter einer kleinen Schnittstelle
+  (`mics`, `loopbacks`, `open`, `close`); statt WASAPI kann eine WAV-Datei auf der
+  Sitzungsuhr eingespielt werden. Alles hinter der Aufnahme bleibt unverändert, darum sind
+  Messwerte aus dem Replay auf den Echtbetrieb übertragbar.
 - **Beide Fassungen bleiben erhalten.** Beim Stopp wird das Live-Ergebnis zusätzlich als
   `transkript.live.md`/`transcript.live.json` gesichert. `audioscribe refine` fährt danach
   die Offline-Pipeline (Transkription, Alignment, Diarisierung) über die aufgenommenen
@@ -569,6 +573,7 @@ Compliance-Anforderungen.
 | FR-46 | Jede Live-Sitzung und jedes Nachschärfen hinterlassen ein Fazit: Ladezeit der Modelle, Aufnahmedauer, Rechenzeit und Tempo (Rechenzeit je Audiosekunde, nur Dekodieren; daneben inkl. Vorschau), Verzögerung Ø/Median/max, Abschnitte (davon zusammengelegt und sparsam dekodiert), höchster Rückstand, Zeit im Aufholmodus mit Anteil an der Aufnahme bzw. Dauer je Stufe. Es steht als `bilanz.json` im Sitzungsordner, als Zeile im Protokoll und als Kasten „Fazit“ im Reiter. |
 | FR-47 | **Diagnose-Log.** Jede Live-Sitzung schreibt `diagnose.jsonl` (eine JSON-Zeile je fertigem Abschnitt): Lage im Audio, Zeitpunkte Abschluss/Start/Ende auf der Sitzungsuhr, Wartezeit, Rechenzeit (Dekodieren und Sprecher-Label getrennt), Latenz (bei zusammengelegten Stücken auch ab dem ersten Teil), Modell, Sparmodus, Teile, Wortzahl, Schlussgrund (`pause`/`zeitlimit`/`flush`) und je Whisper-Segment `avg_logprob`, `compression_ratio`, `no_speech_prob`, `temperature`. Vorschauen stehen als eigene Zeilen mit Fensterlänge und Rechenzeit, das Nachschärfen hängt je Segment und je Stufe eine Zeile an. Das Fazit (FR-46) ist aus diesem Log abgeleitet. |
 | FR-48 | **Ehrliche Metriken.** Rückstand = Summe des fertig gesprochenen, noch nicht begonnenen Audios; Aufholmodus = Zeitanteil, in dem dieser Rückstand über einer Chunk-Länge liegt; Echtzeitfaktor getrennt für das Dekodieren allein und inkl. Vorschau. `audioscribe live --eco` erzwingt für Messläufe den Sparmodus für alle Abschnitte. |
+| FR-49 | **WAV-Replay und Reintext.** `audioscribe live --wav DATEI [--wav-mic DATEI] [--speed X]` schickt Aufnahmen durch dieselbe Live-Pipeline (Schnitt, Warteschlange, Fazit, Diagnose-Log), als kämen sie in Echtzeit; ohne Standbilder, auch unter Linux; die Sitzung endet mit der Datei. Jedes Transkript (live und nachgeschärft) liegt zusätzlich als `transkript.txt` ohne Zeitstempel und Sprecher vor, die Live-Fassung als `transkript.live.txt`. |
 
 ### 17.4 Nicht-funktionale Anforderungen
 

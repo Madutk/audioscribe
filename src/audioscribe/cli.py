@@ -94,16 +94,28 @@ def _live(args: argparse.Namespace) -> int:
     from audioscribe.live.session import LiveOptions, LiveSession
 
     model = args.model if args.model and args.model != "auto" else default_model(device)
+    replay = args.wav is not None or args.wav_mic is not None
+    for pfad in (args.wav, args.wav_mic):
+        if pfad is not None and not Path(pfad).is_file():
+            print(f"WAV nicht gefunden: {pfad}")
+            return 1
+    if args.speed <= 0:
+        print("--speed muss groesser als 0 sein")
+        return 1
     opts = LiveOptions(
         output_dir=Path(args.output) if args.output else settings.output_dir,
         model=model,
         device=device,
         compute_type=compute_type,
         language=settings.whisper_language,
-        monitor=args.monitor,
-        window=args.window,
-        mic=args.mic,
-        loopback=args.loopback,
+        # Replay: keine Standbilder, Spuren nur aus den Dateien.
+        monitor=0 if replay else args.monitor,
+        window=0 if replay else args.window,
+        mic=("default" if args.wav_mic else "none") if replay else args.mic,
+        loopback=("default" if args.wav else "none") if replay else args.loopback,
+        replay_system=Path(args.wav) if args.wav else None,
+        replay_mic=Path(args.wav_mic) if args.wav_mic else None,
+        speed=args.speed,
         sensitivity=args.frame_sensitivity or settings.screen_sensitivity,
         bildformat=args.frame_format or settings.screen_format,
         partials=not args.no_partials,
@@ -347,6 +359,20 @@ def main(argv: list[str] | None = None) -> int:
         "--eco",
         action="store_true",
         help="Messlaeufe: jeden Abschnitt sparsam dekodieren (Beam 1, kein Fallback), wie im Aufholmodus",
+    )
+    live.add_argument(
+        "--wav",
+        metavar="DATEI",
+        help="Messlaeufe: WAV als System-Audio durch die Live-Pipeline schicken statt aufzunehmen "
+        "(keine Standbilder; laeuft auch unter Linux)",
+    )
+    live.add_argument("--wav-mic", metavar="DATEI", help="WAV als Mikrofon-Spur (mit oder ohne --wav)")
+    live.add_argument(
+        "--speed",
+        type=float,
+        default=1.0,
+        metavar="X",
+        help="Abspieltempo beim Replay (1.0 = Echtzeit; schneller nur fuer Funktionstests)",
     )
 
     ref = sub.add_parser(

@@ -543,7 +543,9 @@ def test_diagnose_without_measurements_has_no_tempo_or_latency(tmp_path):
     assert b.tempo_inkl_vorschau is None and b.aufholmodus_anteil == 0.0
     text = beschreibe_live(b)
     assert text.startswith("Fazit: Aufnahme 0:05") and "Verzögerung" not in text and "0 Abschnitte" in text
-    assert not (tmp_path / "diagnose.jsonl").exists()
+    leer = Diagnose(tmp_path / "leer" / "diagnose.jsonl")
+    leer.close()  # ohne Abschnitte: Datei da, aber leer
+    assert (tmp_path / "leer" / "diagnose.jsonl").read_text(encoding="utf-8") == ""
 
 
 def test_beschreibe_live_mentions_preview_tempo_and_catchup_share():
@@ -647,6 +649,129 @@ def test_refine_session_times_its_stages(tmp_path, monkeypatch):
     assert zeilen[0] == {"art": "nachschaerfen", "teil": "nachschaerfen", "spur": "Mikrofon", "start_s": 0.0,
                          "end_s": 1.0, "dauer_s": 1.0, "anzahl_woerter": 1, "modell": "tiny"}
     assert all(z["teil"] == "nachschaerfen" for z in zeilen)
+
+
+# --- WAV-Replay (FR-49) ------------------------------------------------------------
+
+
+def write_wav(path, samples: np.ndarray, rate: int = SR, channels: int = 1) -> None:
+    import wave
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    pcm = (np.clip(samples, -1, 1) * 32767).astype("<i2")
+    with wave.open(str(path), "wb") as wav:
+        wav.setnchannels(channels)
+        wav.setsampwidth(2)
+        wav.setframerate(rate)
+        wav.writeframes(np.repeat(pcm, channels).tobytes())
+
+
+def wait_until(cond, timeout: float = 10.0) -> bool:
+    import time
+
+    ende = time.monotonic() + timeout
+    while time.monotonic() < ende:
+        if cond():
+            return True
+        time.sleep(0.02)
+    return False
+
+
+def test_replay_capture_feeds_wav_on_session_clock(tmp_path):
+    import time
+
+    from audioscribe.live.replay import ReplayCapture
+
+    write_wav(tmp_path / "in.wav", np.full(int(1.2 * 8000), 0.4, dtype=np.float32), rate=8000, channels=2)
+    t0 = time.monotonic()
+    speed = 20.0
+    clock = lambda: (time.monotonic() - t0) * speed  # noqa: E731
+    ended = []
+    cap = ReplayCapture(clock, system=tmp_path / "in.wav", mic=None, speed=speed, on_end=lambda: ended.append(1),
+                        nachlauf_s=0.5)
+    assert cap.mics == [] and len(cap.loopbacks) == 1
+    dev = cap.loopbacks[0]
+    assert (dev["rate"], dev["channels"], dev["default"], round(dev["dauer_s"], 2)) == (8000, 2, True, 1.2)
+    track = cap.open("system", dev, tmp_path / "audio" / "system.wav")
+    assert wait_until(lambda: ended, timeout=10)
+    assert ended == [1]
+    start, samples = track.take(1.0)  # nicht clock(): take() fuellt bis "jetzt" mit Stille auf
+    assert start == 0 and abs(len(samples) - 1.2 * SR) < 0.05 * SR
+    assert np.abs(samples[SR // 2 : SR]).max() > 0.3  # Stereo heruntergemischt, auf 16 kHz gebracht
+    cap.close()
+    assert abs(len(load_wav(tmp_path / "audio" / "system.wav")) - 1.2 * SR) < 0.05 * SR
+
+
+def test_replay_capture_rejects_bad_files(tmp_path):
+    from audioscribe.live.replay import ReplayCapture
+
+    with pytest.raises(RuntimeError, match="nicht gefunden"):
+        ReplayCapture(lambda: 0.0, system=tmp_path / "fehlt.wav", mic=None, on_end=lambda: None)
+    (tmp_path / "kaputt.wav").write_bytes(b"nicht wav")
+    with pytest.raises(RuntimeError, match="keine lesbare WAV"):
+        ReplayCapture(lambda: 0.0, system=None, mic=tmp_path / "kaputt.wav", on_end=lambda: None)
+
+
+def test_live_session_replays_wav_end_to_end(tmp_path, monkeypatch):
+    from audioscribe.live.bilanz import load_bilanz
+    from audioscribe.live.diagnose import lies_diagnose
+    from audioscribe.live.session import LiveOptions, LiveSession
+
+    write_wav(tmp_path / "ref.wav", np.concatenate([silence(1.0), speech(1.5), silence(0.5)]))
+    emitted, logged = [], []
+    monkeypatch.setattr(events, "emit", lambda typ, **d: emitted.append((typ, d)))
+    monkeypatch.setattr(events, "log", logged.append)
+    opts = LiveOptions(output_dir=tmp_path / "out", model="m", device="cpu", compute_type="int8",
+                       replay_system=tmp_path / "ref.wav", speed=10.0, monitor=0, mic="none",
+                       partials=False, speakers=False)
+    session = LiveSession(opts)
+    monkeypatch.setattr(session, "_load_asr", lambda: FakeAsr())
+    monkeypatch.setattr(session, "_load_vad", lambda: energy_vad)
+    monkeypatch.setattr(session, "_watch_stdin", lambda: None)
+
+    assert session.run() == 0
+
+    segs = [d for typ, d in emitted if typ == events.SEGMENT]
+    assert len(segs) == 1
+    assert abs(segs[0]["start"] - 1.0) < 0.15 and abs(segs[0]["end"] - 2.5) < 0.15
+    assert segs[0]["text"] == "Text" and segs[0]["track"] == "system"
+    # Mitschnitt: die Datei plus die Nachlauf-Stille, mit der die Sitzung ausklingt.
+    mitschnitt = load_wav(session.dir / "audio" / "system.wav")
+    assert 3 * SR <= len(mitschnitt) < 6 * SR and np.abs(mitschnitt[int(1.2 * SR) : int(2.3 * SR)]).max() > 0.4
+    (rec,) = [z for z in lies_diagnose(session.dir) if z["art"] == "abschnitt"]
+    assert rec["schluss"] == "pause" and rec["eco"] is False and rec["anzahl_woerter"] == 1
+    assert load_bilanz(session.dir)["live"]["abschnitte"] == 1
+    assert (session.dir / "transkript.txt").read_text(encoding="utf-8") == "Text\n"
+    types = [(typ, d.get("teil") or d.get("phase")) for typ, d in emitted]
+    assert types.index((events.FAZIT, "live")) < types.index((events.STATE, "fertig"))
+    assert any("Replay statt Aufnahme" in line for line in logged)
+
+
+def test_cli_live_wav_builds_replay_options(tmp_path, monkeypatch):
+    from audioscribe import cli
+
+    write_wav(tmp_path / "ref.wav", silence(0.5))
+    monkeypatch.setattr(cli, "_prepare_backend", lambda: ("cpu", "int8"))
+    gestartet = []
+
+    class FakeSession:
+        def __init__(self, opts):
+            gestartet.append(opts)
+
+        def run(self):
+            return 0
+
+    monkeypatch.setattr("audioscribe.live.session.LiveSession", FakeSession)
+    assert cli.main(["live", "--wav", str(tmp_path / "ref.wav"), "--speed", "4", "--model", "base",
+                     "--output", str(tmp_path), "--eco", "--monitor", "2"]) == 0
+    (opts,) = gestartet
+    assert opts.replay_system == tmp_path / "ref.wav" and opts.replay_mic is None
+    assert (opts.speed, opts.model, opts.force_eco) == (4.0, "base", True)
+    assert (opts.monitor, opts.window, opts.mic, opts.loopback) == (0, 0, "none", "default")
+    assert cli.main(["live", "--wav", str(tmp_path / "fehlt.wav")]) == 1
+    assert cli.main(["live", "--wav-mic", str(tmp_path / "ref.wav"), "--speed", "0"]) == 1
+    assert cli.main(["live", "--wav-mic", str(tmp_path / "ref.wav")]) == 0
+    assert (gestartet[-1].mic, gestartet[-1].loopback, gestartet[-1].replay_mic) == ("default", "none", tmp_path / "ref.wav")
 
 
 # --- Sprecher ----------------------------------------------------------------------
@@ -883,6 +1008,8 @@ def test_session_folder_is_a_valid_analysis_source(tmp_path):
 
     md = (session / "transkript.md").read_text(encoding="utf-8")
     assert md.index("Ich:** Hallo") < md.index("Sprecher 1:** Guten")  # nach Zeit sortiert
+    # Reintext fuer WER-Vergleiche: ohne Zeitstempel und Sprecher, nach Zeit sortiert.
+    assert (session / "transkript.txt").read_text(encoding="utf-8") == "Hallo zusammen.\nGuten Morgen.\n"
     data = json.loads((session / "transcript.json").read_text(encoding="utf-8"))
     assert data["mode"] == "live" and data["num_speakers"] == 2
     assert "#0001" in (session / "transkript.annotiert.md").read_text(encoding="utf-8")
@@ -893,10 +1020,12 @@ def test_session_folder_is_a_valid_analysis_source(tmp_path):
 
 def test_keep_live_copy_never_overwrites_during_refine(tmp_path):
     (tmp_path / "transkript.md").write_text("live", encoding="utf-8")
+    (tmp_path / "transkript.txt").write_text("live txt", encoding="utf-8")
     keep_live_copy(tmp_path, overwrite=True)
     (tmp_path / "transkript.md").write_text("geschaerft", encoding="utf-8")
     keep_live_copy(tmp_path, overwrite=False)
     assert (tmp_path / "transkript.live.md").read_text(encoding="utf-8") == "live"
+    assert (tmp_path / "transkript.live.txt").read_text(encoding="utf-8") == "live txt"
 
 
 # --- LiveRunner (ohne Modelle: das Kind ist ein python -c-Einzeiler) ---------------

@@ -59,6 +59,11 @@ class LiveOptions:
     catchup_s: float = 5.0
     coalesce_s: float = 25.0
     force_eco: bool = False  # Messläufe: jeden Abschnitt sparsam dekodieren (--eco)
+    # WAV-Replay statt Audio-Geräten (FR-49); speed > 1 lässt die Sitzungsuhr schneller
+    # laufen (nur für Funktionstests - Latenzen sind dann nicht mehr vergleichbar).
+    replay_system: Path | None = None
+    replay_mic: Path | None = None
+    speed: float = 1.0
 
 
 class LiveSession:
@@ -81,14 +86,13 @@ class LiveSession:
         self._diagnose = Diagnose(self.dir / DIAGNOSE_NAME)
 
     def clock(self) -> float:
-        return time.monotonic() - self._t0
+        """Sitzungsuhr in Sekunden seit Aufnahmestart; beim Replay ggf. beschleunigt."""
+        return (time.monotonic() - self._t0) * self.opts.speed
 
     # --- Ablauf -------------------------------------------------------------
 
     def run(self) -> int:
-        from audioscribe.live.asr import LiveTranscriber
-        from audioscribe.live.chunker import silero_vad
-        from audioscribe.live.devices import AudioCapture, pick
+        from audioscribe.live.devices import pick
         from audioscribe.live.speakers import SpeakerLabeler
 
         o = self.opts
@@ -96,29 +100,20 @@ class LiveSession:
         self._state("laden", step=f"Whisper {o.model}")
         events.log(f"Lade Modell {o.model} ({o.device}, {o.compute_type}) ...")
         started = time.monotonic()
-        self._asr = LiveTranscriber(
-            o.model,
-            o.device,
-            o.compute_type,
-            o.language,
-            on_progress=lambda done, total: events.emit(
-                events.DOWNLOAD, model=o.model, done=done, total=total
-            ),
-            cpu_threads=o.cpu_threads,
-        )
+        self._asr = self._load_asr()
         events.log(f"Whisper {o.model} geladen ({_took(started)})")
         # Vor dem Hintergrund-Thread: torch.set_num_threads wirkt prozessweit.
         self._limit_torch_threads()
         self._labeler = SpeakerLabeler(self._load_embedder())
         self._state("laden", step="Sprachaktivität (VAD)")
         started = time.monotonic()
-        vad = silero_vad()
+        vad = self._load_vad()
         events.log(f"Sprachaktivität bereit ({_took(started)})")
 
         self.dir.mkdir(parents=True, exist_ok=True)
         self._state("laden", step="Audio-Geräte")
         self._t0 = time.monotonic()
-        audio = AudioCapture(self.clock)
+        audio = self._open_capture()
         tracks: dict = {}
         screen = None
         try:
@@ -191,7 +186,7 @@ class LiveSession:
     def _main_loop(self, tracks: dict) -> None:
         last_persist = time.monotonic()
         try:
-            while not self._stop.wait(1.0):
+            while not self._stop.wait(1.0 / self.opts.speed):
                 backlog = self._board.backlog_s()
                 self._diagnose.rueckstand(self.clock(), backlog)
                 events.emit(
@@ -228,7 +223,7 @@ class LiveSession:
     def _cut_loop(self, tracks: dict, chunkers: dict[str, Chunker]) -> None:
         last_partial = dict.fromkeys(tracks, 0.0)
         tick = 0
-        while not self._stop.wait(_TICK_S):
+        while not self._stop.wait(_TICK_S / self.opts.speed):
             tick += 1
             now = self.clock()
             for name, track in tracks.items():
@@ -366,6 +361,40 @@ class LiveSession:
                 return
 
     # --- Hilfen -------------------------------------------------------------
+
+    def _load_asr(self):
+        from audioscribe.live.asr import LiveTranscriber
+
+        o = self.opts
+        return LiveTranscriber(
+            o.model,
+            o.device,
+            o.compute_type,
+            o.language,
+            on_progress=lambda done, total: events.emit(
+                events.DOWNLOAD, model=o.model, done=done, total=total
+            ),
+            cpu_threads=o.cpu_threads,
+        )
+
+    def _load_vad(self):
+        from audioscribe.live.chunker import silero_vad
+
+        return silero_vad()
+
+    def _open_capture(self):
+        """Audio-Geräte - oder beim Replay die WAV-Dateien (FR-49)."""
+        o = self.opts
+        if o.replay_system is not None or o.replay_mic is not None:
+            from audioscribe.live.replay import ReplayCapture
+
+            events.log(f"Replay statt Aufnahme (Tempo {o.speed:g}×)")
+            return ReplayCapture(
+                self.clock, system=o.replay_system, mic=o.replay_mic, speed=o.speed, on_end=self._stop.set
+            )
+        from audioscribe.live.devices import AudioCapture
+
+        return AudioCapture(self.clock)
 
     def _enter_catchup(self, backlog_s: float) -> bool:
         """Sparmodus an/aus je nach Rückstand; der Wechsel wird einmal protokolliert."""

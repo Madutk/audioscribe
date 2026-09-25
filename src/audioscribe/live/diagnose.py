@@ -102,6 +102,10 @@ class Diagnose:
             if self._file is not None:
                 self._file.close()
                 self._file = None
+            elif self._path is not None and not self._path.exists():
+                # Auch eine Sitzung ohne Abschnitte hinterlässt die Datei - leer, nicht fehlend.
+                self._path.parent.mkdir(parents=True, exist_ok=True)
+                self._path.touch()
 
     def _write(self, zeile: dict) -> None:
         """Aufrufer hält den Lock."""

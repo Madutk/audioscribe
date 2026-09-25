@@ -475,7 +475,8 @@ Der Ordner der verworfenen Sitzung wird nicht gelöscht; das Protokoll nennt sei
 ```
 output/live-2026-09-19_14-30-05/
   transkript.md  transcript.json  transkript.annotiert.md  marks.json  frames/
-  transkript.live.md  transcript.live.json        # Live-Fassung (nach dem Stopp)
+  transkript.txt                                  # reiner Text ohne Zeitstempel/Sprecher (WER-Vergleich)
+  transkript.live.md  transcript.live.json  transkript.live.txt   # Live-Fassung (nach dem Stopp)
   audio/mikrofon.wav  audio/system.wav            # 16 kHz mono
   bilanz.json                                     # Fazit: Rechendauer und Latenz (live + nachschaerfen)
   diagnose.jsonl                                  # je Abschnitt und Vorschau eine Zeile (Zeiten, Qualitaet)
@@ -525,6 +526,20 @@ Bildwechsel aus.
 .venv-win\Scripts\audioscribe.exe live --monitor 1 --mic 23  # Ende mit Strg+C oder "stop" + Enter
 .venv-win\Scripts\audioscribe.exe live --window 592902       # nur dieses Fenster statt eines Monitors
 .venv-win\Scripts\audioscribe.exe refine output\live-2026-09-19_14-30-05 --model large-v3-turbo
+```
+
+**Messläufe ohne Aufnahme (WAV-Replay):** `live --wav DATEI` schickt eine WAV-Datei als
+System-Audio durch dieselbe Pipeline, als käme sie gerade aus dem Lautsprecher: derselbe
+Schnitt, dieselbe Warteschlange, dasselbe Fazit und Diagnose-Log. `--wav-mic DATEI` spielt
+eine zweite Datei als Mikrofon. Standbilder gibt es dabei nicht, und es läuft auch unter
+Linux. Die Sitzung endet von selbst, sobald die Datei durch ist. So lassen sich Modelle und
+Schnitt-Einstellungen reproduzierbar gegen ein Referenztranskript messen, etwa mit
+`transkript.txt` (reiner Text) und einem WER-Werkzeug. `--speed 4` lässt die Sitzungsuhr
+viermal so schnell laufen; das taugt für Funktionstests, aber nicht für Latenzwerte.
+
+```powershell
+.venv-win\Scripts\audioscribe.exe live --wav referenz.wav --model base --device cpu --no-speakers --no-partials
+.venv-win\Scripts\audioscribe.exe live --wav referenz.wav --model base --device cpu --no-speakers --eco
 ```
 
 ## Erster Lauf & Modell-Downloads
