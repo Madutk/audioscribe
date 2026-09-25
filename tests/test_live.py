@@ -902,15 +902,17 @@ def test_live_runner_reset_after_end_clears_state(tmp_path):
 def test_build_live_argv_and_refine_argv(tmp_path):
     from audioscribe.ui.jobs import LiveJobOptions, build_live_argv, build_refine_argv
 
-    opts = LiveJobOptions(output_dir=tmp_path, monitor=2, mic="23", loopback="none", partials=False)
+    opts = LiveJobOptions(output_dir=tmp_path, monitor=2, mic="23", loopback="none", partials=False,
+                          model="small", refine_model="large-v3-turbo")
     argv = build_live_argv(opts, prefix=["audioscribe"])
     assert argv[:2] == ["audioscribe", "live"]
-    assert {"--monitor=2", "--mic=23", "--loopback=none", "--model=auto", "--no-partials"} <= set(argv)
+    assert {"--monitor=2", "--mic=23", "--loopback=none", "--model=small", "--no-partials"} <= set(argv)
     assert "--no-speakers" not in argv
     assert not any(a.startswith("--window") for a in argv)
-    assert build_refine_argv(tmp_path / "live-x", opts, prefix=["audioscribe"])[:3] == [
-        "audioscribe", "refine", str(tmp_path / "live-x")
-    ]
+    # Nachschaerfen laeuft mit seinem eigenen Modell, nicht mit dem Live-Modell.
+    refine_argv = build_refine_argv(tmp_path / "live-x", opts, prefix=["audioscribe"])
+    assert refine_argv[:3] == ["audioscribe", "refine", str(tmp_path / "live-x")]
+    assert "--model=large-v3-turbo" in refine_argv and "--model=small" not in refine_argv
     fenster_argv = build_live_argv(LiveJobOptions(output_dir=tmp_path, monitor=0, window=4711), prefix=["x"])
     assert {"--monitor=0", "--window=4711"} <= set(fenster_argv)
 
@@ -937,6 +939,7 @@ def client(tmp_path, monkeypatch):
 def test_live_defaults_route(client):
     data = client.get("/api/live/defaults").json()
     assert data["models"][0] == "auto" and "large-v3-turbo" in data["models"]
+    assert "large-v3-turbo" in data["refine_models"] and "auto" not in data["refine_models"]
     assert data["problems"] == ["Attrappe"] and data["refine"] is True
 
 

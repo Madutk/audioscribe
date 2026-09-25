@@ -457,8 +457,11 @@ System-Abschnitt, sobald das Protokoll „Sprecher-Modell bereit“ meldet (auf 
 nicht sauber getrennt, das korrigiert das Nachschärfen.
 
 **Nach dem Stopp** bleibt die Live-Fassung als `transkript.live.md` erhalten. Ist
-„nach Stopp nachschärfen“ angehakt, läuft danach die Offline-Pipeline (Standard `large-v3`,
-Alignment, Diarisierung der System-Spur) über den Mitschnitt und ersetzt `transkript.md`.
+„nach Stopp nachschärfen“ angehakt, läuft danach die Offline-Pipeline (Alignment,
+Diarisierung der System-Spur) über den Mitschnitt und ersetzt `transkript.md`. Das Modell
+dafür wird getrennt vom Live-Modell gewählt („Modell (Nachschärfen)“, Standard `large-v3`):
+live zählt das Tempo, beim Nachschärfen die Genauigkeit – etwa `small` live auf der CPU und
+`large-v3` oder `large-v3-turbo` danach. Ohne Oberfläche: `audioscribe refine ORDNER --model …`.
 Die Screenshots bleiben. Ein zweiter Klick auf Stoppen bricht hart ab.
 
 **Von vorn:** „Zurücksetzen“ unter den Start-/Stopp-Knöpfen leert nach Rückfrage Transkript,
@@ -504,7 +507,7 @@ Bildwechsel aus.
 .venv-win\Scripts\audioscribe.exe live --list-devices        # Geräteindizes, Monitore, Fenster (HWND)
 .venv-win\Scripts\audioscribe.exe live --monitor 1 --mic 23  # Ende mit Strg+C oder "stop" + Enter
 .venv-win\Scripts\audioscribe.exe live --window 592902       # nur dieses Fenster statt eines Monitors
-.venv-win\Scripts\audioscribe.exe refine output\live-2026-09-19_14-30-05
+.venv-win\Scripts\audioscribe.exe refine output\live-2026-09-19_14-30-05 --model large-v3-turbo
 ```
 
 ## Erster Lauf & Modell-Downloads

@@ -43,6 +43,7 @@ WHISPER_MODELS: tuple[str, ...] = (
     "medium",
     "large-v2",
     "large-v3",
+    "large-v3-turbo",
 )
 
 # Sprachvorschlaege der Oberflaeche ('auto' = erkennen lassen).
@@ -358,7 +359,7 @@ def scan_results(output_dir: Path) -> list[dict]:
 # --- Live-Transkription (PRD §17) --------------------------------------------------
 
 # 'auto' waehlt nach Geraet: large-v3-turbo auf CUDA, small auf CPU (live/asr.default_model).
-LIVE_WHISPER_MODELS: tuple[str, ...] = ("auto", "large-v3-turbo", *WHISPER_MODELS)
+LIVE_WHISPER_MODELS: tuple[str, ...] = ("auto", *WHISPER_MODELS)
 
 
 @dataclass(frozen=True)
@@ -378,6 +379,7 @@ class LiveJobOptions:
     partials: bool = True
     speakers: bool = True
     refine: bool = True
+    # Unabhaengig vom Live-Modell: live zaehlt Tempo, beim Nachschaerfen Genauigkeit.
     refine_model: str = "large-v3"
 
 
