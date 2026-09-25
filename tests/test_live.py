@@ -1,6 +1,7 @@
 """Live-Transkription (PRD §17): reine Bausteine ohne Audio-Hardware und ohne Modelle."""
 
 import json
+import sys
 import threading
 from types import SimpleNamespace
 
@@ -14,7 +15,13 @@ from audioscribe.live.chunker import Chunker, Utterance, merge_utterances
 from audioscribe.live.devices import pick
 from audioscribe.live.fenster import WindowGone
 from audioscribe.live.screen import ChangeDetector
-from audioscribe.live.speakers import GEGENSEITE, ICH, OnlineClusterer, SpeakerLabeler
+from audioscribe.live.speakers import (
+    GEGENSEITE,
+    ICH,
+    BackgroundEmbedder,
+    OnlineClusterer,
+    SpeakerLabeler,
+)
 from audioscribe.live.store import keep_live_copy, session_name, write_transcript
 from audioscribe.live.track import SAMPLE_RATE, Resampler, Track, load_wav
 from audioscribe.models import Segment
@@ -268,6 +275,74 @@ def test_board_wait_idle_wakes_up_when_worker_finishes():
     assert not board.wait_idle(0.01)
     threading.Timer(0.05, board.done, args=(job,)).start()
     assert board.wait_idle(2.0)
+
+
+# --- Sprecher-Modell im Hintergrund ------------------------------------------------
+
+
+def test_background_embedder_never_blocks_mic_and_labels_system_when_ready():
+    gate, logged = threading.Event(), []
+
+    def load():
+        gate.wait(5.0)
+        return lambda audio: np.ones(8)
+
+    labeler = SpeakerLabeler(BackgroundEmbedder(load, log=logged.append))
+    assert labeler.label("mic", speech(2)) == ICH  # vor dem Laden, ohne zu warten
+    assert not logged
+    gate.set()
+    assert labeler.label("system", speech(2)) == "Sprecher 1"
+    assert logged and logged[0].startswith("Sprecher-Modell bereit")
+
+
+def test_background_embedder_failure_falls_back_to_gegenseite():
+    logged = []
+
+    def load():
+        raise RuntimeError("kein Token")
+
+    labeler = SpeakerLabeler(BackgroundEmbedder(load, log=logged.append))
+    assert labeler.label("system", speech(2)) == GEGENSEITE
+    assert "kein Token" in logged[0] and GEGENSEITE in logged[0]
+
+
+# --- Modell aus dem Cache ohne Hub-Anfrage -----------------------------------------
+
+
+def fake_faster_whisper(monkeypatch, download_model):
+    utils = SimpleNamespace(disabled_tqdm=object(), download_model=download_model)
+    monkeypatch.setitem(sys.modules, "faster_whisper", SimpleNamespace(utils=utils))
+    return utils
+
+
+def test_fetch_model_uses_cache_without_asking_the_hub(monkeypatch):
+    from audioscribe.pipeline.models import fetch_model
+
+    calls = []
+    utils = fake_faster_whisper(monkeypatch, lambda m, **kw: (calls.append(kw), "/cache/small")[1])
+    assert fetch_model("small", lambda a, b: None) == "/cache/small"
+    assert calls == [{"local_files_only": True}]
+    assert utils.disabled_tqdm is not None  # Fortschritts-Patch wurde nicht gebraucht
+
+
+def test_fetch_model_downloads_with_progress_when_not_cached(monkeypatch):
+    from audioscribe.pipeline.models import fetch_model
+
+    calls = []
+
+    def download_model(model, **kw):
+        calls.append(kw)
+        if kw.get("local_files_only"):
+            raise FileNotFoundError(model)
+        return "/cache/small"
+
+    utils = fake_faster_whisper(monkeypatch, download_model)
+    seen = {}
+    original = utils.disabled_tqdm
+    utils.download_model = lambda m, **kw: (seen.update(tqdm=utils.disabled_tqdm), download_model(m, **kw))[1]
+    assert fetch_model("small", lambda a, b: None) == "/cache/small"
+    assert calls == [{"local_files_only": True}, {}]
+    assert seen["tqdm"] is not original  # beim Online-Pfad war der Fortschritt eingehaengt
 
 
 # --- Dekodieren / Aufholmodus ------------------------------------------------------
@@ -585,6 +660,7 @@ CHILD = r"""
 import sys, json
 def ev(**d): print("[Live] " + json.dumps(d), flush=True)
 state = dict(session="live-x", dir=sys.argv[1], model="small", device="cpu")
+ev(type="state", phase="laden", step="Whisper small", **state)
 ev(type="state", phase="laeuft", **state)
 print("Spur 'mic': Test", flush=True)
 ev(type="partial", track="system", start=0.2, text="Gu")
@@ -634,6 +710,7 @@ def test_live_runner_collects_events_and_stops_gracefully(tmp_path):
     assert [e["type"] for e in snap["events"]] == ["segment", "shot"]
     assert list(snap["partials"]) == ["system"]  # das Segment hat die mic-Vorschau abgeloest
     assert snap["phase"] == "laeuft" and runner.session_dir() == tmp_path
+    assert snap["step"] is None  # der Ladeschritt gilt nur waehrend "laden"
     assert "Spur 'mic': Test" in snap["lines"]
     assert runner.snapshot(ev_offset=snap["ev_offset"])["events"] == []
 

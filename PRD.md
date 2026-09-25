@@ -518,6 +518,11 @@ Compliance-Anforderungen.
   (NFR-2) und taugt nicht für Sekunden-Abschnitte. Der Live-Modus hält ein
   `faster_whisper.WhisperModel` für die ganze Sitzung. Standard: `large-v3-turbo` auf
   CUDA, `small` auf CPU.
+- **Schneller Start.** Nur Whisper, VAD und Audio-Geräte blockieren den Start; das
+  Sprecher-Modell (pyannote samt Lightning, auf der CPU der größte Posten) lädt in einem
+  Hintergrund-Thread, der erste System-Abschnitt wartet darauf. Liegen die Modelle im
+  Cache, wird der Hugging-Face-Hub nicht befragt. Die Oberfläche zeigt den aktuellen
+  Ladeschritt, das Protokoll die Dauer je Stufe.
 - **Schnitt an Sprechpausen.** Silero-VAD (liegt faster-whisper bei) schneidet nach
   ≥ 0,6 s Pause oder spätestens nach 12 s. Stille wird nie transkribiert, das hält
   Whisper-Halluzinationen fern.

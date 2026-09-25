@@ -93,3 +93,30 @@ def test_cudnn8_verzeichnis_haengt_am_system(monkeypatch):
     assert compat._cudnn8_lib_dir().name == "bin"
     monkeypatch.setattr(compat.os, "name", "posix")
     assert compat._cudnn8_lib_dir().name == "lib"
+
+
+def test_hf_hub_wrapper_tries_cache_first(monkeypatch):
+    """pyannote fragt je Datei den Hub - liegt sie im Cache, bleibt der Aufruf offline."""
+    from types import SimpleNamespace
+
+    calls = []
+
+    def hf_hub_download(repo, filename, **kw):
+        calls.append(kw)
+        if kw.get("local_files_only") and filename == "fehlt.bin":
+            raise FileNotFoundError(filename)
+        return f"/cache/{filename}"
+
+    hub = SimpleNamespace(hf_hub_download=hf_hub_download)
+    monkeypatch.setitem(sys.modules, "huggingface_hub", hub)
+    monkeypatch.setattr(compat, "_HF_HUB_PATCHED", False)
+    compat.apply_hf_hub_compat()
+
+    assert hub.hf_hub_download("m", "config.yaml", use_auth_token="t") == "/cache/config.yaml"
+    assert calls == [{"local_files_only": True, "token": "t"}]
+    calls.clear()
+    assert hub.hf_hub_download("m", "fehlt.bin") == "/cache/fehlt.bin"
+    assert calls == [{"local_files_only": True}, {}]  # Cache-Fehlschlag -> regulaer online
+    calls.clear()
+    hub.hf_hub_download("m", "x", local_files_only=False)
+    assert calls == [{"local_files_only": False}]  # Vorgabe des Aufrufers bleibt unangetastet

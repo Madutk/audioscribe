@@ -12,7 +12,7 @@ import threading
 PREFIX = "[Live] "
 
 # Ereignistypen
-STATE = "state"  # phase, session, dir, model, device
+STATE = "state"  # phase, session, dir, model, device, step (nur während "laden")
 SEGMENT = "segment"  # id, track, speaker, start, end, text, delay
 PARTIAL = "partial"  # track, start, text (leerer Text = Vorschau zurücknehmen)
 SHOT = "shot"  # id, t, file

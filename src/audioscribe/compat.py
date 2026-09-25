@@ -57,6 +57,11 @@ def apply_hf_hub_compat() -> None:
     Wir wrappen ``hf_hub_download`` so, dass ``use_auth_token`` auf ``token`` gemappt
     wird, und ziehen die Referenz in bereits importierten Modulen (pyannote) nach.
     Idempotent.
+
+    Nebenbei spart der Wrapper Netzwerkrunden: pyannote fragt je Modell-Datei den Hub nach
+    der aktuellen Revision, obwohl sie längst im Cache liegt. Setzt der Aufrufer
+    ``local_files_only`` nicht selbst, versuchen wir erst den Cache und gehen nur dann
+    online, wenn dort etwas fehlt.
     """
     global _HF_HUB_PATCHED
     if _HF_HUB_PATCHED:
@@ -74,6 +79,11 @@ def apply_hf_hub_compat() -> None:
         if "use_auth_token" in kwargs:
             token = kwargs.pop("use_auth_token")
             kwargs.setdefault("token", token)
+        if "local_files_only" not in kwargs:
+            try:
+                return orig(*args, local_files_only=True, **kwargs)
+            except Exception:  # noqa: BLE001 - nicht im Cache -> regulaer (online) laden
+                pass
         return orig(*args, **kwargs)
 
     huggingface_hub.hf_hub_download = _download

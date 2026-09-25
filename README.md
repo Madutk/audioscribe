@@ -450,7 +450,10 @@ Screenshots erscheinen rechts als Thumbnails, ein Klick öffnet die Großansicht
 
 **Sprecher:** Das Mikrofon ist „Ich“. Das System-Audio wird per Stimm-Embedding in
 „Sprecher 1/2/3“ getrennt; das braucht denselben `HF_TOKEN` wie die Diarisierung. Ohne
-Token heißt die Spur „Gegenseite“. Sehr kurze Einwürfe und Durcheinanderreden werden live
+Token heißt die Spur „Gegenseite“. Das Sprecher-Modell lädt im Hintergrund, damit die
+Aufnahme sofort beginnt: Mikrofon-Abschnitte erscheinen ab der ersten Sekunde, der erste
+System-Abschnitt, sobald das Protokoll „Sprecher-Modell bereit“ meldet (auf der CPU rund
+10 s, deutlich länger, wenn parallel eine Besprechung läuft). Sehr kurze Einwürfe und Durcheinanderreden werden live
 nicht sauber getrennt, das korrigiert das Nachschärfen.
 
 **Nach dem Stopp** bleibt die Live-Fassung als `transkript.live.md` erhalten. Ist

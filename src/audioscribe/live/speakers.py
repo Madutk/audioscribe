@@ -7,6 +7,10 @@ laufenden Zentroiden zugeordnet; so bleibt "Sprecher 2" über die Sitzung dersel
 
 from __future__ import annotations
 
+import threading
+import time
+from collections.abc import Callable
+
 import numpy as np
 
 from audioscribe.live.track import SAMPLE_RATE
@@ -70,6 +74,36 @@ class SpeakerEmbedder:
         return np.asarray(self._inference(data), dtype=np.float32).reshape(-1)
 
 
+class BackgroundEmbedder:
+    """Lädt den Embedder in einem Thread, damit die Aufnahme nicht auf ihn wartet.
+
+    pyannote zieht torch-lightning und Co. mit - auf der CPU dauert das länger als alles
+    andere beim Start, gebraucht wird es aber erst beim ersten fertigen Abschnitt der
+    System-Spur. ``wait()`` liefert den Embedder oder ``None`` (Fehler protokolliert).
+    """
+
+    def __init__(self, load: Callable[[], Callable], log: Callable[[str], None]) -> None:
+        self._load = load
+        self._log = log
+        self._done = threading.Event()
+        self._embedder: Callable | None = None
+        threading.Thread(target=self._run, name="speaker-embedder", daemon=True).start()
+
+    def _run(self) -> None:
+        started = time.monotonic()
+        try:
+            self._embedder = self._load()
+            self._log(f"Sprecher-Modell bereit ({time.monotonic() - started:.1f} s)")
+        except Exception as exc:  # noqa: BLE001 - Sprechertrennung ist Zugabe, kein Muss
+            self._log(f"Sprecher-Modell nicht ladbar ({exc}) - System-Spur heißt '{GEGENSEITE}'")
+        finally:
+            self._done.set()
+
+    def wait(self) -> Callable | None:
+        self._done.wait()
+        return self._embedder
+
+
 class SpeakerLabeler:
     """Sprecher-Label je Abschnitt: Mikrofon = Ich, System = Sprecher N bzw. Gegenseite."""
 
@@ -80,7 +114,9 @@ class SpeakerLabeler:
 
     def label(self, track: str, audio: np.ndarray) -> str:
         if track == "mic":
-            return ICH
+            return ICH  # braucht kein Modell - wartet also auch nie auf das Laden
+        if isinstance(self._embedder, BackgroundEmbedder):
+            self._embedder = self._embedder.wait()
         if self._embedder is None:
             return GEGENSEITE
         if len(audio) < MIN_EMBED_S * SAMPLE_RATE and self._last:

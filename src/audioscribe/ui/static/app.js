@@ -768,7 +768,7 @@ async function pollLive() {
   $('liveLoadBarBox').classList.toggle('wait', !dl);
   $('liveLoadStep').textContent = dl
     ? `Modell ${dl.model} wird heruntergeladen – ${mb(dl.done)} von ${mb(dl.total)} MB (${Math.floor(dl.done / dl.total * 100)} %)`
-    : `Modell ${s.model || ''} wird geladen …`;
+    : `Modell ${s.model || ''} wird geladen …${s.step ? ' – ' + s.step : ''}`;
   $('liveLoadBar').style.width = dl ? (dl.done / dl.total * 100) + '%' : '';
 
   const r = s.refine;

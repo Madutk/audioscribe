@@ -11,14 +11,20 @@ def fetch_model(model: str, on_progress: Callable[[int, int], None]) -> str:
 
     faster-whisper schaltet den Fortschritt seines Downloads fest ab
     (``tqdm_class=disabled_tqdm``); der erste Start wirkte darum minutenlang eingefroren.
-    Liegt das Modell schon im Cache, kommt keine Meldung. Der Fortschritt ist Zugabe: geht
-    hier etwas schief, lädt ``WhisperModel`` das Modell wie bisher selbst.
+    Liegt das Modell schon im Cache, wird der Hub gar nicht erst befragt (spart je Start
+    eine Netzwerkrunde) und es kommt keine Meldung. Der Fortschritt ist Zugabe: geht hier
+    etwas schief, lädt ``WhisperModel`` das Modell wie bisher selbst.
     """
     if os.path.isdir(model):
         return model
     try:
         from faster_whisper import utils
         from tqdm import tqdm
+
+        try:
+            return utils.download_model(model, local_files_only=True)
+        except Exception:  # noqa: BLE001 - nicht (vollständig) im Cache -> herunterladen
+            pass
 
         class Progress(tqdm):
             def __init__(self, *args, **kwargs) -> None:

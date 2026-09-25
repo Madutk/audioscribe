@@ -85,8 +85,9 @@ class LiveSession:
         from audioscribe.live.speakers import SpeakerLabeler
 
         o = self.opts
-        self._state("laden")
+        self._state("laden", step=f"Whisper {o.model}")
         events.log(f"Lade Modell {o.model} ({o.device}, {o.compute_type}) ...")
+        started = time.monotonic()
         self._asr = LiveTranscriber(
             o.model,
             o.device,
@@ -97,11 +98,17 @@ class LiveSession:
             ),
             cpu_threads=o.cpu_threads,
         )
-        self._labeler = SpeakerLabeler(self._load_embedder())
+        events.log(f"Whisper {o.model} geladen ({_took(started)})")
+        # Vor dem Hintergrund-Thread: torch.set_num_threads wirkt prozessweit.
         self._limit_torch_threads()
+        self._labeler = SpeakerLabeler(self._load_embedder())
+        self._state("laden", step="Sprachaktivität (VAD)")
+        started = time.monotonic()
         vad = silero_vad()
+        events.log(f"Sprachaktivität bereit ({_took(started)})")
 
         self.dir.mkdir(parents=True, exist_ok=True)
+        self._state("laden", step="Audio-Geräte")
         self._t0 = time.monotonic()
         audio = AudioCapture(self.clock)
         tracks: dict = {}
@@ -326,19 +333,22 @@ class LiveSession:
             pass
 
     def _load_embedder(self):
+        """Sprecher-Modell im Hintergrund; der erste System-Abschnitt wartet darauf."""
         o = self.opts
         if not o.speakers or o.loopback.strip().lower() == "none":
             return None
         if not o.hf_token:
             events.log("HF_TOKEN fehlt - System-Spur heißt 'Gegenseite' statt 'Sprecher N'")
             return None
-        try:
+        from audioscribe.live.speakers import BackgroundEmbedder
+
+        def load():
             from audioscribe.live.speakers import SpeakerEmbedder
 
             return SpeakerEmbedder(o.device, o.hf_token)
-        except Exception as exc:  # noqa: BLE001 - Sprechertrennung ist Zugabe, kein Muss
-            events.log(f"Sprecher-Modell nicht ladbar ({exc}) - System-Spur heißt 'Gegenseite'")
-            return None
+
+        events.log("Sprecher-Modell lädt im Hintergrund ...")
+        return BackgroundEmbedder(load, log=events.log)
 
     def _start_screen(self):
         if not (self.opts.monitor or self.opts.window):
@@ -382,7 +392,7 @@ class LiveSession:
                 sentences_per_timestamp=self.opts.sentences_per_timestamp,
             )
 
-    def _state(self, phase: str) -> None:
+    def _state(self, phase: str, **extra: object) -> None:
         events.emit(
             events.STATE,
             phase=phase,
@@ -390,4 +400,9 @@ class LiveSession:
             dir=str(self.dir),
             model=self.opts.model,
             device=self.opts.device,
+            **extra,
         )
+
+
+def _took(started: float) -> str:
+    return f"{time.monotonic() - started:.1f} s"
