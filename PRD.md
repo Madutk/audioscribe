@@ -529,11 +529,18 @@ Compliance-Anforderungen.
 - **Vorschautext mit niedrigster Priorität.** Der laufende Abschnitt wird etwa alle 2 s
   vorläufig transkribiert und grau angezeigt. Vorschau-Aufträge laufen nur, wenn kein
   fertiger Abschnitt wartet, und pausieren ab 3 s Rückstand – wichtig für den CPU-Betrieb.
-- **Aufholmodus ab 5 s Rückstand.** Whisper polstert jede Eingabe auf 30 s; kurze
-  Abschnitte kosten also fast so viel wie lange. Wartende Abschnitte derselben Spur werden
-  darum zu Stücken bis 25 s zusammengelegt und mit Beam 1 ohne Temperatur-Fallback
+- **Aufholmodus ab 5 s wartendem Rückstand.** Whisper polstert jede Eingabe auf 30 s;
+  kurze Abschnitte kosten also fast so viel wie lange. Wartende Abschnitte derselben Spur
+  werden darum zu Stücken bis 25 s zusammengelegt und mit Beam 1 ohne Temperatur-Fallback
   dekodiert. Die Segmente werden gröber, der Rückstand wächst aber nicht mehr unbegrenzt.
-  Das gemessene Tempo (Rechenzeit je Audiosekunde) wird mitgemeldet.
+  Rückstand ist nur, was fertig gesprochen *wartet*; der Abschnitt in Arbeit zählt nicht
+  mit – sonst liefe jeder Abschnitt über 5 s im Sparmodus, auch bei leerer Warteschlange
+  (so war es bis September 2026). Das gemessene Tempo (Rechenzeit je Audiosekunde) wird
+  mitgemeldet.
+- **Fazit aus dem Diagnose-Log, nicht aus Zählern.** Jeder Abschnitt hinterlässt eine
+  Zeile in `diagnose.jsonl` mit Zeitpunkten, Rechenzeiten und den Qualitätswerten der
+  Whisper-Segmente; das Fazit wird am Ende daraus abgeleitet. Eine zweite Buchführung,
+  die vom Log abweichen könnte, gibt es nicht.
 - **Sprecher live per Online-Clustering.** Je Abschnitt der System-Spur entsteht ein
   Stimm-Embedding (pyannote/wespeaker), das per Kosinus-Ähnlichkeit laufenden Zentroiden
   zugeordnet wird. So bleiben „Sprecher 1/2/3“ über die Sitzung stabil. Abschnitte unter
@@ -552,14 +559,16 @@ Compliance-Anforderungen.
 |----|-------------|
 | FR-37 | `audioscribe live` schneidet einen wählbaren Monitor **oder ein einzelnes Anwendungsfenster**, das System-Audio und das Mikrofon mit, bis `stop` über stdin oder Strg+C eintrifft. Geräte und Bildquelle sind wählbar (`--mic`, `--loopback`, `--monitor`, `--window HWND`), jede Quelle ist abschaltbar. Ein Fenster wird per `PrintWindow` auch verdeckt aufgenommen; minimiert pausieren die Standbilder, geschlossen endet nur die Bildaufnahme. |
 | FR-38 | Abgeschlossene Sprechabschnitte erscheinen als Text mit Zeitstempel und Sprecher. Der laufende Abschnitt erscheint als vorläufiger Text (abschaltbar mit `--no-partials`). |
-| FR-39 | Die **Verzögerung** (Ende des Gesprochenen bis zur Anzeige) und der **Rückstand** (aufgenommenes, noch nicht transkribiertes Audio) werden laufend gemeldet und angezeigt. |
+| FR-39 | Die **Verzögerung** (Ende des Gesprochenen bis zur Anzeige) und der **Rückstand** (fertig gesprochenes Audio, das auf die Transkription wartet – ohne den Abschnitt in Arbeit) werden laufend gemeldet und angezeigt. |
 | FR-40 | Sprecher: Mikrofon = „Ich“. Die System-Spur wird per Online-Clustering in „Sprecher N“ getrennt; ohne HF-Token oder mit `--no-speakers` heißt sie „Gegenseite“. |
 | FR-41 | Bildwechsel auf dem gewählten Monitor werden erkannt und als Standbild nach `frames/` gesichert, mit Startbild bei 0 s. Empfindlichkeit und Bildformat wie FR-24/FR-26. |
 | FR-42 | Die Sitzung landet in `<output>/live-JJJJ-MM-TT_hh-mm-ss/` im Format eines Offline-Laufs (`transkript.md`, `transcript.json`, `marks.json`, `frames/`, `transkript.annotiert.md`) plus `audio/mikrofon.wav` und `audio/system.wav` (16 kHz mono). Geschrieben wird alle 30 s und beim Stopp. |
 | FR-43 | `audioscribe refine ORDNER` schärft eine Sitzung nach: je Spur Transkription und Alignment, Diarisierung nur auf der System-Spur. Die Live-Fassung bleibt als `transkript.live.md`/`transcript.live.json` erhalten. |
 | FR-44 | Die Oberfläche bekommt den Reiter „Live Transcription“ mit Monitorwahl samt Vorschau, Gerätewahl, Start/Stopp, laufendem Transkript, Verzögerungsanzeige, Pegeln und einer Thumbnail-Leiste mit Großansicht. Der bisherige Reiter „Transkription“ heißt „Offline Transcription“. |
 | FR-45 | `audioscribe doctor` prüft Plattform, Audio-Geräte (inkl. Loopback) und Monitore. |
-| FR-46 | Jede Live-Sitzung und jedes Nachschärfen hinterlassen ein Fazit: Ladezeit der Modelle, Aufnahmedauer, Rechenzeit und Tempo (Rechenzeit je Audiosekunde), Verzögerung Ø/Median/max, Abschnitte (davon zusammengelegt), Zeit im Aufholmodus bzw. Dauer je Stufe. Es steht als `bilanz.json` im Sitzungsordner, als Zeile im Protokoll und als Kasten „Fazit“ im Reiter. |
+| FR-46 | Jede Live-Sitzung und jedes Nachschärfen hinterlassen ein Fazit: Ladezeit der Modelle, Aufnahmedauer, Rechenzeit und Tempo (Rechenzeit je Audiosekunde, nur Dekodieren; daneben inkl. Vorschau), Verzögerung Ø/Median/max, Abschnitte (davon zusammengelegt und sparsam dekodiert), höchster Rückstand, Zeit im Aufholmodus mit Anteil an der Aufnahme bzw. Dauer je Stufe. Es steht als `bilanz.json` im Sitzungsordner, als Zeile im Protokoll und als Kasten „Fazit“ im Reiter. |
+| FR-47 | **Diagnose-Log.** Jede Live-Sitzung schreibt `diagnose.jsonl` (eine JSON-Zeile je fertigem Abschnitt): Lage im Audio, Zeitpunkte Abschluss/Start/Ende auf der Sitzungsuhr, Wartezeit, Rechenzeit (Dekodieren und Sprecher-Label getrennt), Latenz (bei zusammengelegten Stücken auch ab dem ersten Teil), Modell, Sparmodus, Teile, Wortzahl, Schlussgrund (`pause`/`zeitlimit`/`flush`) und je Whisper-Segment `avg_logprob`, `compression_ratio`, `no_speech_prob`, `temperature`. Vorschauen stehen als eigene Zeilen mit Fensterlänge und Rechenzeit, das Nachschärfen hängt je Segment und je Stufe eine Zeile an. Das Fazit (FR-46) ist aus diesem Log abgeleitet. |
+| FR-48 | **Ehrliche Metriken.** Rückstand = Summe des fertig gesprochenen, noch nicht begonnenen Audios; Aufholmodus = Zeitanteil, in dem dieser Rückstand über einer Chunk-Länge liegt; Echtzeitfaktor getrennt für das Dekodieren allein und inkl. Vorschau. `audioscribe live --eco` erzwingt für Messläufe den Sparmodus für alle Abschnitte. |
 
 ### 17.4 Nicht-funktionale Anforderungen
 
@@ -584,3 +593,6 @@ Compliance-Anforderungen.
 - [ ] Der Sitzungsordner erscheint im Reiter „KI-Analyse“ als Quelle.
 - [ ] `refine` ersetzt das Transkript, die Live-Fassung und die Bilder bleiben erhalten.
 - [ ] Rein auf CPU läuft die Sitzung durch; die Anzeige weist den Rückstand aus.
+- [ ] Ein einzelner 12-s-Abschnitt bei leerer Warteschlange zeigt Rückstand 0 und wird
+      mit voller Qualität dekodiert; `diagnose.jsonl` enthält je Abschnitt `schluss`,
+      `eco` und die Segment-Qualitätswerte, und das Fazit stimmt mit den Logzeilen überein.

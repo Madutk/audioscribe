@@ -13,6 +13,7 @@ from pathlib import Path
 from audioscribe.config import settings
 from audioscribe.live import events
 from audioscribe.live.bilanz import TEIL_REFINE, RefineBilanz, beschreibe_refine, save_bilanz
+from audioscribe.live.diagnose import DIAGNOSE_NAME, Diagnose
 from audioscribe.live.speakers import GEGENSEITE, ICH
 from audioscribe.live.store import MIC_WAV, SYSTEM_WAV, keep_live_copy, write_transcript
 from audioscribe.live.track import SAMPLE_RATE, load_wav
@@ -43,6 +44,7 @@ def refine_session(session_dir: str | Path) -> Path:
     sprache = settings.whisper_language
     t_start = time.monotonic()
     stufen = _Stufen()  # Fazit: Dauer je Stufe
+    diagnose = Diagnose(session_dir / DIAGNOSE_NAME)  # FR-47: an das Live-Log anhängen
 
     def stage(name: str) -> None:
         nonlocal step
@@ -56,6 +58,18 @@ def refine_session(session_dir: str | Path) -> Path:
         stage(f"Transkription {name} (faster-whisper {settings.whisper_model})")
         result = transcribe(audio, reporter)
         sprache = result.get("language") or sprache
+        # WhisperX liefert keine Qualitätswerte je Segment - nur Lage und Wortzahl.
+        for seg in result.get("segments") or []:
+            diagnose.zeile(
+                "nachschaerfen",
+                teil=TEIL_REFINE,
+                spur=name,
+                start_s=round(float(seg.get("start") or 0.0), 2),
+                end_s=round(float(seg.get("end") or 0.0), 2),
+                dauer_s=round(float(seg.get("end") or 0.0) - float(seg.get("start") or 0.0), 2),
+                anzahl_woerter=len(str(seg.get("text") or "").split()),
+                modell=settings.whisper_model,
+            )
         if do_align:
             stage(f"Wort-Alignment {name}")
             result = align(audio, result, reporter)
@@ -102,6 +116,9 @@ def refine_session(session_dir: str | Path) -> Path:
         modell=settings.whisper_model,
         stufen=stufen.close(),
     )
+    for st in bilanz.stufen:
+        diagnose.zeile("stufe", teil=TEIL_REFINE, name=st["name"], dauer_s=st["dauer_s"])
+    diagnose.close()
     save_bilanz(session_dir, TEIL_REFINE, bilanz)
     reporter.info(beschreibe_refine(bilanz))
     events.emit(events.FAZIT, teil=TEIL_REFINE, **asdict(bilanz))

@@ -436,15 +436,17 @@ Zugriff auf den Bildschirm.
 
 **Im Reiter:** Monitor anklicken (mit Vorschaubild), Mikrofon und System-Audio wählen,
 „Aufnahme starten“. Oben laufen Laufzeit, **Verzögerung** (Ende des Gesprochenen bis zur
-Anzeige) und **Rückstand** (aufgenommenes, noch nicht transkribiertes Audio) mit. Grauer
-Kursivtext ist die Vorschau des gerade gesprochenen Abschnitts; sie pausiert von selbst ab
-3 s Rückstand. Ab 5 s Rückstand schaltet die Sitzung in den **Aufholmodus**: wartende
-Abschnitte derselben Spur werden zu Stücken bis 25 s zusammengelegt und sparsamer
-dekodiert (Beam 1) – die Segmente sind in dieser Phase gröber, der Rückstand pendelt sich
-aber auch auf der CPU ein. Der Tooltip der Rückstand-Anzeige zeigt das gemessene Tempo
-(Rechenzeit je Audiosekunde); liegt es dauerhaft über 1× Echtzeit, ist das Modell für den
-Rechner zu groß. `AUDIOSCRIBE_CPU_THREADS` (oder `--cpu-threads`) setzt die Rechen-Threads;
-sinnvoll ist die Zahl physischer Kerne.
+Anzeige) und **Rückstand** mit. Rückstand ist fertig gesprochenes Audio, das auf die
+Transkription *wartet* – der Abschnitt, der gerade gerechnet wird, zählt nicht mit, sonst
+wäre jeder lange Abschnitt schon „Rückstand“. Grauer Kursivtext ist die Vorschau des gerade
+gesprochenen Abschnitts; sie pausiert von selbst ab 3 s Rückstand. Ab 5 s Rückstand schaltet
+die Sitzung in den **Aufholmodus**: wartende Abschnitte derselben Spur werden zu Stücken
+bis 25 s zusammengelegt und sparsamer dekodiert (Beam 1) – die Segmente sind in dieser
+Phase gröber, der Rückstand pendelt sich aber auch auf der CPU ein. Der Tooltip der
+Rückstand-Anzeige zeigt das gemessene Tempo (Rechenzeit je Audiosekunde); liegt es
+dauerhaft über 1× Echtzeit, ist das Modell für den Rechner zu groß.
+`AUDIOSCRIBE_CPU_THREADS` (oder `--cpu-threads`) setzt die Rechen-Threads; sinnvoll ist
+die Zahl physischer Kerne.
 Screenshots erscheinen rechts als Thumbnails, ein Klick öffnet die Großansicht
 (Pfeiltasten blättern).
 
@@ -476,13 +478,28 @@ output/live-2026-09-19_14-30-05/
   transkript.live.md  transcript.live.json        # Live-Fassung (nach dem Stopp)
   audio/mikrofon.wav  audio/system.wav            # 16 kHz mono
   bilanz.json                                     # Fazit: Rechendauer und Latenz (live + nachschaerfen)
+  diagnose.jsonl                                  # je Abschnitt und Vorschau eine Zeile (Zeiten, Qualitaet)
 ```
 
 **Fazit:** Nach dem Stopp erscheint im Reiter ein Kasten „Fazit“ mit Aufnahmedauer,
-Ladezeit der Modelle, Rechenzeit und Tempo (Rechenzeit je Audiosekunde), Verzögerung
-(Ø, Median, max), Zahl der Abschnitte und Zeit im Aufholmodus; nach dem Nachschärfen kommt
-die Dauer je Stufe dazu. Dieselben Zahlen stehen im Protokoll („Fazit: …“) und in
-`bilanz.json` im Sitzungsordner.
+Ladezeit der Modelle, Rechenzeit und Tempo (Rechenzeit je Audiosekunde, nur das
+Dekodieren; daneben „inkl. Vorschau“, was die Vorschau obendrauf kostet), Verzögerung
+(Ø, Median, max), Zahl der Abschnitte (davon zusammengelegt bzw. sparsam dekodiert),
+höchster Rückstand und Zeit im Aufholmodus (Rückstand über einer Chunk-Länge, mit Anteil an
+der Aufnahme); nach dem Nachschärfen kommt die Dauer je Stufe dazu. Dieselben Zahlen stehen
+im Protokoll („Fazit: …“) und in `bilanz.json` im Sitzungsordner.
+
+**Diagnose-Log:** Das Fazit ist aus `diagnose.jsonl` abgeleitet, einer JSON-Lines-Datei
+im Sitzungsordner mit einer Zeile je fertigem Abschnitt (`art: "abschnitt"`): Lage im
+Audio (`audio_start_s`, `audio_end_s`), Zeitpunkte auf der Sitzungsuhr (`t_abgeschlossen`,
+`t_start`, `t_ende`), daraus `wartezeit_s`, `rechenzeit_s`, `sprecher_s`, `latenz_s`
+(bei zusammengelegten Stücken auch `latenz_max_s` ab dem ersten Teil), Modell, `eco`
+(sparsam dekodiert), Wortzahl, `schluss` (`pause`, `zeitlimit` oder `flush`) und je
+Whisper-Segment `avg_logprob`, `compression_ratio`, `no_speech_prob` und `temperature`
+(> 0 heißt: der Fallback hat gegriffen). Vorschauen stehen als eigene Zeilen
+(`art: "vorschau"`, Fensterlänge und Rechenzeit), das Nachschärfen hängt je Segment und
+je Stufe eine Zeile an. Damit lässt sich ein Lauf nachträglich Chunk für Chunk bewerten.
+Für Messläufe erzwingt `audioscribe live --eco` den Sparmodus für alle Abschnitte.
 
 **Modell:** `auto` nimmt `large-v3-turbo` auf der GPU (etwa 2–5 s Verzögerung) und `small`
 auf der CPU (eher 5–15 s).

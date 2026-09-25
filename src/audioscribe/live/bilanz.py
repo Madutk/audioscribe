@@ -1,17 +1,15 @@
 """Fazit einer Live-Sitzung und ihres Nachschärfens: Rechendauer und Latenz (FR-46).
 
-Der Zähler sammelt während der Sitzung je Abschnitt Audiolänge, Rechenzeit und Verzögerung;
-am Ende wird daraus eine ``LiveBilanz``. Das Nachschärfen misst seine Stufen und liefert
-eine ``RefineBilanz``. Beide landen als ``bilanz.json`` im Sitzungsordner (atomar geschrieben
-wie ``analyse.json``), als Zeile im Protokoll und als ``fazit``-Ereignis in der Oberfläche.
+Die ``LiveBilanz`` wird am Ende aus dem Diagnose-Log abgeleitet (``live/diagnose.py``,
+FR-47). Das Nachschärfen misst seine Stufen und liefert eine ``RefineBilanz``. Beide landen
+als ``bilanz.json`` im Sitzungsordner (atomar geschrieben wie ``analyse.json``), als Zeile im
+Protokoll und als ``fazit``-Ereignis in der Oberfläche.
 """
 
 from __future__ import annotations
 
 import json
 import os
-import statistics
-import threading
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
@@ -38,8 +36,12 @@ class LiveBilanz:
     verzoegerung_mittel_s: float | None = None  # Ende des Abschnitts bis Text steht
     verzoegerung_median_s: float | None = None
     verzoegerung_max_s: float | None = None
-    rueckstand_max_s: float = 0.0
-    aufholmodus_s: float = 0.0  # Zeit im Sparmodus
+    rueckstand_max_s: float = 0.0  # wartendes Audio (ohne den gerade gerechneten Abschnitt)
+    aufholmodus_s: float = 0.0  # Zeit, in der der Rückstand über einer Chunk-Länge lag
+    sprecher_s: float = 0.0  # davon Sprecher-Label (in rechenzeit_s enthalten)
+    tempo_inkl_vorschau: float | None = None  # (Dekodieren + Sprecher + Vorschau) je Audiosekunde
+    aufholmodus_anteil: float = 0.0  # aufholmodus_s / aufnahme_s
+    eco_abschnitte: int = 0  # sparsam dekodierte Abschnitte (Beam 1, kein Fallback)
 
 
 @dataclass
@@ -49,76 +51,6 @@ class RefineBilanz:
     tempo: float | None = None  # Gesamtzeit je Audiosekunde
     modell: str | None = None
     stufen: list[dict] = field(default_factory=list)  # {"name", "dauer_s"}
-
-
-class Zaehler:
-    """Sammelt die Messwerte einer Sitzung; threadsicher, weil Schnitt- und
-    Transkriptions-Thread und Hauptschleife gleichzeitig melden."""
-
-    def __init__(self) -> None:
-        self._lock = threading.Lock()
-        self._audio_s = 0.0
-        self._spent_s = 0.0
-        self._abschnitte = 0
-        self._zusammengelegt = 0
-        self._delays: list[float] = []
-        self._vorschau_n = 0
-        self._vorschau_s = 0.0
-        self._rueckstand_max = 0.0
-        self._aufhol_s = 0.0
-        self._aufhol_seit: float | None = None
-
-    def final(self, audio_s: float, spent_s: float, delay_s: float | None, parts: int = 1) -> None:
-        with self._lock:
-            self._audio_s += audio_s
-            self._spent_s += spent_s
-            if delay_s is not None:
-                self._abschnitte += 1
-                self._delays.append(delay_s)
-                if parts > 1:
-                    self._zusammengelegt += 1
-
-    def partial(self, spent_s: float) -> None:
-        with self._lock:
-            self._vorschau_n += 1
-            self._vorschau_s += spent_s
-
-    def rueckstand(self, backlog_s: float) -> None:
-        with self._lock:
-            self._rueckstand_max = max(self._rueckstand_max, backlog_s)
-
-    def aufholmodus(self, an: bool, now: float) -> None:
-        with self._lock:
-            if an and self._aufhol_seit is None:
-                self._aufhol_seit = now
-            elif not an and self._aufhol_seit is not None:
-                self._aufhol_s += now - self._aufhol_seit
-                self._aufhol_seit = None
-
-    def bilanz(
-        self, *, laden_s: float, aufnahme_s: float, abschluss_s: float, gesamt_s: float, now: float
-    ) -> LiveBilanz:
-        with self._lock:
-            aufhol = self._aufhol_s + (now - self._aufhol_seit if self._aufhol_seit is not None else 0.0)
-            delays = list(self._delays)
-            return LiveBilanz(
-                laden_s=round(laden_s, 1),
-                aufnahme_s=round(aufnahme_s, 1),
-                abschluss_s=round(abschluss_s, 1),
-                gesamt_s=round(gesamt_s, 1),
-                abschnitte=self._abschnitte,
-                zusammengelegt=self._zusammengelegt,
-                audio_s=round(self._audio_s, 1),
-                rechenzeit_s=round(self._spent_s, 1),
-                tempo=round(self._spent_s / self._audio_s, 2) if self._audio_s > 0 else None,
-                vorschau_n=self._vorschau_n,
-                vorschau_s=round(self._vorschau_s, 1),
-                verzoegerung_mittel_s=round(statistics.fmean(delays), 1) if delays else None,
-                verzoegerung_median_s=round(statistics.median(delays), 1) if delays else None,
-                verzoegerung_max_s=round(max(delays), 1) if delays else None,
-                rueckstand_max_s=round(self._rueckstand_max, 1),
-                aufholmodus_s=round(aufhol, 1),
-            )
 
 
 # --- Datei ---------------------------------------------------------------------------
@@ -170,11 +102,10 @@ def _tempo(value: float | None) -> str:
 
 
 def beschreibe_live(b: LiveBilanz) -> str:
-    teile = [
-        f"Aufnahme {_hms(b.aufnahme_s)}",
-        f"Modelle {_s(b.laden_s)}",
-        f"Rechenzeit {_s(b.rechenzeit_s)}{_tempo(b.tempo)}",
-    ]
+    rechenzeit = f"Rechenzeit {_s(b.rechenzeit_s)}{_tempo(b.tempo)}"
+    if b.vorschau_n:
+        rechenzeit += f" · {b.vorschau_n} Vorschauen {_s(b.vorschau_s)}{_tempo(b.tempo_inkl_vorschau)}"
+    teile = [f"Aufnahme {_hms(b.aufnahme_s)}", f"Modelle {_s(b.laden_s)}", rechenzeit]
     if b.abschnitte:
         teile.append(
             f"Verzögerung Ø {_s(b.verzoegerung_mittel_s)} / max {_s(b.verzoegerung_max_s)}"
@@ -182,9 +113,12 @@ def beschreibe_live(b: LiveBilanz) -> str:
     abschnitte = f"{b.abschnitte} Abschnitte"
     if b.zusammengelegt:
         abschnitte += f" ({b.zusammengelegt} zusammengelegt)"
+    if b.eco_abschnitte:
+        abschnitte += f" ({b.eco_abschnitte} sparsam)"
     teile.append(abschnitte)
     if b.aufholmodus_s:
-        teile.append(f"Aufholmodus {_s(b.aufholmodus_s)}")
+        anteil = f" ({round(b.aufholmodus_anteil * 100)} %)" if b.aufholmodus_anteil else ""
+        teile.append(f"Aufholmodus {_s(b.aufholmodus_s)}{anteil}")
     teile.append(f"Abschluss {_s(b.abschluss_s)}")
     return "Fazit: " + " · ".join(teile)
 

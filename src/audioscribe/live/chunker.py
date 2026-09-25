@@ -13,11 +13,20 @@ from audioscribe.live.track import SAMPLE_RATE
 Vad = Callable[[np.ndarray], list[tuple[int, int]]]
 
 
+# Warum ein Abschnitt zu Ende war (Diagnose-Log, FR-47).
+SCHLUSS_PAUSE = "pause"  # Sprechpause erkannt
+SCHLUSS_ZEITLIMIT = "zeitlimit"  # Zwangsschnitt bei max_s, mitten im Reden
+SCHLUSS_FLUSH = "flush"  # Sitzungsende hat den offenen Abschnitt geschlossen
+
+
 @dataclass
 class Utterance:
     start: int  # absolute Samples auf der Zeitleiste der Spur
     end: int
     audio: np.ndarray
+    schluss: str = SCHLUSS_PAUSE
+    # Endzeiten der Teile eines zusammengelegten Stücks (leer = ein Teil).
+    teile_end_s: tuple[float, ...] = ()
 
     @property
     def start_s(self) -> float:
@@ -30,6 +39,11 @@ class Utterance:
     @property
     def duration_s(self) -> float:
         return (self.end - self.start) / SAMPLE_RATE
+
+    @property
+    def erster_teil_end_s(self) -> float:
+        """Ende des ersten Teils - ab da wartet der Zuhörer auf Text (Latenz-Obergrenze)."""
+        return self.teile_end_s[0] if self.teile_end_s else self.end_s
 
 
 def merge_utterances(parts: list[Utterance], gap_s: float = 0.3) -> Utterance:
@@ -46,7 +60,13 @@ def merge_utterances(parts: list[Utterance], gap_s: float = 0.3) -> Utterance:
         if audio:
             audio.append(gap)
         audio.append(part.audio)
-    return Utterance(parts[0].start, parts[-1].end, np.concatenate(audio))
+    return Utterance(
+        parts[0].start,
+        parts[-1].end,
+        np.concatenate(audio),
+        schluss=parts[-1].schluss,
+        teile_end_s=tuple(p.end_s for p in parts),
+    )
 
 
 def silero_vad() -> Vad:
@@ -105,12 +125,14 @@ class Chunker:
         groups = self._groups(speech)
         for i, (g_start, g_end, gaps) in enumerate(groups):
             is_last = i == len(groups) - 1
-            if not is_last or flush or len(self._buf) - g_end >= self._pause:
-                done.append(self._cut(g_start, g_end))
+            pause_ok = len(self._buf) - g_end >= self._pause
+            if not is_last or flush or pause_ok:
+                schluss = SCHLUSS_FLUSH if is_last and flush and not pause_ok else SCHLUSS_PAUSE
+                done.append(self._cut(g_start, g_end, schluss))
                 consumed = g_end
             elif g_end - g_start >= self._max:
                 cut = self._forced_cut(g_start, gaps)
-                done.append(self._cut(g_start, cut))
+                done.append(self._cut(g_start, cut, SCHLUSS_ZEITLIMIT))
                 consumed = cut
                 self._open = cut
             else:
@@ -153,7 +175,9 @@ class Chunker:
         usable = [(b - a, (a + b) // 2) for a, b in gaps if g_start + self._max // 2 <= a and b <= limit]
         return max(usable)[1] if usable else limit
 
-    def _cut(self, start: int, end: int) -> Utterance:
+    def _cut(self, start: int, end: int, schluss: str) -> Utterance:
         a = max(0, start - self._pad)
         b = min(len(self._buf), end + self._pad)
-        return Utterance(self._buf_start + start, self._buf_start + end, self._buf[a:b].copy())
+        return Utterance(
+            self._buf_start + start, self._buf_start + end, self._buf[a:b].copy(), schluss=schluss
+        )

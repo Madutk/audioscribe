@@ -111,6 +111,7 @@ def _live(args: argparse.Namespace) -> int:
         hf_token=settings.hf_token,
         sentences_per_timestamp=settings.sentences_per_timestamp,
         cpu_threads=args.cpu_threads if args.cpu_threads is not None else settings.cpu_threads,
+        force_eco=args.eco,
     )
     try:
         return LiveSession(opts).run()
@@ -341,6 +342,11 @@ def main(argv: list[str] | None = None) -> int:
     live.add_argument("--no-partials", action="store_true", help="keinen vorlaeufigen Text ausgeben")
     live.add_argument(
         "--no-speakers", action="store_true", help="System-Spur nicht in 'Sprecher N' trennen"
+    )
+    live.add_argument(
+        "--eco",
+        action="store_true",
+        help="Messlaeufe: jeden Abschnitt sparsam dekodieren (Beam 1, kein Fallback), wie im Aufholmodus",
     )
 
     ref = sub.add_parser(

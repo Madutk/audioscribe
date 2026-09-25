@@ -8,6 +8,7 @@ Sitzung geladen; der VRAM wird mit dem Prozessende frei.
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import dataclass
 
 import numpy as np
 
@@ -40,6 +41,29 @@ def decode_options(*, final: bool, eco: bool = False) -> dict:
     }
 
 
+@dataclass(frozen=True)
+class SegmentInfo:
+    """Qualitätswerte eines Whisper-Segments (Diagnose-Log, FR-47)."""
+
+    avg_logprob: float
+    compression_ratio: float
+    no_speech_prob: float
+    temperature: float  # > 0 heißt: der Temperatur-Fallback hat gegriffen
+
+
+@dataclass(frozen=True)
+class Ergebnis:
+    text: str
+    segmente: tuple[SegmentInfo, ...] = ()
+
+    @classmethod
+    def von(cls, wert: object) -> Ergebnis:
+        """Ein ``Ergebnis`` oder ein bloßer Text (Attrappen in Tests) -> ``Ergebnis``."""
+        if isinstance(wert, cls):
+            return wert
+        return cls(str(wert or "").strip())
+
+
 class LiveTranscriber:
     def __init__(
         self,
@@ -53,6 +77,7 @@ class LiveTranscriber:
         from faster_whisper import WhisperModel
 
         name, _, index = device.partition(":")
+        self.model = model
         self.language = None if language.lower() == "auto" else language
         self.detected = self.language or ""
         if on_progress is not None:
@@ -65,12 +90,35 @@ class LiveTranscriber:
             cpu_threads=cpu_threads,  # 0 = Bibliotheks-Default (ctranslate2: 4)
         )
 
-    def transcribe(self, audio: np.ndarray, *, final: bool, eco: bool = False) -> str:
-        """Text eines Abschnitts; ``eco`` = Aufholmodus (billig dekodieren, s. decode_options)."""
+    def transcribe(
+        self,
+        audio: np.ndarray,
+        *,
+        final: bool,
+        eco: bool = False,
+        initial_prompt: str | None = None,
+    ) -> Ergebnis:
+        """Text eines Abschnitts samt Segment-Qualitätswerten; ``eco`` = Aufholmodus."""
         segments, info = self._model.transcribe(
-            audio, language=self.language, **decode_options(final=final, eco=eco)
+            audio,
+            language=self.language,
+            initial_prompt=initial_prompt,
+            **decode_options(final=final, eco=eco),
         )
-        text = " ".join(s.text.strip() for s in segments).strip()
+        # Der Generator dekodiert erst beim Durchlaufen - einmal materialisieren.
+        segs = list(segments)
+        text = " ".join(s.text.strip() for s in segs).strip()
         if final and not self.detected:
             self.detected = info.language
-        return text
+        return Ergebnis(
+            text,
+            tuple(
+                SegmentInfo(
+                    avg_logprob=round(float(s.avg_logprob), 3),
+                    compression_ratio=round(float(s.compression_ratio), 3),
+                    no_speech_prob=round(float(s.no_speech_prob), 3),
+                    temperature=float(s.temperature),
+                )
+                for s in segs
+            ),
+        )
