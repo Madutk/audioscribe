@@ -1,93 +1,138 @@
 # AudioScribe
 
-Lokale **Audio-Transkription mit Sprecher-Diarisierung**. Aus einer Meeting-Aufnahme
-(Audio: mp3/m4a/wav/… oder Video: mp4/mkv/mov/webm/… – die Audiospur wird dann zuerst
-extrahiert) entsteht ein zeitgestempeltes Markdown-Transkript, in dem die Sprecher
-getrennt sind (`Sprecher 1 / 2 / 3`). Läuft **vollständig lokal** (kein Audio-Upload);
-einzige Online-Aktion ist der einmalige Download der Modellgewichte.
+Lokale **Audio-Transkription mit Sprecher-Trennung**. Aus einer Meeting-Aufnahme (Audio
+oder Video) entsteht ein zeitgestempeltes Markdown-Transkript mit `Sprecher 1 / 2 / 3`.
+Alles läuft **auf dem eigenen Rechner**; online geht nur der einmalige Download der
+Modellgewichte.
 
-Pipeline: **WhisperX** — faster-whisper `large-v3` (Transkription) → wav2vec2
-(Wort-Alignment) → pyannote `speaker-diarization-3.1` (Diarisierung). Die Modelle laufen
-sequenziell; der VRAM wird zwischen den Stufen freigegeben (Ziel-HW: RTX 3080, 8 GB).
-Läuft wahlweise auf **NVIDIA-GPU (CUDA, schnell)** oder **CPU-only (deutlich langsamer)**.
+**Was AudioScribe kann**
 
-## Umgebung
+| Funktion | Kurz gesagt | Details |
+|---|---|---|
+| Offline-Transkription | Datei oder ganzer Ordner → `transkript.md` (+ PDF), Sprecher getrennt | [Kommandozeile](#kommandozeile), [Oberfläche](#browser-oberfläche) |
+| Bildwechsel-Erkennung | Bei Bildschirmaufnahmen je Folien-/Fensterwechsel ein Standbild im Transkript | [→](#bildwechsel-automatisch-erkennen) |
+| Bild-Annotation | Standbilder von Hand markieren und ins Transkript einfügen | [→](#bild-annotation-von-hand) |
+| KI-Analyse | Claude-Agent macht aus Transkript und Bildern Prozessdoku, Prozessbild, BPMN | [→](#ki-analyse-per-claude-agent) |
+| Live-Transkription | Monitor, System-Audio und Mikrofon live mitschneiden (nur Windows) | [→](#live-transkription-nur-windows) |
 
-- **WSL2 / Ubuntu 24.04** (oder anderes Linux), Python 3.12.
-- **GPU optional**: NVIDIA-GPU mit CUDA (schnell) **oder** reiner CPU-Betrieb
-  (Rechner ohne NVIDIA-Karte; mehrfache Echtzeit-Laufzeit, s. „CPU-Betrieb" unten).
-- Paket-/Env-Verwaltung über **[uv](https://docs.astral.sh/uv/)**.
-- `ffmpeg` wird **gebündelt** mitgeliefert (`imageio-ffmpeg`) — kein System-`ffmpeg`/`sudo` nötig.
+**Technik:** WhisperX mit faster-whisper `large-v3` (Transkription) → wav2vec2
+(Wort-Alignment) → pyannote `speaker-diarization-3.1` (Sprecher). Die Modelle laufen
+nacheinander; der VRAM wird zwischen den Stufen freigegeben (Ziel: RTX 3080, 8 GB).
+Läuft auf **NVIDIA-GPU** (schnell) oder **nur CPU** (deutlich langsamer).
 
-## Setup
+---
+
+## Schnellstart
+
+Voraussetzungen: Linux oder WSL2 (Ubuntu 24.04), Python 3.12, [uv](https://docs.astral.sh/uv/).
+`ffmpeg` ist gebündelt, kein System-Paket nötig. Unter Windows siehe
+[Windows](#windows-startps1).
 
 ```bash
-# uv installieren (einmalig, falls noch nicht vorhanden)
+# 1) uv installieren (einmalig)
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# Abhängigkeiten installieren — GENAU EINE Backend-Variante wählen:
-uv sync --extra cu124      # Rechner MIT NVIDIA-GPU (CUDA-PyTorch)
-uv sync --extra cpu        # Rechner OHNE NVIDIA-Karte (schlanke CPU-Wheels, ~3 GB weniger)
-# (beide gleichzeitig lehnt uv mit einem Konfliktfehler ab; die Browser-Oberflächen
-#  kommen bei Bedarf dazu: uv sync --extra cu124 --extra review)
-#
-# WICHTIG: 'uv run' synct vorher OHNE Extras und ersetzt die gewählten Wheels durch
-# die von PyPI. Das Extra gehört daher AUCH ans Ausführen — oder man startet die
-# Skripte direkt aus dem venv. Siehe "GPU-Betrieb (CUDA)" bzw. "CPU-Betrieb".
+# 2) Abhängigkeiten – GENAU EINE Backend-Variante wählen
+uv sync --extra cu124 --extra review --extra agent   # Rechner MIT NVIDIA-GPU
+uv sync --extra cpu   --extra review --extra agent   # Rechner OHNE NVIDIA-Karte (~3 GB kleiner)
 
-# HuggingFace-Token für die Diarisierung hinterlegen
-cp .env.example .env
-#   -> HF_TOKEN=... eintragen und einmalig die Modell-Bedingungen akzeptieren:
-#      https://huggingface.co/pyannote/speaker-diarization-3.1
-#      https://huggingface.co/pyannote/segmentation-3.0
+# 3) HuggingFace-Token für die Sprecher-Trennung hinterlegen
+cp .env.example .env            # HF_TOKEN=... eintragen, Modell-Bedingungen einmalig akzeptieren:
+                                # https://huggingface.co/pyannote/speaker-diarization-3.1
+                                # https://huggingface.co/pyannote/segmentation-3.0
 
-# Umgebung prüfen
-uv run audioscribe doctor
+# 4) Umgebung prüfen und loslegen
+.venv/bin/audioscribe doctor
+.venv/bin/audioscribe ui                        # Browser-Oberfläche, http://127.0.0.1:8766
+.venv/bin/audioscribe run input/meeting.m4a     # oder direkt eine Datei
 ```
 
-## Nutzung
+Die Extras: `review` = Browser-Oberflächen (FastAPI), `agent` = KI-Analyse (Claude Agent
+SDK), `live` = Live-Transkription (nur Windows). Für `analyze` einmal `claude` starten und
+mit dem Claude-Abo anmelden.
+
+> **Wichtig: `uv run` ohne Extras zerstört die Umgebung.** `uv run` synct vor jedem Start,
+> und ohne `--extra …` ersetzt es die CUDA-Wheels durch die von PyPI und entfernt
+> Oberfläche und Agent SDK. Darum entweder immer `uv run --extra cu124 --extra review
+> --extra agent …` schreiben oder, kürzer, die Programme **direkt aus `.venv/bin/`**
+> starten. Diese README verwendet durchgehend `.venv/bin/audioscribe`.
+
+Beim ersten Lauf werden die Modelle einmalig geladen und unter `~/.cache` abgelegt:
+Whisper `large-v3` (~3 GB), das deutsche Alignment-Modell (~360 MB), die pyannote-Modelle.
+Danach läuft alles offline.
+
+### Windows (`start.ps1`)
+
+```powershell
+.\start.ps1                     # wählt cpu|cu124 selbst, synct .venv-win, startet die Oberfläche
+.\start.ps1 -Torch cpu -Port 8800 -NoBrowser
+.venv-win\Scripts\audioscribe.exe doctor
+```
+
+`start.ps1` legt die Windows-Umgebung bewusst in `.venv-win` an: Wird das Repo auch aus WSL
+benutzt, gehört `.venv` dem Linux-Python, und Windows-`uv` würde daran scheitern. Wer
+`uv sync` von Hand aufruft, setzt vorher `$env:UV_PROJECT_ENVIRONMENT = '.venv-win'`.
+
+---
+
+## Browser-Oberfläche
+
+`audioscribe ui` startet eine schlanke lokale Oberfläche (nur `localhost`, kein Upload) mit
+vier Reitern. Alle Läufe laufen **im Server weiter**, der Browser-Tab darf geschlossen
+werden; beendet wird mit „Abbrechen“ oder Strg+C im Terminal.
 
 ```bash
-# Standard: Transkription + Diarisierung -> output/<name>/transkript.md
-uv run audioscribe run input/meeting.m4a
-
-# Video: die Audiospur wird zuerst extrahiert (work/<name>.16k.wav), dann transkribiert
-uv run audioscribe run input/meeting.mp4
-
-# zusätzlich PDF erzeugen
-uv run audioscribe run input/meeting.m4a --pdf
-
-# ohne Diarisierung (kein HF-Token nötig), Sprache automatisch erkennen
-uv run audioscribe run input/meeting.m4a --no-diarize --language auto
-
-# Sprecheranzahl vorgeben / eingrenzen
-uv run audioscribe run input/meeting.m4a --num-speakers 3
-uv run audioscribe run input/meeting.m4a --min-speakers 2 --max-speakers 5
-
-# Zeitstempel-Granularitaet: neuer Zeitstempel alle N Saetze (Default 2; 0 = ganzer Beitrag)
-uv run audioscribe run input/meeting.m4a --sentences-per-timestamp 3
-
-# Geraet: Default "auto" (CUDA falls verfuegbar, sonst CPU); erzwingen mit --device
-uv run audioscribe run input/meeting.m4a --device cpu
+.venv/bin/audioscribe ui                      # http://127.0.0.1:8766
+.venv/bin/audioscribe ui --port 9000 --no-browser
 ```
 
-### Zeitstempel-Granularität
+**Einstellungen** – die drei Standardordner für alle Reiter: Eingangsordner,
+Ausgabeordner Transkription (gemeinsam für Offline und Live) und Ausgabeordner Analysen.
+Pfade aus dem Explorer (`C:\Users\…`) lassen sich direkt einfügen; „Wählen“ öffnet einen
+Ordner-Browser mit Schnellzielen (Laufwerke, Home, Desktop, Downloads, Videos). Alle
+Einstellungen werden **serverseitig gemerkt** und überleben Neustart und Adresswechsel.
+Die Karte **Umgebung** zeigt die Prüfzeilen von `audioscribe doctor` (ffmpeg, Gerät,
+WhisperX, HF-Token, Live-Geräte) direkt in der Seite.
 
-Standardmäßig wird **alle 2 Sätze** ein neuer Zeitstempel gesetzt, auch innerhalb eines
-langen Sprecher-Beitrags – die feine Zeit stammt aus den Wort-Zeitstempeln des Alignments.
-Steuerbar über `--sentences-per-timestamp N` bzw. `AUDIOSCRIBE_SENTENCES_PER_TIMESTAMP`:
+**Offline Transcription** – Stapelverarbeitung des Eingangsordners. Die Dateiliste zeigt
+alle Medien mit Länge und Größe; vorausgewählt sind die noch offenen („Alle“, „Nur offene“,
+„Keine“). Optionen: Modell, Sprache, Gerät, Sprecher-Trennung, Bildwechsel-Erkennung.
+Je Datei ein Fortschrittsbalken, dazu Gesamtbalken und **Restzeit** (geschätzt aus den
+bereits fertigen Dateien, erscheint also ab der zweiten). Schlägt eine Datei fehl, läuft
+der Stapel weiter; das Protokoll klappt dann von selbst auf.
 
+**Live Transcription** – siehe [Live-Transkription](#live-transkription-nur-windows).
+
+**KI-Analyse** – siehe [KI-Analyse](#ki-analyse-per-claude-agent).
+
+Die Reiter sind auch per Adresse erreichbar (`#trans`, `#live`, `#ana`, `#set`). Der Knopf
+oben rechts schaltet das Design (System / Hell / Dunkel).
+
+**Unter WSL** die Adresse im Windows-Browser öffnen; WSL2 leitet `127.0.0.1` durch. Pfade
+werden in beide Richtungen umgesetzt (`C:\Users\…` ↔ `/mnt/c/Users/…`). Medien auf dem
+WSL-Dateisystem werden spürbar schneller gelesen als unter `/mnt/c`.
+
+---
+
+## Kommandozeile
+
+```bash
+.venv/bin/audioscribe run input/meeting.m4a                 # -> output/meeting/transkript.md
+.venv/bin/audioscribe run input/meeting.mp4                 # Video: Tonspur wird vorab extrahiert
+.venv/bin/audioscribe run input/meeting.m4a --pdf           # zusätzlich PDF
+.venv/bin/audioscribe run input/meeting.m4a --no-diarize --language auto   # ohne Sprecher, Sprache erkennen
+.venv/bin/audioscribe run input/meeting.m4a --num-speakers 3               # oder --min-speakers 2 --max-speakers 5
+.venv/bin/audioscribe run input/meeting.m4a --sentences-per-timestamp 3    # Zeitstempel alle N Sätze (Default 2, 0 = ganzer Beitrag)
+.venv/bin/audioscribe run input/meeting.m4a --device cpu                   # Default auto: CUDA falls da, sonst CPU
+.venv/bin/audioscribe run input/demo.mkv --frames                          # Bildschirmaufnahme: Standbilder je Bildwechsel
 ```
-**[00:01:23] Sprecher 1:** Guten Morgen, fangen wir an. Schön, dass alle da sind.
-**[00:01:31] Sprecher 1:** Heute geht es um das Quartalsergebnis. Ich teile gleich den Bildschirm.
-**[00:01:44] Sprecher 2:** Ja, einverstanden …
-```
 
-`--sentences-per-timestamp 0` fasst – wie früher – den ganzen Beitrag eines Sprechers zu
-einem Block mit nur einem Zeitstempel zusammen. Ohne Alignment (`--no-align`) fällt die
-Granularität auf Segment-Ebene zurück.
+**Video** wird wie Audio behandelt: Die Tonspur wird mit dem gebündelten ffmpeg als
+16-kHz-Mono-WAV nach `work/<name>.16k.wav` geschrieben und bleibt dort liegen. Unterstützt:
+`mp4 mkv mov avi webm m4v wmv flv mpg mpeg ts m2ts 3gp ogv`. Ohne Tonspur bricht der Lauf
+mit klarer Meldung ab; Ton ohne Sprache ergibt ein leeres Transkript.
 
-### Ausgabeformat (Markdown)
+**Ausgabe** `output/<name>/transkript.md`:
 
 ```
 # Transkript: meeting.m4a
@@ -102,183 +147,34 @@ Granularität auf Segment-Ebene zurück.
 
 ---
 
-**[00:01:23] Sprecher 1:** Guten Morgen, fangen wir an …
-**[00:01:41] Sprecher 2:** Ja, einverstanden …
+**[00:01:23] Sprecher 1:** Guten Morgen, fangen wir an. Schön, dass alle da sind.
+**[00:01:31] Sprecher 1:** Heute geht es um das Quartalsergebnis. Ich teile gleich den Bildschirm.
+**[00:01:44] Sprecher 2:** Ja, einverstanden …
 ```
 
-Namen werden bei Bedarf manuell nachgetragen (Markdown ist das editierbare
-Primärformat; PDF wird daraus optional erzeugt).
+Alle zwei Sätze steht ein neuer Zeitstempel, auch innerhalb eines langen Beitrags; die Zeit
+stammt aus dem Wort-Alignment (ohne `--no-align` fällt sie auf Segment-Ebene zurück). Namen
+trägt man im Markdown von Hand nach; es ist das editierbare Primärformat, PDF wird daraus
+erzeugt. Fortschrittszeilen im Terminal: `AUDIOSCRIBE_PROGRESS=1`.
 
-## Browser-Oberfläche: ganze Ordner transkribieren
+---
 
-Wer nicht je Datei einen CLI-Aufruf tippen möchte: `audioscribe ui` startet eine schlanke
-Oberfläche. Im Reiter **„Einstellungen“** werden Eingangs- und Ausgabeordner gewählt; alle im
-Eingangsordner gefundenen Audio-/Videodateien werden **nacheinander** transkribiert, der
-Fortschritt läuft live mit.
-Vollständig lokal (nur `localhost`, kein Upload).
+## Bildwechsel automatisch erkennen
+
+Für **Bildschirmaufnahmen**: AudioScribe erkennt Wechsel des Bildschirminhalts und sichert
+je Wechsel ein Standbild. Mausbewegungen lösen nichts aus.
 
 ```bash
-# einmalig die optionalen Pakete installieren (FastAPI + uvicorn)
-uv sync --extra cu124 --extra review      # bzw. --extra cpu --extra review
-
-# Extras beim Start MITGEBEN - sonst synct uv die Umgebung ohne sie zurück und die
-# Geräte-Auswahl steht danach auf 'cuda (nicht verfügbar)':
-uv run --extra cu124 --extra review audioscribe ui        # öffnet http://127.0.0.1:8766
-uv run --extra cu124 --extra review audioscribe ui --port 9000 --no-browser
-
-# Ohne uv (synchronisiert nichts, kürzer):
-.venv/bin/audioscribe ui                  # Windows: .venv-win\Scripts\audioscribe.exe ui (siehe start.ps1)
+.venv/bin/audioscribe run input/demo.mkv --frames
+    --frame-sensitivity grob|mittel|fein   # Default mittel
+    --frame-format jpg-1600|jpg-1280|png   # Default jpg-1600 (~150 KB je Bild)
+    --frame-fps 1                          # Abtastungen/s, Default 2
+    --frame-min-gap 8                      # Mindestabstand in s, Default 4
 ```
 
-**Ablauf in der Oberfläche:**
-
-1. Im Reiter **„Einstellungen“** die Ordner wählen – **Eingangsordner**, **Ausgabeordner
-   Transkription** (gemeinsam für Offline- und Live-Transkription) und **Ausgabeordner
-   Analysen** – entweder über „Wählen" (Ordner-Browser mit Schnellzielen für Projekt, Home
-   und Windows-Laufwerke) oder direkt ins Textfeld getippt. Die Ordner und Optionen werden
-   **serverseitig gemerkt** und stehen nach einem Neustart wieder da – unabhängig von
-   Browser und Adresse. Jeder Reiter zeigt seinen Zielordner als Hinweis mit „ändern“.
-   Daneben zeigt die Karte **„Umgebung“** die Zeilen von `audioscribe doctor` (ffmpeg,
-   Gerät, WhisperX, HF-Token, Live-Geräte) direkt in der Oberfläche.
-2. Die **Dateiliste** zeigt alle gefundenen Medien mit Länge und Größe. Jede Datei hat ein
-   **Kontrollkästchen**; vorausgewählt sind die noch offenen. Schnellschalter: „Alle",
-   „Nur offene", „Keine". Wer eine bereits transkribierte Datei ankreuzt, lässt sie **neu**
-   laufen – die Markierung „bereits transkribiert" bleibt sichtbar.
-3. **Optionen**: Modell, Sprache, Gerät (`cuda` ist ausgegraut, wenn keine GPU verfügbar ist),
-   Sprecher-Diarisierung an/aus und **Bildwechsel-Erkennung** für Bildschirmaufnahmen
-   (mit Empfindlichkeit und Bildformat, s. u.).
-4. **„Transkription starten"** – je Datei ein Fortschrittsbalken, dazu ein Gesamtbalken über
-   die Audio-Gesamtlänge und eine **Restzeit**. Schlägt eine Datei fehl, läuft der Stapel mit
-   der nächsten weiter. Am Ende steht eine Zusammenfassung. Das ausführliche **Protokoll** ist
-   eingeklappt („Protokoll anzeigen") und öffnet sich von selbst, sobald eine Datei fehlschlägt.
-
-Die Karten sind als Schritte nummeriert; die vier Bereiche liegen als Reiter oben
-(auch direkt per Adresse erreichbar: `#trans`, `#live`, `#ana`, `#set`). Der Knopf rechts im
-Kopfbereich schaltet das **Design** um – „System" folgt der Betriebssystem-Einstellung,
-„Hell" und „Dunkel" erzwingen eine Variante. Die Wahl wird wie die anderen Einstellungen
-serverseitig gemerkt und gilt auch für die Review-Oberfläche.
-
-Ergebnisse landen wie gewohnt unter `<Ausgabeordner>/<Dateiname>/transkript.md`. Jede Datei
-läuft als eigener `audioscribe run`-Subprozess – der Lauf hängt also **nicht** am Browser-Tab
-und läuft weiter, wenn er geschlossen wird (Beenden per „Abbrechen" oder Strg+C im Terminal).
-
-**Woher der Fortschritt kommt:** WhisperX meldet während der Transkription den Anteil der
-bereits verarbeiteten Audio-Abschnitte, pyannote während der Diarisierung den Anteil der
-Segmentierung und Sprecher-Einbettungen. Die Restzeit wird aus den **bereits fertigen Dateien**
-geschätzt (Audiolänge gegen Laufzeit, getrennt nach festem Aufwand je Datei und Durchsatz) und
-erscheint deshalb erst, sobald die erste Datei durch ist. Dateien ohne auslesbare Länge
-(z. B. manche `.ts`-Container) werden separat ausgewiesen statt geraten.
-
-Dieselben Fortschrittszeilen lassen sich auch im Terminal einschalten – standardmäßig bleibt
-die Ausgabe dort ruhig:
-
-```bash
-AUDIOSCRIBE_PROGRESS=1 uv run audioscribe run input/meeting.mp4
-```
-
-**Ordner wählen:** Ein aus dem Explorer kopierter Pfad wie `C:\Users\user\Videos` kann in
-beide Felder direkt eingefügt werden; der Knopf **Wählen** blättert serverseitig durch
-das Dateisystem. Die Schnellziele über der Ordnerliste führen zu den Laufwerken (`C:`, `D:`
-…) sowie zu Home, Desktop, Downloads und Videos – unter Windows gibt es keine gemeinsame
-Wurzel `/`, aus der man sich zu allen Ordnern durchklicken könnte. Versteckte Ordner und
-Systemordner (`$Recycle.Bin`, `System Volume Information`) bleiben ausgeblendet.
-
-**Windows/WSL:** Läuft AudioScribe unter WSL, die Adresse einfach im Windows-Browser
-öffnen – WSL2 leitet `127.0.0.1` durch. Öffnet sich kein Browser automatisch, die im
-Terminal ausgegebene URL von Hand aufrufen. Pfade werden dann in die jeweils passende
-Richtung umgesetzt: unter WSL wird `C:\Users\user\Videos` zu `/mnt/c/Users/user/Videos`,
-nativ unter Windows umgekehrt `/mnt/c/...` zu `C:\...`. Medien auf dem WSL-Dateisystem
-(z. B. `input/`) werden spürbar schneller gelesen als solche unter `/mnt/c`.
-
-## Video transkribieren
-
-Videos werden **genauso** verarbeitet wie Audiodateien – einfach den Pfad zur Videodatei
-übergeben. AudioScribe extrahiert vorab automatisch die Tonspur und transkribiert sie dann.
-
-```bash
-# Standard: Video -> Audiospur extrahieren -> Transkription + Diarisierung
-uv run audioscribe run input/meeting.mp4
-
-# mit PDF, ohne Diarisierung, Sprecheranzahl vorgeben – alle Optionen gelten genauso
-uv run audioscribe run input/meeting.mkv --pdf
-uv run audioscribe run input/meeting.mov --no-diarize
-uv run audioscribe run input/meeting.webm --num-speakers 3
-```
-
-**Unterstützte Container:** `mp4`, `mkv`, `mov`, `avi`, `webm`, `m4v`, `wmv`, `flv`,
-`mpg`/`mpeg`, `ts`, `m2ts`, `3gp`, `ogv` (Erkennung an der Dateiendung).
-
-**Was dabei passiert:**
-
-1. **Audiospur extrahieren** (zusätzliche erste Pipeline-Stufe): Die Tonspur wird mit dem
-   gebündelten ffmpeg als 16-kHz-Mono-WAV nach `work/<name>.16k.wav` geschrieben
-   (kein System-`ffmpeg` nötig). Dieses Zwischen-WAV bleibt als wiederverwendbares Artefakt liegen.
-2. Danach laufen die normalen Stufen (Transkription → Alignment → Diarisierung → Export).
-
-Das Transkript landet wie gewohnt unter `output/<videoname>/transkript.md`; Kopfzeile und
-Ordnername tragen den **Original-Videonamen** (z. B. `# Transkript: meeting.mp4`).
-
-> Hinweise: Das Video muss eine **Tonspur** enthalten (sonst bricht die Extraktion mit einer
-> klaren Meldung ab). Enthält der Ton **keine Sprache** (Stille/Musik), wird ein leeres
-> Transkript erzeugt – kein Abbruch.
-
-## Bild-Annotation: wichtige Standbilder zum Transkript (Review-Oberfläche)
-
-Optionale Ausbaustufe (PRD §13): Nach der Transkription wichtige Video-**Standbilder**
-markieren und dem Transkript an der zeitlich passenden Stelle zuordnen – z. B. geteilte
-Folien/Bildschirme. Läuft vollständig lokal (nur `localhost`, kein Upload).
-
-```bash
-# einmalig die optionalen Pakete installieren (FastAPI + uvicorn)
-uv sync --extra review
-
-# 1) wie gewohnt transkribieren – schreibt zusätzlich output/<name>/transcript.json
-uv run audioscribe run input/meeting.mp4
-
-# 2) Review-Oberfläche starten (öffnet den Browser auf http://127.0.0.1:8765)
-uv run audioscribe review input/meeting.mp4        # oder: review output/meeting
-
-# 3) annotiertes Transkript erzeugen (Markdown, optional PDF)
-uv run audioscribe export output/meeting --pdf
-```
-
-**Ablauf in der Oberfläche:**
-
-1. Das Video ist scrub-/suchbar; das Transkript läuft synchron mit (Klick auf eine Zeile
-   springt im Video dorthin, Klick auf ein Thumbnail zur Markierung).
-2. **„Frame markieren"** greift den aktuellen Wiedergabe-Zeitpunkt – abzüglich eines
-   **Lag-Offsets** (Default −2,5 s, in der UI justierbar) – extrahiert per ffmpeg ein
-   **framegenaues PNG** und legt es als Markierung an (optional mit Notiz).
-3. Markierungen erscheinen rechts als **Thumbnail-Liste** und lassen sich einzeln löschen.
-4. `audioscribe export` merged Transkript + Markierungen zu `transkript.annotiert.md`
-   (+ optional `.pdf`); das editierbare `transkript.md` bleibt **unberührt**.
-
-**Artefakte je Aufnahme:** `output/<name>/transcript.json`, `frames/<HH-MM-SS>.png`,
-`marks.json`, `transkript.annotiert.md`. Die Markierungen (`marks.json`) **überstehen
-erneute Transkriptionsläufe** – die Einfügeposition wird beim Export aus dem Zeitstempel
-berechnet, nicht fest gespeichert.
-
-## Bildwechsel automatisch erkennen (Bildschirmaufnahmen)
-
-Statt Standbilder von Hand zu markieren, erkennt AudioScribe Wechsel des Bildschirm­inhalts
-selbst und sichert je Wechsel eines. **Mausbewegungen lösen nichts aus.**
-
-```bash
-uv run audioscribe run input/demo.mkv --frames
-
-# einstellbar:
---frame-sensitivity grob|mittel|fein   # Default mittel
---frame-format jpg-1600|jpg-1280|png   # Default jpg-1600 (~150 KB je Bild)
---frame-fps 1                          # Abtastungen/s, Default 2
---frame-min-gap 8                      # Mindestabstand in Sekunden, Default 4
-```
-
-In der Stapel-Oberfläche stehen Checkbox, Empfindlichkeit und Bildformat in der Karte
-„Optionen"; die beiden Feinparameter bleiben der Kommandozeile vorbehalten.
-
-**Ergebnis:** `output/<name>/frames/0001_00-01-23.jpg` … und ein
-`transkript.annotiert.md`, in dem jedes Bild mit seiner ID am zeitlich passenden Absatz
-steht:
+Ergebnis: `output/<name>/frames/0001_00-01-23.jpg …` und `transkript.annotiert.md`, in dem
+jedes Bild mit seiner ID am passenden Absatz steht. Über die ID („Bild #0001“) lassen sich
+Transkript und Bilder gemeinsam einer KI vorlegen.
 
 ```
 **[00:01:20] Sprecher 1:** Hier seht ihr die Auswertung …
@@ -286,390 +182,146 @@ steht:
 ![Bild #0001 – 00:01:23](frames/0001_00-01-23.jpg)
 ```
 
-Die ID ist die Klammer zwischen Bild und Text: Transkript und Bilder lassen sich damit
-gemeinsam einer KI vorlegen, die sich auf „Bild #0001" beziehen kann.
+<details>
+<summary>Wie es arbeitet und was es kostet</summary>
 
-**Wie es arbeitet:** Ein einziger ffmpeg-Durchlauf verkleinert das Video auf 192×108
-Graustufen; verglichen wird über ein Raster aus 16×9 Blöcken. Ein Mauszeiger belegt genau
-einen Block und bleibt damit unter der Schwelle, ein Fenster- oder Folienwechsel betrifft
-Dutzende. Zusammenhängende Trefferserien (Animationen, Scrollen) ergeben **ein** Bild —
-aufgenommen am Ende der Serie, wenn der Bildschirm fertig aufgebaut ist.
+Ein ffmpeg-Durchlauf verkleinert das Video auf 192×108 Graustufen; verglichen wird über ein
+Raster aus 16×9 Blöcken. Ein Mauszeiger belegt einen Block und bleibt unter der Schwelle,
+ein Fenster- oder Folienwechsel betrifft Dutzende. Zusammenhängende Trefferserien
+(Animationen, Scrollen) ergeben **ein** Bild, aufgenommen am Ende der Serie.
 
-**Kosten:** grob ein Achtel der Videolänge (80-Minuten-Aufnahme ≈ 10 Minuten). Deshalb ist
-die Erkennung standardmäßig aus. Ein erneuter Lauf ersetzt die automatischen Bilder und
-lässt von Hand gesetzte Markierungen unberührt.
+Kosten: grob ein Achtel der Videolänge (80 Minuten ≈ 10 Minuten), deshalb standardmäßig
+aus. Ein erneuter Lauf ersetzt die automatischen Bilder und lässt von Hand gesetzte
+Markierungen unberührt. In der Oberfläche stehen Checkbox, Empfindlichkeit und Bildformat
+in der Karte „Optionen“; `--frame-fps` und `--frame-min-gap` gibt es nur auf der
+Kommandozeile.
+</details>
 
-## KI-Analyse per Claude-Agent (Prozessdokumentation u. a.)
+---
 
-Ein Claude-Agent wertet einen fertigen Ergebnisordner aus, also Transkript und Standbilder,
-und legt alle Dokumente in einem Ordner ab, den du selbst wählst. Dafür gibst du ihm einen
-**Prozessnamen**, freien **Kontext** und eine Auswahl an **Skills** mit. Die Skills legen
-Aufbau und Qualitätsmaßstab der Dokumente fest, zum Beispiel `prozessrekonstruktion`,
-`prozessdoku-qs` oder `arbeitsanweisung-ableiten`.
+## Bild-Annotation von Hand
 
-**Abrechnung über das Claude-Abo:** Die Anbindung läuft über das
-[Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk). Es steuert Claude Code und
-benutzt dessen Anmeldung. Wer sich einmal mit `claude` per Pro-/Max-Abo eingeloggt hat,
-braucht keinen API-Key. **Achtung:** Ist `ANTHROPIC_API_KEY` gesetzt (Umgebung oder
-`.env`), hat der Key Vorrang, und die Kosten laufen über das API-Guthaben.
-`audioscribe doctor` zeigt an, welcher Weg aktiv ist.
+Nach der Transkription wichtige Standbilder (Folien, geteilte Bildschirme) selbst markieren
+und an der zeitlich passenden Stelle ins Transkript einfügen.
 
 ```bash
-# einmalig: das SDK installieren (zusammen mit dem Rechen-Backend)
-uv sync --extra cu124 --extra review --extra agent
-claude            # einmal starten und mit dem Claude-Abo anmelden, dann beenden
+.venv/bin/audioscribe run input/meeting.mp4        # schreibt zusätzlich transcript.json
+.venv/bin/audioscribe review output/meeting        # Review-Oberfläche, http://127.0.0.1:8765
+.venv/bin/audioscribe export output/meeting --pdf  # -> transkript.annotiert.md (+ PDF)
+```
 
-# welche Skills gibt es? (* = Vorauswahl aus AUDIOSCRIBE_AGENT_SKILLS)
-.venv/bin/audioscribe analyze --list-skills
+<details>
+<summary>Ablauf und Artefakte</summary>
 
-# Analyse starten: Quelle ist der Ergebnisordner eines 'run' (oder der Videopfad)
+Das Video ist scrubbar, das Transkript läuft synchron mit (Klick auf eine Zeile springt im
+Video dorthin). **„Frame markieren“** greift den aktuellen Zeitpunkt abzüglich eines
+**Lag-Offsets** (Default −2,5 s, justierbar), extrahiert per ffmpeg ein framegenaues PNG
+und legt eine Markierung an, optional mit Notiz. Markierungen erscheinen als
+Thumbnail-Liste und lassen sich einzeln löschen.
+
+`export` fügt Transkript und Markierungen zu `transkript.annotiert.md` zusammen; das
+editierbare `transkript.md` bleibt unberührt. Artefakte: `transcript.json`,
+`frames/<HH-MM-SS>.png`, `marks.json`. Die Markierungen überstehen erneute
+Transkriptionsläufe, weil die Einfügeposition beim Export aus dem Zeitstempel berechnet
+wird.
+</details>
+
+---
+
+## KI-Analyse per Claude-Agent
+
+Ein Claude-Agent wertet einen fertigen Ergebnisordner aus (Transkript und Standbilder) und
+schreibt Dokumente in einen Ordner deiner Wahl. Du gibst ihm einen **Prozessnamen**, freien
+**Kontext** und **Skills** mit; die Skills legen Aufbau und Qualitätsmaßstab fest, etwa
+`prozessrekonstruktion`, `prozessdoku-qs`, `arbeitsanweisung-ableiten`.
+
+```bash
+claude                                                  # einmalig: mit dem Claude-Abo anmelden, dann beenden
+.venv/bin/audioscribe analyze --list-skills             # verfügbare Skills (* = Vorauswahl)
 .venv/bin/audioscribe analyze output/demo \
-    --name "Rechnungsprüfung Kreditoren" \
-    --out ~/Analysen \
+    --name "Rechnungsprüfung Kreditoren" --out ~/Analysen \
     --context-text "Zielgruppe: neue Kollegen in der Kreditorenbuchhaltung" \
     --context glossar.md \
     --skill transkript-normalisierung --skill prozessrekonstruktion --skill prozessdoku-qs
 ```
 
-Fehlen `--name` oder `--out`, fragt der Befehl im Terminal nach. Ohne `--skill` gilt die
-Vorauswahl, mit `--no-skills` arbeitet der Agent ohne Skills. Weitere Schalter:
-`--model` (Default `claude-opus-5`), `--max-turns N`, `--no-bash` (Skill-Skripte nicht
-ausführen) und `--skills-dir` (Default `~/.claude/skills`, rekursiv durchsucht, also
-auch die mit claude.ai synchronisierten Skills).
+Fehlen `--name` oder `--out`, fragt der Befehl nach. Weitere Schalter: `--no-skills`,
+`--skills-dir PFAD` (Default `~/.claude/skills`, rekursiv), `--model` (Default
+`claude-opus-5`), `--max-turns N`, `--no-bash`, `--no-prozessbild`, `--no-bpmn`.
 
-**In der Browser-Oberfläche** (`audioscribe ui`) steht die Analyse im Reiter
-„KI-Analyse“. Dort wählst du eine fertige Transkription aus dem Ausgabeordner, gibst
-Prozessname und Kontext ein (optional mit Kontextdateien) und kreuzt die Skills an. Der
-Ausgabeordner der Analysen kommt aus dem Reiter „Einstellungen“. Während des Laufs zeigt die Seite den Fortschritt:
-- den Plan des Agenten als abhakbare Schrittliste mit Balken („Schritt 3 von 7“)
-- den aktiven Skill
-- wie viele Standbilder er schon angesehen hat
-- die bisher geschriebenen Dokumente
+**In der Oberfläche** (Reiter „KI-Analyse“): fertige Transkription aus dem Ausgabeordner
+wählen, Prozessname und Kontext eingeben, Skills ankreuzen. Der Ausgabeordner kommt aus
+den Einstellungen. Der Fortschritt zeigt den Plan des Agenten als Schrittliste, den aktiven
+Skill, angesehene Standbilder und geschriebene Dokumente. Einen Prozentwert gibt es bewusst
+nicht; ergänzt der Agent Schritte, läuft der Balken auch zurück.
 
-Einen Prozentwert gibt es bewusst nicht: Der Balken zählt die Schritte des Agenten, und
-ergänzt er Schritte, läuft der Balken auch zurück. Am Ende stehen Ergebnisordner und
-`INDEX.md` in der Seite.
+**Abrechnung:** Die Anbindung läuft über das
+[Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk) und nutzt die Anmeldung von
+Claude Code. Mit Pro-/Max-Abo braucht es keinen API-Key und es fallen keine zusätzlichen
+Kosten an. **Achtung:** Ein gesetzter `ANTHROPIC_API_KEY` hat Vorrang und rechnet über
+das API-Guthaben ab; `audioscribe doctor` zeigt, welcher Weg aktiv ist. Jedes angesehene
+Standbild kostet Tokens; bei Hunderten Bildern helfen `--frame-sensitivity grob` oder ein
+größerer `--frame-min-gap`.
 
-**Ergebnis** in `<out>/<prozessname>/`:
-
-```
-INDEX.md                  # vom Agenten: Übersicht aller Dokumente, offene Punkte, Annahmen
-prozessdokumentation.md   # … je nach Skills und Kontext
-prozessbild.png / .svg    # das Prozessdiagramm als Bild (für Word, PowerPoint, Confluence)
-prozessbild.mmd           # dessen Mermaid-Quelltext
-bpmn-modell.bpmn          # BPMN 2.0 mit Lanes, bearbeitbar in Camunda Modeler, bpmn.io, Signavio …
-bpmn-modell.png / .svg    # das BPMN-Modell als Bild
-bpmn-modell.json          # dessen Fachlogik (Lanes, Schritte, Flüsse) vom Agenten
-material/                 # Kopie von Transkript, frames/, marks.json (Dokumente verweisen hierauf)
-kontext/                  # Kopie der Kontextdateien
-analyse.json              # Protokoll: Skills, Modell, Session-ID, Dauer, Token-Gegenwert (kosten_usd)
-agent-log.txt             # vollständiger Verlauf
-.claude/skills/           # die verwendeten Skills (Stand zum Zeitpunkt der Analyse)
-```
-
-**Prozessbild:** Enthält die Prozessdoku ein Mermaid-Diagramm, erzeugt audioscribe daraus
-nach dem Lauf `prozessbild.png` (doppelte Auflösung, weißer Hintergrund) und
-`prozessbild.svg`. Bei aufgeteilten Prozessen kommen `prozessbild-2.png` usw. dazu.
-Gerendert wird mit dem vorhandenen **Edge oder Chrome** im Hintergrund, unter WSL mit
-dem Windows-Browser. Es muss nichts installiert werden, und die Mermaid-Bibliothek liegt
-im Paket, funktioniert also auch offline. Hast du das Diagramm in `prozessbild.mmd` von
-Hand korrigiert, erzeugt `audioscribe prozessbild <ordner>` die Bilder neu. Findet
-audioscribe keinen Browser oder enthält das Diagramm einen Syntaxfehler, steht das im
-Protokoll, und die Analyse gilt trotzdem als fertig. Ein anderer Browser lässt sich mit
-`AUDIOSCRIBE_BROWSER=<pfad>` festlegen, `--no-prozessbild` schaltet die Bilder ab.
-
-**BPMN-Modell mit Lanes:** Zusätzlich entsteht `bpmn-modell.bpmn`, ein BPMN-2.0-Modell,
-das du in jedem gängigen BPMN-Werkzeug öffnen und weiterbearbeiten kannst:
-[Camunda Modeler](https://camunda.com/download/modeler/) (kostenlos), https://demo.bpmn.io
-im Browser, Signavio, ADONIS. Dazu kommen `bpmn-modell.png` und `.svg` als Bild.
-
-- **Lanes:** Sie sind **Rollen**, wenn mehrere Beteiligte erkennbar sind, etwa aus deinem
-  Kontext („Freigabe durch die Teamleitung“), und sonst die verwendeten **Systeme**. Die
-  Begründung steht in der Doku.
-- **Nummern:** Die Schritte tragen dieselben Nummern (S1, E1 …) wie Doku und Prozessbild.
-- **Arbeitsteilung:** Der Agent liefert nur die Fachlogik (`bpmn-modell.json`).
-  Layout, BPMN-XML und Bild erzeugt audioscribe, der Agent prüft seine Datei vorher mit
-  `audioscribe bpmn . --pruefen`.
-- **Grenzen:** Das Layout ist automatisch und sauber, aber nicht perfekt; Feinschliff machst
-  du im BPMN-Werkzeug. Es gibt ein Modell je Prozess, ohne Unterprozesse und ohne parallele
-  Gateways.
-- **Nach dem Bearbeiten:** Hast du die `.bpmn` in einem Werkzeug gespeichert, ist sie ab
-  dann maßgeblich. `audioscribe bpmn <ordner>` baut sie nur mit `--neu` aus dem JSON neu
-  auf.
-
-`--no-bpmn` bzw. `AUDIOSCRIBE_AGENT_BPMN=0` schaltet das Modell ab.
-
-**Abgrenzung:** Der Agent schreibt **nur** in diesen Ordner. Schreibversuche außerhalb
-werden abgelehnt und im Protokoll als `[Verweigert]` vermerkt. Der audioscribe-Ergebnisordner
-bleibt unverändert, weil der Agent auf einer Kopie arbeitet. Deine übrigen Claude-Code-Skills,
-MCP-Server und die globale `CLAUDE.md` fließen **nicht** in den Lauf ein.
-
-**Kosten:** Mit Abo-Anmeldung fallen keine zusätzlichen Kosten an; der Lauf zählt auf die
-Nutzungslimits des Abos. `kosten_usd` in `analyse.json` ist nur der Gegenwert zu API-Preisen,
-den Claude Code immer mitliefert. Die Oberfläche zeigt ihn deshalb nicht an.
-
-**Nutzungslimits:** Jedes Standbild, das der Agent ansieht, kostet Tokens. Bei
-Aufnahmen mit Hunderten Bildern kann eine Analyse einen spürbaren Teil des Abo-Kontingents
-belegen. Dann hilft es, mit `--frame-sensitivity grob` oder `--frame-min-gap` weniger Bilder
-zu erzeugen.
-
-**Nachbessern (experimentell):** `analyze … --resume --context-text "Ergänze …"` setzt
-die gespeicherte Sitzung fort; der Agent kennt dabei den bisherigen Verlauf. Das ist die
-Grundlage für einen späteren Dialogmodus.
-
-## Live Transcription (Proof of Concept, nur Windows)
-
-Schneidet eine laufende Sitzung mit: einen Monitor, das System-Audio (was aus den
-Lautsprechern kommt) und das Mikrofon. Das Transkript erscheint mit wenigen Sekunden
-Verzögerung, jeder Bildwechsel wird als Screenshot gesichert, und am Ende liegt ein Ordner
-im selben Format wie nach einem Offline-Lauf, den die KI-Analyse direkt auswerten kann.
-Details und Designentscheidungen stehen in PRD §17.
-
-```powershell
-.\start.ps1                                                # synct .venv-win und startet die Oberfläche
-.venv-win\Scripts\audioscribe.exe doctor               # Zeile "Live": Mikrofone, Loopback, Monitore
-.venv-win\Scripts\audioscribe.exe ui                   # Reiter „Live Transcription“
-```
-
-`start.ps1` legt die Windows-Umgebung bewusst in `.venv-win` an: Liegt das Repo unter
-`C:\Users\…` und wird auch aus WSL benutzt, gehört `.venv` dem Linux-Python. Windows-`uv`
-kann dessen Symlink `lib64 -> lib` nicht löschen und bricht mit „Zugriff verweigert“ ab.
-Wer `uv sync` von Hand aufruft, setzt vorher `$env:UV_PROJECT_ENVIRONMENT = '.venv-win'`.
-
-Das funktioniert nur mit nativem Windows-Python. Unter WSL gibt es weder WASAPI noch
-Zugriff auf den Bildschirm.
-
-**Im Reiter:** Monitor anklicken (mit Vorschaubild), Mikrofon und System-Audio wählen,
-„Aufnahme starten“. Oben laufen Laufzeit, **Verzögerung** (Ende des Gesprochenen bis zur
-Anzeige) und **Rückstand** (aufgenommenes, noch nicht transkribiertes Audio) mit. Grauer
-Kursivtext ist die Vorschau des gerade gesprochenen Abschnitts; sie pausiert von selbst ab
-3 s Rückstand. Ab 5 s Rückstand schaltet die Sitzung in den **Aufholmodus**: wartende
-Abschnitte derselben Spur werden zu Stücken bis 25 s zusammengelegt und sparsamer
-dekodiert (Beam 1) – die Segmente sind in dieser Phase gröber, der Rückstand pendelt sich
-aber auch auf der CPU ein. Der Tooltip der Rückstand-Anzeige zeigt das gemessene Tempo
-(Rechenzeit je Audiosekunde); liegt es dauerhaft über 1× Echtzeit, ist das Modell für den
-Rechner zu groß. `AUDIOSCRIBE_CPU_THREADS` (oder `--cpu-threads`) setzt die Rechen-Threads;
-sinnvoll ist die Zahl physischer Kerne.
-Screenshots erscheinen rechts als Thumbnails, ein Klick öffnet die Großansicht
-(Pfeiltasten blättern).
-
-**Sprecher:** Das Mikrofon ist „Ich“. Das System-Audio wird per Stimm-Embedding in
-„Sprecher 1/2/3“ getrennt; das braucht denselben `HF_TOKEN` wie die Diarisierung. Ohne
-Token heißt die Spur „Gegenseite“. Das Sprecher-Modell lädt im Hintergrund, damit die
-Aufnahme sofort beginnt: Mikrofon-Abschnitte erscheinen ab der ersten Sekunde, der erste
-System-Abschnitt, sobald das Protokoll „Sprecher-Modell bereit“ meldet (auf der CPU rund
-10 s, deutlich länger, wenn parallel eine Besprechung läuft). Sehr kurze Einwürfe und Durcheinanderreden werden live
-nicht sauber getrennt, das korrigiert das Nachschärfen.
-
-**Nach dem Stopp** bleibt die Live-Fassung als `transkript.live.md` erhalten. Ist
-„nach Stopp nachschärfen“ angehakt, läuft danach die Offline-Pipeline (Alignment,
-Diarisierung der System-Spur) über den Mitschnitt und ersetzt `transkript.md`. Das Modell
-dafür wird getrennt vom Live-Modell gewählt („Modell (Nachschärfen)“, Standard `large-v3`):
-live zählt das Tempo, beim Nachschärfen die Genauigkeit – etwa `small` live auf der CPU und
-`large-v3` oder `large-v3-turbo` danach. Ohne Oberfläche: `audioscribe refine ORDNER --model …`.
-Die Screenshots bleiben. Ein zweiter Klick auf Stoppen bricht hart ab.
-
-**Von vorn:** „Zurücksetzen“ unter den Start-/Stopp-Knöpfen leert nach Rückfrage Transkript,
-Screenshots und Protokoll und bringt den Reiter in den Ausgangszustand. Während einer Aufnahme
-heißt der Knopf „Verwerfen und neu beginnen“: Nach Rückfrage wird die laufende Sitzung hart
-beendet (ohne Nachschärfen) und mit denselben Einstellungen sofort eine neue gestartet.
-Der Ordner der verworfenen Sitzung wird nicht gelöscht; das Protokoll nennt seinen Pfad.
+<details>
+<summary>Ergebnisordner</summary>
 
 ```
-output/live-2026-09-19_14-30-05/
-  transkript.md  transcript.json  transkript.annotiert.md  marks.json  frames/
-  transkript.live.md  transcript.live.json        # Live-Fassung (nach dem Stopp)
-  audio/mikrofon.wav  audio/system.wav            # 16 kHz mono
-  bilanz.json                                     # Fazit: Rechendauer und Latenz (live + nachschaerfen)
+<out>/<prozessname>/
+  INDEX.md                  # vom Agenten: Übersicht aller Dokumente, offene Punkte, Annahmen
+  prozessdokumentation.md   # … je nach Skills und Kontext
+  prozessbild.png / .svg    # Prozessdiagramm als Bild (Word, PowerPoint, Confluence)
+  prozessbild.mmd           # dessen Mermaid-Quelltext
+  bpmn-modell.bpmn          # BPMN 2.0 mit Lanes (Camunda Modeler, bpmn.io, Signavio …)
+  bpmn-modell.png / .svg    # BPMN-Modell als Bild
+  bpmn-modell.json          # dessen Fachlogik vom Agenten
+  material/                 # Kopie von Transkript, frames/, marks.json
+  kontext/                  # Kopie der Kontextdateien
+  analyse.json              # Protokoll: Skills, Modell, Session-ID, Dauer, kosten_usd (nur Gegenwert)
+  agent-log.txt             # vollständiger Verlauf
+  .claude/skills/           # die verwendeten Skills (Stand der Analyse)
 ```
 
-**Fazit:** Nach dem Stopp erscheint im Reiter ein Kasten „Fazit“ mit Aufnahmedauer,
-Ladezeit der Modelle, Rechenzeit und Tempo (Rechenzeit je Audiosekunde), Verzögerung
-(Ø, Median, max), Zahl der Abschnitte und Zeit im Aufholmodus; nach dem Nachschärfen kommt
-die Dauer je Stufe dazu. Dieselben Zahlen stehen im Protokoll („Fazit: …“) und in
-`bilanz.json` im Sitzungsordner.
+Der Agent schreibt **nur** in diesen Ordner; Schreibversuche außerhalb werden abgelehnt und
+als `[Verweigert]` protokolliert. Er arbeitet auf einer Kopie, der audioscribe-Ergebnisordner
+bleibt unverändert. Deine übrigen Claude-Code-Skills, MCP-Server und die globale
+`CLAUDE.md` fließen nicht ein.
+</details>
 
-**Modell:** `auto` nimmt `large-v3-turbo` auf der GPU (etwa 2–5 s Verzögerung) und `small`
-auf der CPU (eher 5–15 s).
+<details>
+<summary>Prozessbild (Mermaid → PNG/SVG)</summary>
 
-**Bildquelle:** Statt eines ganzen Monitors lässt sich auch ein einzelnes **Anwendungsfenster**
-wählen: Die Kachel **Anwendungsfenster** neben den Monitoren öffnet eine Auswahl mit
-Vorschaubildern, nach Anwendung gebündelt und per Suchfeld filterbar. Aufgenommen wird dann nur
-dieses Fenster – auch wenn andere Fenster davor liegen, und die Oberfläche darf auf demselben
-Monitor bleiben. Minimiert pausieren die Standbilder, geschlossen endet nur die Bildaufnahme;
-der Ton läuft weiter. Grenzen: Erhöhte (Admin-)Prozesse und exklusive DirectX-Vollbilder
-liefern kein Fensterbild – dann fällt AudioScribe auf den Bildschirmausschnitt am
-Fensterrechteck zurück, inklusive allem, was davor liegt.
-
-**Zwei Fallstricke:** Mit Lautsprechern statt Headset hört das Mikrofon die Gegenseite mit,
-dann stehen Textstellen doppelt im Transkript. Und bei Monitoraufnahme gehört die
-AudioScribe-Oberfläche nicht auf den überwachten Monitor, sonst lösen neue Thumbnails selbst
-Bildwechsel aus.
-
-**Ohne Oberfläche:**
-
-```powershell
-.venv-win\Scripts\audioscribe.exe live --list-devices        # Geräteindizes, Monitore, Fenster (HWND)
-.venv-win\Scripts\audioscribe.exe live --monitor 1 --mic 23  # Ende mit Strg+C oder "stop" + Enter
-.venv-win\Scripts\audioscribe.exe live --window 592902       # nur dieses Fenster statt eines Monitors
-.venv-win\Scripts\audioscribe.exe refine output\live-2026-09-19_14-30-05 --model large-v3-turbo
-```
-
-## Erster Lauf & Modell-Downloads
-
-Beim ersten `run` werden die Modellgewichte einmalig geladen und danach gecached
-(`~/.cache`): Whisper `large-v3` (~3 GB), das deutsche wav2vec2-Alignment-Modell
-(~360 MB) und – falls Diarisierung aktiv – die pyannote-Modelle. Danach läuft alles
-offline. Validiere die Qualität am ersten echten Sample und justiere ggf. nach (s. PRD §9/§10).
-
-## Kompatibilität (WhisperX + PyTorch 2.6)
-
-Zwei bekannte Reibungspunkte des aktuellen Stacks werden automatisch im Code behandelt
-(`src/audioscribe/compat.py`):
-
-- **cuDNN** (betrifft nur den CUDA-Pfad; im CPU-Betrieb wird der Schritt komplett
-  übersprungen): WhisperX pinnt `ctranslate2<4.5` (gegen cuDNN **8** gebaut), torch 2.6 bringt
-  aber cuDNN **9** mit. AudioScribe lädt die cuDNN-8-Bibliotheken **einmalig** separat nach
-  (`~/.cache/audioscribe/cudnn8/`) und macht sie via `LD_LIBRARY_PATH` auffindbar – ohne
-  torchs cuDNN 9 zu stören (andere SO-Namen).
-- **`torch.load`:** PyTorch 2.6 lädt standardmäßig mit `weights_only=True`; die
-  pyannote-Checkpoints (VAD/Diarisierung) lassen sich damit nicht entpacken. Da alle Gewichte
-  aus vertrauenswürdiger lokaler Quelle stammen, wird `weights_only=False` erzwungen.
-
-## VRAM / Tuning (8 GB)
-
-`large-v3` in `float16` kann auf 8 GB knapp werden. Stellschrauben:
+Enthält die Prozessdoku ein Mermaid-Diagramm, erzeugt audioscribe daraus `prozessbild.png`
+(doppelte Auflösung, weißer Hintergrund) und `prozessbild.svg`; bei mehreren Prozessen
+`prozessbild-2.png` usw. Gerendert wird mit dem vorhandenen **Edge oder Chrome** im
+Hintergrund (unter WSL der Windows-Browser), die Mermaid-Bibliothek liegt im Paket, es
+funktioniert offline. Nach einer Handkorrektur von `prozessbild.mmd`:
 
 ```bash
-# in der .env oder als Flag
-AUDIOSCRIBE_WHISPER_COMPUTE_TYPE=int8_float16   # oder int8; Default "auto" (cuda->float16)
-AUDIOSCRIBE_BATCH_SIZE=4                          # Standard 8; bei OOM senken
+.venv/bin/audioscribe prozessbild ~/Analysen/rechnungspruefung
 ```
 
-## GPU-Betrieb (CUDA)
+Fehlt ein Browser oder hat das Diagramm einen Syntaxfehler, steht das im Protokoll, und die
+Analyse gilt trotzdem als fertig. `AUDIOSCRIBE_BROWSER=<pfad>` legt einen anderen Browser
+fest.
+</details>
 
-```bash
-uv sync --extra cu124 --extra review     # CUDA-Wheels installieren (einmalig)
+<details>
+<summary>BPMN-Modell mit Lanes</summary>
 
-.venv/bin/audioscribe run input/meeting.mp4      # Windows: .venv\Scripts\audioscribe.exe
-.venv/bin/audioscribe ui
+`bpmn-modell.bpmn` ist ein BPMN-2.0-Modell für
+[Camunda Modeler](https://camunda.com/download/modeler/), https://demo.bpmn.io, Signavio
+oder ADONIS, dazu `.png` und `.svg`.
 
-# mit uv: die Extras MÜSSEN mit — sonst synct uv die CUDA-Wheels wieder weg
-uv run --extra cu124 --extra review audioscribe ui
-```
-
-- `--device auto` (Default) nimmt CUDA, sonst CPU. `--device cuda` erzwingt sie (bricht
-  ohne CUDA ab), `--device cpu` schaltet sie aus. Dasselbe über `AUDIOSCRIBE_DEVICE`.
-- `--compute-type` folgt dem Gerät (`cuda → float16`, `cpu → int8`); bei knappem VRAM
-  `--compute-type int8_float16`, notfalls `AUDIOSCRIBE_BATCH_SIZE=4` (kein CLI-Flag).
-- Prüfen mit `audioscribe doctor`: dort muss `torch …+cu124 -> auto=cuda (<GPU-Name>)`
-  stehen. Steht da `+cpu`, hat ein `uv run` ohne Extras die Wheels ersetzt.
-
-## CPU-Betrieb (Rechner ohne NVIDIA-Karte)
-
-Mit `uv sync --extra cpu` installiert und `--device auto` (Default) läuft AudioScribe
-automatisch auf der CPU; `compute_type` wird dann automatisch auf `int8` gesetzt
-(CTranslate2 unterstützt kein `float16` auf CPU).
-
-```bash
-uv sync --extra cpu
-uv run --extra cpu audioscribe doctor
-uv run --extra cpu audioscribe run input/meeting.m4a
-```
-
-Zu beachten:
-
-- Das gewählte Extra gehört **auch an `uv run`** — ohne Extra synct uv die Umgebung
-  zurück auf das PyPI-torch. Unter Linux ist das das CUDA-Bundle (~3 GB mehr, läuft
-  auch auf CPU), unter Windows ein reiner CPU-Build (dann ist die GPU weg). Wer das
-  umgehen will, startet die Skripte direkt aus dem venv.
-
-- **Deutlich langsamer** als auf GPU — `large-v3` braucht auf CPU ein Mehrfaches der
-  Aufnahmedauer. Wirksamster Hebel ist ein **kleineres Modell**, nicht die Batch-Größe:
-  ```bash
-  uv run audioscribe run input/meeting.m4a --model medium   # oder small
-  ```
-- Diarisierung (pyannote) läuft ebenfalls auf CPU, auch das dauert entsprechend länger.
-- Auf einem GPU-Rechner lässt sich CPU-Betrieb mit `--device cpu` erzwingen (z. B. zum Testen).
-- `uv run audioscribe doctor` zeigt das effektive Gerät, den torch-Build (`+cpu`/`+cu124`)
-  und den effektiven `compute_type`.
-
-## Konfiguration
-
-Alle Defaults stehen in `src/audioscribe/config.py` und sind per `AUDIOSCRIBE_*`-Umgebungs­variablen
-oder `.env` überschreibbar (siehe `.env.example`).
-
-## Entwicklung
-
-```bash
-uv run pytest        # Unit-Tests (reine Logik, keine Modell-Downloads)
-```
-
-## Status / Scope
-
-Basisstufe gemäß `PRD.md`: eine Datei pro CLI-Aufruf (die Browser-Oberfläche arbeitet ganze
-Ordner nacheinander ab), Markdown-Ausgabe (+ optional PDF), Diarisierung als „Sprecher N"
-(keine echte Personen-Identifikation). AudioScribe ist die Transkriptions-Basisstufe für die
-übergeordnete Meeting-Protokoll-Pipeline; die Auswertung übernimmt optional der
-Claude-Agent (`audioscribe analyze`, PRD §16).
-
-## Befehle auf einen Blick
-
-Alle Befehle im Projektordner ausführen (`cd ~/develop/git/audioscribe`). Starte sie
-direkt aus `.venv/bin/`, **nicht** mit `uv run`: Ohne Extras würde `uv run` die
-CUDA-Pakete, die Oberfläche und das Agent SDK aus der Umgebung entfernen.
-
-**Einrichten (einmalig bzw. nach Updates)**
-
-```bash
-uv sync --extra cu124 --extra review --extra agent   # GPU-Rechner
-uv sync --extra cpu   --extra review --extra agent   # Rechner ohne NVIDIA-Karte
-claude                                               # einmal mit dem Claude-Abo anmelden (für analyze)
-.venv/bin/audioscribe doctor                         # Umgebung prüfen
-```
-
-**Browser-Oberfläche (Transkription + KI-Analyse)**
-
-```bash
-.venv/bin/audioscribe ui                   # http://127.0.0.1:8766, Reiter „Offline Transcription“ / „Live Transcription“ / „KI-Analyse“ / „Einstellungen“
-.venv/bin/audioscribe ui --port 9000       # anderer Port
-.venv/bin/audioscribe ui --no-browser      # Browser nicht automatisch öffnen
-```
-
-Beenden mit Strg+C. Unter WSL die Adresse notfalls selbst im Windows-Browser öffnen.
-
-**Transkribieren (einzelne Datei)**
-
-```bash
-.venv/bin/audioscribe run input/meeting.m4a                  # -> output/meeting/transkript.md
-.venv/bin/audioscribe run input/demo.mp4 --frames            # Bildschirmaufnahme: + Standbilder
-.venv/bin/audioscribe run input/demo.mp4 --frames --pdf      # zusätzlich PDF
-.venv/bin/audioscribe run input/x.mp3 --no-diarize --language auto
-.venv/bin/audioscribe run input/x.mp3 --num-speakers 3 --device cpu
-```
-
-**KI-Analyse per Claude-Agent**
-
-```bash
-.venv/bin/audioscribe analyze --list-skills                  # verfügbare Skills (* = Vorauswahl)
-.venv/bin/audioscribe analyze output/demo                    # fragt Prozessname + Ausgabeordner ab
-.venv/bin/audioscribe analyze output/demo --name "Rechnungsprüfung" --out ~/Analysen \
-    --context-text "Zielgruppe: neue Kollegen" --context glossar.md \
-    --skill prozessrekonstruktion --skill prozessdoku-qs
-.venv/bin/audioscribe analyze output/demo --name "Rechnungsprüfung" --out ~/Analysen \
-    --resume --context-text "Ergänze die Ausnahmefälle"      # Sitzung fortsetzen (experimentell)
-```
-
-Weitere Schalter: `--no-skills`, `--skills-dir PFAD`, `--model claude-sonnet-5`,
-`--max-turns N`, `--no-bash`, `--no-prozessbild`, `--no-bpmn`.
-
-**Prozessbild neu erzeugen (nach Handkorrektur von prozessbild.mmd)**
-
-```bash
-.venv/bin/audioscribe prozessbild ~/Analysen/rechnungspruefung   # -> prozessbild.png + .svg
-```
-
-**BPMN-Modell prüfen bzw. neu erzeugen (nach Korrektur von bpmn-modell.json)**
+- **Lanes** sind Rollen, wenn mehrere Beteiligte erkennbar sind (etwa aus deinem Kontext),
+  sonst die verwendeten Systeme. Die Begründung steht in der Doku.
+- **Nummern** (S1, E1 …) sind dieselben wie in Doku und Prozessbild.
+- **Arbeitsteilung:** Der Agent liefert nur die Fachlogik (`bpmn-modell.json`) und prüft
+  sie mit `audioscribe bpmn . --pruefen`; Layout, XML und Bild erzeugt audioscribe.
+- **Grenzen:** Layout automatisch, aber nicht perfekt; ein Modell je Prozess, ohne
+  Unterprozesse und parallele Gateways.
+- **Nach dem Bearbeiten** im BPMN-Werkzeug ist die `.bpmn` maßgeblich; `audioscribe bpmn
+  <ordner>` baut sie nur mit `--neu` aus dem JSON neu auf.
 
 ```bash
 .venv/bin/audioscribe bpmn ~/Analysen/rechnungspruefung --pruefen   # nur prüfen
@@ -677,37 +329,194 @@ Weitere Schalter: `--no-skills`, `--skills-dir PFAD`, `--model claude-sonnet-5`,
 .venv/bin/audioscribe bpmn ~/Analysen/rechnungspruefung --neu       # auch bearbeitete .bpmn ersetzen
 ```
 
-**Standbilder von Hand markieren und exportieren**
+`--no-bpmn` bzw. `AUDIOSCRIBE_AGENT_BPMN=0` schaltet das Modell ab.
+</details>
 
-```bash
-.venv/bin/audioscribe review output/demo                     # http://127.0.0.1:8765
-.venv/bin/audioscribe export output/demo --pdf               # -> transkript.annotiert.md (+ PDF)
-```
+<details>
+<summary>Nachbessern (experimentell)</summary>
 
-**Hilfe und Tests**
+`analyze … --resume --context-text "Ergänze die Ausnahmefälle"` setzt die gespeicherte
+Sitzung fort; der Agent kennt den bisherigen Verlauf. Grundlage für einen späteren
+Dialogmodus.
+</details>
 
-```bash
-.venv/bin/audioscribe --help                                 # alle Befehle
-.venv/bin/audioscribe analyze --help                         # alle Optionen eines Befehls
-uv run --extra cu124 --extra review --extra agent pytest     # Unit-Tests
-```
+---
 
-**Schnellstart: Oberfläche starten**
+## Live-Transkription (nur Windows)
 
-```bash
-cd ~/develop/git/audioscribe
-.venv/bin/audioscribe ui
-```
-
-Danach öffnet sich http://127.0.0.1:8766 mit den Reitern „Offline Transcription“, „Live Transcription“, „KI-Analyse“ und „Einstellungen“ (Ordner und Umgebungs-Check).
-Unter WSL die Adresse notfalls selbst im Windows-Browser öffnen, beenden mit Strg+C.
-
-```bash
-uv run --extra cu124 --extra review --extra agent audioscribe ui
-```
-
-Unter Windows (PowerShell) erledigt das `start.ps1` – es wählt `cpu` oder `cu124` selbst und nimmt alle Extras mit (review, agent, live):
+Proof of Concept: schneidet eine laufende Sitzung mit, also einen Monitor **oder ein
+Anwendungsfenster**, das System-Audio und das Mikrofon. Das Transkript erscheint mit
+wenigen Sekunden Verzögerung, jeder Bildwechsel wird als Screenshot gesichert, und am Ende
+liegt ein Ordner im Format eines Offline-Laufs, den die KI-Analyse direkt auswerten kann.
+Braucht natives Windows-Python (WASAPI, Bildschirmzugriff); unter WSL geht es nicht.
+Designentscheidungen: PRD §17.
 
 ```powershell
-.\start.ps1                                  # Optionen: -Torch cpu|cu124  -Port 8800  -NoBrowser
+.\start.ps1                                                  # Oberfläche, Reiter „Live Transcription“
+.venv-win\Scripts\audioscribe.exe doctor                     # Zeile „Live“: Mikrofone, Loopback, Monitore
+.venv-win\Scripts\audioscribe.exe live --list-devices        # ohne Oberfläche: Geräte, Monitore, Fenster (HWND)
+.venv-win\Scripts\audioscribe.exe live --monitor 1 --mic 23  # Ende mit Strg+C oder "stop" + Enter
+.venv-win\Scripts\audioscribe.exe live --window 592902       # nur dieses Fenster
+.venv-win\Scripts\audioscribe.exe refine output\live-2026-09-19_14-30-05 --model large-v3-turbo
 ```
+
+**Im Reiter:** Bildquelle wählen (Monitor mit Vorschaubild, Anwendungsfenster oder „nur
+Ton“), Mikrofon und System-Audio wählen, „Aufnahme starten“. Oben laufen Laufzeit,
+**Verzögerung** (Ende des Gesprochenen bis zur Anzeige) und **Rückstand** (aufgenommen,
+noch nicht transkribiert) mit. Screenshots erscheinen rechts als Thumbnails. Gespeichert
+wird im Ausgabeordner Transkription aus den Einstellungen:
+
+```
+output/live-2026-09-19_14-30-05/
+  transkript.md  transcript.json  transkript.annotiert.md  marks.json  frames/
+  transkript.live.md  transcript.live.json        # Live-Fassung (nach dem Stopp)
+  audio/mikrofon.wav  audio/system.wav            # 16 kHz mono
+  bilanz.json                                     # Fazit: Rechendauer und Latenz
+```
+
+**Zwei Fallstricke:** Mit Lautsprechern statt Headset hört das Mikrofon die Gegenseite mit,
+dann stehen Textstellen doppelt. Und bei Monitoraufnahme gehört die AudioScribe-Oberfläche
+nicht auf den überwachten Monitor, sonst lösen neue Thumbnails selbst Bildwechsel aus.
+
+<details>
+<summary>Modelle, Sprecher, Nachschärfen</summary>
+
+**Modell:** `auto` nimmt `large-v3-turbo` auf der GPU (2–5 s Verzögerung) und `small` auf
+der CPU (5–15 s). Das Modell fürs **Nachschärfen** wird getrennt gewählt (Standard
+`large-v3`): live zählt das Tempo, danach die Genauigkeit.
+
+**Sprecher:** Das Mikrofon ist „Ich“. Das System-Audio wird per Stimm-Embedding in
+„Sprecher 1/2/3“ getrennt (braucht den `HF_TOKEN`); ohne Token heißt die Spur
+„Gegenseite“. Das Sprecher-Modell lädt im Hintergrund, Mikrofon-Text erscheint sofort, der
+erste System-Abschnitt sobald das Protokoll „Sprecher-Modell bereit“ meldet. Kurze Einwürfe
+und Durcheinanderreden trennt erst das Nachschärfen sauber.
+
+**Nach dem Stopp** bleibt die Live-Fassung als `transkript.live.md` erhalten. Mit „nach
+Stopp nachschärfen“ läuft die Offline-Pipeline (Alignment, Diarisierung der System-Spur)
+über den Mitschnitt und ersetzt `transkript.md`; die Screenshots bleiben. Ein zweiter Klick
+auf Stoppen bricht hart ab. Danach zeigt der Reiter ein **Fazit**: Aufnahmedauer, Ladezeit,
+Rechenzeit und Tempo, Verzögerung (Ø, Median, max), Abschnitte, Zeit im Aufholmodus, nach
+dem Nachschärfen die Dauer je Stufe. Dieselben Zahlen stehen im Protokoll und in
+`bilanz.json`.
+
+**Zurücksetzen** leert nach Rückfrage Transkript, Screenshots und Protokoll. Während einer
+Aufnahme heißt der Knopf „Verwerfen und neu beginnen“: Die Sitzung wird hart beendet (ohne
+Nachschärfen) und mit denselben Einstellungen neu gestartet; der alte Ordner bleibt liegen.
+</details>
+
+<details>
+<summary>Vorschau, Aufholmodus, CPU-Tuning</summary>
+
+Grauer Kursivtext ist die Vorschau des gerade gesprochenen Abschnitts; sie pausiert ab 3 s
+Rückstand. Ab 5 s Rückstand schaltet die Sitzung in den **Aufholmodus**: wartende
+Abschnitte derselben Spur werden zu Stücken bis 25 s zusammengelegt und sparsamer dekodiert
+(Beam 1). Die Segmente sind dann gröber, der Rückstand pendelt sich aber auch auf der CPU
+ein. Der Tooltip der Rückstand-Anzeige zeigt das gemessene Tempo (Rechenzeit je
+Audiosekunde); liegt es dauerhaft über 1× Echtzeit, ist das Modell für den Rechner zu groß.
+`AUDIOSCRIBE_CPU_THREADS` bzw. `--cpu-threads` setzt die Rechen-Threads; sinnvoll ist die
+Zahl physischer Kerne.
+</details>
+
+<details>
+<summary>Anwendungsfenster statt Monitor</summary>
+
+Die Kachel **Anwendungsfenster** öffnet eine Auswahl mit Vorschaubildern, nach Anwendung
+gebündelt und filterbar. Aufgenommen wird nur dieses Fenster, auch wenn andere davor
+liegen; die Oberfläche darf auf demselben Monitor bleiben. Minimiert pausieren die
+Standbilder, geschlossen endet nur die Bildaufnahme, der Ton läuft weiter. Grenzen: Erhöhte
+(Admin-)Prozesse und exklusive DirectX-Vollbilder liefern kein Fensterbild; dann fällt
+AudioScribe auf den Bildschirmausschnitt am Fensterrechteck zurück, inklusive allem, was
+davor liegt.
+</details>
+
+---
+
+## Betrieb: GPU, CPU, Konfiguration
+
+| | GPU (CUDA) | CPU |
+|---|---|---|
+| Installation | `uv sync --extra cu124 …` | `uv sync --extra cpu …` |
+| `--device auto` wählt | `cuda`, `compute_type=float16` | `cpu`, `compute_type=int8` |
+| Tempo | Bruchteil der Aufnahmedauer | Mehrfaches der Aufnahmedauer |
+| Wichtigster Hebel | bei knappem VRAM `--compute-type int8_float16`, `AUDIOSCRIBE_BATCH_SIZE=4` | kleineres Modell: `--model medium` oder `small` |
+| `doctor` zeigt | `torch …+cu124 -> auto=cuda (<GPU>)` | `torch …+cpu -> auto=cpu` |
+
+`--device cuda` erzwingt die GPU (bricht ohne CUDA ab), `--device cpu` schaltet sie aus,
+auch auf einem GPU-Rechner zum Testen. Steht in `doctor` unerwartet `+cpu` auf einem
+GPU-Rechner, hat ein `uv run` ohne Extras die Wheels ersetzt (siehe
+[Schnellstart](#schnellstart)). Die Sprecher-Trennung läuft auf CPU ebenfalls entsprechend
+länger.
+
+**Konfiguration:** Alle Defaults stehen in `src/audioscribe/config.py` und lassen sich per
+`AUDIOSCRIBE_*`-Umgebungsvariablen oder `.env` überschreiben; `.env.example` listet sie mit
+Erklärung.
+
+<details>
+<summary>Kompatibilität WhisperX + PyTorch 2.6</summary>
+
+Zwei bekannte Reibungspunkte behandelt `src/audioscribe/compat.py` automatisch:
+
+- **cuDNN** (nur CUDA-Pfad): WhisperX pinnt `ctranslate2<4.5` (gegen cuDNN 8 gebaut), torch
+  2.6 bringt cuDNN 9 mit. AudioScribe lädt die cuDNN-8-Bibliotheken einmalig nach
+  (`~/.cache/audioscribe/cudnn8/`) und macht sie via `LD_LIBRARY_PATH` auffindbar, ohne
+  torchs cuDNN 9 zu stören. Im CPU-Betrieb entfällt der Schritt.
+- **`torch.load`:** PyTorch 2.6 lädt standardmäßig mit `weights_only=True`; die
+  pyannote-Checkpoints lassen sich damit nicht entpacken. Da alle Gewichte aus
+  vertrauenswürdiger lokaler Quelle stammen, wird `weights_only=False` erzwungen.
+</details>
+
+---
+
+## Befehle auf einen Blick
+
+Alle Befehle im Projektordner, direkt aus `.venv/bin/` (Windows: `.venv-win\Scripts\…exe`).
+
+```bash
+# Einrichten
+uv sync --extra cu124 --extra review --extra agent   # GPU-Rechner; CPU: --extra cpu
+claude                                               # einmal mit dem Claude-Abo anmelden (für analyze)
+.venv/bin/audioscribe doctor                         # Umgebung prüfen (--json für Maschinen)
+
+# Oberfläche
+.venv/bin/audioscribe ui                             # http://127.0.0.1:8766
+.venv/bin/audioscribe ui --port 9000 --no-browser
+
+# Transkribieren
+.venv/bin/audioscribe run input/meeting.m4a                  # -> output/meeting/transkript.md
+.venv/bin/audioscribe run input/demo.mp4 --frames --pdf      # Bildschirmaufnahme + PDF
+.venv/bin/audioscribe run input/x.mp3 --no-diarize --language auto
+.venv/bin/audioscribe run input/x.mp3 --num-speakers 3 --device cpu
+
+# Standbilder von Hand
+.venv/bin/audioscribe review output/demo                     # http://127.0.0.1:8765
+.venv/bin/audioscribe export output/demo --pdf               # -> transkript.annotiert.md (+ PDF)
+
+# KI-Analyse
+.venv/bin/audioscribe analyze --list-skills
+.venv/bin/audioscribe analyze output/demo --name "Rechnungsprüfung" --out ~/Analysen \
+    --context-text "Zielgruppe: neue Kollegen" --context glossar.md \
+    --skill prozessrekonstruktion --skill prozessdoku-qs
+.venv/bin/audioscribe analyze output/demo --name "Rechnungsprüfung" --out ~/Analysen \
+    --resume --context-text "Ergänze die Ausnahmefälle"      # Sitzung fortsetzen (experimentell)
+.venv/bin/audioscribe prozessbild ~/Analysen/rechnungspruefung          # Prozessbild neu rendern
+.venv/bin/audioscribe bpmn ~/Analysen/rechnungspruefung [--pruefen|--neu]
+
+# Live (Windows)
+.venv-win\Scripts\audioscribe.exe live --list-devices
+.venv-win\Scripts\audioscribe.exe live --monitor 1 --mic 23
+.venv-win\Scripts\audioscribe.exe refine output\live-…
+
+# Hilfe und Tests
+.venv/bin/audioscribe --help                                 # alle Befehle; <befehl> --help für Optionen
+.venv/bin/python -m pytest                                   # Unit-Tests (reine Logik, keine Modell-Downloads)
+```
+
+---
+
+## Status
+
+Basisstufe gemäß `PRD.md`: eine Datei pro CLI-Aufruf (die Oberfläche arbeitet Ordner
+nacheinander ab), Markdown-Ausgabe mit optionalem PDF, Sprecher als „Sprecher N“ ohne
+Personen-Identifikation. AudioScribe ist die Transkriptions-Basis für die übergeordnete
+Meeting-Protokoll-Pipeline; die Auswertung übernimmt optional der Claude-Agent. Alle
+Anforderungen und Designentscheidungen stehen nummeriert (FR-1 … FR-47) in `PRD.md`.
