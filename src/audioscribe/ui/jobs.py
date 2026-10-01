@@ -19,6 +19,7 @@ Datei kippt nur ihren eigenen Lauf, nicht den ganzen Stapel.
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import subprocess
@@ -263,6 +264,44 @@ def probe_cuda(*, timeout: float = 120.0) -> bool | None:
     if proc.returncode != 0:
         return None
     return proc.stdout.strip().endswith("1")
+
+
+def doctor_argv(python: str | None = None) -> list[str]:
+    """Kommando fuer den Umgebungs-Check als Wegwerf-Prozess (``audioscribe doctor --json``)."""
+    return [python or sys.executable, "-m", "audioscribe.cli", "doctor", "--json"]
+
+
+def probe_environment(*, timeout: float = 300.0) -> list[dict] | None:
+    """``audioscribe doctor --json`` in einem *separaten* Prozess ausfuehren.
+
+    Gleiche Begruendung wie ``probe_cuda``: die Checks importieren torch und pyannote
+    und fragen Hugging Face an - nichts davon gehoert in den Server-Prozess. ``None``
+    heisst: Check nicht ausfuehrbar (Timeout, kaputte Installation); die Oberflaeche
+    zeigt dann einen Hinweis statt einer Liste. Exit-Code 1 ist dagegen normal - er
+    meldet nur, dass mindestens ein Check FAIL ist.
+    """
+    try:
+        proc = subprocess.run(  # noqa: S603 - festes Kommando, keine Nutzereingabe
+            doctor_argv(),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=timeout,
+            env=child_env(),
+        )
+        # Die letzte nicht-leere Zeile ist das JSON; davor koennen Warnungen stehen.
+        zeilen = [z for z in proc.stdout.splitlines() if z.strip()]
+        daten = json.loads(zeilen[-1]) if zeilen else None
+    except Exception:  # noqa: BLE001 - Timeout, kein JSON -> unbekannt
+        return None
+    if not isinstance(daten, list):
+        return None
+    return [
+        {"status": str(d.get("status", "WARN")), "name": str(d.get("name", "?")), "detail": str(d.get("detail", ""))}
+        for d in daten
+        if isinstance(d, dict)
+    ]
 
 
 # --- KI-Analyse (PRD §16) ----------------------------------------------------------

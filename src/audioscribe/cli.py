@@ -147,7 +147,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--version", action="version", version=f"audioscribe {__version__}")
     sub = parser.add_subparsers(dest="command")
 
-    sub.add_parser("doctor", help="Umgebungs-Check (Python/ffmpeg/Device/WhisperX/pyannote)")
+    doctor = sub.add_parser("doctor", help="Umgebungs-Check (Python/ffmpeg/Device/WhisperX/pyannote)")
+    doctor.add_argument("--json", action="store_true", help="Ergebnis als JSON-Liste (fuer die Oberflaeche)")
 
     run = sub.add_parser("run", help="Audio-/Videodatei transkribieren und diarisieren")
     run.add_argument(
@@ -368,7 +369,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "doctor":
         from audioscribe.doctor import run_doctor
 
-        return run_doctor()
+        return run_doctor(as_json=args.json)
 
     if args.command == "run":
         # CLI-Flags -> Umgebungsvariablen, BEVOR die Konfiguration geladen wird.

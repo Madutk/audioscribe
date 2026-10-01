@@ -5,9 +5,11 @@ const empty = (name, text) => `<div class="empty">${icon(name)}${esc(text)}</div
 
 
 let defaults = null;      // /api/defaults
+// Die drei Standardordner - eine Quelle fuer alle Reiter, gepflegt im Reiter "Einstellungen".
+const folders = { input_dir: '', output_dir: '', agent_output_dir: '' };
 let scanned = [];         // zuletzt gescannte Dateien
 let offset = 0;           // gelesene Log-Zeilen
-let dlgTarget = null;     // 'in' | 'out'
+let dlgTarget = null;     // 'in' | 'out' | 'ana'
 let dlgPath = '';         // aktuell im Dialog gezeigter Ordner
 
 async function api(path, opts) {
@@ -83,11 +85,75 @@ async function init() {
     ? 'Pfade aus dem Explorer können direkt eingefügt werden – <code>C:\\Users\\…</code>. ' +
       'WSL-Pfade (<code>/mnt/c/…</code>) werden mit umgesetzt.'
     : 'Windows-Pfade können direkt eingefügt werden – <code>C:\\Users\\…</code> wird zu <code>/mnt/c/Users/…</code>.';
-  $('inDir').value = defaults.input_dir;
-  $('outDir').value = defaults.output_dir;
+  for (const key of Object.keys(folders)) folders[key] = defaults[key] || '';
+  showFolders();
   await scan();
   setInterval(poll, 1000);
   poll();
+}
+
+// --- Einstellungen: Ordner --------------------------------------------------
+
+const FOLDER_FIELDS = { input_dir: 'setIn', output_dir: 'setOut', agent_output_dir: 'setAna' };
+
+/** Felder im Reiter Einstellungen und die Zielhinweise der anderen Reiter nachziehen. */
+function showFolders() {
+  for (const [key, id] of Object.entries(FOLDER_FIELDS)) $(id).value = folders[key];
+  updateTransTarget();
+  updateLiveTarget();
+  if (anaDefaults) updateTarget();
+}
+
+const sep = () => (defaults && defaults.platform === 'windows' ? '\\' : '/');
+const trimSep = (path) => String(path || '').replace(/[\\/]+$/, '');
+const changeLink = () => ' <a class="goto" data-goto="Set" href="#set">ändern</a>';
+
+function updateTransTarget() {
+  $('transTarget').innerHTML = `Eingang: <code>${esc(folders.input_dir)}</code> · Ausgabe: <code>${esc(folders.output_dir)}</code>${changeLink()}`;
+}
+
+/**
+ * Geaenderte Ordner uebernehmen: merken, Dateiliste und Analyse-Quellen neu einlesen,
+ * Zielhinweise aktualisieren. Der Server normalisiert die Pfade (Windows <-> WSL) und
+ * schreibt sie ueber scan() in die Felder zurueck.
+ */
+async function applyFolders() {
+  $('setErr').textContent = '';
+  for (const [key, id] of Object.entries(FOLDER_FIELDS)) folders[key] = $(id).value.trim();
+  try {
+    await post('/api/state', { ...folders });
+  } catch (err) {
+    $('setErr').textContent = err.message;
+  }
+  await scan();
+  showFolders();
+  if (anaDefaults) await loadSources();
+}
+
+// --- Einstellungen: Umgebung ------------------------------------------------
+
+let envLoaded = false;
+
+async function loadEnvironment(refresh = false) {
+  if (envLoaded && !refresh) return;
+  envLoaded = true;
+  $('envRefresh').disabled = true;
+  $('envChecks').innerHTML = `<p class="hint">${icon('loader')} Prüfe die Umgebung … (ein paar Sekunden)</p>`;
+  try {
+    const data = await api('/api/environment' + (refresh ? '?refresh=1' : ''));
+    $('envStamp').textContent = data.checked_at ? `– Stand ${data.checked_at}` : '';
+    $('envChecks').innerHTML = data.checks
+      ? data.checks.map((c) => `<div class="env ${esc(c.status.toLowerCase())}">
+           <span class="badge ${esc(c.status.toLowerCase())}">${esc(c.status)}</span>
+           <span class="name">${esc(c.name)}</span>
+           <span class="detail">${esc(c.detail)}</span></div>`).join('')
+      : empty('alert', 'Umgebungs-Check nicht ausführbar – „audioscribe doctor“ im Terminal versuchen.');
+  } catch (err) {
+    envLoaded = false;
+    $('envChecks').innerHTML = `<p class="err">${esc(err.message)}</p>`;
+  } finally {
+    $('envRefresh').disabled = false;
+  }
 }
 
 /** Die beiden Auswahlfelder sind nur sinnvoll, wenn die Erkennung ueberhaupt laeuft. */
@@ -108,8 +174,6 @@ const remember = () => post('/api/state', {
   frames: $('frames').checked,
   frame_sensitivity: $('frameSens').value,
   frame_format: $('frameFmt').value,
-  input_dir: $('inDir').value,
-  output_dir: $('outDir').value,
   model: $('model').value,
   language: $('language').value,
   device: $('device').value,
@@ -121,10 +185,13 @@ const remember = () => post('/api/state', {
 async function scan() {
   $('pathErr').textContent = '';
   try {
-    const data = await api(`/api/scan?input_dir=${encodeURIComponent($('inDir').value)}`
-      + `&output_dir=${encodeURIComponent($('outDir').value)}`);
-    $('inDir').value = data.input_dir;
-    $('outDir').value = data.output_dir;
+    const data = await api(`/api/scan?input_dir=${encodeURIComponent(folders.input_dir)}`
+      + `&output_dir=${encodeURIComponent(folders.output_dir)}`);
+    folders.input_dir = data.input_dir;
+    folders.output_dir = data.output_dir;
+    $('setIn').value = data.input_dir;
+    $('setOut').value = data.output_dir;
+    updateTransTarget();
     scanned = data.files;
     $('files').innerHTML = data.count
       ? data.files.map((f) => `<div class="file" data-name="${esc(f.name)}">
@@ -138,7 +205,9 @@ async function scan() {
       : empty('file-audio', 'Keine Medien-Dateien in diesem Ordner.');
     updateCount();
   } catch (err) {
+    // Der Fehler gehoert an beide Stellen: in die Dateiliste und zu den Feldern.
     $('pathErr').textContent = err.message;
+    $('setErr').textContent = err.message;
     $('files').innerHTML = empty('folder', 'Eingangsordner wählen …');
     scanned = [];
     updateCount();
@@ -172,8 +241,8 @@ function pick(mode) {
 
 async function openDialog(target) {
   dlgTarget = target;
-  $('dlgTitle').textContent = { in: 'Eingangsordner wählen', out: 'Ausgangsordner wählen',
-                                ana: 'Ausgabeordner der Analyse wählen' }[target];
+  $('dlgTitle').textContent = { in: 'Eingangsordner wählen', out: 'Ausgabeordner Transkription wählen',
+                                ana: 'Ausgabeordner Analysen wählen' }[target];
   $('dlgLinks').innerHTML = defaults.quick_links
     .map((l) => `<a data-path="${esc(l.path)}">${esc(l.label)}</a>`).join('');
   $('overlay').classList.add('open');
@@ -203,8 +272,8 @@ async function start() {
   $('startErr').textContent = '';
   try {
     await post('/api/start', {
-      input_dir: $('inDir').value,
-      output_dir: $('outDir').value,
+      input_dir: folders.input_dir,
+      output_dir: folders.output_dir,
       files: selectedNames(),
       model: $('model').value,
       language: $('language').value,
@@ -274,22 +343,31 @@ async function poll() {
 
 // --- Verdrahtung ------------------------------------------------------------
 
-$('pickIn').onclick = () => openDialog('in');
-$('pickOut').onclick = () => openDialog('out');
+$('pickSetIn').onclick = () => openDialog('in');
+$('pickSetOut').onclick = () => openDialog('out');
+$('pickSetAna').onclick = () => openDialog('ana');
 $('dlgCancel').onclick = () => $('overlay').classList.remove('open');
 $('overlay').onclick = (e) => { if (e.target === $('overlay')) $('overlay').classList.remove('open'); };
-const dlgInput = (target) => $({ in: 'inDir', out: 'outDir', ana: 'anaOut' }[target]);
+const dlgInput = (target) => $({ in: 'setIn', out: 'setOut', ana: 'setAna' }[target]);
 $('dlgOk').onclick = () => {
   dlgInput(dlgTarget).value = dlgPath;
   $('overlay').classList.remove('open');
-  if (dlgTarget === 'ana') updateTarget();
-  else scan().then(remember);
+  applyFolders();
 };
+for (const id of Object.values(FOLDER_FIELDS)) {
+  $(id).onchange = applyFolders;
+}
+$('envRefresh').onclick = () => loadEnvironment(true);
+// "ändern"-Links in den Zielhinweisen springen in die Einstellungen.
+document.addEventListener('click', (e) => {
+  const link = e.target.closest('[data-goto]');
+  if (!link) return;
+  e.preventDefault();
+  history.replaceState(null, '', '#' + link.dataset.goto.toLowerCase());
+  showTab(link.dataset.goto);
+});
 for (const id of ['dlgList', 'dlgCrumbs', 'dlgLinks']) {
   $(id).onclick = (e) => { const p = e.target.closest('[data-path]')?.dataset.path; if (p) showDir(p); };
-}
-for (const id of ['inDir', 'outDir']) {
-  $(id).onchange = () => scan().then(remember);
 }
 for (const id of ['model', 'language', 'device', 'diarize', 'frameSens', 'frameFmt']) {
   $(id).onchange = remember;
@@ -324,17 +402,15 @@ function slugify(text) {
 }
 
 function updateTarget() {
-  const sep = defaults && defaults.platform === 'windows' ? '\\' : '/';
-  const out = $('anaOut').value.replace(/[\\/]+$/, '');
-  $('anaTarget').textContent = $('anaName').value.trim()
-    ? `Ergebnisse landen in: ${out}${sep}${slugify($('anaName').value)}` : '';
+  const name = $('anaName').value.trim();
+  const ziel = `${trimSep(folders.agent_output_dir)}${sep()}${name ? slugify(name) : '<prozessname>'}`;
+  $('anaTarget').innerHTML = `Ergebnisse landen in: <code>${esc(ziel)}</code>${changeLink()}`;
   $('anaStart').disabled = !anaSource || !$('anaName').value.trim() || anaRunning;
 }
 
 async function initAnalyse() {
   anaDefaults = await api('/api/agent/defaults');
   fill($('anaModel'), anaDefaults.models, anaDefaults.model);
-  $('anaOut').value = anaDefaults.output_dir;
   $('anaBash').checked = anaDefaults.bash !== false;
   $('anaSkillsDir').textContent = anaDefaults.skills_dir;
   $('anaSkills').innerHTML = anaDefaults.skills.length
@@ -350,7 +426,7 @@ async function initAnalyse() {
 
 async function loadSources() {
   try {
-    const data = await api('/api/agent/sources?output_dir=' + encodeURIComponent($('outDir').value));
+    const data = await api('/api/agent/sources?output_dir=' + encodeURIComponent(folders.output_dir));
     $('anaSourceDir').textContent = 'Gesucht in: ' + data.output_dir;
     if (!data.sources.some((s) => s.path === anaSource)) anaSource = data.sources[0]?.path || null;
     $('anaSources').innerHTML = data.sources.length
@@ -359,7 +435,7 @@ async function loadSources() {
            <span class="name" title="${esc(s.path)}">${esc(s.name)}</span>
            <span class="badge">${s.frames ? s.frames + ' Bilder' : 'ohne Bilder'}</span>
            ${s.annotated ? '<span class="badge fertig">annotiert</span>' : ''}</label>`).join('')
-      : empty('file-audio', 'Noch keine fertigen Transkriptionen im Ausgangsordner.');
+      : empty('file-audio', 'Noch keine fertigen Transkriptionen im Ausgabeordner.');
   } catch (err) {
     $('anaSources').innerHTML = `<p class="err">${esc(err.message)}</p>`;
     anaSource = null;
@@ -368,7 +444,6 @@ async function loadSources() {
 }
 
 const rememberAnalyse = () => post('/api/state', {
-  agent_output_dir: $('anaOut').value,
   agent_model: $('anaModel').value,
   agent_bash: $('anaBash').checked,
   agent_skills: selectedSkills(),
@@ -382,7 +457,7 @@ async function startAnalyse() {
     await post('/api/agent/start', {
       source: anaSource,
       name: $('anaName').value,
-      output_dir: $('anaOut').value,
+      output_dir: folders.agent_output_dir,
       context_text: $('anaContext').value,
       context_files: $('anaFiles').value.split('\n').map((l) => l.trim()).filter(Boolean),
       skills: selectedSkills(),
@@ -592,8 +667,8 @@ function updateSourceHint() {
 }
 
 function updateLiveTarget() {
-  const sep = defaults && defaults.platform === 'windows' ? '\\' : '/';
-  $('liveTarget').textContent = `Gespeichert wird unter: ${$('outDir').value.replace(/[\\/]+$/, '')}${sep}live-JJJJ-MM-TT_hh-mm-ss`;
+  const ziel = `${trimSep(folders.output_dir)}${sep()}live-JJJJ-MM-TT_hh-mm-ss`;
+  $('liveTarget').innerHTML = `Gespeichert wird unter: <code>${esc(ziel)}</code>${changeLink()}`;
 }
 
 function resetLiveView() {
@@ -641,7 +716,7 @@ async function startLive() {
   $('liveErr').textContent = '';
   try {
     await post('/api/live/start', {
-      output_dir: $('outDir').value,
+      output_dir: folders.output_dir,
       monitor: liveSource.kind === 'monitor' ? liveSource.id : 0,
       window: liveSource.kind === 'window' ? liveSource.id : 0,
       window_label: liveSource.kind === 'window'
@@ -995,6 +1070,7 @@ const TAB_META = {
   Trans: 'Stapelverarbeitung: Ordner wählen, Dateien ankreuzen, transkribieren',
   Live: 'Monitor, System-Audio und Mikrofon mitschneiden – Transkript und Screenshots entstehen live',
   Ana: 'Claude-Agent: Transkription + Standbilder auswerten, Dokumente im Ausgabeordner ablegen',
+  Set: 'Standardordner für alle Reiter und Zustand der Umgebung',
 };
 
 function showTab(name) {
@@ -1006,6 +1082,7 @@ function showTab(name) {
   $('tabMeta').textContent = TAB_META[name];
   if (name === 'Ana') loadSources();
   if (name === 'Live') updateLiveTarget();
+  if (name === 'Set') loadEnvironment();
 }
 
 for (const btn of document.querySelectorAll('.tabs button')) {
@@ -1025,9 +1102,7 @@ $('anaSources').onchange = (e) => {
   }
 };
 $('anaRefresh').onclick = loadSources;
-$('pickAna').onclick = () => openDialog('ana');
 $('anaName').oninput = updateTarget;
-$('anaOut').onchange = () => { updateTarget(); rememberAnalyse(); };
 $('anaModel').onchange = rememberAnalyse;
 $('anaBash').onchange = rememberAnalyse;
 $('anaSkills').onchange = rememberAnalyse;

@@ -112,8 +112,9 @@ Primärformat; PDF wird daraus optional erzeugt).
 ## Browser-Oberfläche: ganze Ordner transkribieren
 
 Wer nicht je Datei einen CLI-Aufruf tippen möchte: `audioscribe ui` startet eine schlanke
-Oberfläche, in der **Eingangs- und Ausgangsordner** gewählt werden. Alle darin gefundenen
-Audio-/Videodateien werden **nacheinander** transkribiert, der Fortschritt läuft live mit.
+Oberfläche. Im Reiter **„Einstellungen“** werden Eingangs- und Ausgabeordner gewählt; alle im
+Eingangsordner gefundenen Audio-/Videodateien werden **nacheinander** transkribiert, der
+Fortschritt läuft live mit.
 Vollständig lokal (nur `localhost`, kein Upload).
 
 ```bash
@@ -131,10 +132,14 @@ uv run --extra cu124 --extra review audioscribe ui --port 9000 --no-browser
 
 **Ablauf in der Oberfläche:**
 
-1. **Eingangs- und Ausgangsordner** wählen – entweder über „Wählen" (Ordner-Browser mit
-   Schnellzielen für Projekt, Home und Windows-Laufwerke) oder direkt ins Textfeld getippt.
-   Die zuletzt benutzten Ordner und Optionen werden **serverseitig gemerkt** und stehen nach
-   einem Neustart wieder da – unabhängig von Browser und Adresse.
+1. Im Reiter **„Einstellungen“** die Ordner wählen – **Eingangsordner**, **Ausgabeordner
+   Transkription** (gemeinsam für Offline- und Live-Transkription) und **Ausgabeordner
+   Analysen** – entweder über „Wählen" (Ordner-Browser mit Schnellzielen für Projekt, Home
+   und Windows-Laufwerke) oder direkt ins Textfeld getippt. Die Ordner und Optionen werden
+   **serverseitig gemerkt** und stehen nach einem Neustart wieder da – unabhängig von
+   Browser und Adresse. Jeder Reiter zeigt seinen Zielordner als Hinweis mit „ändern“.
+   Daneben zeigt die Karte **„Umgebung“** die Zeilen von `audioscribe doctor` (ffmpeg,
+   Gerät, WhisperX, HF-Token, Live-Geräte) direkt in der Oberfläche.
 2. Die **Dateiliste** zeigt alle gefundenen Medien mit Länge und Größe. Jede Datei hat ein
    **Kontrollkästchen**; vorausgewählt sind die noch offenen. Schnellschalter: „Alle",
    „Nur offene", „Keine". Wer eine bereits transkribierte Datei ankreuzt, lässt sie **neu**
@@ -147,13 +152,13 @@ uv run --extra cu124 --extra review audioscribe ui --port 9000 --no-browser
    der nächsten weiter. Am Ende steht eine Zusammenfassung. Das ausführliche **Protokoll** ist
    eingeklappt („Protokoll anzeigen") und öffnet sich von selbst, sobald eine Datei fehlschlägt.
 
-Die Karten sind als Schritte 1–3 nummeriert; die drei Bereiche liegen als Reiter oben
-(auch direkt per Adresse erreichbar: `#trans`, `#live`, `#ana`). Der Knopf rechts im
+Die Karten sind als Schritte nummeriert; die vier Bereiche liegen als Reiter oben
+(auch direkt per Adresse erreichbar: `#trans`, `#live`, `#ana`, `#set`). Der Knopf rechts im
 Kopfbereich schaltet das **Design** um – „System" folgt der Betriebssystem-Einstellung,
 „Hell" und „Dunkel" erzwingen eine Variante. Die Wahl wird wie die anderen Einstellungen
 serverseitig gemerkt und gilt auch für die Review-Oberfläche.
 
-Ergebnisse landen wie gewohnt unter `<Ausgangsordner>/<Dateiname>/transkript.md`. Jede Datei
+Ergebnisse landen wie gewohnt unter `<Ausgabeordner>/<Dateiname>/transkript.md`. Jede Datei
 läuft als eigener `audioscribe run`-Subprozess – der Lauf hängt also **nicht** am Browser-Tab
 und läuft weiter, wenn er geschlossen wird (Beenden per „Abbrechen" oder Strg+C im Terminal).
 
@@ -333,9 +338,9 @@ ausführen) und `--skills-dir` (Default `~/.claude/skills`, rekursiv durchsucht,
 auch die mit claude.ai synchronisierten Skills).
 
 **In der Browser-Oberfläche** (`audioscribe ui`) steht die Analyse im Reiter
-„KI-Analyse“. Dort wählst du eine fertige Transkription aus dem Ausgangsordner, gibst
-Prozessname, Ausgabeordner und Kontext ein (optional mit Kontextdateien) und kreuzt die
-Skills an. Während des Laufs zeigt die Seite den Fortschritt:
+„KI-Analyse“. Dort wählst du eine fertige Transkription aus dem Ausgabeordner, gibst
+Prozessname und Kontext ein (optional mit Kontextdateien) und kreuzt die Skills an. Der
+Ausgabeordner der Analysen kommt aus dem Reiter „Einstellungen“. Während des Laufs zeigt die Seite den Fortschritt:
 - den Plan des Agenten als abhakbare Schrittliste mit Balken („Schritt 3 von 7“)
 - den aktiven Skill
 - wie viele Standbilder er schon angesehen hat
@@ -626,7 +631,7 @@ claude                                               # einmal mit dem Claude-Abo
 **Browser-Oberfläche (Transkription + KI-Analyse)**
 
 ```bash
-.venv/bin/audioscribe ui                   # http://127.0.0.1:8766, Reiter „Offline Transcription“ / „Live Transcription“ / „KI-Analyse“
+.venv/bin/audioscribe ui                   # http://127.0.0.1:8766, Reiter „Offline Transcription“ / „Live Transcription“ / „KI-Analyse“ / „Einstellungen“
 .venv/bin/audioscribe ui --port 9000       # anderer Port
 .venv/bin/audioscribe ui --no-browser      # Browser nicht automatisch öffnen
 ```
@@ -694,7 +699,7 @@ cd ~/develop/git/audioscribe
 .venv/bin/audioscribe ui
 ```
 
-Danach öffnet sich http://127.0.0.1:8766 mit den Reitern „Offline Transcription“, „Live Transcription“ und „KI-Analyse“.
+Danach öffnet sich http://127.0.0.1:8766 mit den Reitern „Offline Transcription“, „Live Transcription“, „KI-Analyse“ und „Einstellungen“ (Ordner und Umgebungs-Check).
 Unter WSL die Adresse notfalls selbst im Windows-Browser öffnen, beenden mit Strg+C.
 
 ```bash

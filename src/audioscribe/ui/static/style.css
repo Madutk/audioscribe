@@ -196,6 +196,19 @@ textarea.small { min-height: 60px; font: 12px/1.5 var(--mono); }
 .skill b { font-weight: 600; }
 .skill .desc { color: var(--fg-muted); font-size: 12px; display: block; line-height: 1.4; }
 
+/* --- Einstellungen: Zielhinweise und Umgebungs-Check -------------------------- */
+.hint.target code { overflow-wrap: anywhere; }
+.hint.target a.goto { color: var(--accent); text-decoration: none; font-weight: 500; margin-left: 2px; }
+.hint.target a.goto:hover { text-decoration: underline; }
+.envlist { display: flex; flex-direction: column; gap: 4px; }
+.env { display: grid; grid-template-columns: auto minmax(90px, 140px) minmax(0, 1fr); gap: 10px; align-items: baseline;
+       padding: 6px var(--s2); border-radius: var(--radius-sm); font-size: 13px; }
+.env:hover { background: var(--surface-2); }
+.env .name { font-weight: 600; }
+.env .detail { color: var(--fg-muted); font-size: 12px; line-height: 1.45; overflow-wrap: anywhere; }
+.env .badge { min-width: 48px; justify-content: center; }
+.tabs button .ic { width: 14px; height: 14px; margin-right: 5px; vertical-align: -2px; }
+
 /* --- Badges, Balken --------------------------------------------------------- */
 .badge { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; padding: 2px 9px 2px 7px;
          border-radius: var(--radius-pill); background: var(--surface-2); color: var(--fg-muted); white-space: nowrap; }
@@ -205,6 +218,9 @@ textarea.small { min-height: 60px; font: 12px/1.5 var(--mono); }
 .badge.laeuft::before { animation: pulse 1.4s ease-in-out infinite; }
 .badge.fehler { background: var(--err-soft); color: var(--err); }
 .badge.abgebrochen { background: var(--warn-soft); color: var(--warn); }
+.badge.ok { background: var(--ok-soft); color: var(--ok); }
+.badge.warn { background: var(--warn-soft); color: var(--warn); }
+.badge.fail { background: var(--err-soft); color: var(--err); }
 .bar { height: 6px; border-radius: var(--radius-pill); background: var(--surface-2); overflow: hidden; }
 .bar > i { display: block; height: 100%; background: var(--accent); width: 0; border-radius: inherit; transition: width .4s linear; }
 .bar.big { height: 10px; }

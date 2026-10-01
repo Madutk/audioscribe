@@ -34,6 +34,24 @@ _CUDA_TTL_S = 120.0
 _cuda_cache: tuple[float, bool | None] | None = None
 
 
+# Umgebungs-Check ('audioscribe doctor --json' als Subprozess): dauert Sekunden (torch-
+# Import, Hugging-Face-Anfrage), darum laenger gecacht; der Reiter hat einen Knopf
+# "Aktualisieren", der den Cache umgeht.
+_ENV_TTL_S = 600.0
+_env_cache: tuple[float, list[dict] | None] | None = None
+
+
+def _environment(*, refresh: bool = False) -> tuple[list[dict] | None, float]:
+    """Ergebnis des Umgebungs-Checks samt Zeitstempel (``time.time``), kurz gecacht."""
+    global _env_cache
+    jetzt = time.monotonic()
+    if not refresh and _env_cache is not None and jetzt - _env_cache[0] < _ENV_TTL_S:
+        return _env_cache[1], time.time() - (jetzt - _env_cache[0])
+    checks = jobs.probe_environment()
+    _env_cache = (time.monotonic(), checks)
+    return checks, time.time()
+
+
 def _cuda() -> bool | None:
     """CUDA-Probe (Wegwerf-Subprozess), kurz gecacht.
 
@@ -168,6 +186,7 @@ def create_app():
     class StateIn(BaseModel):
         input_dir: str | None = None
         output_dir: str | None = None
+        agent_output_dir: str | None = None
         model: str | None = None
         language: str | None = None
         device: str | None = None
@@ -247,11 +266,17 @@ def create_app():
                 "frame_sensitivity": settings.screen_sensitivity,
                 "frame_format": settings.screen_format,
                 "theme": "system",
+                # Die drei Standardordner pflegt der Reiter "Einstellungen"; der
+                # Analyse-Ordner steht darum auch hier, nicht nur in /api/agent/defaults.
+                "agent_output_dir": str(settings.agent_output_dir),
             },
             state.load_state(),
         )
         chosen["input_dir"] = _remembered_dir(chosen["input_dir"], settings.input_dir)
         chosen["output_dir"] = _remembered_dir(chosen["output_dir"], settings.output_dir)
+        chosen["agent_output_dir"] = _remembered_dir(
+            chosen["agent_output_dir"], settings.agent_output_dir
+        )
         return JSONResponse(
             {
                 **chosen,
@@ -320,6 +345,22 @@ def create_app():
         """Zuletzt benutzte Ordner/Optionen merken (einzige Speicherstelle)."""
         state.save_state({k: v for k, v in body.model_dump().items() if v is not None})
         return JSONResponse({"ok": True})
+
+    @app.get("/api/environment")
+    def api_environment(refresh: bool = Query(False)):
+        """Karte "Umgebung" im Reiter Einstellungen: die Zeilen von ``audioscribe doctor``.
+
+        Laeuft synchron im Threadpool von FastAPI - die Status-Abfragen der anderen
+        Reiter laufen derweil weiter. ``checks`` ist ``null``, wenn der Check selbst
+        nicht ausfuehrbar war.
+        """
+        checks, stamp = _environment(refresh=refresh)
+        return JSONResponse(
+            {
+                "checks": checks,
+                "checked_at": time.strftime("%H:%M:%S", time.localtime(stamp)),
+            }
+        )
 
     @app.post("/api/start")
     def api_start(body: StartIn):

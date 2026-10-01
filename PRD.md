@@ -445,7 +445,7 @@ eine Auswahl an Skills. Abgerechnet wird über das **Claude-Abo** des Nutzers.
 | FR-30 | Freier **Kontext** als Text (`--context-text`) und/oder als Dateien (`--context`, mehrfach). Kleine Textdateien werden direkt übergeben, andere Formate liegen dem Agenten als Datei vor. |
 | FR-31 | **Skills** werden aus einem wählbaren Ordner (`--skills-dir`, Default `~/.claude/skills`, rekursiv) bereitgestellt: `--skill` mehrfach, Vorauswahl über `AUDIOSCRIBE_AGENT_SKILLS`, `--no-skills`, Liste mit `--list-skills`. |
 | FR-32 | Der Agent schließt mit `INDEX.md` ab (Dokumente, Zweck, offene Punkte, Annahmen). `analyse.json` protokolliert Status, Skills, Modell, Session-ID, Dauer und rechnerische Kosten, `agent-log.txt` den Verlauf. |
-| FR-33 | Die Browser-Oberfläche bietet einen Reiter „KI-Analyse“ mit Quellenauswahl, Prozessname, Ausgabeordner, Kontext, Kontextdateien, Skills, Modell, Live-Protokoll und Abbruch. Ausgabeordner, Modell und Skill-Auswahl werden gemerkt. Der Fortschritt wird aus den Werkzeugaufrufen abgeleitet, nicht geschätzt: Plan des Agenten (TaskCreate/TaskUpdate bzw. TodoWrite) als Schrittliste mit Balken, aktiver Skill, angesehene Standbilder und geschriebene Dokumente. Der Token-Gegenwert in USD wird nicht angezeigt, weil bei Abo-Anmeldung nichts abgerechnet wird. |
+| FR-33 | Die Browser-Oberfläche bietet einen Reiter „KI-Analyse“ mit Quellenauswahl, Prozessname, Kontext, Kontextdateien, Skills, Modell, Live-Protokoll und Abbruch. Der Ausgabeordner kommt aus dem Reiter „Einstellungen“ (FR-47) und wird als Zielhinweis angezeigt; Modell und Skill-Auswahl werden gemerkt. Der Fortschritt wird aus den Werkzeugaufrufen abgeleitet, nicht geschätzt: Plan des Agenten (TaskCreate/TaskUpdate bzw. TodoWrite) als Schrittliste mit Balken, aktiver Skill, angesehene Standbilder und geschriebene Dokumente. Der Token-Gegenwert in USD wird nicht angezeigt, weil bei Abo-Anmeldung nichts abgerechnet wird. |
 | FR-34 | `audioscribe doctor` prüft SDK, Claude Code und Skill-Ordner und warnt, wenn `ANTHROPIC_API_KEY` die Abo-Abrechnung übersteuert. |
 | FR-35 | Enthält die Prozessdoku ein Mermaid-Diagramm, entstehen daraus `prozessbild.png` und `prozessbild.svg`. Die Quelle `prozessbild.mmd` schreibt der Agent; fehlt sie, übernimmt audioscribe den ersten Mermaid-Block aus den Dokumenten. Gerendert wird über den vorhandenen Edge oder Chrome headless (unter WSL die Windows-Exe) mit lokal mitgelieferter Mermaid-Bibliothek, ohne Playwright und ohne zusätzlichen Download. Fehler beim Rendern werden protokolliert und brechen die Analyse nicht ab. `audioscribe prozessbild ORDNER` rendert nach einer Handkorrektur neu, `--no-prozessbild` bzw. `AUDIOSCRIBE_AGENT_PROZESSBILD=0` schaltet die Bilder ab. |
 | FR-36 | Zusätzlich entsteht ein BPMN-2.0-Modell mit Lanes (`bpmn-modell.bpmn`, bearbeitbar in Camunda Modeler, bpmn.io, Signavio …) samt PNG/SVG. Der Agent liefert nur die Fachlogik (`bpmn-modell.json`: Lanes, Knoten mit denselben S-/E-Nummern wie Doku und Prozessbild, Flüsse) und prüft sie mit `audioscribe bpmn . --pruefen`. Lanes sind Rollen, wenn mehrere Beteiligte erkennbar sind, sonst Systeme, mit Begründung in der Doku. Layout, XML (inkl. DI) und Bild erzeugt audioscribe selbst: kein `bpmn-auto-layout` (keine Lanes), kein bpmn-js zum Zeichnen (Wasserzeichen-Pflicht). Eine in einem Werkzeug bearbeitete `.bpmn` (fremder `exporter`) wird nur mit `--neu` überschrieben. Fehler werden protokolliert und brechen die Analyse nicht ab. |
@@ -557,7 +557,7 @@ Compliance-Anforderungen.
 | FR-41 | Bildwechsel auf dem gewählten Monitor werden erkannt und als Standbild nach `frames/` gesichert, mit Startbild bei 0 s. Empfindlichkeit und Bildformat wie FR-24/FR-26. |
 | FR-42 | Die Sitzung landet in `<output>/live-JJJJ-MM-TT_hh-mm-ss/` im Format eines Offline-Laufs (`transkript.md`, `transcript.json`, `marks.json`, `frames/`, `transkript.annotiert.md`) plus `audio/mikrofon.wav` und `audio/system.wav` (16 kHz mono). Geschrieben wird alle 30 s und beim Stopp. |
 | FR-43 | `audioscribe refine ORDNER` schärft eine Sitzung nach: je Spur Transkription und Alignment, Diarisierung nur auf der System-Spur. Die Live-Fassung bleibt als `transkript.live.md`/`transcript.live.json` erhalten. |
-| FR-44 | Die Oberfläche bekommt den Reiter „Live Transcription“ mit Monitorwahl samt Vorschau, Gerätewahl, Start/Stopp, laufendem Transkript, Verzögerungsanzeige, Pegeln und einer Thumbnail-Leiste mit Großansicht. Der bisherige Reiter „Transkription“ heißt „Offline Transcription“. |
+| FR-44 | Die Oberfläche bekommt den Reiter „Live Transcription“ mit Monitorwahl samt Vorschau, Gerätewahl, Start/Stopp, laufendem Transkript, Verzögerungsanzeige, Pegeln und einer Thumbnail-Leiste mit Großansicht. Der bisherige Reiter „Transkription“ heißt „Offline Transcription“. Der Ausgabeordner der Sitzung ist der gemeinsame Ausgabeordner Transkription aus dem Reiter „Einstellungen“ (FR-47) und wird als Zielhinweis `<output>/live-…` angezeigt. |
 | FR-45 | `audioscribe doctor` prüft Plattform, Audio-Geräte (inkl. Loopback) und Monitore. |
 | FR-46 | Jede Live-Sitzung und jedes Nachschärfen hinterlassen ein Fazit: Ladezeit der Modelle, Aufnahmedauer, Rechenzeit und Tempo (Rechenzeit je Audiosekunde), Verzögerung Ø/Median/max, Abschnitte (davon zusammengelegt), Zeit im Aufholmodus bzw. Dauer je Stufe. Es steht als `bilanz.json` im Sitzungsordner, als Zeile im Protokoll und als Kasten „Fazit“ im Reiter. |
 
@@ -584,3 +584,37 @@ Compliance-Anforderungen.
 - [ ] Der Sitzungsordner erscheint im Reiter „KI-Analyse“ als Quelle.
 - [ ] `refine` ersetzt das Transkript, die Live-Fassung und die Bilder bleiben erhalten.
 - [ ] Rein auf CPU läuft die Sitzung durch; die Anzeige weist den Rückstand aus.
+
+## 18. Ausbaustufe: Reiter „Einstellungen“
+
+### 18.1 Ziel
+
+Die drei Standardordner der Oberfläche liegen an **einer** Stelle statt verteilt über die
+Reiter. Bisher nahm der Live-Reiter stillschweigend den Ausgangsordner des Offline-Reiters,
+und die KI-Analyse suchte ihre Quellen dort, hatte aber ein eigenes Ausgabefeld. Dazu
+kommt eine Sichtprüfung der Umgebung, damit niemand erst ins Terminal muss, um zu sehen,
+warum die Diarisierung oder die GPU nicht läuft.
+
+### 18.2 Designentscheidungen (festgelegt)
+
+- **Ein Ausgabeordner Transkription für Offline und Live.** Live-Sitzungen landen
+  weiter als `live-JJJJ-MM-TT_hh-mm-ss/` neben den Offline-Ergebnissen (FR-42); die
+  KI-Analyse findet beides ohne zweite Suche.
+- **Modell, Sprache, Gerät bleiben Job-Optionen** in den Reitern – sie wechseln je Lauf.
+- **Umgebungs-Check als Subprozess.** `audioscribe doctor --json` läuft als Wegwerf-
+  Prozess, weil torch/pyannote nicht in den Server gehören (VRAM, siehe §14). Das
+  Ergebnis wird gecacht; „Aktualisieren“ erzwingt einen neuen Lauf.
+
+### 18.3 Funktionale Anforderungen
+
+| ID | Anforderung |
+|----|-------------|
+| FR-47 | Die Oberfläche bekommt den Reiter „Einstellungen“ mit **Eingangsordner**, **Ausgabeordner Transkription** (gemeinsam für Offline und Live) und **Ausgabeordner Analysen**, je mit Ordner-Browser. Änderungen gelten sofort für alle Reiter und werden serverseitig gemerkt. Die Reiter Offline, Live und KI-Analyse zeigen ihren Zielordner nur noch als Hinweis mit Sprung „ändern“ in die Einstellungen. Eine Karte „Umgebung“ zeigt die Zeilen von `audioscribe doctor` (Status OK/WARN/FAIL, Name, Detail) mit Zeitstempel und „Aktualisieren“. `audioscribe doctor --json` gibt dieselben Zeilen als JSON-Liste aus; ein geplatzter Einzelcheck erscheint dort als FAIL-Zeile. |
+
+### 18.4 Akzeptanzkriterien
+
+- [ ] Ausgabeordner in den Einstellungen ändern: Offline-Dateiliste, Live-Zielhinweis und
+      Analyse-Quellen wechseln ohne Neuladen mit; nach einem Neustart stehen die Werte
+      wieder da.
+- [ ] Eine Live-Sitzung landet im gewählten Ausgabeordner Transkription.
+- [ ] Die Karte „Umgebung“ zeigt dieselben Zeilen wie `audioscribe doctor` im Terminal.

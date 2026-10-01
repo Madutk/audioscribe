@@ -672,3 +672,124 @@ def test_static_assets(ui_client):
     assert ui_client.get("/static/app.js").status_code == 200
     assert ui_client.get("/static/server.py").status_code == 404
     assert ui_client.get("/static/..%2Fserver.py").status_code == 404
+
+
+# --- Reiter "Einstellungen": Standardordner und Umgebungs-Check (FR-47) ---
+
+
+def test_defaults_liefern_analyse_ordner_und_state_merkt_ihn(ui_client, tmp_path):
+    ziel = tmp_path / "analysen"
+    ziel.mkdir()
+    assert ui_client.post("/api/state", json={"agent_output_dir": str(ziel)}).status_code == 200
+    data = ui_client.get("/api/defaults").json()
+    assert Path(data["agent_output_dir"]) == ziel
+    # Dieselbe Quelle wie der Reiter KI-Analyse
+    assert Path(ui_client.get("/api/agent/defaults").json()["output_dir"]) == ziel
+
+
+def test_defaults_verwerfen_fremden_analyse_ordner(ui_client, tmp_path):
+    from audioscribe.config import settings
+
+    ui_client.post("/api/state", json={"agent_output_dir": str(tmp_path / "weg" / "ganz" / "weg")})
+    data = ui_client.get("/api/defaults").json()
+    assert data["agent_output_dir"] == str(settings.agent_output_dir)
+
+
+def test_index_hat_einstellungen_reiter_ohne_alte_ordnerfelder(ui_client):
+    html = ui_client.get("/").text
+    assert 'id="tabSet"' in html and 'data-tab="Set"' in html
+    for feld in ("setIn", "setOut", "setAna", "envChecks", "transTarget", "liveTarget", "anaTarget"):
+        assert f'id="{feld}"' in html
+    for alt in ("inDir", "outDir", "anaOut", "pickIn", "pickOut", "pickAna"):
+        assert f'id="{alt}"' not in html
+
+
+def test_doctor_argv_ruft_json_modus():
+    from audioscribe.ui.jobs import doctor_argv
+
+    argv = doctor_argv("python")
+    assert argv[0] == "python" and argv[-2:] == ["doctor", "--json"]
+    assert "audioscribe.cli" in argv
+
+
+def test_probe_environment_liest_letzte_json_zeile(monkeypatch):
+    from audioscribe.ui import jobs
+
+    class Proc:
+        returncode = 1  # ein FAIL ist normal, kein Abbruch
+        stdout = 'Warnung: irgendwas\n[{"status": "FAIL", "name": "ffmpeg", "detail": "fehlt"}, {"name": "x"}]\n'
+
+    monkeypatch.setattr(jobs.subprocess, "run", lambda *a, **k: Proc())
+    checks = jobs.probe_environment()
+    assert checks == [
+        {"status": "FAIL", "name": "ffmpeg", "detail": "fehlt"},
+        {"status": "WARN", "name": "x", "detail": ""},
+    ]
+
+
+def test_probe_environment_ohne_json_ist_unbekannt(monkeypatch):
+    from audioscribe.ui import jobs
+
+    class Proc:
+        returncode = 0
+        stdout = "kein json\n"
+
+    monkeypatch.setattr(jobs.subprocess, "run", lambda *a, **k: Proc())
+    assert jobs.probe_environment() is None
+    monkeypatch.setattr(jobs.subprocess, "run", lambda *a, **k: (_ for _ in ()).throw(subprocess.TimeoutExpired("x", 1)))
+    assert jobs.probe_environment() is None
+
+
+def test_environment_route_cacht_und_refresh_umgeht(ui_client, monkeypatch):
+    from audioscribe.ui import server
+
+    proben = []
+    monkeypatch.setattr(
+        server.jobs, "probe_environment",
+        lambda: (proben.append(1), [{"status": "OK", "name": "Python", "detail": str(len(proben))}])[1],
+    )
+    monkeypatch.setattr(server, "_env_cache", None)
+
+    erste = ui_client.get("/api/environment").json()
+    assert erste["checks"][0]["name"] == "Python" and erste["checked_at"]
+    zweite = ui_client.get("/api/environment").json()
+    assert zweite["checks"] == erste["checks"] and len(proben) == 1
+    dritte = ui_client.get("/api/environment?refresh=1").json()
+    assert dritte["checks"][0]["detail"] == "2" and len(proben) == 2
+
+
+def test_environment_route_meldet_unbekannt(ui_client, monkeypatch):
+    from audioscribe.ui import server
+
+    monkeypatch.setattr(server.jobs, "probe_environment", lambda: None)
+    monkeypatch.setattr(server, "_env_cache", None)
+    assert ui_client.get("/api/environment").json()["checks"] is None
+
+
+def test_run_doctor_json_gibt_liste_aus(monkeypatch, capsys):
+    from audioscribe import doctor
+
+    def kaputt():
+        raise RuntimeError("peng")
+
+    kaputt.__name__ = "_check_kaputt"
+    monkeypatch.setattr(
+        doctor, "CHECKS",
+        (lambda: doctor.CheckResult("OK", "Python", "3.12"), kaputt),
+    )
+    code = doctor.run_doctor(as_json=True)
+    import json
+
+    zeilen = json.loads(capsys.readouterr().out.strip())
+    assert code == 1
+    assert zeilen[0] == {"status": "OK", "name": "Python", "detail": "3.12"}
+    assert zeilen[1]["status"] == "FAIL" and zeilen[1]["name"] == "kaputt" and "peng" in zeilen[1]["detail"]
+
+
+def test_cli_doctor_kennt_json_flag():
+    proc = subprocess.run(
+        [sys.executable, "-m", "audioscribe.cli", "doctor", "--help"],
+        capture_output=True,
+        text=True,
+    )
+    assert proc.returncode == 0 and "--json" in proc.stdout

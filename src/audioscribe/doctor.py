@@ -1,4 +1,4 @@
-"""Umgebungs-Check. Aufruf: ``audioscribe doctor``.
+"""Umgebungs-Check. Aufruf: ``audioscribe doctor`` (``--json`` fuer Maschinen).
 
 Jeder Check liefert (Status, Name, Detail); Status ist OK / WARN / FAIL.
 Exit-Code 0, wenn kein FAIL auftritt.
@@ -6,10 +6,11 @@ Exit-Code 0, wenn kein FAIL auftritt.
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import sys
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Literal
 
@@ -265,8 +266,26 @@ CHECKS = (
 _ICON = {"OK": "[ OK ]", "WARN": "[WARN]", "FAIL": "[FAIL]"}
 
 
-def run_doctor() -> int:
-    results = [check() for check in CHECKS]
+def _safe(check) -> CheckResult:
+    try:
+        return check()
+    except Exception as exc:  # noqa: BLE001 - ein Check darf die anderen nicht mitreissen
+        name = check.__name__.removeprefix("_check_")
+        return CheckResult("FAIL", name, f"Pruefung abgebrochen: {type(exc).__name__}: {exc}")
+
+
+def run_doctor(*, as_json: bool = False) -> int:
+    """Alle Checks ausfuehren; ``as_json`` gibt sie als Liste von Objekten aus.
+
+    Die JSON-Form liest die Browser-Oberflaeche (Karte "Umgebung" im Reiter
+    Einstellungen) aus einem Wegwerf-Subprozess - torch/pyannote bleiben so aus dem
+    Server-Prozess heraus. Ein einzelner geplatzter Check wird dort als FAIL-Zeile
+    gemeldet statt die ganze Liste zu verlieren.
+    """
+    results = [_safe(check) for check in CHECKS] if as_json else [check() for check in CHECKS]
+    if as_json:
+        print(json.dumps([asdict(r) for r in results], ensure_ascii=False))
+        return 1 if any(r.status == "FAIL" for r in results) else 0
     print("audioscribe - Umgebungs-Check\n" + "=" * 60)
     worst = 0
     for r in results:
