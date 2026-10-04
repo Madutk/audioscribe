@@ -42,3 +42,6 @@ analysen/
 .vscode/
 Thumbs.db
 desktop.ini
+
+# lokale Diagnose-Skripte und Rauchtest-Logs
+.tmp_diag/

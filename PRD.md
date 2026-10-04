@@ -7,7 +7,6 @@
 | **Status** | Entwurf |
 | **Datum** | 2026-06-30 |
 | **Autor** | Marek (madutkow@googlemail.com) |
-| **Projektordner** | `C:\Users\user\develop\git\audioscribe` |
 
 ---
 
