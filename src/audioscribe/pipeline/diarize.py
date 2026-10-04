@@ -92,6 +92,40 @@ def make_progress_hook(
     return hook
 
 
+def _ladefehler_meldung(status: str, detail: str, hint: str = "") -> str:
+    """Nutzermeldung fuer ein fehlgeschlagenes Laden des Diarisierungsmodells (rein, testbar).
+
+    ``UNPRUEFBAR`` (kein Netz, Proxy, huggingface_hub fehlt) braucht einen eigenen Zweig:
+    sonst hiesse es "Token gueltig, Bedingungen akzeptieren", obwohl schlicht Hugging Face
+    nicht erreichbar ist.
+    """
+    from audioscribe.hf import TOKENS_URL
+
+    if status in ("FEHLT", "UNGUELTIG"):
+        return (
+            f"Diarisierungsmodell konnte nicht geladen werden: {detail}\n"
+            f"Neuen Token erstellen ({TOKENS_URL}, Rolle 'read'), in die .env eintragen "
+            "und mit 'audioscribe doctor' pruefen. "
+            "Alternativ ohne Sprecher-Trennung: '--no-diarize'." + hint
+        )
+    if status == "UNPRUEFBAR":
+        return (
+            "Diarisierungsmodell konnte nicht geladen werden - Hugging Face ist nicht "
+            f"erreichbar oder der Token nicht pruefbar ({detail}). Netzwerk/Proxy pruefen "
+            "und mit 'audioscribe doctor' gegenchecken. "
+            "Alternativ ohne Sprecher-Trennung: '--no-diarize'." + hint
+        )
+    return (
+        "Diarisierungsmodell konnte nicht geladen werden - der HF_TOKEN ist gueltig, also "
+        "sind die Modell-Bedingungen noch nicht (vollstaendig) akzeptiert. BEIDE Seiten "
+        "muessen EINGELOGGT akzeptiert werden:\n"
+        "  https://huggingface.co/pyannote/speaker-diarization-3.1\n"
+        "  https://huggingface.co/pyannote/segmentation-3.0\n"
+        "Status pruefen mit 'audioscribe doctor'. Alternativ ohne Sprecher-Trennung: '--no-diarize'."
+        + hint
+    )
+
+
 def diarize(audio, result: dict, reporter: Reporter | None = None) -> dict:
     """Weist Sprecher zu und liefert das angereicherte Result-Dict zurueck."""
     if not result.get("segments"):
@@ -132,25 +166,10 @@ def diarize(audio, result: dict, reporter: Reporter | None = None) -> dict:
         # Ein abgelehnter Token sieht fuer Hugging Face aus wie ein anonymer Zugriff, das
         # gesperrte Repo meldet dann ebenfalls "gated". Erst nachfragen, dann anleiten -
         # sonst klickt der Nutzer 'Agree', obwohl sein Token widerrufen ist.
-        from audioscribe.hf import TOKENS_URL, token_status
+        from audioscribe.hf import token_status
 
         status, detail = token_status(settings.hf_token)
-        if status in ("FEHLT", "UNGUELTIG"):
-            raise RuntimeError(
-                f"Diarisierungsmodell konnte nicht geladen werden: {detail}\n"
-                f"Neuen Token erstellen ({TOKENS_URL}, Rolle 'read'), in die .env eintragen "
-                "und mit 'audioscribe doctor' pruefen. "
-                "Alternativ ohne Sprecher-Trennung: '--no-diarize'." + hint
-            )
-        raise RuntimeError(
-            "Diarisierungsmodell konnte nicht geladen werden - der HF_TOKEN ist gueltig, also "
-            "sind die Modell-Bedingungen noch nicht (vollstaendig) akzeptiert. BEIDE Seiten "
-            "muessen EINGELOGGT akzeptiert werden:\n"
-            "  https://huggingface.co/pyannote/speaker-diarization-3.1\n"
-            "  https://huggingface.co/pyannote/segmentation-3.0\n"
-            "Status pruefen mit 'audioscribe doctor'. Alternativ ohne Sprecher-Trennung: '--no-diarize'."
-            + hint
-        )
+        raise RuntimeError(_ladefehler_meldung(status, detail, hint))
 
     assign_word_speakers = _assign_word_speakers()
 

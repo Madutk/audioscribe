@@ -340,7 +340,9 @@ def capture_screens(
     """Erkennt Bildwechsel, sichert je einen Screenshot und schreibt ``marks.json``.
 
     Liefert die neu erzeugten Marks. Bereits vorhandene manuelle Markierungen bleiben
-    erhalten, automatische aus frueheren Laeufen werden samt Bilddatei ersetzt.
+    erhalten, automatische aus frueheren Laeufen werden samt Bilddatei ersetzt - auch
+    dann, wenn dieser Lauf gar keine Wechsel findet (sonst blieben Bilder eines frueheren
+    Laufs stehen, die zum neuen Transkript nicht mehr passen).
     """
     out_dir = Path(out_dir)
     ffmpeg = _ffmpeg_exe()
@@ -355,6 +357,11 @@ def capture_screens(
         reporter=reporter,
     )
     if not zeitpunkte:
+        vorhandene = load_marks(out_dir)
+        # Nur schreiben, wenn es etwas aufzuraeumen gibt - kein leeres marks.json anlegen.
+        if any(m.kind == KIND_AUTO for m in vorhandene):
+            _alte_bilder_loeschen(out_dir, vorhandene)
+            save_marks(out_dir, merge_marks(vorhandene, []))
         return []
 
     suffix, max_breite, qualitaet = FORMATS.get(bildformat, FORMATS[DEFAULT_FORMAT])

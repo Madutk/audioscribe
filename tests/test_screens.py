@@ -211,3 +211,28 @@ def test_ids_bleiben_ueber_mehrere_laeufe_stabil(tmp_path):
     start_id = max((m.id or 0) for m in behalten) + 1 if behalten else 1
 
     assert start_id == 1  # nicht 3 - sonst wandern die Nummern bei jedem Lauf hoch
+
+
+def test_lauf_ohne_treffer_raeumt_alte_auto_bilder_ab(tmp_path, monkeypatch):
+    """Zweiter Lauf findet nichts: alte Auto-Bilder duerfen nicht stehen bleiben."""
+    (tmp_path / "frames").mkdir()
+    alt_bild = tmp_path / "frames" / "0001_00-00-20.jpg"
+    alt_bild.write_bytes(b"jpg")
+    manuell = Mark(t=10.0, png="frames/00-00-10.png", note="wichtig")
+    alt_auto = Mark(t=20.0, png="frames/0001_00-00-20.jpg", id=1, kind=screens.KIND_AUTO)
+    save_marks(tmp_path, [manuell, alt_auto])
+
+    monkeypatch.setattr(screens, "_ffmpeg_exe", lambda: "ffmpeg")
+    monkeypatch.setattr(screens, "detect_changes", lambda *a, **k: [])
+
+    assert screens.capture_screens("v.mp4", tmp_path) == []
+    assert not alt_bild.exists()
+    assert [m.png for m in load_marks(tmp_path)] == ["frames/00-00-10.png"]
+
+
+def test_lauf_ohne_treffer_legt_kein_marks_json_an(tmp_path, monkeypatch):
+    monkeypatch.setattr(screens, "_ffmpeg_exe", lambda: "ffmpeg")
+    monkeypatch.setattr(screens, "detect_changes", lambda *a, **k: [])
+
+    assert screens.capture_screens("v.mp4", tmp_path) == []
+    assert not (tmp_path / "marks.json").exists()
