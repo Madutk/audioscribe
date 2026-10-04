@@ -1,7 +1,7 @@
 [project]
 name = "audioscribe"
 version = "0.1.0"
-description = "Lokale Audio-Transkription mit Sprecher-Diarisierung (WhisperX: faster-whisper large-v3 + wav2vec2-Alignment + pyannote). Vollstaendig lokal, CUDA oder CPU."
+description = "Lokale Audio-Transkription mit Sprecher-Diarisierung (WhisperX: faster-whisper large-v3 + wav2vec2-Alignment + pyannote). Vollstaendig lokal: CUDA, Apple Silicon (MPS/MLX) oder CPU."
 readme = "README.md"
 authors = [{ name = "Marek", email = "madutkow@googlemail.com" }]
 # Python auf 3.12 gepinnt: maximale Kompatibilitaet des ML-Stacks (whisperx / pyannote.audio 3.1).
@@ -47,8 +47,9 @@ agent = [
     "claude-agent-sdk>=0.2.156",
 ]
 
-# Live-Transkription ('audioscribe live', PRD §17): WASAPI-Loopback + Mikrofon und
-# Bildschirmabgriff. Nur natives Windows - unter WSL/Linux bleibt das Extra wirkungslos.
+# Live-Transkription ('audioscribe live', PRD §17): System-Audio + Mikrofon und
+# Bildschirmabgriff. Windows (WASAPI-Loopback) und macOS (zusammen mit 'mac') -
+# unter WSL/Linux bleibt nur das WAV-Replay.
 # Installation: uv sync --extra cu124 --extra review --extra live
 live = [
     "PyAudioWPatch>=0.2.12; sys_platform == 'win32'",
@@ -56,6 +57,24 @@ live = [
     "numpy",
     "scipy",
     "pillow",
+]
+
+# macOS auf Apple Silicon (PRD §19): mlx-whisper als schnelles ASR-Backend (Metal),
+# sounddevice (buendelt PortAudio) fuers Mikrofon, PyObjC-Bruecken fuer ScreenCaptureKit
+# (System-Audio), Quartz (Fenster, Berechtigungen) und AVFoundation (Mikrofon-Freigabe).
+# Alle Pakete tragen Plattform-Marker: unter Linux/Windows bleibt das Extra wirkungslos.
+# torch kommt weiter aus 'cpu' - das arm64-Wheel enthaelt MPS.
+# Installation: uv sync --extra cpu --extra mac --extra review --extra agent --extra live
+mac = [
+    "mlx-whisper>=0.4; sys_platform == 'darwin' and platform_machine == 'arm64'",
+    "sounddevice>=0.5; sys_platform == 'darwin'",
+    "pyobjc-core>=10.3; sys_platform == 'darwin'",
+    "pyobjc-framework-Cocoa>=10.3; sys_platform == 'darwin'",
+    "pyobjc-framework-ScreenCaptureKit>=10.3; sys_platform == 'darwin'",
+    "pyobjc-framework-CoreMedia>=10.3; sys_platform == 'darwin'",
+    "pyobjc-framework-Quartz>=10.3; sys_platform == 'darwin'",
+    "pyobjc-framework-AVFoundation>=10.3; sys_platform == 'darwin'",
+    "pyobjc-framework-libdispatch>=10.3; sys_platform == 'darwin'",
 ]
 
 [project.scripts]
@@ -80,6 +99,11 @@ packages = ["src/audioscribe"]
 conflicts = [
     [
         { extra = "cpu" },
+        { extra = "cu124" },
+    ],
+    # CUDA-Wheels gibt es nicht fuer macOS; die Kombination ist immer ein Irrtum.
+    [
+        { extra = "mac" },
         { extra = "cu124" },
     ],
 ]

@@ -1,6 +1,7 @@
 # Python / uv
 .venv/
 .venv-win/
+.venv-mac/
 __pycache__/
 *.py[cod]
 *.egg-info/
