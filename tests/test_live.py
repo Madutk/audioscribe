@@ -1,6 +1,7 @@
 """Live-Transkription (PRD §17): reine Bausteine ohne Audio-Hardware und ohne Modelle."""
 
 import json
+from pathlib import Path
 import sys
 import threading
 from types import SimpleNamespace
@@ -22,7 +23,7 @@ from audioscribe.live.speakers import (
     OnlineClusterer,
     SpeakerLabeler,
 )
-from audioscribe.live.store import keep_live_copy, session_name, write_transcript
+from audioscribe.live.store import MIC_WAV, SYSTEM_WAV, keep_live_copy, session_name, write_transcript
 from audioscribe.live.track import SAMPLE_RATE, Resampler, Track, load_wav
 from audioscribe.models import Segment
 
@@ -229,6 +230,22 @@ def test_board_coalesces_waiting_finals_of_same_track():
     assert board.backlog_s() == 0.0  # in Arbeit heisst nicht wartend
     board.done(job)
     assert board.get(0) is None and board.backlog_s() == 0.0
+
+
+def test_board_coalesces_only_above_catchup_threshold():
+    # Kurzer Rückstand: einzeln lassen, sonst teilen sich zwei Sprecher ein Label.
+    board = JobBoard(coalesce_s=25.0, catchup_s=5.0)
+    board.put_final(Job("system", utt_at(0.0, 1), final=True))
+    board.put_final(Job("system", utt_at(1.5, 1), final=True))
+    job = board.get(0)
+    assert job.parts == 1 and job.utterance.end_s == 1.0
+    board.done(job)
+    board.done(board.get(0))
+    # Über der Schwelle wartend: zusammenlegen.
+    for start in (10.0, 13.5, 17.0):
+        board.put_final(Job("system", utt_at(start, 3), final=True))
+    job = board.get(0)
+    assert job.parts == 3
 
 
 def test_board_backlog_excludes_active_but_wait_idle_waits_for_it():
@@ -470,7 +487,8 @@ def test_do_final_writes_diagnose_record(tmp_path, monkeypatch):
     from audioscribe.live.asr import Ergebnis, SegmentInfo
 
     monkeypatch.setattr(events, "emit", lambda typ, **d: None)
-    session = make_session(tmp_path, coalesce_s=25.0)
+    # catchup_s=0: schon ein wartender Abschnitt gilt als Rückstand, damit zusammengelegt wird.
+    session = make_session(tmp_path, coalesce_s=25.0, catchup_s=0.0)
     session._asr.antwort = Ergebnis("eins zwei drei", (SegmentInfo(-0.3, 1.2, 0.01, 0.2),))
     board = session._board
     a = Utterance(SR, 3 * SR, speech(2), schluss="zeitlimit")
@@ -1004,6 +1022,20 @@ def test_screen_watcher_reports_missing_source(tmp_path):
     assert marks == [] and log == ["Monitor 7 gibt es nicht - keine Standbilder"]
 
 
+def test_screen_watcher_reports_missing_mss(tmp_path):
+    from audioscribe.live.screen import MSS_FEHLT
+
+    class OhneMss:
+        def __enter__(self):
+            raise ImportError("No module named 'mss'")  # mss lädt erst im Thread
+
+        def __exit__(self, *exc):
+            return None
+
+    marks, log = run_watcher(tmp_path, OhneMss())
+    assert marks == [] and log == [MSS_FEHLT]
+
+
 def test_window_source_region_clips_to_virtual_screen(monkeypatch):
     from audioscribe.live.screen import WindowSource
 
@@ -1042,6 +1074,19 @@ def test_session_folder_is_a_valid_analysis_source(tmp_path):
 
     assert find_transcript(session).name == "transkript.annotiert.md"
     assert [r["name"] for r in scan_results(tmp_path)] == [session.name]
+
+
+def test_transcript_source_path_points_to_existing_track(tmp_path):
+    seg = [Segment(0.0, 1.0, "Hallo.", ICH)]
+    (tmp_path / "audio").mkdir()
+    (tmp_path / MIC_WAV).write_bytes(b"")
+    write_transcript(tmp_path, seg, duration_s=1.0, language="de", model="small", mode="live")
+    data = json.loads((tmp_path / "transcript.json").read_text(encoding="utf-8"))
+    assert Path(data["source_path"]) == (tmp_path / MIC_WAV).resolve()  # nur Mikrofon
+    (tmp_path / SYSTEM_WAV).write_bytes(b"")
+    write_transcript(tmp_path, seg, duration_s=1.0, language="de", model="small", mode="live")
+    data = json.loads((tmp_path / "transcript.json").read_text(encoding="utf-8"))
+    assert Path(data["source_path"]) == (tmp_path / SYSTEM_WAV).resolve()
 
 
 def test_keep_live_copy_never_overwrites_during_refine(tmp_path):

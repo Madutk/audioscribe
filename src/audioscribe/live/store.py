@@ -65,7 +65,10 @@ def write_transcript(
 
     data = transcript_to_dict(result)
     # Kein Video: die Quelle ist der Mitschnitt. "mode" unterscheidet live von nachgeschärft.
-    data["source_path"] = str((session_dir / SYSTEM_WAV).resolve())
+    source = session_dir / SYSTEM_WAV
+    if not source.is_file() and (session_dir / MIC_WAV).is_file():
+        source = session_dir / MIC_WAV  # reine Mikrofon-Sitzung
+    data["source_path"] = str(source.resolve())
     data["mode"] = mode
     (session_dir / "transcript.json").write_text(
         json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"

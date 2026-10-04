@@ -43,7 +43,11 @@ def pick(devices: list[dict], wahl: str) -> dict | None:
         raise RuntimeError(f"Audio-Gerät '{wahl}' nicht gefunden") from None
 
 
-def open_capture(clock: Callable[[], float], platform: str | None = None) -> Capture:
+def open_capture(
+    clock: Callable[[], float],
+    platform: str | None = None,
+    log: Callable[[str], None] | None = None,
+) -> Capture:
     """Die Aufnahme der laufenden Plattform; außerhalb von Windows/macOS bleibt nur das Replay."""
     platform = sys.platform if platform is None else platform
     if platform == "win32":
@@ -53,7 +57,7 @@ def open_capture(clock: Callable[[], float], platform: str | None = None) -> Cap
     if platform == "darwin":
         from audioscribe.live.capture.mac import MacCapture
 
-        return MacCapture(clock)
+        return MacCapture(clock, log=log)
     raise RuntimeError(
         "Live-Aufnahme braucht Windows (WASAPI) oder macOS (ScreenCaptureKit); unter Linux/WSL "
         "geht nur das Replay: audioscribe live --wav DATEI"
@@ -96,12 +100,14 @@ def ensure_permissions(
         if status == berechtigungen.NICHT_GEFRAGT:
             log("macOS fragt nach der Mikrofon-Berechtigung ...")
             status = berechtigungen.mikrofon_anfragen()
-        if status != berechtigungen.ERTEILT:
+        # UNBEKANNT (PyObjC fehlt, Abfrage scheiterte) ist kein Verbot - der Stream versucht es.
+        if status not in (berechtigungen.ERTEILT, berechtigungen.UNBEKANNT):
             raise RuntimeError(
                 "Mikrofon nicht erlaubt - Systemeinstellungen > Datenschutz & Sicherheit > "
                 f"Mikrofon: '{berechtigungen.host_app()}' freigeben (oder '--mic none')."
             )
-    if system and not berechtigungen.bildschirm_erlaubt():
+    # None heißt unbekannt (siehe oben); nur ein klares False bricht ab.
+    if system and berechtigungen.bildschirm_erlaubt() is False:
         berechtigungen.bildschirm_anfragen()  # öffnet den Dialog; wirkt erst nach Neustart
         raise RuntimeError(
             "Bildschirmaufnahme nicht erlaubt - das System-Audio läuft über ScreenCaptureKit. "

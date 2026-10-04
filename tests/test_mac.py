@@ -33,7 +33,7 @@ def test_open_capture_verweist_linux_auf_das_replay():
 def test_open_capture_dispatcht_nach_plattform(monkeypatch):
     aufrufe = []
     fake_mac = types.ModuleType("audioscribe.live.capture.mac")
-    fake_mac.MacCapture = lambda clock: aufrufe.append(("mac", clock)) or "MAC"
+    fake_mac.MacCapture = lambda clock, log=None: aufrufe.append(("mac", log)) or "MAC"
     fake_win = types.ModuleType("audioscribe.live.capture.wasapi")
     fake_win.AudioCapture = lambda clock: aufrufe.append(("win", clock)) or "WIN"
     monkeypatch.setitem(sys.modules, "audioscribe.live.capture.mac", fake_mac)
@@ -41,6 +41,9 @@ def test_open_capture_dispatcht_nach_plattform(monkeypatch):
     assert open_capture(lambda: 1.0, platform="darwin") == "MAC"
     assert open_capture(lambda: 1.0, platform="win32") == "WIN"
     assert [a[0] for a in aufrufe] == ["mac", "win"]
+    meldung = print
+    open_capture(lambda: 1.0, platform="darwin", log=meldung)
+    assert aufrufe[-1] == ("mac", meldung)  # MacCapture-Diagnosen erreichen das Log
 
 
 def test_pick_findet_synthetischen_loopback_mit_negativem_index():
@@ -208,6 +211,16 @@ def test_ensure_permissions_fragt_mikrofon_an(monkeypatch):
     with pytest.raises(RuntimeError, match="Mikrofon nicht erlaubt.*'iTerm'"):
         ensure_permissions(mic=True, system=False, log=log.append, platform="darwin")
     assert any("Mikrofon-Berechtigung" in z for z in log)
+
+
+def test_ensure_permissions_laesst_unbekannten_stand_durch(monkeypatch):
+    # PyObjC fehlt oder die Abfrage scheitert: kein Verbot behaupten, der Stream versucht es.
+    monkeypatch.setattr(berechtigungen, "mikrofon_status", lambda: berechtigungen.UNBEKANNT)
+    monkeypatch.setattr(berechtigungen, "bildschirm_erlaubt", lambda: None)
+    angefragt = []
+    monkeypatch.setattr(berechtigungen, "bildschirm_anfragen", lambda: angefragt.append(1))
+    ensure_permissions(mic=True, system=True, log=lambda _t: None, platform="darwin")
+    assert angefragt == []
 
 
 # --- MLX-Backend --------------------------------------------------------------------------

@@ -83,7 +83,7 @@ class LiveSession:
         self._marks: list[Mark] = []
         self._open: dict[str, int | None] = {}
         self._last_delay: float | None = None
-        self._board = JobBoard(coalesce_s=opts.coalesce_s)
+        self._board = JobBoard(coalesce_s=opts.coalesce_s, catchup_s=opts.catchup_s)
         self._catchup = False
         self._t0 = 0.0
         self._chunk_index = 0  # nur im Transkriptions-Thread
@@ -408,7 +408,7 @@ class LiveSession:
             )
         from audioscribe.live.capture import open_capture
 
-        return open_capture(self.clock)
+        return open_capture(self.clock, log=events.log)
 
     def _enter_catchup(self, backlog_s: float) -> bool:
         """Sparmodus an/aus je nach Rückstand; der Wechsel wird einmal protokolliert."""
@@ -475,7 +475,7 @@ class LiveSession:
             watcher.start()
             return watcher
         except ImportError:
-            events.log("mss fehlt - keine Standbilder (uv sync ... --extra live)")
+            events.log("Standbilder-Modul nicht ladbar - keine Standbilder (uv sync ... --extra live)")
             return None
 
     def _on_shot(self, mark: Mark) -> None:
