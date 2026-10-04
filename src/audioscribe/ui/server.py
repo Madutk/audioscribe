@@ -28,10 +28,11 @@ from audioscribe.ui.runner import AnalyseRunner, BatchRunner, LiveRunner
 
 _STATIC_DIR = Path(__file__).parent / "static"
 
-# Lebensdauer des CUDA-Probe-Ergebnisses. Kurz genug, dass ein Wechsel der Installation
-# von selbst sichtbar wird; lang genug, dass Seitenaufrufe keinen Subprozess kosten.
+# Lebensdauer des Beschleuniger-Probe-Ergebnisses (CUDA/MPS/MLX). Kurz genug, dass ein
+# Wechsel der Installation von selbst sichtbar wird; lang genug, dass Seitenaufrufe
+# keinen Subprozess kosten.
 _CUDA_TTL_S = 120.0
-_cuda_cache: tuple[float, bool | None] | None = None
+_cuda_cache: tuple[float, dict | None] | None = None
 
 
 # Umgebungs-Check ('audioscribe doctor --json' als Subprozess): dauert Sekunden (torch-
@@ -52,8 +53,8 @@ def _environment(*, refresh: bool = False) -> tuple[list[dict] | None, float]:
     return checks, time.time()
 
 
-def _cuda() -> bool | None:
-    """CUDA-Probe (Wegwerf-Subprozess), kurz gecacht.
+def _accelerator() -> dict | None:
+    """Beschleuniger-Probe (Wegwerf-Subprozess), kurz gecacht: ``{"cuda", "mps", "backend"}``.
 
     Die Probe startet Python samt torch-Import und kostet Sekunden - pro Seitenaufruf
     waere das zu teuer. Ein Cache ohne Ablauf haelt aber auch eine laengst geaenderte
@@ -65,9 +66,14 @@ def _cuda() -> bool | None:
     jetzt = time.monotonic()
     if _cuda_cache is not None and jetzt - _cuda_cache[0] < _CUDA_TTL_S:
         return _cuda_cache[1]
-    wert = jobs.probe_cuda()
+    wert = jobs.probe_accelerator()
     _cuda_cache = (jetzt, wert)
     return wert
+
+
+def _cuda() -> bool | None:
+    acc = _accelerator()
+    return None if acc is None else acc["cuda"]
 
 
 def _size_mb(path: Path) -> float:
@@ -286,9 +292,12 @@ def create_app():
                 "sensitivities": list(jobs.SENSITIVITIES),
                 "frame_formats": list(jobs.FRAME_FORMATS),
                 "cuda": _cuda(),
+                "mps": (acc := _accelerator()) and acc["mps"],
+                "backend": acc["backend"] if acc else None,
                 # Steuert nur den Hinweistext der Oberflaeche: unter Windows werden
-                # Pfade nach C:\... umgesetzt, unter WSL nach /mnt/c/....
-                "platform": "windows" if browse.IS_WINDOWS else "posix",
+                # Pfade nach C:\... umgesetzt, unter WSL nach /mnt/c/...., auf dem Mac
+                # bleiben Pfade, wie der Finder sie liefert.
+                "platform": browse.PLATFORM,
                 "quick_links": [
                     {"label": label, "path": path}
                     for label, path in browse.quick_links(
@@ -550,9 +559,22 @@ def create_app():
         from audioscribe.live.kommando import inventory
 
         saved = state.load_state()
+        hinweis = ""
+        if browse.IS_MAC:
+            try:
+                from audioscribe.live.berechtigungen import hinweis as perm_hinweis
+
+                hinweis = perm_hinweis()
+            except Exception:  # noqa: BLE001 - Hinweis ist Zugabe
+                hinweis = ""
         return JSONResponse(
             {
                 **inventory(),
+                "platform": browse.PLATFORM,
+                "loopback_label": (
+                    "System-Audio (ScreenCaptureKit, Gegenseite)" if browse.IS_MAC else "System-Audio (Ausgabe, Gegenseite)"
+                ),
+                "permission_hint": hinweis,
                 "models": list(jobs.LIVE_WHISPER_MODELS),
                 "refine_models": list(jobs.WHISPER_MODELS),
                 "source": saved.get("live_source", "monitor"),
@@ -714,7 +736,8 @@ def serve(*, host: str = "127.0.0.1", port: int = 8766, open_browser: bool = Tru
     # Adresse ZUERST ausgeben: unter WSL oeffnet webbrowser.open haeufig nichts,
     # dann muss der Nutzer die URL selbst in den Windows-Browser kopieren.
     print(f"AudioScribe UI laeuft auf {url}  (Strg+C zum Beenden)")
-    print("Unter WSL: die Adresse notfalls von Hand im Windows-Browser oeffnen.")
+    if not browse.IS_WINDOWS and not browse.IS_MAC:
+        print("Unter WSL: die Adresse notfalls von Hand im Windows-Browser oeffnen.")
     if open_browser:
         try:
             webbrowser.open(url)

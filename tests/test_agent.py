@@ -656,6 +656,20 @@ def test_find_browser_reihenfolge():
     assert pb.find_browser(env={}, platform="linux", wsl=False, **kw) is None
 
 
+def test_find_browser_macos():
+    chrome = Path("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
+    edge_home = Path("/Users/x/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge")
+    kw = {"which": lambda n: None, "home": Path("/Users/x")}
+    assert pb.find_browser(env={}, platform="darwin", exists=lambda p: p == chrome, **kw) == chrome
+    assert pb.find_browser(env={}, platform="darwin", exists=lambda p: p == edge_home, **kw) == edge_home
+    assert pb.find_browser(env={}, platform="darwin", exists=lambda p: False, **kw) is None
+    assert (
+        pb.find_browser(env={}, platform="darwin", exists=lambda p: False, home=Path("/Users/x"),
+                        which=lambda n: "/opt/homebrew/bin/chromium" if n == "chromium" else None)
+        == Path("/opt/homebrew/bin/chromium")
+    )
+
+
 def test_browser_argv_und_seite():
     argv = pb.browser_argv(Path("/b/msedge.exe"), "C:\\x\\render.html", "C:\\tmp\\p")
     assert argv[0] == "/b/msedge.exe" and argv[-1] == "C:\\x\\render.html"

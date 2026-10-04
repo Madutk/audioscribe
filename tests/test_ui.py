@@ -617,7 +617,11 @@ def test_cuda_probe_wird_kurz_gecacht_und_laeuft_dann_neu(monkeypatch):
     from audioscribe.ui import server
 
     proben = []
-    monkeypatch.setattr(server.jobs, "probe_cuda", lambda: (proben.append(1), len(proben) > 1)[1])
+    monkeypatch.setattr(
+        server.jobs,
+        "probe_accelerator",
+        lambda: (proben.append(1), {"cuda": len(proben) > 1, "mps": False, "backend": "faster-whisper"})[1],
+    )
     monkeypatch.setattr(server, "_cuda_cache", None)
 
     uhr = [1000.0]
@@ -793,3 +797,80 @@ def test_cli_doctor_kennt_json_flag():
         text=True,
     )
     assert proc.returncode == 0 and "--json" in proc.stdout
+
+
+# --- Apple Silicon (PRD §19): Geraete, Probe, Pfade ---
+
+
+def test_devices_enthalten_mps_und_argv_reicht_es_durch(tmp_path):
+    from audioscribe.ui.jobs import DEVICES, JobOptions, build_argv
+
+    assert "mps" in DEVICES
+    argv = build_argv(tmp_path / "x.mp3", JobOptions(input_dir=tmp_path, output_dir=tmp_path, device="mps"), prefix=["a"])
+    assert "--device=mps" in argv or "--device" in argv
+
+
+def test_accelerator_probe_laeuft_in_eigenem_prozess():
+    from audioscribe.ui.jobs import accelerator_probe_argv
+
+    argv = accelerator_probe_argv("python")
+    assert argv[0] == "python" and argv[1] == "-c"
+    assert "mps" in argv[2] and "mlx_whisper" in argv[2] and "cuda" in argv[2]
+
+
+def test_parse_accelerator_liest_letzte_zeile_und_waehlt_backend():
+    from audioscribe.ui.jobs import parse_accelerator
+
+    out = parse_accelerator('Warnung\n{"cuda": false, "mps": true, "mlx": true}')
+    assert out == {"cuda": False, "mps": True, "backend": "mlx"}
+    # Erzwungenes faster-whisper gewinnt; mit CUDA bleibt es faster-whisper.
+    assert parse_accelerator('{"cuda": false, "mps": true, "mlx": true}', "faster-whisper")["backend"] == "faster-whisper"
+    assert parse_accelerator('{"cuda": true, "mps": false, "mlx": true}')["backend"] == "faster-whisper"
+    assert parse_accelerator("") is None
+    assert parse_accelerator("kein json") is None
+    assert parse_accelerator("[1, 2]") is None
+
+
+def test_probe_accelerator_und_probe_cuda(monkeypatch):
+    from audioscribe.ui import jobs
+
+    class Proc:
+        returncode = 0
+        stdout = '{"cuda": false, "mps": true, "mlx": false}\n'
+
+    monkeypatch.setattr(jobs.subprocess, "run", lambda *a, **k: Proc())
+    assert jobs.probe_accelerator() == {"cuda": False, "mps": True, "backend": "faster-whisper"}
+    assert jobs.probe_cuda() is False
+    Proc.returncode = 1
+    assert jobs.probe_accelerator() is None and jobs.probe_cuda() is None
+
+
+def test_to_native_mac_laesst_windows_pfade_in_ruhe():
+    assert browse.to_native(r"C:\Users\x", windows=False, mac=True) == r"C:\Users\x"
+    assert browse.to_native(' "/Users/x/Downloads" ', windows=False, mac=True) == "/Users/x/Downloads"
+    # Ohne mac-Flag bleibt das WSL-Verhalten.
+    assert browse.to_native(r"C:\Users\x", windows=False, mac=False) == "/mnt/c/Users/x"
+
+
+def test_quick_links_mac_volumes_und_nutzerordner(tmp_path):
+    home = tmp_path / "home"
+    (home / "Desktop").mkdir(parents=True)
+    (home / "Downloads").mkdir()
+    volumes = tmp_path / "Volumes"
+    (volumes / "USB").mkdir(parents=True)
+    (volumes / "Macintosh HD").symlink_to("/")
+    mnt = tmp_path / "mnt"
+    (mnt / "c").mkdir(parents=True)  # darf auf dem Mac nicht als "Windows C:" erscheinen
+    root = tmp_path / "projekt"
+    root.mkdir()
+    links = browse.quick_links(
+        project_root=root,
+        input_dir=root,
+        output_dir=tmp_path / "fehlt",
+        home=home,
+        mnt_root=mnt,
+        volumes_root=volumes,
+        windows=False,
+        mac=True,
+    )
+    assert [label for label, _ in links] == ["Projekt", "Home", "Schreibtisch", "Downloads", "Volume USB"]

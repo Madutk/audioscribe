@@ -13,12 +13,13 @@ Modellgewichte.
 | Bildwechsel-Erkennung | Bei Bildschirmaufnahmen je Folien-/Fensterwechsel ein Standbild im Transkript | [→](#bildwechsel-automatisch-erkennen) |
 | Bild-Annotation | Standbilder von Hand markieren und ins Transkript einfügen | [→](#bild-annotation-von-hand) |
 | KI-Analyse | Claude-Agent macht aus Transkript und Bildern Prozessdoku, Prozessbild, BPMN | [→](#ki-analyse-per-claude-agent) |
-| Live-Transkription | Monitor, System-Audio und Mikrofon live mitschneiden (nur Windows) | [→](#live-transkription-nur-windows) |
+| Live-Transkription | Monitor, System-Audio und Mikrofon live mitschneiden (Windows, macOS) | [→](#live-transkription-windows-und-macos) |
 
 **Technik:** WhisperX mit faster-whisper `large-v3` (Transkription) → wav2vec2
 (Wort-Alignment) → pyannote `speaker-diarization-3.1` (Sprecher). Die Modelle laufen
 nacheinander; der VRAM wird zwischen den Stufen freigegeben (Ziel: RTX 3080, 8 GB).
-Läuft auf **NVIDIA-GPU** (schnell) oder **nur CPU** (deutlich langsamer).
+Läuft auf **NVIDIA-GPU** (schnell), **Apple Silicon** (MLX für Whisper, MPS für den Rest,
+siehe [macOS](#macos-startsh--audioscribecommand)) oder **nur CPU** (deutlich langsamer).
 
 ---
 
@@ -26,7 +27,8 @@ Läuft auf **NVIDIA-GPU** (schnell) oder **nur CPU** (deutlich langsamer).
 
 Voraussetzungen: Linux oder WSL2 (Ubuntu 24.04), Python 3.12, [uv](https://docs.astral.sh/uv/).
 `ffmpeg` ist gebündelt, kein System-Paket nötig. Unter Windows siehe
-[Windows](#windows-startps1).
+[Windows](#windows-startps1), auf dem Mac [macOS](#macos-startsh--audioscribecommand)
+(dort erledigt `start.sh` die Schritte 1, 2 und 4).
 
 ```bash
 # 1) uv installieren (einmalig)
@@ -35,6 +37,7 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 # 2) Abhängigkeiten – GENAU EINE Backend-Variante wählen
 uv sync --extra cu124 --extra review --extra agent   # Rechner MIT NVIDIA-GPU
 uv sync --extra cpu   --extra review --extra agent   # Rechner OHNE NVIDIA-Karte (~3 GB kleiner)
+uv sync --extra cpu --extra mac --extra review --extra agent --extra live   # Mac mit Apple Silicon
 
 # 3) HuggingFace-Token für die Sprecher-Trennung hinterlegen
 cp .env.example .env            # HF_TOKEN=... eintragen, Modell-Bedingungen einmalig akzeptieren:
@@ -48,8 +51,8 @@ cp .env.example .env            # HF_TOKEN=... eintragen, Modell-Bedingungen ein
 ```
 
 Die Extras: `review` = Browser-Oberflächen (FastAPI), `agent` = KI-Analyse (Claude Agent
-SDK), `live` = Live-Transkription (nur Windows). Für `analyze` einmal `claude` starten und
-mit dem Claude-Abo anmelden.
+SDK), `live` = Live-Transkription (Windows, macOS), `mac` = Apple Silicon (mlx-whisper,
+sounddevice, PyObjC). Für `analyze` einmal `claude` starten und mit dem Claude-Abo anmelden.
 
 > **Wichtig: `uv run` ohne Extras zerstört die Umgebung.** `uv run` synct vor jedem Start,
 > und ohne `--extra …` ersetzt es die CUDA-Wheels durch die von PyPI und entfernt
@@ -72,6 +75,35 @@ Danach läuft alles offline.
 `start.ps1` legt die Windows-Umgebung bewusst in `.venv-win` an: Wird das Repo auch aus WSL
 benutzt, gehört `.venv` dem Linux-Python, und Windows-`uv` würde daran scheitern. Wer
 `uv sync` von Hand aufruft, setzt vorher `$env:UV_PROJECT_ENVIRONMENT = '.venv-win'`.
+
+### macOS (`start.sh` / `AudioScribe.command`)
+
+MacBook Pro mit M4 oder M5 (M1–M3 laufen, langsamer), macOS 14 oder neuer. Alles bleibt in
+Python: kein Homebrew, kein virtuelles Audiogerät, nur `uv`-Pakete.
+
+```bash
+./start.sh                      # installiert uv und Python 3.12 bei Bedarf, synct .venv-mac, startet die Oberfläche
+./start.sh --doctor             # Umgebung prüfen: macOS-Version, Chip, mps, mlx-whisper, Berechtigungen
+./start.sh --devices            # Mikrofone, System-Audio (ScreenCaptureKit), Monitore, Fenster
+.venv-mac/bin/audioscribe run input/meeting.m4a   # direkt, ohne uv run
+```
+
+`AudioScribe.command` ist dasselbe für den **Doppelklick im Finder** (öffnet Terminal.app).
+Kommt das Repo als ZIP statt per `git clone`, blockt Gatekeeper die Datei einmal:
+`xattr -d com.apple.quarantine AudioScribe.command`.
+
+**Berechtigungen:** Beim ersten „Aufnahme starten“ fragt macOS nach **Mikrofon** und
+**Bildschirmaufnahme** (letztere liefert über ScreenCaptureKit auch das System-Audio).
+Beide gehören der *startenden App* (Terminal, iTerm, VS Code), nicht „Python“, und die
+Bildschirmaufnahme wirkt erst, nachdem diese App neu gestartet wurde. `doctor` und der
+Live-Reiter sagen, was fehlt und wo es steht (Systemeinstellungen › Datenschutz &
+Sicherheit).
+
+**Was wo rechnet:** faster-whisper/CTranslate2 kennt kein Metal und liefe auf dem Mac nur
+auf der CPU. Darum rechnet Whisper über **mlx-whisper** auf der GPU (Live, `run` und
+Nachschärfen), Sprecher-Modelle und Alignment über **PyTorch/MPS**. `--device auto` wählt
+`mps`, `--backend auto` wählt `mlx`; `--backend faster-whisper` erzwingt die CPU-Variante
+zum Vergleich. Die Umgebung heißt `.venv-mac` – aus demselben Grund wie `.venv-win`.
 
 ---
 
@@ -342,14 +374,15 @@ Dialogmodus.
 
 ---
 
-## Live-Transkription (nur Windows)
+## Live-Transkription (Windows und macOS)
 
 Proof of Concept: schneidet eine laufende Sitzung mit, also einen Monitor **oder ein
 Anwendungsfenster**, das System-Audio und das Mikrofon. Das Transkript erscheint mit
 wenigen Sekunden Verzögerung, jeder Bildwechsel wird als Screenshot gesichert, und am Ende
 liegt ein Ordner im Format eines Offline-Laufs, den die KI-Analyse direkt auswerten kann.
-Braucht natives Windows-Python (WASAPI, Bildschirmzugriff); unter WSL geht es nicht.
-Designentscheidungen: PRD §17.
+Braucht natives Windows-Python (WASAPI-Loopback) oder macOS (ScreenCaptureKit liefert das
+System-Audio, sounddevice das Mikrofon – ohne BlackHole oder andere Treiber); unter WSL geht
+nur das WAV-Replay. Designentscheidungen: PRD §17 und §19.
 
 ```powershell
 .\start.ps1                                                  # Oberfläche, Reiter „Live Transcription“
@@ -358,6 +391,13 @@ Designentscheidungen: PRD §17.
 .venv-win\Scripts\audioscribe.exe live --monitor 1 --mic 23  # Ende mit Strg+C oder "stop" + Enter
 .venv-win\Scripts\audioscribe.exe live --window 592902       # nur dieses Fenster
 .venv-win\Scripts\audioscribe.exe refine output\live-2026-09-19_14-30-05 --model large-v3-turbo
+```
+
+```bash
+./start.sh                                                   # macOS: Oberfläche, Reiter „Live Transcription“
+.venv-mac/bin/audioscribe live --list-devices                # Mikrofone, „System-Audio (ScreenCaptureKit)“, Monitore, Fenster
+.venv-mac/bin/audioscribe live --monitor 1                   # Ende mit Strg+C oder "stop" + Enter
+.venv-mac/bin/audioscribe refine output/live-2026-09-19_14-30-05
 ```
 
 **Im Reiter:** Bildquelle wählen (Monitor mit Vorschaubild, Anwendungsfenster oder „nur
@@ -384,9 +424,17 @@ nicht auf den überwachten Monitor, sonst lösen neue Thumbnails selbst Bildwech
 <details>
 <summary>Modelle, Sprecher, Nachschärfen</summary>
 
-**Modell:** `auto` nimmt `large-v3-turbo` auf der GPU (2–5 s Verzögerung) und `small` auf
-der CPU (5–15 s). Das Modell fürs **Nachschärfen** wird getrennt gewählt (Standard
+**Modell:** `auto` nimmt `large-v3-turbo` auf der GPU und auf Apple Silicon (MLX) und
+`small` auf der CPU. Das Modell fürs **Nachschärfen** wird getrennt gewählt (Standard
 `large-v3`): live zählt das Tempo, danach die Genauigkeit.
+
+**Verzögerung:** Ein Abschnitt ist frühestens ~1 s nach dem letzten Wort fertig (Pause
+0,6 s plus Puffer und VAD-Takt), dann kommt die Rechenzeit dazu. Erwartung je Abschnitt:
+NVIDIA-GPU 2–5 s, M4 Pro/Max und M5 etwa 1,8–2,5 s, Basis-M4 2,5–3,5 s, CPU 5–15 s. Wer
+auf GPU oder MLX noch näher heran will: `AUDIOSCRIBE_LIVE_PAUSE_S=0.45`,
+`AUDIOSCRIBE_LIVE_PARTIAL_INTERVAL_S=1.0`, `AUDIOSCRIBE_LIVE_VAD_EVERY_TICK=1` (mehr
+Schnitte mitten im Satz, mehr Rechenlast). Die Werte stehen nach jeder Sitzung in
+`bilanz.json`; Messläufe gehen reproduzierbar per WAV-Replay (unten).
 
 **Sprecher:** Das Mikrofon ist „Ich“. Das System-Audio wird per Stimm-Embedding in
 „Sprecher 1/2/3“ getrennt (braucht den `HF_TOKEN`); ohne Token heißt die Spur
@@ -464,16 +512,18 @@ davor liegt.
 
 ## Betrieb: GPU, CPU, Konfiguration
 
-| | GPU (CUDA) | CPU |
-|---|---|---|
-| Installation | `uv sync --extra cu124 …` | `uv sync --extra cpu …` |
-| `--device auto` wählt | `cuda`, `compute_type=float16` | `cpu`, `compute_type=int8` |
-| Tempo | Bruchteil der Aufnahmedauer | Mehrfaches der Aufnahmedauer |
-| Wichtigster Hebel | bei knappem VRAM `--compute-type int8_float16`, `AUDIOSCRIBE_BATCH_SIZE=4` | kleineres Modell: `--model medium` oder `small` |
-| `doctor` zeigt | `torch …+cu124 -> auto=cuda (<GPU>)` | `torch …+cpu -> auto=cpu` |
+| | GPU (CUDA) | Apple Silicon (MPS + MLX) | CPU |
+|---|---|---|---|
+| Installation | `uv sync --extra cu124 …` | `uv sync --extra cpu --extra mac …` | `uv sync --extra cpu …` |
+| `--device auto` wählt | `cuda`, `compute_type=float16` | `mps`; Whisper über MLX (`--backend auto`), torch über MPS | `cpu`, `compute_type=int8` |
+| Tempo | Bruchteil der Aufnahmedauer | Bruchteil der Aufnahmedauer (Whisper), Diarisierung etwas langsamer als CUDA | Mehrfaches der Aufnahmedauer |
+| Wichtigster Hebel | bei knappem VRAM `--compute-type int8_float16`, `AUDIOSCRIBE_BATCH_SIZE=4` | `--backend faster-whisper` nur zum Vergleich (CPU); `PYTORCH_ENABLE_MPS_FALLBACK=1` (setzt `start.sh`) | kleineres Modell: `--model medium` oder `small` |
+| `doctor` zeigt | `torch …+cu124 -> auto=cuda (<GPU>)` | `torch 2.6.0 -> auto=mps (Apple M4 …)`, `ASR-Backend mlx-whisper …` | `torch …+cpu -> auto=cpu` |
 
-`--device cuda` erzwingt die GPU (bricht ohne CUDA ab), `--device cpu` schaltet sie aus,
-auch auf einem GPU-Rechner zum Testen. Steht in `doctor` unerwartet `+cpu` auf einem
+`--device cuda` erzwingt die GPU (bricht ohne CUDA ab), `--device mps` Metal (nur Apple
+Silicon), `--device cpu` schaltet beides aus, auch auf einem GPU-Rechner zum Testen.
+`--backend auto|faster-whisper|mlx` (bzw. `AUDIOSCRIBE_ASR_BACKEND`) wählt die
+Whisper-Implementierung; `mlx` gibt es nur auf Apple Silicon. Steht in `doctor` unerwartet `+cpu` auf einem
 GPU-Rechner, hat ein `uv run` ohne Extras die Wheels ersetzt (siehe
 [Schnellstart](#schnellstart)). Die Sprecher-Trennung läuft auf CPU ebenfalls entsprechend
 länger.
@@ -500,7 +550,8 @@ Zwei bekannte Reibungspunkte behandelt `src/audioscribe/compat.py` automatisch:
 
 ## Befehle auf einen Blick
 
-Alle Befehle im Projektordner, direkt aus `.venv/bin/` (Windows: `.venv-win\Scripts\…exe`).
+Alle Befehle im Projektordner, direkt aus `.venv/bin/` (Windows: `.venv-win\Scripts\…exe`,
+macOS: `.venv-mac/bin/…`).
 
 ```bash
 # Einrichten
@@ -537,9 +588,15 @@ claude                                               # einmal mit dem Claude-Abo
 .venv-win\Scripts\audioscribe.exe live --monitor 1 --mic 23
 .venv-win\Scripts\audioscribe.exe refine output\live-…
 
+# macOS (Apple Silicon)
+./start.sh                                                   # Oberfläche; --doctor | --devices | --port N | --no-browser
+.venv-mac/bin/audioscribe live --monitor 1                   # System-Audio über ScreenCaptureKit, Whisper über MLX
+.venv-mac/bin/audioscribe run input/meeting.m4a --device mps # Whisper über MLX, Alignment/Diarisierung über MPS
+.venv-mac/bin/python -m audioscribe.live.capture.sck --probe 5   # Spike: 5 s System-Audio nach /tmp/sck.wav
+
 # Hilfe und Tests
 .venv/bin/audioscribe --help                                 # alle Befehle; <befehl> --help für Optionen
-.venv/bin/python -m pytest                                   # Unit-Tests (reine Logik, keine Modell-Downloads)
+.venv/bin/python -m pytest                                   # Unit-Tests (reine Logik, keine Modell-Downloads; Mac: .venv-mac/bin/python)
 ```
 
 ---
@@ -550,4 +607,6 @@ Basisstufe gemäß `PRD.md`: eine Datei pro CLI-Aufruf (die Oberfläche arbeitet
 nacheinander ab), Markdown-Ausgabe mit optionalem PDF, Sprecher als „Sprecher N“ ohne
 Personen-Identifikation. AudioScribe ist die Transkriptions-Basis für die übergeordnete
 Meeting-Protokoll-Pipeline; die Auswertung übernimmt optional der Claude-Agent. Alle
-Anforderungen und Designentscheidungen stehen nummeriert (FR-1 … FR-47) in `PRD.md`.
+Anforderungen und Designentscheidungen stehen nummeriert (FR-1 … FR-55) in `PRD.md`; die
+macOS-Portierung (PRD §19) ist implementiert und wartet auf die Validierung auf dem Gerät
+(Akzeptanzkriterien §19.5).

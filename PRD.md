@@ -78,7 +78,7 @@ Sprechertrennung kombiniert.
 | NFR-1 | **Vollständig lokal**: Audio verlässt den Rechner nicht. Einzige Online-Aktion ist der einmalige Download der Modellgewichte von Hugging Face. |
 | NFR-2 | **Hardware-Budget**: Lauffähig auf RTX 3080 Laptop mit 8 GB VRAM. Die Modelle laufen **sequenziell**; VRAM wird zwischen den Stufen freigegeben. |
 | NFR-3 | **Performance**: Batch-Verarbeitung; einige Minuten Rechenzeit pro Aufnahme sind akzeptabel (Qualität vor Tempo). |
-| NFR-4 | **Plattform**: Ausführung unter **WSL2** (Ubuntu) auf Windows 11. |
+| NFR-4 | **Plattform**: Ausführung unter **WSL2** (Ubuntu) auf Windows 11; natives Windows 11 für die Live-Transkription (§17); **macOS 14+ auf Apple Silicon** für alles (§19). |
 | NFR-5 | **Robustheit**: Aufnahmen von 10 min bis 2 h müssen ohne Speicherüberlauf verarbeitbar sein. |
 | NFR-6 | **Editierbarkeit**: Markdown wird immer erzeugt, damit der Text vor der PDF-Erzeugung korrigiert werden kann. |
 
@@ -282,9 +282,11 @@ Gerät wird verwendet — standardmäßig automatisch erkannt).
 
 ### 14.2 Abgrenzung / Designentscheidungen (festgelegt)
 
-- **Kein Apple-MPS-Support** — Zielplattform bleibt Linux/WSL2 (NFR-4).
+- ~~**Kein Apple-MPS-Support** — Zielplattform bleibt Linux/WSL2 (NFR-4).~~ Aufgehoben
+  durch §19 (Apple Silicon): `auto` wählt heute `cuda` > `mps` > `cpu`.
 - **`--device auto` ist der neue Default** (statt bisher fest `cuda`): CUDA falls
-  verfügbar, sonst CPU. Explizites `--device cuda|cpu` erzwingt.
+  verfügbar, sonst MPS (Apple Silicon), sonst CPU. Explizites `--device cuda|mps|cpu`
+  erzwingt.
 - **Backend-Wahl über zwei sich ausschließende uv-Extras** (`cpu` / `cu124`) mit
   `[tool.uv] conflicts` — offizielles uv-Muster für PyTorch-Accelerator-Wahl,
   ein gemeinsames `uv.lock` für beide Varianten.
@@ -488,7 +490,7 @@ Grundlage steht: `AnalyseSitzung` hält einen `ClaudeSDKClient` offen und nimmt 
 
 ## 17. Ausbaustufe: Live-Transkription
 
-> Status: Proof of Concept · optionales Extra `live` · nur natives Windows (nicht WSL).
+> Status: Proof of Concept · optionales Extra `live` · natives Windows oder macOS (§19), nicht WSL.
 
 ### 17.1 Ziel
 
@@ -502,22 +504,24 @@ Compliance-Anforderungen.
 
 ### 17.2 Designentscheidungen (festgelegt)
 
-- **Python + Web-Oberfläche, keine native Windows-App.** Aufgenommen wird im lokalen
-  Python-Prozess, der Browser zeigt nur an. Voraussetzung ist natives Windows-Python; WSL
-  hat weder Zugriff auf WASAPI noch auf den Bildschirm. Eine native App wäre erst für
-  Tray-Icon, globale Hotkeys oder ein Overlay nötig.
+- **Python + Web-Oberfläche, keine native App.** Aufgenommen wird im lokalen
+  Python-Prozess, der Browser zeigt nur an. Voraussetzung ist natives Windows-Python oder
+  macOS-Python (§19); WSL hat weder Zugriff auf WASAPI noch auf den Bildschirm. Eine native
+  App wäre erst für Tray-Icon, globale Hotkeys oder ein Overlay nötig.
 - **Subprozess wie `run` und `analyze`.** Die Oberfläche startet `audioscribe live` als
   Kindprozess. Ereignisse kommen als `[Live] {json}`-Zeilen über stdout, gestoppt wird über
   stdin (`stop`), damit die Dateien sauber abgeschlossen werden. Das Prozessende gibt den
   VRAM frei.
-- **Zwei getrennte Audiospuren statt Mix.** Mikrofon und WASAPI-Loopback werden getrennt
-  aufgenommen (PyAudioWPatch). Damit ist „Ich“ gegen „Gegenseite“ ohne Modell und ohne
-  Fehler trennbar. Loopback liefert bei Stille keine Pakete; die Lücken werden anhand der
-  Sitzungsuhr mit Nullen gefüllt, sonst driften die Zeitstempel.
+- **Zwei getrennte Audiospuren statt Mix.** Mikrofon und System-Audio werden getrennt
+  aufgenommen – unter Windows WASAPI-Loopback (PyAudioWPatch), unter macOS ScreenCaptureKit
+  plus CoreAudio (§19). Damit ist „Ich“ gegen „Gegenseite“ ohne Modell und ohne Fehler
+  trennbar. WASAPI-Loopback liefert bei Stille keine Pakete; die Lücken werden anhand der
+  Sitzungsuhr mit Nullen gefüllt, sonst driften die Zeitstempel. Die Aufnahme steckt hinter
+  einer kleinen Schnittstelle (`live/capture`: `mics`, `loopbacks`, `open`, `close`).
 - **Residentes Modell.** `pipeline.transcribe` lädt und entlädt das Modell je Aufruf
-  (NFR-2) und taugt nicht für Sekunden-Abschnitte. Der Live-Modus hält ein
-  `faster_whisper.WhisperModel` für die ganze Sitzung. Standard: `large-v3-turbo` auf
-  CUDA, `small` auf CPU.
+  (NFR-2) und taugt nicht für Sekunden-Abschnitte. Der Live-Modus hält ein Whisper-Modell
+  für die ganze Sitzung – `faster_whisper.WhisperModel` auf CUDA/CPU, `mlx_whisper` auf
+  Apple Silicon (§19). Standard: `large-v3-turbo` auf CUDA und MLX, `small` auf CPU.
 - **Schneller Start.** Nur Whisper, VAD und Audio-Geräte blockieren den Start; das
   Sprecher-Modell (pyannote samt Lightning, auf der CPU der größte Posten) lädt in einem
   Hintergrund-Thread, der erste System-Abschnitt wartet darauf. Liegen die Modelle im
@@ -569,7 +573,7 @@ Compliance-Anforderungen.
 | FR-42 | Die Sitzung landet in `<output>/live-JJJJ-MM-TT_hh-mm-ss/` im Format eines Offline-Laufs (`transkript.md`, `transcript.json`, `marks.json`, `frames/`, `transkript.annotiert.md`) plus `audio/mikrofon.wav` und `audio/system.wav` (16 kHz mono). Geschrieben wird alle 30 s und beim Stopp. |
 | FR-43 | `audioscribe refine ORDNER` schärft eine Sitzung nach: je Spur Transkription und Alignment, Diarisierung nur auf der System-Spur. Die Live-Fassung bleibt als `transkript.live.md`/`transcript.live.json` erhalten. |
 | FR-44 | Die Oberfläche bekommt den Reiter „Live Transcription“ mit Monitorwahl samt Vorschau, Gerätewahl, Start/Stopp, laufendem Transkript, Verzögerungsanzeige, Pegeln und einer Thumbnail-Leiste mit Großansicht. Der bisherige Reiter „Transkription“ heißt „Offline Transcription“. Der Ausgabeordner der Sitzung ist der gemeinsame Ausgabeordner Transkription aus dem Reiter „Einstellungen“ (FR-47) und wird als Zielhinweis `<output>/live-…` angezeigt. |
-| FR-45 | `audioscribe doctor` prüft Plattform, Audio-Geräte (inkl. Loopback) und Monitore. |
+| FR-45 | `audioscribe doctor` prüft Plattform, Berechtigungen (macOS), Audio-Geräte (inkl. Loopback) und Monitore. |
 | FR-46 | Jede Live-Sitzung und jedes Nachschärfen hinterlassen ein Fazit: Ladezeit der Modelle, Aufnahmedauer, Rechenzeit und Tempo (Rechenzeit je Audiosekunde, nur Dekodieren; daneben inkl. Vorschau), Verzögerung Ø/Median/max, Abschnitte (davon zusammengelegt und sparsam dekodiert), höchster Rückstand, Zeit im Aufholmodus mit Anteil an der Aufnahme bzw. Dauer je Stufe. Es steht als `bilanz.json` im Sitzungsordner, als Zeile im Protokoll und als Kasten „Fazit“ im Reiter. |
 | FR-47 | **Diagnose-Log.** Jede Live-Sitzung schreibt `diagnose.jsonl` (eine JSON-Zeile je fertigem Abschnitt): Lage im Audio, Zeitpunkte Abschluss/Start/Ende auf der Sitzungsuhr, Wartezeit, Rechenzeit (Dekodieren und Sprecher-Label getrennt), Latenz (bei zusammengelegten Stücken auch ab dem ersten Teil), Modell, Sparmodus, Teile, Wortzahl, Schlussgrund (`pause`/`zeitlimit`/`flush`) und je Whisper-Segment `avg_logprob`, `compression_ratio`, `no_speech_prob`, `temperature`. Vorschauen stehen als eigene Zeilen mit Fensterlänge und Rechenzeit, das Nachschärfen hängt je Segment und je Stufe eine Zeile an. Das Fazit (FR-46) ist aus diesem Log abgeleitet. |
 | FR-48 | **Ehrliche Metriken.** Rückstand = Summe des fertig gesprochenen, noch nicht begonnenen Audios; Aufholmodus = Zeitanteil, in dem dieser Rückstand über einer Chunk-Länge liegt; Echtzeitfaktor getrennt für das Dekodieren allein und inkl. Vorschau. `audioscribe live --eco` erzwingt für Messläufe den Sparmodus für alle Abschnitte. |
@@ -635,3 +639,101 @@ warum die Diarisierung oder die GPU nicht läuft.
       wieder da.
 - [ ] Eine Live-Sitzung landet im gewählten Ausgabeordner Transkription.
 - [ ] Die Karte „Umgebung“ zeigt dieselben Zeilen wie `audioscribe doctor` im Terminal.
+
+## 19. Ausbaustufe: macOS auf Apple Silicon
+
+> Status: implementiert, Validierung auf dem Gerät offen (§19.4) · Extra `mac` · MacBook
+> Pro mit M4/M5 (M1–M3 laufen, langsamer) · macOS 14+.
+
+### 19.1 Ziel
+
+AudioScribe läuft vollständig auf einem Mac mit Apple Silicon – Offline-Pipeline,
+KI-Analyse und vor allem der Live-Modus mit Quasi-Echtzeit. Alles bleibt innerhalb von
+Python: keine Homebrew-Werkzeuge, kein virtuelles Audiogerät (BlackHole), nur
+pip-/uv-Pakete. Ein Doppelklick startet die Oberfläche.
+
+### 19.2 Designentscheidungen (festgelegt)
+
+- **Whisper über MLX, torch über MPS.** CTranslate2 (faster-whisper, WhisperX) kennt kein
+  Metal; auf dem Mac liefe `large-v3-turbo` damit nur auf der CPU und wäre nicht
+  live-tauglich. Darum rechnet Whisper über `mlx-whisper` (Metal, 14–37× Echtzeit), die
+  torch-Modelle (pyannote-Embedding, wav2vec2, Diarisierung) über MPS mit
+  `PYTORCH_ENABLE_MPS_FALLBACK=1`. `ct2_device()` hält CTranslate2 auf `cpu`, falls es doch
+  gebraucht wird (Backend `faster-whisper` erzwungen).
+- **Ein Transcriber-Protokoll, zwei Backends.** `live/asr.make_transcriber(backend, …)`
+  liefert `LiveTranscriber` (faster-whisper) oder `MlxTranscriber`. Beide geben dasselbe
+  `Ergebnis` mit Segment-Qualitätswerten; das Diagnose-Log (FR-47) bleibt backend-neutral.
+  mlx-whisper kennt keinen Beam-Search: fertige Abschnitte bekommen den Temperatur-Fallback
+  mit `best_of` 5, die Vorschau reines Greedy.
+- **Nachschärfen und `run` ebenfalls über MLX.** `pipeline/transcribe_mlx.py` ersetzt nur
+  Stufe 2 (VAD-Fenster bis 30 s wie WhisperX) und liefert das WhisperX-Format; Alignment
+  und Diarisierung laufen unverändert, nur auf MPS. Standardmodell bleibt `large-v3`.
+- **System-Audio über ScreenCaptureKit.** PortAudio kann auf dem Mac kein Loopback.
+  ScreenCaptureKit (macOS 13+) liefert den gemischten Ton aller Apps als Nebenprodukt einer
+  Bildschirmaufnahme (2×2 Pixel, 1 Bild/s); genutzt werden nur die Audiopuffer (Float32,
+  48 kHz, planar → mono). Core-Audio-Process-Taps (macOS 14.2+) brauchen C-Callbacks und
+  werden nicht verfolgt. Das Mikrofon kommt über `sounddevice` (PortAudio im Wheel).
+- **Berechtigungen vor der Sitzungsuhr.** Mikrofon und Bildschirmaufnahme sind
+  TCC-Berechtigungen der startenden App (Terminal, iTerm, VS Code), die Bildschirmaufnahme
+  wirkt erst nach deren Neustart. `ensure_permissions()` fragt sie ab, bevor die Aufnahme
+  beginnt, damit Dialoge nicht als Stille in die Zeitleiste fallen; `doctor` und die
+  Oberfläche nennen die App beim Namen.
+- **Ein `uv.lock`, drittes Extra `mac`.** Alle Mac-Pakete tragen `sys_platform == 'darwin'`
+  (mlx zusätzlich `arm64`); unter Linux/Windows ist das Extra wirkungslos. torch kommt weiter
+  aus `cpu` – das arm64-Wheel enthält MPS. `.venv-mac` ist von `.venv` (WSL) und `.venv-win`
+  getrennt, aus demselben Grund wie bisher.
+- **Latenzboden ist der Schnitt, nicht das Modell.** Pausenerkennung (0,6 s) plus Puffer
+  (0,3 s, auf dem Mac 0,15 s) plus VAD-Takt ergeben rund eine Sekunde, bevor dekodiert wird.
+  Die Stellschrauben dafür sind Einstellungen (FR-55), nicht Konstanten.
+
+### 19.3 Funktionale Anforderungen
+
+| ID | Anforderung |
+|----|-------------|
+| FR-50 | **macOS-Start.** `start.sh` (und `AudioScribe.command` für den Doppelklick) installiert bei Bedarf `uv`, lässt `uv` Python 3.12 besorgen, legt `.venv-mac` an, wählt die Extras `cpu mac live review agent`, setzt `PYTORCH_ENABLE_MPS_FALLBACK=1` und startet die Oberfläche; `--doctor` und `--devices` als Kurzbefehle. `audioscribe doctor` zeigt Plattform (macOS-Version, Chip, Terminal-App), Rechengerät `mps`, ASR-Backend und Berechtigungen. |
+| FR-51 | **Aufnahme ohne Zusatztreiber.** System-Audio über ScreenCaptureKit, Mikrofon über sounddevice, Fensterliste und Fensteraufnahme über Quartz, Monitore über mss. Dieselbe Geräteliste (`mics`, `loopbacks` mit einem synthetischen Eintrag „System-Audio (ScreenCaptureKit)“) wie unter Windows; Oberfläche und doctor nennen fehlende Berechtigungen samt Systemeinstellungs-Pfad und App. |
+| FR-52 | **MLX-Backend.** `AUDIOSCRIBE_ASR_BACKEND=auto\|faster-whisper\|mlx` bzw. `--backend`; `auto` nimmt `mlx` auf Apple Silicon, sonst `faster-whisper`. Modellnamen werden auf `mlx-community/whisper-*` gemappt (`AUDIOSCRIBE_MLX_REPO` erzwingt ein Repo). Gilt für `live`, `refine` und `run`; Gewichte werden offline-first aus dem Hugging-Face-Cache geladen, der Download meldet Fortschritt. |
+| FR-53 | **Gerät `mps`.** `--device auto\|cuda\|mps\|cpu` in CLI und Oberfläche; `auto` wählt cuda > mps > cpu. Die Oberfläche deaktiviert nicht verfügbare Geräte (Probe im Wegwerf-Prozess). CTranslate2 bekommt nie `mps`. |
+| FR-54 | **Mac-Pfade und Browser.** Der Ordner-Dialog bietet Schreibtisch, Dokumente, Downloads, Filme, iCloud Drive und `/Volumes/*`; eingefügte Pfade werden auf dem Mac nicht nach `/mnt/c` umgeschrieben. Das Prozessbild findet Chrome, Edge, Chromium und Brave in `/Applications` bzw. `~/Applications`. |
+| FR-55 | **Live-Stellschrauben.** `AUDIOSCRIBE_LIVE_PAUSE_S` (0,6), `AUDIOSCRIBE_LIVE_PARTIAL_INTERVAL_S` (2,0), `AUDIOSCRIBE_LIVE_PARTIAL_MIN_S` (1,0) und `AUDIOSCRIBE_LIVE_VAD_EVERY_TICK` (0) steuern Schnitt und Vorschau; `bilanz.json` trägt `backend`, `geraet` und `modell`, damit Messläufe vergleichbar bleiben. |
+
+### 19.4 Nicht-funktionale Anforderungen
+
+| ID | Anforderung |
+|----|-------------|
+| NFR-18 | **Latenzziel Mac.** Mit `large-v3-turbo` über MLX liegt die Verzögerung (Median, `bilanz.json`) auf einem M4 Pro/Max oder M5 bei ≤ 3 s, auf dem Basis-M4 bei ≤ 5 s; der Rückstand pendelt sich ein (Aufholmodus ≈ 0). Erwartung je Abschnitt: M4 2,5–3,5 s, M4 Pro/Max 1,8–2,5 s, M5 1,7–2,2 s; mit FR-55 ~1,5–2 s. |
+| NFR-19 | **Keine Systempakete.** Alles kommt als pip-/uv-Wheel: PortAudio in sounddevice, ffmpeg in imageio-ffmpeg, die Apple-Frameworks über PyObjC. Einzige Ausnahme ist der optionale Browser fürs Prozessbild (Safari kann nicht headless rendern). |
+| NFR-20 | **Windows, WSL und Linux unverändert.** Gleiche Befehle, gleiche Ausgaben, ein `uv.lock`; die bestehenden Tests laufen ohne Änderung durch. |
+
+### 19.5 Akzeptanzkriterien (Validierung auf dem Gerät)
+
+- [ ] `AudioScribe.command` (Doppelklick) oder `./start.sh`: `uv` und Python kommen von
+      selbst, `.venv-mac` entsteht, der Erststart-Hinweis erscheint, der Browser öffnet
+      `http://127.0.0.1:8766`.
+- [ ] `./start.sh --doctor`: Plattform `macOS 15.x (arm64, Apple M4 …)`, `PyTorch/Device
+      auto=mps`, `ASR-Backend mlx-whisper …`, ffmpeg gebündelt, kein FAIL; Reiter
+      Einstellungen zeigt dieselben Zeilen.
+- [ ] `.venv-mac/bin/audioscribe live --list-devices`: Mikrofone, ein `System-Audio
+      (ScreenCaptureKit)`, Monitore, Fenster. Nach Freigabe der Bildschirmaufnahme und
+      Neustart der Terminal-App meldet `doctor` Live OK.
+- [ ] Spike `python -m audioscribe.live.capture.sck --probe 5` bei laufendem Video: WAV ist
+      nicht stumm, das Format (Float32 planar, 48 kHz) steht im Protokoll.
+- [ ] Oberfläche: `cuda` deaktiviert, `mps` wählbar; Schnellzugriffe Schreibtisch, Downloads,
+      `/Volumes/*`; ein Windows-Pfad wird nicht umgeschrieben; der Live-Reiter zeigt das
+      ScreenCaptureKit-Label und den Backend-Hinweis.
+- [ ] Zwei Minuten Live mit Teams oder YouTube (`auto`/`auto`, Sprecher an, Nachschärfen an):
+      beide Pegel schlagen aus, erster Text unter 10 s, Verzögerung meist unter 3 s, der
+      Rückstand wächst nicht, Standbilder bei Folienwechseln; das Nachschärfen läuft ohne
+      MPS-Fehler durch.
+- [ ] `bilanz.json`: `verzoegerung_median_s`, `verzoegerung_max_s`, `tempo`,
+      `aufholmodus_s`, `backend`, `geraet`, Dauer je Refine-Stufe erfüllen NFR-18;
+      `audio/system.wav` ist nicht stumm.
+- [ ] Replay-Benchmark auf derselben Referenz-WAV: `AUDIOSCRIBE_ASR_BACKEND=mlx … live --wav
+      ref.wav --model large-v3-turbo` gegen `…=faster-whisper … --model small --device cpu`;
+      `bilanz.json`, `diagnose.jsonl` und `transkript.txt` (WER) vergleichen; Sweep mit
+      `AUDIOSCRIBE_LIVE_PAUSE_S=0.45 AUDIOSCRIBE_LIVE_VAD_EVERY_TICK=1`.
+- [ ] Offline `run` auf einer 10-min-Datei mit `--device auto` (MLX + MPS) und `--device
+      cpu`: strukturgleiche Ausgabe, MLX deutlich schneller.
+- [ ] Negativpfade: `--device cuda` → klare Meldung; entzogene Bildschirmaufnahme →
+      Berechtigungshinweis statt Stacktrace; `uv run audioscribe doctor` ohne Extras →
+      ASR-Backend WARN, `./start.sh` repariert.

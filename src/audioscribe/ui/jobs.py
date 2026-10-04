@@ -50,7 +50,8 @@ WHISPER_MODELS: tuple[str, ...] = (
 # Sprachvorschlaege der Oberflaeche ('auto' = erkennen lassen).
 LANGUAGES: tuple[str, ...] = ("de", "en", "auto")
 
-DEVICES: tuple[str, ...] = ("auto", "cuda", "cpu")
+# 'mps' = Apple Silicon (PRD §19, FR-53); nicht verfuegbare Geraete deaktiviert die Oberflaeche.
+DEVICES: tuple[str, ...] = ("auto", "cuda", "mps", "cpu")
 
 # Bildwechsel-Erkennung: die Namen stammen aus pipeline.screens (SENSITIVITIES/FORMATS),
 # werden hier aber bewusst wiederholt - die Oberflaeche darf die Pipeline nicht importieren
@@ -236,6 +237,24 @@ def parse_duration_line(line: str) -> float | None:
     return float(match.group(1)) if match else None
 
 
+_ACCELERATOR_PROBE = (
+    "import json, sys, torch\n"
+    "mps = getattr(torch.backends, 'mps', None)\n"
+    "mps_ok = bool(mps is not None and mps.is_available())\n"
+    "try:\n"
+    "    import mlx_whisper\n"
+    "    mlx_ok = sys.platform == 'darwin'\n"
+    "except Exception:\n"
+    "    mlx_ok = False\n"
+    "print(json.dumps({'cuda': bool(torch.cuda.is_available()), 'mps': mps_ok, 'mlx': mlx_ok}))\n"
+)
+
+
+def accelerator_probe_argv(python: str | None = None) -> list[str]:
+    """Kommando, das in einem Wegwerf-Prozess CUDA, MPS und mlx-whisper prueft (JSON-Zeile)."""
+    return [python or sys.executable, "-c", _ACCELERATOR_PROBE]
+
+
 def cuda_probe_argv(python: str | None = None) -> list[str]:
     """Kommando, das in einem Wegwerf-Prozess prueft, ob CUDA verfuegbar ist."""
     return [
@@ -245,8 +264,24 @@ def cuda_probe_argv(python: str | None = None) -> list[str]:
     ]
 
 
-def probe_cuda(*, timeout: float = 120.0) -> bool | None:
-    """CUDA-Verfuegbarkeit in einem *separaten* Prozess pruefen.
+def parse_accelerator(stdout: str, backend_raw: str = "auto") -> dict | None:
+    """Letzte JSON-Zeile der Probe -> ``{"cuda", "mps", "backend"}``; ``None`` = unbekannt."""
+    zeilen = [z for z in (stdout or "").splitlines() if z.strip()]
+    if not zeilen:
+        return None
+    try:
+        daten = json.loads(zeilen[-1])
+    except ValueError:
+        return None
+    if not isinstance(daten, dict):
+        return None
+    raw = (backend_raw or "auto").strip().lower()
+    mlx = bool(daten.get("mlx")) and raw != "faster-whisper" and not bool(daten.get("cuda"))
+    return {"cuda": bool(daten.get("cuda")), "mps": bool(daten.get("mps")), "backend": "mlx" if mlx else "faster-whisper"}
+
+
+def probe_accelerator(*, timeout: float = 120.0) -> dict | None:
+    """Beschleuniger in einem *separaten* Prozess pruefen: CUDA, MPS (Apple Silicon), MLX.
 
     Nicht ``config.cuda_available()`` benutzen: das importiert torch im Server-Prozess
     und haelt dauerhaft einen CUDA-Kontext offen - VRAM, den der eigentliche
@@ -254,7 +289,7 @@ def probe_cuda(*, timeout: float = 120.0) -> bool | None:
     """
     try:
         proc = subprocess.run(  # noqa: S603 - festes Kommando, keine Nutzereingabe
-            cuda_probe_argv(),
+            accelerator_probe_argv(),
             capture_output=True,
             text=True,
             timeout=timeout,
@@ -263,7 +298,13 @@ def probe_cuda(*, timeout: float = 120.0) -> bool | None:
         return None
     if proc.returncode != 0:
         return None
-    return proc.stdout.strip().endswith("1")
+    return parse_accelerator(proc.stdout, os.environ.get("AUDIOSCRIBE_ASR_BACKEND", "auto"))
+
+
+def probe_cuda(*, timeout: float = 120.0) -> bool | None:
+    """CUDA-Verfuegbarkeit (``None`` = unbekannt) - Huelle um ``probe_accelerator``."""
+    acc = probe_accelerator(timeout=timeout)
+    return None if acc is None else acc["cuda"]
 
 
 def doctor_argv(python: str | None = None) -> list[str]:
@@ -397,7 +438,8 @@ def scan_results(output_dir: Path) -> list[dict]:
 
 # --- Live-Transkription (PRD §17) --------------------------------------------------
 
-# 'auto' waehlt nach Geraet: large-v3-turbo auf CUDA, small auf CPU (live/asr.default_model).
+# 'auto' waehlt nach Geraet und Backend: large-v3-turbo auf CUDA und MLX, small auf CPU
+# (live/asr.default_model).
 LIVE_WHISPER_MODELS: tuple[str, ...] = ("auto", *WHISPER_MODELS)
 
 

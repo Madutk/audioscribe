@@ -3,11 +3,12 @@
 Ein Browser kennt keinen nativen Ordner-Dialog, der einen *Pfad* zurueckgibt - deshalb
 blaettert die Oberflaeche serverseitig durch das Dateisystem.
 
-Der Server laeuft entweder nativ unter Windows oder unter WSL/Linux. Eingefuegte Pfade
-werden deshalb in BEIDE Richtungen umgesetzt: unter WSL wird ``C:\\Users\\...`` zu
-``/mnt/c/Users/...``, nativ unter Windows umgekehrt ``/mnt/c/Users/...`` zu
-``C:\\Users\\...``. Derselbe kopierte Explorer-Pfad funktioniert damit ueberall, und ein
-Ordner, den ein frueherer WSL-Lauf gemerkt hat, oeffnet sich auch unter Windows.
+Der Server laeuft nativ unter Windows, unter WSL/Linux oder unter macOS. Eingefuegte Pfade
+werden zwischen Windows und WSL in BEIDE Richtungen umgesetzt: unter WSL wird
+``C:\\Users\\...`` zu ``/mnt/c/Users/...``, nativ unter Windows umgekehrt
+``/mnt/c/Users/...`` zu ``C:\\Users\\...``. Derselbe kopierte Explorer-Pfad funktioniert
+damit ueberall, und ein Ordner, den ein frueherer WSL-Lauf gemerkt hat, oeffnet sich auch
+unter Windows. Auf dem Mac gibt es kein ``/mnt/c`` - Pfade bleiben, wie der Finder sie liefert.
 
 Sicherheit: Das Blaettern ist absichtlich nicht auf ein Wurzelverzeichnis beschraenkt -
 genau das ist das Feature. Abgesichert wird es dadurch, dass der Server ausschliesslich
@@ -20,9 +21,13 @@ from __future__ import annotations
 import os
 import re
 import string
+import sys
 from pathlib import Path
 
 IS_WINDOWS = os.name == "nt"
+IS_MAC = sys.platform == "darwin"
+# Steuert Hinweistexte und Pfad-Umsetzung der Oberflaeche.
+PLATFORM = "windows" if IS_WINDOWS else ("mac" if IS_MAC else "posix")
 
 # "C:\Users\user" / "c:/Users/user" -> Laufwerksbuchstabe + Rest
 _DRIVE_RE = re.compile(r"^([A-Za-z]):(?:[\\/](.*))?$")
@@ -89,15 +94,24 @@ def wsl_to_windows(text: str) -> str:
     return raw
 
 
-def to_native(text: str, *, windows: bool | None = None) -> str:
-    """Nutzereingabe -> Schreibweise des Systems, auf dem der Server laeuft."""
+def to_native(text: str, *, windows: bool | None = None, mac: bool | None = None) -> str:
+    """Nutzereingabe -> Schreibweise des Systems, auf dem der Server laeuft.
+
+    Auf dem Mac wird nichts umgesetzt: ein eingefuegtes ``C:\\...`` ergaebe ein nicht
+    existierendes ``/mnt/c/...`` statt einer klaren Fehlermeldung.
+    """
     windows = IS_WINDOWS if windows is None else windows
+    mac = (IS_MAC and not windows) if mac is None else mac
+    if mac and not windows:
+        return _clean(text)
     return wsl_to_windows(text) if windows else windows_to_wsl(text)
 
 
-def normalize_path(text: str, *, default: Path | None = None, windows: bool | None = None) -> Path:
+def normalize_path(
+    text: str, *, default: Path | None = None, windows: bool | None = None, mac: bool | None = None
+) -> Path:
     """Nutzereingabe -> absoluter Pfad (Pfad-Umsetzung, ``~``, ``..`` aufgeloest)."""
-    raw = to_native(text or "", windows=windows)
+    raw = to_native(text or "", windows=windows, mac=mac)
     if not raw:
         return Path(default) if default is not None else Path.home()
     return Path(raw).expanduser().resolve()
@@ -190,10 +204,13 @@ def quick_links(
     output_dir: Path,
     home: Path | None = None,
     mnt_root: Path = Path("/mnt"),
+    volumes_root: Path = Path("/Volumes"),
     windows: bool | None = None,
+    mac: bool | None = None,
 ) -> list[tuple[str, str]]:
     """Sprungziele fuer den Ordner-Dialog (Projektordner, Home, Laufwerke, Nutzer-Ordner)."""
     windows = IS_WINDOWS if windows is None else windows
+    mac = (IS_MAC and not windows) if mac is None else mac
     home = Path.home() if home is None else Path(home)
     candidates: list[tuple[str, Path]] = [
         ("Projekt", Path(project_root)),
@@ -212,6 +229,28 @@ def quick_links(
             (name, home / name)
             for name in ("Desktop", "Downloads", "Videos", "Dokumente", "Documents")
         ]
+    elif mac:
+        # Finder zeigt die Nutzerordner lokalisiert ("Schreibtisch"), auf der Platte heissen
+        # sie englisch - darum deutsche Labels auf englische Pfade.
+        candidates += [
+            ("Schreibtisch", home / "Desktop"),
+            ("Dokumente", home / "Documents"),
+            ("Downloads", home / "Downloads"),
+            ("Filme", home / "Movies"),
+            ("iCloud Drive", home / "Library" / "Mobile Documents" / "com~apple~CloudDocs"),
+        ]
+        # Externe Platten und Sticks haengen unter /Volumes; "Macintosh HD" ist nur ein Link auf /.
+        try:
+            volumes = sorted(p for p in Path(volumes_root).iterdir() if p.is_dir())
+        except OSError:
+            volumes = []
+        for vol in volumes:
+            try:
+                if vol.resolve() == Path("/"):
+                    continue
+            except OSError:
+                continue
+            candidates.append((f"Volume {vol.name}", vol))
     else:
         # Unter WSL haengen die Windows-Laufwerke in /mnt/<buchstabe>; /mnt/wsl & Co. raus.
         try:

@@ -8,13 +8,15 @@ from __future__ import annotations
 
 import json
 import os
+import platform
 import shutil
+import subprocess
 import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Literal
 
-from audioscribe.config import ensure_ffmpeg_on_path, resolve_compute_type, settings
+from audioscribe.config import ct2_device, ensure_ffmpeg_on_path, resolve_compute_type, settings
 
 Status = Literal["OK", "WARN", "FAIL"]
 
@@ -24,6 +26,67 @@ class CheckResult:
     status: Status
     name: str
     detail: str
+
+
+# --- Plattform (PRD §19, FR-50) ---
+
+MACOS_MIN = (14, 0)  # mlx-Wheels gibt es ab macOS 14; ScreenCaptureKit-Audio ab 13.0
+
+
+def _sysctl(name: str) -> str:
+    try:
+        return subprocess.run(  # noqa: S603 - festes Kommando
+            ["sysctl", "-n", name], capture_output=True, text=True, timeout=5
+        ).stdout.strip()
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def mac_chip() -> str | None:
+    """``Apple M4 Pro`` o. ae.; ``None`` ausserhalb von macOS."""
+    if sys.platform != "darwin":
+        return None
+    return _sysctl("machdep.cpu.brand_string") or platform.processor() or None
+
+
+def evaluate_mac_platform(
+    version: str, machine: str, translated: bool, chip: str | None, host: str
+) -> CheckResult:
+    """Reine Bewertung der macOS-Plattform (testbar ohne Mac)."""
+    teile = [f"macOS {version or '?'} ({machine}{', ' + chip if chip else ''})", f"Terminal-App: {host}"]
+    try:
+        parts = tuple(int(p) for p in version.split(".")[:2])
+    except ValueError:
+        parts = ()
+    status: Status = "OK"
+    if machine != "arm64" or translated:
+        status = "WARN"
+        teile.append(
+            "Rosetta/Intel -> kein MPS/MLX, CPU-Betrieb"
+            + (" (arm64-Python verwenden: uv python install 3.12)" if translated else "")
+        )
+    if parts and parts < MACOS_MIN:
+        status = "WARN"
+        teile.append(f"MLX braucht macOS >= {MACOS_MIN[0]}, ScreenCaptureKit-Audio >= 13 -> ohne MLX nur CPU")
+    return CheckResult(status, "Plattform", "; ".join(teile))
+
+
+def _check_platform() -> CheckResult:
+    if sys.platform == "darwin":
+        from audioscribe.live.berechtigungen import host_app
+
+        return evaluate_mac_platform(
+            platform.mac_ver()[0],
+            platform.machine(),
+            _sysctl("sysctl.proc_translated") == "1",
+            mac_chip(),
+            host_app(),
+        )
+    if sys.platform == "win32":
+        return CheckResult("OK", "Plattform", f"Windows {platform.release()} ({platform.machine()})")
+    release = os.uname().release
+    wsl = " (WSL2)" if "microsoft" in release.lower() else ""
+    return CheckResult("OK", "Plattform", f"Linux {release}{wsl} ({platform.machine()})")
 
 
 def _check_python() -> CheckResult:
@@ -53,11 +116,15 @@ def evaluate_device(
     compute_type_raw: str,
     gpu_name: str | None = None,
     nvidia_karte: bool = False,
+    *,
+    mps_ok: bool = False,
+    chip: str | None = None,
+    darwin: bool = False,
 ) -> CheckResult:
     """Reine Bewertungslogik fuer den Device-Check (testbar ohne torch).
 
-    Statusmatrix (PRD §14, FR-22): fehlendes CUDA ist nur noch FAIL, wenn das
-    Geraet explizit auf cuda erzwungen wurde; 'auto' faellt auf CPU zurueck.
+    Statusmatrix (PRD §14, FR-22; §19, FR-53): fehlendes CUDA/MPS ist nur FAIL, wenn das
+    Geraet explizit erzwungen wurde; 'auto' nimmt cuda > mps > cpu.
     """
     raw = raw_device.strip().lower()
     build = f"torch {torch_version}"
@@ -69,9 +136,29 @@ def evaluate_device(
             f"{build} -> Device '{raw_device}' erzwungen, aber CUDA nicht verfuegbar "
             "(CPU-Build/Treiber?) -> '--device auto|cpu' oder 'uv sync --extra cu124'",
         )
+    if raw == "mps" and not mps_ok:
+        return CheckResult(
+            "FAIL",
+            "PyTorch/Device",
+            f"{build} -> Device 'mps' erzwungen, aber Metal (MPS) nicht verfuegbar "
+            "(Intel-Mac/Rosetta/macOS < 13?) -> '--device auto|cpu'",
+        )
 
-    device = "cuda" if (raw == "auto" and cuda_ok) else ("cpu" if raw == "auto" else raw)
-    compute_type = resolve_compute_type(compute_type_raw, device)
+    if raw == "auto":
+        device = "cuda" if cuda_ok else ("mps" if mps_ok else "cpu")
+    else:
+        device = raw
+    compute_type = resolve_compute_type(compute_type_raw, ct2_device(device))
+
+    if device == "mps":
+        label = "auto=mps" if raw == "auto" else "mps"
+        wo = f" ({chip})" if chip else ""
+        return CheckResult(
+            "OK",
+            "PyTorch/Device",
+            f"{build} -> {label}{wo}; Alignment/Diarisierung auf MPS, faster-whisper auf CPU "
+            f"(ctranslate2 ohne Metal, compute_type={compute_type}) -> Whisper siehe 'ASR-Backend'",
+        )
 
     if device.startswith("cuda"):
         label = f"auto={device}" if raw == "auto" else device
@@ -85,7 +172,10 @@ def evaluate_device(
     else:
         hint = " — Hinweis: CUDA waere verfuegbar" if cuda_ok else ""
         detail = f"{build} -> cpu (explizit; langsam), compute_type={compute_type}{hint}"
-    if not cuda_ok and "+cpu" not in torch_version:
+    if darwin:
+        if not mps_ok:
+            detail += " — Tipp: arm64-Python und macOS >= 13 fuer MPS/MLX"
+    elif not cuda_ok and "+cpu" not in torch_version:
         # CUDA-/PyPI-Build ohne nutzbares CUDA: die schlanken CPU-Wheels sparen ~3 GB.
         detail += " — Tipp: 'uv sync --extra cpu' installiert die schlanken CPU-Wheels"
     elif not cuda_ok and nvidia_karte:
@@ -110,6 +200,8 @@ def _check_torch_device() -> CheckResult:
         )
     cuda_ok = torch.cuda.is_available()
     gpu_name = torch.cuda.get_device_name(0) if cuda_ok else None
+    mps = getattr(torch.backends, "mps", None)
+    mps_ok = bool(mps is not None and mps.is_available())
     # nvidia-smi kommt mit dem Treiber, nicht mit torch: seine blosse Anwesenheit verraet
     # eine Karte auch dann, wenn torch als CPU-Build gar nichts von ihr wissen kann.
     return evaluate_device(
@@ -119,6 +211,9 @@ def _check_torch_device() -> CheckResult:
         settings.whisper_compute_type,
         gpu_name,
         nvidia_karte=bool(shutil.which("nvidia-smi")),
+        mps_ok=mps_ok,
+        chip=mac_chip(),
+        darwin=sys.platform == "darwin",
     )
 
 
@@ -137,6 +232,58 @@ def _check_whisperx() -> CheckResult:
     except ImportError as exc:
         return CheckResult("FAIL", "WhisperX", f"Import fehlgeschlagen: {exc}")
     return CheckResult("OK", "WhisperX", f"verfuegbar; Modell konfiguriert: {settings.whisper_model}")
+
+
+def evaluate_asr_backend(
+    backend_raw: str, darwin_arm: bool, mlx_version: str | None, mlx_device: str | None = None
+) -> CheckResult:
+    """Reine Bewertung des ASR-Backends (FR-52): faster-whisper ueberall, mlx auf Apple Silicon."""
+    raw = backend_raw.strip().lower()
+    if darwin_arm:
+        if mlx_version:
+            backend = "faster-whisper" if raw == "faster-whisper" else "mlx"
+            from audioscribe.live.asr_mlx import mlx_repo
+
+            ziel = mlx_repo("large-v3-turbo", settings.mlx_repo or None)
+            detail = f"mlx-whisper {mlx_version}{' (' + mlx_device + ')' if mlx_device else ''}; "
+            detail += f"AUDIOSCRIBE_ASR_BACKEND={raw} -> {backend}"
+            if backend == "mlx":
+                detail += f"; Live-Modell: {ziel}"
+            else:
+                detail += " (MLX waere schneller: AUDIOSCRIBE_ASR_BACKEND=auto)"
+            return CheckResult("OK", "ASR-Backend", detail)
+        if raw == "mlx":
+            return CheckResult(
+                "FAIL",
+                "ASR-Backend",
+                "mlx erzwungen, aber mlx-whisper fehlt -> 'uv sync --extra cpu --extra mac --extra live'",
+            )
+        return CheckResult(
+            "WARN",
+            "ASR-Backend",
+            "mlx-whisper fehlt -> 'uv sync --extra cpu --extra mac --extra live' "
+            "(sonst faster-whisper auf der CPU: large-v3-turbo nicht live-tauglich)",
+        )
+    if raw == "mlx":
+        return CheckResult("WARN", "ASR-Backend", "mlx nur auf Apple Silicon -> faster-whisper oder 'auto'")
+    return CheckResult("OK", "ASR-Backend", "faster-whisper (ctranslate2); MLX nur auf Apple Silicon")
+
+
+def _check_asr_backend() -> CheckResult:
+    darwin_arm = sys.platform == "darwin" and platform.machine() == "arm64"
+    mlx_version = mlx_device = None
+    if darwin_arm:
+        try:
+            import importlib.metadata
+
+            import mlx.core as mx
+            import mlx_whisper  # noqa: F401
+
+            mlx_version = importlib.metadata.version("mlx-whisper")
+            mlx_device = str(mx.default_device())
+        except Exception:  # noqa: BLE001 - fehlt oder kaputt -> wie nicht installiert
+            mlx_version = None
+    return evaluate_asr_backend(settings.asr_backend, darwin_arm, mlx_version, mlx_device)
 
 
 def _check_diarization() -> CheckResult:
@@ -224,7 +371,10 @@ def _check_agent() -> CheckResult:
     browser = find_browser()
     if browser is None:
         status = "WARN"
-        teile.append("Prozessbild: kein Edge/Chrome gefunden (AUDIOSCRIBE_BROWSER setzen)")
+        teile.append(
+            "Prozessbild: kein Edge/Chrome gefunden -> Chrome oder Edge installieren "
+            "(einzige Komponente ausserhalb von pip; nur fuers Prozessbild) oder AUDIOSCRIBE_BROWSER setzen"
+        )
     else:
         teile.append(f"Prozessbild via {browser.name}")
     if os.environ.get("ANTHROPIC_API_KEY"):
@@ -235,28 +385,47 @@ def _check_agent() -> CheckResult:
     return CheckResult(status, "KI-Analyse", "; ".join(teile))
 
 
-def _check_live() -> CheckResult:
-    """Live-Transkription (optional, daher hoechstens WARN): Plattform, Geraete, Monitore."""
-    if sys.platform != "win32":
-        return CheckResult("WARN", "Live", "nur unter nativem Windows verfuegbar (WASAPI)")
+def _live_inventory(prefix: list[str], status: Status = "OK") -> CheckResult:
     from audioscribe.live.kommando import inventory
 
     inv = inventory()
     teile = [
+        *prefix,
         f"{len(inv['mics'])} Mikrofon(e)",
         f"{len(inv['loopbacks'])} Loopback-Geraet(e)",
         f"{len(inv['monitors'])} Monitor(e)",
         *inv["problems"],
     ]
-    ok = not inv["problems"] and inv["loopbacks"] and inv["monitors"]
+    ok = status == "OK" and not inv["problems"] and inv["loopbacks"] and inv["monitors"]
     return CheckResult("OK" if ok else "WARN", "Live", "; ".join(teile))
 
 
+def _check_live() -> CheckResult:
+    """Live-Transkription (optional, daher hoechstens WARN): Plattform, Berechtigungen, Geraete."""
+    if sys.platform == "win32":
+        return _live_inventory([])
+    if sys.platform == "darwin":
+        from audioscribe.live import berechtigungen
+
+        status, teile = berechtigungen.bewerte(
+            bildschirm=berechtigungen.bildschirm_erlaubt(),
+            mikrofon=berechtigungen.mikrofon_status(),
+            host=berechtigungen.host_app(),
+            pyobjc_fehlt=berechtigungen.pyobjc_fehlt(),
+        )
+        return _live_inventory(teile, "OK" if status == "OK" else "WARN")
+    return CheckResult(
+        "WARN", "Live", "nur unter nativem Windows (WASAPI) und macOS (ScreenCaptureKit) verfuegbar"
+    )
+
+
 CHECKS = (
+    _check_platform,
     _check_python,
     _check_ffmpeg,
     _check_torch_device,
     _check_whisperx,
+    _check_asr_backend,
     _check_diarization,
     _check_dirs,
     _check_agent,

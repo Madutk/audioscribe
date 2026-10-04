@@ -42,6 +42,13 @@ _WINDOWS_BROWSERS = (
     "Program Files (x86)/Google/Chrome/Application/chrome.exe",
 )
 _LINUX_BROWSERS = ("chromium", "chromium-browser", "google-chrome", "microsoft-edge")
+# Relative Installationsorte unter macOS (/Applications bzw. ~/Applications).
+_MAC_BROWSERS = (
+    "Google Chrome.app/Contents/MacOS/Google Chrome",
+    "Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+    "Chromium.app/Contents/MacOS/Chromium",
+    "Brave Browser.app/Contents/MacOS/Brave Browser",
+)
 
 _PAGE = """<!DOCTYPE html>
 <html><head><meta charset="utf-8"><script src="mermaid.min.js"></script></head>
@@ -148,13 +155,30 @@ def find_browser(
     wsl: bool | None = None,
     exists: Callable[[Path], bool] = Path.is_file,
     which: Callable[[str], str | None] = shutil.which,
+    home: Path | None = None,
 ) -> Path | None:
-    """Edge/Chrome/Chromium fuer das headless Rendern; ``None`` wenn keiner da ist."""
+    """Edge/Chrome/Chromium fuer das headless Rendern; ``None`` wenn keiner da ist.
+
+    Der Browser ist die einzige Komponente ausserhalb von pip - und optional (nur fuer das
+    Prozessbild). Safari kann nicht headless rendern, darum auch auf dem Mac Chrome/Edge.
+    """
     env = os.environ if env is None else env
     override = env.get("AUDIOSCRIBE_BROWSER", "").strip()
     if override:
         return Path(override)
     platform = sys.platform if platform is None else platform
+    if platform == "darwin":
+        roots = (Path("/Applications"), (Path.home() if home is None else Path(home)) / "Applications")
+        for root in roots:
+            for rel in _MAC_BROWSERS:
+                candidate = root / rel
+                if exists(candidate):
+                    return candidate
+        for name in _LINUX_BROWSERS:
+            found = which(name)
+            if found:
+                return Path(found)
+        return None
     windows_root: Path | None = None
     if platform == "win32":
         windows_root = Path(env.get("SystemDrive", "C:") + "/")

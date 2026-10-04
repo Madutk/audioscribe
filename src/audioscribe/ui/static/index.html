@@ -128,8 +128,9 @@
     <div class="card">
       <h2 class="card-title"><span class="step">2</span>Audio</h2>
       <div class="field"><label for="liveMic">Mikrofon (Eingabe, „Ich“)</label><select id="liveMic"></select></div>
-      <div class="field"><label for="liveLoop">System-Audio (Ausgabe, Gegenseite)</label><select id="liveLoop"></select></div>
+      <div class="field"><label for="liveLoop" id="liveLoopLabel">System-Audio (Ausgabe, Gegenseite)</label><select id="liveLoop"></select></div>
       <p class="hint">Headset empfohlen: über Lautsprecher hört das Mikrofon die Gegenseite mit.</p>
+      <p class="hint" id="livePermHint" hidden></p>
       <div class="err" id="liveProblems" role="alert"></div>
     </div>
 
@@ -148,6 +149,7 @@
         <label><input type="checkbox" id="liveSpeakers" checked /><span>Sprecher trennen</span></label>
         <label><input type="checkbox" id="liveRefine" checked /><span>Nach Stopp nachschärfen</span></label>
       </div>
+      <p class="hint" id="liveBackendHint" hidden></p>
       <p class="hint target" id="liveTarget" style="margin-top:8px"></p>
     </div>
 
@@ -313,8 +315,9 @@
         <button class="ghost sm" id="envRefresh"><svg class="ic" aria-hidden="true"><use href="#i-refresh"/></svg>Aktualisieren</button>
       </h2>
       <div class="envlist" id="envChecks"><p class="hint">…</p></div>
-      <p class="hint" style="margin-top:8px">Dieselben Prüfungen wie <code>audioscribe doctor</code>: Python, ffmpeg,
-        Rechengerät, WhisperX, Diarisierung (HF-Token), Ordner, KI-Analyse und Live-Aufnahme.</p>
+      <p class="hint" style="margin-top:8px">Dieselben Prüfungen wie <code>audioscribe doctor</code>: Plattform, Python, ffmpeg,
+        Rechengerät (CUDA/MPS/CPU), WhisperX, ASR-Backend, Diarisierung (HF-Token), Ordner, KI-Analyse und Live-Aufnahme
+        (unter macOS samt Berechtigungen).</p>
     </div>
   </div>
 </div>

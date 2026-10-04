@@ -71,11 +71,7 @@ async function init() {
   fill($('model'), defaults.models, defaults.model);
   fill($('language'), defaults.languages, defaults.language);
   fill($('device'), defaults.devices, defaults.device);
-  if (defaults.cuda === false) {
-    const opt = [...$('device').options].find((o) => o.value === 'cuda');
-    if (opt) { opt.disabled = true; opt.textContent = 'cuda (nicht verfügbar)'; }
-    if ($('device').value === 'cuda') $('device').value = 'auto';
-  }
+  markUnavailable($('device'));
   $('diarize').checked = defaults.diarize !== false;
   fill($('frameSens'), defaults.sensitivities, defaults.frame_sensitivity);
   fill($('frameFmt'), defaults.frame_formats, defaults.frame_format);
@@ -84,12 +80,26 @@ async function init() {
   $('pathHint').innerHTML = defaults.platform === 'windows'
     ? 'Pfade aus dem Explorer können direkt eingefügt werden – <code>C:\\Users\\…</code>. ' +
       'WSL-Pfade (<code>/mnt/c/…</code>) werden mit umgesetzt.'
-    : 'Windows-Pfade können direkt eingefügt werden – <code>C:\\Users\\…</code> wird zu <code>/mnt/c/Users/…</code>.';
+    : defaults.platform === 'mac'
+      ? 'Pfade aus dem Finder können direkt eingefügt werden – im Finder <kbd>⌥</kbd> gedrückt halten und ' +
+        '„… als Pfadname kopieren“ wählen. Externe Laufwerke liegen unter <code>/Volumes/…</code>.'
+      : 'Windows-Pfade können direkt eingefügt werden – <code>C:\\Users\\…</code> wird zu <code>/mnt/c/Users/…</code>.';
   for (const key of Object.keys(folders)) folders[key] = defaults[key] || '';
   showFolders();
   await scan();
   setInterval(poll, 1000);
   poll();
+}
+
+/** Geraete, die die Probe als nicht verfuegbar meldet (cuda ohne NVIDIA, mps ausserhalb
+ *  von Apple Silicon), bleiben sichtbar, aber ausgegraut; eine gemerkte Wahl faellt auf auto. */
+function markUnavailable(select) {
+  for (const dev of ['cuda', 'mps']) {
+    if (defaults[dev] !== false) continue;
+    const opt = [...select.options].find((o) => o.value === dev);
+    if (opt) { opt.disabled = true; opt.textContent = `${dev} (nicht verfügbar)`; }
+    if (select.value === dev) select.value = 'auto';
+  }
 }
 
 // --- Einstellungen: Ordner --------------------------------------------------
@@ -582,12 +592,21 @@ async function loadLiveDefaults() {
   fill($('liveRefineModel'), d.refine_models, d.refine_model);
   fill($('liveLang'), defaults.languages, d.language);
   fill($('liveDevice'), defaults.devices, d.device);
+  markUnavailable($('liveDevice'));
   fill($('liveSens'), defaults.sensitivities, d.sensitivity);
   fill($('liveFmt'), defaults.frame_formats, d.format);
   $('livePartials').checked = d.partials !== false;
   $('liveSpeakers').checked = d.speakers !== false;
   $('liveRefine').checked = d.refine !== false;
   $('liveProblems').textContent = d.problems.join(' · ');
+  if (d.loopback_label) $('liveLoopLabel').textContent = d.loopback_label;
+  $('livePermHint').textContent = d.permission_hint || '';
+  $('livePermHint').hidden = !d.permission_hint;
+  const mlx = defaults.backend === 'mlx';
+  $('liveBackendHint').textContent = mlx
+    ? 'Apple Silicon: Live-Transkription über MLX (Metal-GPU), Sprecher und Nachschärfen über PyTorch/MPS.'
+    : '';
+  $('liveBackendHint').hidden = !mlx;
   d.windows = d.windows || [];
   liveSource = pickLiveSource(d);
   renderSources();
@@ -625,7 +644,7 @@ const sourceTile = (kind, id, inner) =>
  *  Sie oeffnet den Auswahldialog und traegt darum KEIN data-kind. */
 function windowTileHtml(stamp) {
   const chosen = liveSource.kind === 'window' && liveDefaults.windows.find((w) => w.hwnd === liveSource.id);
-  if (!chosen && !liveDefaults.windows.length && liveSource.kind !== 'window') return '';  // z. B. ausserhalb von Windows
+  if (!chosen && !liveDefaults.windows.length && liveSource.kind !== 'window') return '';  // z. B. ausserhalb von Windows/macOS
   const attrs = 'data-winpick="window" tabindex="0" role="button" aria-haspopup="dialog" title="Anwendungsfenster wählen"';
   if (!chosen) {
     return `<div class="monitor pick" ${attrs}><div class="none">${icon('image')}Fenster wählen …</div>Anwendungsfenster</div>`;
