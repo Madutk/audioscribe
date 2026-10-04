@@ -13,11 +13,11 @@ den Woertern uebernimmt weiterhin ``whisperx.assign_word_speakers``.
 
 from __future__ import annotations
 
-import gc
 import time
 from collections.abc import Callable
 
-from audioscribe.config import resolve_device, settings
+from audioscribe.compat import free_accelerator as _free_vram
+from audioscribe.config import resolve_device, settings, torch_device
 from audioscribe.progress import Reporter, emit_progress
 
 SAMPLE_RATE = 16_000
@@ -28,17 +28,6 @@ _HOOK_SPANS: dict[str, tuple[float, float]] = {
     "segmentation": (0.0, 50.0),
     "embeddings": (50.0, 100.0),
 }
-
-
-def _free_vram() -> None:
-    gc.collect()
-    try:
-        import torch
-
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-    except Exception:  # noqa: BLE001 - best effort
-        pass
 
 
 def _assign_word_speakers():
@@ -175,7 +164,7 @@ def diarize(audio, result: dict, reporter: Reporter | None = None) -> dict:
             kwargs["max_speakers"] = settings.max_speakers
 
     try:
-        pipeline.to(torch.device(resolve_device(settings.device)))
+        pipeline.to(torch.device(torch_device(resolve_device(settings.device))))
         audio_data = {"waveform": torch.from_numpy(audio[None, :]), "sample_rate": SAMPLE_RATE}
         if settings.emit_progress:
             try:

@@ -137,3 +137,74 @@ def test_doctor_hinweis_auf_cuda_wheels_bei_karte_und_cpu_build():
 def test_doctor_kein_cuda_hinweis_ohne_karte():
     r = evaluate_device("auto", False, "2.6.0+cpu", "auto", nvidia_karte=False)
     assert "NVIDIA-Karte erkannt" not in r.detail
+
+
+# --- Apple Silicon: mps, ct2_device, ASR-Backend (PRD §19, FR-52/53) ---
+
+
+def test_auto_waehlt_mps_ohne_cuda():
+    assert resolve_device("auto", cuda_check=lambda: False, mps_check=lambda: True) == "mps"
+
+
+def test_auto_bevorzugt_cuda_vor_mps():
+    assert resolve_device("auto", cuda_check=lambda: True, mps_check=lambda: True) == "cuda"
+
+
+def test_auto_ohne_beschleuniger_ist_cpu():
+    assert resolve_device("auto", cuda_check=lambda: False, mps_check=lambda: False) == "cpu"
+
+
+def test_explizites_cpu_ruft_keine_probe_auch_nicht_mps():
+    assert resolve_device("cpu", cuda_check=_boom, mps_check=_boom) == "cpu"
+
+
+def test_erzwungenes_mps_ohne_mps_ist_fehler():
+    with pytest.raises(RuntimeError, match="MPS"):
+        resolve_device("mps", cuda_check=lambda: False, mps_check=lambda: False)
+
+
+def test_explizites_mps_bleibt_erhalten():
+    assert resolve_device("mps", cuda_check=_boom, mps_check=lambda: True) == "mps"
+
+
+def test_ct2_device_kennt_kein_metal():
+    from audioscribe.config import ct2_device, torch_device
+
+    assert ct2_device("mps") == "cpu"
+    assert ct2_device("cuda:1") == "cuda:1"
+    assert ct2_device("cpu") == "cpu"
+    assert torch_device("mps") == "mps"
+
+
+def test_compute_type_auto_auf_mps_ist_int8():
+    assert resolve_compute_type("auto", "mps") == "int8"
+
+
+def test_asr_backend_auto_waehlt_mlx_nur_wenn_installiert():
+    from audioscribe.config import resolve_asr_backend
+
+    assert resolve_asr_backend("auto", "mps", mlx_check=lambda: True) == "mlx"
+    assert resolve_asr_backend("auto", "mps", mlx_check=lambda: False) == "faster-whisper"
+    assert resolve_asr_backend("auto", "cpu", mlx_check=lambda: False) == "faster-whisper"
+    # Auf CUDA bleibt faster-whisper, selbst wenn mlx importierbar waere.
+    assert resolve_asr_backend("auto", "cuda", mlx_check=lambda: True) == "faster-whisper"
+
+
+def test_asr_backend_explizit():
+    from audioscribe.config import resolve_asr_backend
+
+    assert resolve_asr_backend("faster-whisper", "mps", mlx_check=_boom) == "faster-whisper"
+    assert resolve_asr_backend(" MLX ", "cpu", mlx_check=lambda: True) == "mlx"
+    with pytest.raises(RuntimeError, match="mlx-whisper"):
+        resolve_asr_backend("mlx", "cpu", mlx_check=lambda: False)
+    with pytest.raises(RuntimeError, match="Unbekanntes"):
+        resolve_asr_backend("vulkan", "cpu", mlx_check=lambda: False)
+
+
+def test_mps_available_ist_false_ausserhalb_von_macos(monkeypatch):
+    from audioscribe import config
+
+    config.mps_available.cache_clear()
+    monkeypatch.setattr(config.sys, "platform", "linux")
+    assert config.mps_available() is False
+    config.mps_available.cache_clear()

@@ -389,3 +389,25 @@ def ensure_native_libs(log=None) -> None:
     os.environ[_LD_MARKER] = "1"
 
     os.execv(sys.executable, [sys.executable, *sys.argv])
+
+
+def free_accelerator() -> None:
+    """Beschleuniger-Speicher freigeben (CUDA oder Metal/MPS), best effort.
+
+    Die Pipeline laedt ihre Modelle nacheinander (NFR-2); zwischen den Stufen soll der
+    Platz des vorigen Modells wieder frei sein - auf dem Mac ist das Unified Memory, das
+    sich Whisper, wav2vec2 und pyannote mit allem anderen teilen.
+    """
+    import gc
+
+    gc.collect()
+    try:
+        import torch
+
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        mps = getattr(torch.backends, "mps", None)
+        if mps is not None and mps.is_available() and hasattr(torch, "mps"):
+            torch.mps.empty_cache()
+    except Exception:  # noqa: BLE001 - best effort
+        pass

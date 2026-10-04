@@ -42,6 +42,9 @@ class LiveBilanz:
     tempo_inkl_vorschau: float | None = None  # (Dekodieren + Sprecher + Vorschau) je Audiosekunde
     aufholmodus_anteil: float = 0.0  # aufholmodus_s / aufnahme_s
     eco_abschnitte: int = 0  # sparsam dekodierte Abschnitte (Beam 1, kein Fallback)
+    backend: str = ""  # faster-whisper | mlx (FR-52)
+    geraet: str = ""  # cuda | mps | cpu
+    modell: str = ""
 
 
 @dataclass
@@ -120,6 +123,8 @@ def beschreibe_live(b: LiveBilanz) -> str:
         anteil = f" ({round(b.aufholmodus_anteil * 100)} %)" if b.aufholmodus_anteil else ""
         teile.append(f"Aufholmodus {_s(b.aufholmodus_s)}{anteil}")
     teile.append(f"Abschluss {_s(b.abschluss_s)}")
+    if b.backend or b.geraet:
+        teile.append("/".join(t for t in (b.modell, b.backend, b.geraet) if t))
     return "Fazit: " + " · ".join(teile)
 
 

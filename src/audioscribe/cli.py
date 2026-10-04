@@ -1,7 +1,7 @@
 """CLI-Einstiegspunkt fuer audioscribe.
 
 Befehle:
-  doctor  - Umgebungs-Check (Python/ffmpeg/Device(CUDA/CPU)/WhisperX/pyannote/HF-Token)
+  doctor  - Umgebungs-Check (Plattform/Python/ffmpeg/Device(CUDA/MPS/CPU)/WhisperX/ASR-Backend/pyannote)
   run     - Audiodatei transkribieren + diarisieren -> Markdown (optional PDF)
   review  - lokale Review-Oberflaeche: Video + Transkript, wichtige Frames markieren (PRD §13)
   export  - Transkript + Markierungen zu annotiertem Markdown/PDF mergen (FR-18)
@@ -9,7 +9,7 @@ Befehle:
   analyze - KI-Analyse eines Ergebnisordners per Claude-Agent (Kontext + Skills, PRD §16)
   prozessbild - prozessbild.png/.svg aus prozessbild.mmd neu erzeugen (FR-35)
   bpmn    - BPMN-Modell mit Lanes aus bpmn-modell.json erzeugen/pruefen (FR-36)
-  live    - Live-Transkription: Monitor + System-Audio + Mikrofon mitschneiden (PRD §17)
+  live    - Live-Transkription: Monitor + System-Audio + Mikrofon mitschneiden (PRD §17; Windows, macOS)
   refine  - Live-Sitzung mit der Offline-Pipeline nachschaerfen (FR-43)
 """
 
@@ -17,9 +17,16 @@ from __future__ import annotations
 
 import argparse
 import os
+import sys
 from pathlib import Path
 
 from audioscribe import __version__
+
+
+_BACKEND_HELP = (
+    "ASR-Backend fuer Whisper: auto (Default: mlx auf Apple Silicon, sonst faster-whisper) "
+    "| faster-whisper | mlx"
+)
 
 
 def _set(name: str, value: object) -> None:
@@ -43,24 +50,39 @@ def _resolve_out_dir(target: str) -> Path:
 
 
 def _prepare_backend() -> tuple[str, str] | None:
-    """Loest Geraet/compute_type auf und macht ctranslate2 + cuDNN ladbar.
+    """Loest Geraet/compute_type/ASR-Backend auf und macht ctranslate2 + cuDNN ladbar.
 
     Liefert ``(device, compute_type)`` oder ``None`` (Fehler bereits ausgegeben). Muss VOR
-    dem ersten whisperx-/faster-whisper-Import laufen.
+    dem ersten whisperx-/faster-whisper-/torch-Import laufen.
     """
-    # Geraet aufloesen (auto -> cuda|cpu) und das Ergebnis in die Env zurueckschreiben:
+    # Geraet aufloesen (auto -> cuda|mps|cpu) und das Ergebnis in die Env zurueckschreiben:
     # so gilt nach dem os.execv-Re-Exec des cuDNN-Bootstraps dieselbe Entscheidung.
-    from audioscribe.config import resolve_compute_type, resolve_device, settings
+    from audioscribe.config import (
+        ct2_device,
+        resolve_asr_backend,
+        resolve_compute_type,
+        resolve_device,
+        settings,
+    )
 
+    if sys.platform == "darwin":
+        # Fehlende MPS-Operatoren (pyannote: fft u. a.) rechnet torch dann auf der CPU
+        # statt abzubrechen. Muss vor dem ersten torch-Import stehen.
+        os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
     try:
         device = resolve_device(settings.device)
+        backend = resolve_asr_backend(settings.asr_backend, device)
     except RuntimeError as exc:
         print(str(exc))
         return None
-    compute_type = resolve_compute_type(settings.whisper_compute_type, device)
+    compute_type = resolve_compute_type(settings.whisper_compute_type, ct2_device(device))
     _set("DEVICE", device)
     _set("WHISPER_COMPUTE_TYPE", compute_type)
-    print(f"Device: {device}, compute_type: {compute_type}")
+    _set("ASR_BACKEND", backend)
+    if device.startswith("mps"):
+        print(f"Device: mps (torch) · Whisper: {backend} ({'Metal' if backend == 'mlx' else 'CPU, ' + compute_type})")
+    else:
+        print(f"Device: {device}, compute_type: {compute_type}, Backend: {backend}")
 
     # ctranslate2 importierbar machen (beide Pfade, vor dem whisperx-Import):
     # Wheel-Reparatur fuer neuere glibc (Linux) bzw. pkg_resources-Ersatz (Windows).
@@ -84,16 +106,18 @@ def _live(args: argparse.Namespace) -> int:
     _set("WHISPER_LANGUAGE", args.language)
     _set("WHISPER_COMPUTE_TYPE", args.compute_type)
     _set("DEVICE", args.device)
-    backend = _prepare_backend()
-    if backend is None:
+    _set("ASR_BACKEND", args.backend)
+    prepared = _prepare_backend()
+    if prepared is None:
         return 1
-    device, compute_type = backend
+    device, compute_type = prepared
 
     from audioscribe.config import settings
     from audioscribe.live.asr import default_model
     from audioscribe.live.session import LiveOptions, LiveSession
 
-    model = args.model if args.model and args.model != "auto" else default_model(device)
+    backend = settings.asr_backend  # von _prepare_backend aufgeloest
+    model = args.model if args.model and args.model != "auto" else default_model(device, backend)
     replay = args.wav is not None or args.wav_mic is not None
     for pfad in (args.wav, args.wav_mic):
         if pfad is not None and not Path(pfad).is_file():
@@ -107,6 +131,7 @@ def _live(args: argparse.Namespace) -> int:
         model=model,
         device=device,
         compute_type=compute_type,
+        backend=backend,
         language=settings.whisper_language,
         # Replay: keine Standbilder, Spuren nur aus den Dateien.
         monitor=0 if replay else args.monitor,
@@ -124,6 +149,10 @@ def _live(args: argparse.Namespace) -> int:
         sentences_per_timestamp=settings.sentences_per_timestamp,
         cpu_threads=args.cpu_threads if args.cpu_threads is not None else settings.cpu_threads,
         force_eco=args.eco,
+        pause_s=settings.live_pause_s,
+        partial_interval_s=settings.live_partial_interval_s,
+        partial_min_s=settings.live_partial_min_s,
+        vad_every_tick=settings.live_vad_every_tick,
     )
     try:
         return LiveSession(opts).run()
@@ -138,6 +167,7 @@ def _refine(args: argparse.Namespace) -> int:
     _set("WHISPER_LANGUAGE", args.language)
     _set("WHISPER_MODEL", args.model)
     _set("DEVICE", args.device)
+    _set("ASR_BACKEND", args.backend)
     if _prepare_backend() is None:
         return 1
 
@@ -182,8 +212,9 @@ def main(argv: list[str] | None = None) -> int:
         help="Rechenpraezision: auto (Default; cuda->float16, cpu->int8) | float16 | int8_float16 | int8",
     )
     run.add_argument(
-        "--device", help="auto (Default: CUDA falls verfuegbar, sonst CPU) | cuda | cpu"
+        "--device", help="auto (Default: CUDA > MPS (Apple Silicon) > CPU) | cuda | mps | cpu"
     )
+    run.add_argument("--backend", help=_BACKEND_HELP)
     run.add_argument(
         "--sentences-per-timestamp",
         type=int,
@@ -320,7 +351,7 @@ def main(argv: list[str] | None = None) -> int:
 
     live = sub.add_parser(
         "live",
-        help="Live-Transkription: Monitor, System-Audio und Mikrofon mitschneiden (nur Windows)",
+        help="Live-Transkription: Monitor, System-Audio und Mikrofon mitschneiden (Windows, macOS)",
     )
     live.add_argument("--output", help="Ausgabeverzeichnis; die Sitzung landet in <output>/live-...")
     live.add_argument(
@@ -335,14 +366,19 @@ def main(argv: list[str] | None = None) -> int:
     )
     live.add_argument("--mic", default="default", help="Mikrofon: default | none | Geraeteindex")
     live.add_argument(
-        "--loopback", default="default", help="System-Audio (WASAPI-Loopback): default | none | Geraeteindex"
+        "--loopback",
+        default="default",
+        help="System-Audio (Windows: WASAPI-Loopback, macOS: ScreenCaptureKit): default | none | Geraeteindex",
     )
     live.add_argument(
         "--list-devices", action="store_true", help="Audio-Geraete, Monitore und Fenster anzeigen"
     )
-    live.add_argument("--model", help="Whisper-Modell (Default: large-v3-turbo auf CUDA, small auf CPU)")
+    live.add_argument(
+        "--model", help="Whisper-Modell (Default: large-v3-turbo auf CUDA und MLX, small auf CPU)"
+    )
     live.add_argument("--language", help="Sprachcode (z.B. 'de') oder 'auto'")
-    live.add_argument("--device", help="auto | cuda | cpu")
+    live.add_argument("--device", help="auto | cuda | mps | cpu")
+    live.add_argument("--backend", help=_BACKEND_HELP)
     live.add_argument("--compute-type", help="auto | float16 | int8_float16 | int8")
     live.add_argument(
         "--cpu-threads",
@@ -382,7 +418,8 @@ def main(argv: list[str] | None = None) -> int:
     ref.add_argument("target", metavar="ORDNER", help="Sitzungsordner (output/live-...)")
     ref.add_argument("--model", help="Whisper-Modell (Default: large-v3)")
     ref.add_argument("--language", help="Sprachcode (z.B. 'de') oder 'auto'")
-    ref.add_argument("--device", help="auto | cuda | cpu")
+    ref.add_argument("--device", help="auto | cuda | mps | cpu")
+    ref.add_argument("--backend", help=_BACKEND_HELP)
     ref.add_argument("--no-diarize", action="store_true", help="System-Spur nicht diarisieren")
 
     args = parser.parse_args(argv)
@@ -416,6 +453,7 @@ def main(argv: list[str] | None = None) -> int:
         _set("WHISPER_MODEL", args.model)
         _set("WHISPER_COMPUTE_TYPE", args.compute_type)
         _set("DEVICE", args.device)
+        _set("ASR_BACKEND", args.backend)
         _set("SENTENCES_PER_TIMESTAMP", args.sentences_per_timestamp)
         if args.frames:
             _set("SCREENS", 1)

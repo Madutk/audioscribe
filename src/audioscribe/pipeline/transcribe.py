@@ -1,27 +1,24 @@
-"""Stufe 2+3 - Transkription (faster-whisper large-v3) und Wort-Alignment (wav2vec2).
+"""Stufe 2+3 - Transkription (faster-whisper large-v3 bzw. MLX) und Wort-Alignment (wav2vec2).
 
 Beide Modelle werden nach Gebrauch aus dem VRAM entladen (NFR-2: 8 GB-Budget,
-Modelle laufen sequenziell).
+Modelle laufen sequenziell). Auf Apple Silicon uebernimmt ``transcribe_mlx`` die
+Transkription (CTranslate2 kennt kein Metal), das Alignment laeuft mit torch auf MPS.
 """
 
 from __future__ import annotations
 
-import gc
 import os
 
-from audioscribe.config import resolve_compute_type, resolve_device, settings
+from audioscribe.compat import free_accelerator as _free_vram
+from audioscribe.config import (
+    ct2_device,
+    resolve_asr_backend,
+    resolve_compute_type,
+    resolve_device,
+    settings,
+    torch_device,
+)
 from audioscribe.progress import Reporter, emit_download
-
-
-def _free_vram() -> None:
-    gc.collect()
-    try:
-        import torch
-
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-    except Exception:  # noqa: BLE001 - best effort
-        pass
 
 
 # Auf der CPU bringt Batching kaum Durchsatz, WhisperX meldet Fortschritt aber nur je
@@ -50,6 +47,11 @@ def transcribe(audio, reporter: Reporter | None = None) -> dict:
 
     language = None if settings.whisper_language.lower() == "auto" else settings.whisper_language
     device = resolve_device(settings.device)
+    if resolve_asr_backend(settings.asr_backend, device) == "mlx":
+        from audioscribe.pipeline.transcribe_mlx import transcribe_mlx
+
+        return transcribe_mlx(audio, reporter, model=settings.whisper_model, language=language)
+    device = ct2_device(device)  # CTranslate2: mps -> cpu
     whisper_model = settings.whisper_model
     if settings.emit_progress:
         # Der erste Lauf laedt bis zu 3 GB; ohne Meldung wirkt die Stufe eingefroren.
@@ -108,7 +110,7 @@ def align(audio, result: dict, reporter: Reporter | None = None) -> dict:
     apply_speechbrain_lazy_compat()
 
     language = result.get("language") or settings.whisper_language
-    device = resolve_device(settings.device)
+    device = torch_device(resolve_device(settings.device))
     try:
         align_model, metadata = whisperx.load_align_model(language_code=language, device=device)
     except Exception as exc:  # noqa: BLE001 - z.B. keine Modellgewichte fuer die Sprache

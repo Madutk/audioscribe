@@ -68,6 +68,13 @@ class SpeakerEmbedder:
         self._torch = torch
         self._inference = Inference(model, window="whole")
         self._inference.to(torch.device(device))
+        if device != "cpu":
+            # Aufwaermen (Metal-Shader bzw. CUDA-Kernel) jetzt im Hintergrund-Thread,
+            # nicht erst beim ersten System-Abschnitt.
+            try:
+                self(np.zeros(int(1.5 * SAMPLE_RATE), dtype=np.float32))
+            except Exception:  # noqa: BLE001 - Aufwaermen ist Zugabe
+                pass
 
     def __call__(self, audio: np.ndarray) -> np.ndarray:
         data = {"waveform": self._torch.from_numpy(audio[None, :]), "sample_rate": SAMPLE_RATE}

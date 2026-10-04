@@ -10,7 +10,7 @@ import time
 from dataclasses import asdict
 from pathlib import Path
 
-from audioscribe.config import settings
+from audioscribe.config import resolve_asr_backend, resolve_device, settings
 from audioscribe.live import events
 from audioscribe.live.bilanz import TEIL_REFINE, RefineBilanz, beschreibe_refine, save_bilanz
 from audioscribe.live.diagnose import DIAGNOSE_NAME, Diagnose
@@ -44,6 +44,7 @@ def refine_session(session_dir: str | Path) -> Path:
     sprache = settings.whisper_language
     t_start = time.monotonic()
     stufen = _Stufen()  # Fazit: Dauer je Stufe
+    backend = resolve_asr_backend(settings.asr_backend, resolve_device(settings.device))
     diagnose = Diagnose(session_dir / DIAGNOSE_NAME)  # FR-47: an das Live-Log anhängen
 
     def stage(name: str) -> None:
@@ -55,7 +56,7 @@ def refine_session(session_dir: str | Path) -> Path:
     for name, wav in spuren:
         audio = load_wav(wav)
         dauer = max(dauer, len(audio) / SAMPLE_RATE)
-        stage(f"Transkription {name} (faster-whisper {settings.whisper_model})")
+        stage(f"Transkription {name} ({backend} {settings.whisper_model})")
         result = transcribe(audio, reporter)
         sprache = result.get("language") or sprache
         # WhisperX liefert keine Qualitätswerte je Segment - nur Lage und Wortzahl.

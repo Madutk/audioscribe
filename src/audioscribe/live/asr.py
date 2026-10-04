@@ -1,25 +1,72 @@
-"""Residentes faster-whisper-Modell für die Live-Transkription.
+"""Residentes Whisper-Modell für die Live-Transkription - faster-whisper oder MLX.
 
 ``pipeline.transcribe`` lädt und entlädt das Modell je Aufruf (NFR-2) - bei
 Sekunden-Abschnitten wäre das Laden teurer als die Arbeit. Hier bleibt es für die ganze
 Sitzung geladen; der VRAM wird mit dem Prozessende frei.
+
+Zwei Backends hinter dem ``Transcriber``-Protokoll: ``LiveTranscriber`` (faster-whisper/
+CTranslate2: CUDA oder CPU) und ``asr_mlx.MlxTranscriber`` (Apple Silicon, Metal; FR-52).
+``make_transcriber`` wählt nach ``backend``.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Protocol
 
 import numpy as np
 
+from audioscribe.config import ct2_device
 from audioscribe.pipeline.models import fetch_model
 
 LIVE_MODEL_CUDA = "large-v3-turbo"
 LIVE_MODEL_CPU = "small"
 
+BACKEND_FASTER_WHISPER = "faster-whisper"
+BACKEND_MLX = "mlx"
 
-def default_model(device: str) -> str:
-    return LIVE_MODEL_CUDA if device.startswith("cuda") else LIVE_MODEL_CPU
+
+def default_model(device: str, backend: str = BACKEND_FASTER_WHISPER) -> str:
+    """``auto``-Modell: turbo, wo es flott ist (CUDA, MLX); ``small`` auf der CPU."""
+    if backend == BACKEND_MLX or device.startswith("cuda"):
+        return LIVE_MODEL_CUDA
+    return LIVE_MODEL_CPU
+
+
+class Transcriber(Protocol):
+    """Was die Sitzung von einem ASR-Backend braucht."""
+
+    model: str
+    detected: str  # erkannte Sprache ("" bis zum ersten fertigen Abschnitt bei language=auto)
+
+    def transcribe(
+        self,
+        audio: np.ndarray,
+        *,
+        final: bool,
+        eco: bool = False,
+        initial_prompt: str | None = None,
+    ) -> Ergebnis: ...
+
+
+def make_transcriber(
+    backend: str,
+    model: str,
+    device: str,
+    compute_type: str,
+    language: str,
+    on_progress: Callable[[int, int], None] | None = None,
+    cpu_threads: int = 0,
+) -> Transcriber:
+    """Das Backend zur Wahl; ``mps`` erreicht CTranslate2 nie (``ct2_device``)."""
+    if backend == BACKEND_MLX:
+        from audioscribe.live.asr_mlx import MlxTranscriber
+
+        return MlxTranscriber(model, language, on_progress=on_progress)
+    return LiveTranscriber(
+        model, ct2_device(device), compute_type, language, on_progress=on_progress, cpu_threads=cpu_threads
+    )
 
 
 def decode_options(*, final: bool, eco: bool = False) -> dict:

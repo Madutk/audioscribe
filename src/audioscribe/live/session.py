@@ -1,6 +1,6 @@
 """Eine Live-Sitzung: Aufnahme, Schnitt, Transkription, Standbilder, Ablage (PRD §17).
 
-Threads: PortAudio-Callbacks füllen die Spuren, der Schnitt-Thread zerlegt sie an
+Threads: Audio-Callbacks (PortAudio, ScreenCaptureKit) füllen die Spuren, der Schnitt-Thread zerlegt sie an
 Sprechpausen, EIN Transkriptions-Thread arbeitet das Auftragsbrett ab (ein Modell, eine
 GPU), der Bildschirm-Thread sichert Standbilder. Der Hauptthread meldet den Stand und
 schreibt alle 30 s das Transkript.
@@ -11,7 +11,7 @@ from __future__ import annotations
 import sys
 import threading
 import time
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 
 from audioscribe.live import events
@@ -26,8 +26,6 @@ from audioscribe.review.marks import Mark, save_marks
 
 _TICK_S = 0.25
 _PERSIST_S = 30.0
-_PARTIAL_MIN_S = 1.0
-_PARTIAL_INTERVAL_S = 2.0
 # Ab diesem Rückstand pausiert die Vorschau: fertige Abschnitte gehen vor.
 _PARTIAL_MAX_BACKLOG_S = 3.0
 # Tempo (Rechenzeit je Audiosekunde) über die letzten fertigen Abschnitte gemittelt.
@@ -40,6 +38,7 @@ class LiveOptions:
     model: str
     device: str
     compute_type: str
+    backend: str = "faster-whisper"  # faster-whisper | mlx (Apple Silicon)
     language: str = "de"
     monitor: int = 1  # 0 = ohne Bildschirm
     window: int = 0  # HWND eines Anwendungsfensters; hat Vorrang vor monitor
@@ -52,8 +51,14 @@ class LiveOptions:
     hf_token: str | None = None
     sentences_per_timestamp: int = 2
     cpu_threads: int = 0  # 0 = Bibliotheks-Default
-    # Schnitt: spätestens nach max_chunk_s wird ein Abschnitt geschlossen.
+    # Schnitt: Abschnitt zu nach pause_s Sprechpause, spätestens nach max_chunk_s.
+    pause_s: float = 0.6
     max_chunk_s: float = 12.0
+    # Vorschau: ab partial_min_s offenem Audio, höchstens alle partial_interval_s.
+    partial_min_s: float = 1.0
+    partial_interval_s: float = 2.0
+    # VAD jeden Takt (0,25 s) statt jeden zweiten: ~0,25 s weniger Verzögerung.
+    vad_every_tick: bool = False
     # Aufholmodus (PRD §17, NFR-15): ab catchup_s WARTENDEM Rückstand billig dekodieren,
     # wartende Abschnitte derselben Spur bis coalesce_s zusammenlegen (0 = nie).
     catchup_s: float = 5.0
@@ -92,13 +97,14 @@ class LiveSession:
     # --- Ablauf -------------------------------------------------------------
 
     def run(self) -> int:
-        from audioscribe.live.devices import pick
+        from audioscribe.live.capture import ensure_permissions, pick
         from audioscribe.live.speakers import SpeakerLabeler
 
         o = self.opts
         t_start = time.monotonic()
         self._state("laden", step=f"Whisper {o.model}")
-        events.log(f"Lade Modell {o.model} ({o.device}, {o.compute_type}) ...")
+        wie = "Metal" if o.backend == "mlx" else o.compute_type
+        events.log(f"Lade Modell {o.model} ({o.backend}, {o.device}, {wie}) ...")
         started = time.monotonic()
         self._asr = self._load_asr()
         events.log(f"Whisper {o.model} geladen ({_took(started)})")
@@ -111,6 +117,12 @@ class LiveSession:
         events.log(f"Sprachaktivität bereit ({_took(started)})")
 
         self.dir.mkdir(parents=True, exist_ok=True)
+        if o.replay_system is None and o.replay_mic is None:
+            # Vor der Sitzungsuhr: die macOS-Dialoge dürfen nicht in die Aufnahme fallen.
+            self._state("laden", step="Berechtigungen")
+            ensure_permissions(
+                mic=o.mic.strip().lower() != "none", system=o.loopback.strip().lower() != "none", log=events.log
+            )
         self._state("laden", step="Audio-Geräte")
         self._t0 = time.monotonic()
         audio = self._open_capture()
@@ -131,7 +143,7 @@ class LiveSession:
                 events.log("Weder Audio noch Bildquelle gewählt - nichts aufzunehmen.")
                 return 1
 
-            chunkers = {name: Chunker(vad, max_s=o.max_chunk_s) for name in tracks}
+            chunkers = {name: Chunker(vad, pause_s=o.pause_s, max_s=o.max_chunk_s) for name in tracks}
             threads = [
                 threading.Thread(target=self._cut_loop, args=(tracks, chunkers), daemon=True),
                 threading.Thread(target=self._asr_loop, daemon=True),
@@ -173,6 +185,7 @@ class LiveSession:
             laden_s=laden_s, aufnahme_s=aufnahme_s, abschluss_s=abschluss_s, gesamt_s=gesamt_s,
             schwelle_s=self.opts.max_chunk_s,
         )
+        bilanz = replace(bilanz, backend=self.opts.backend, geraet=self.opts.device, modell=self.opts.model)
         self._diagnose.close()
         with self._io_lock:
             keep_live_copy(self.dir, overwrite=True)
@@ -229,7 +242,7 @@ class LiveSession:
             for name, track in tracks.items():
                 chunker = chunkers[name]
                 chunker.feed(*track.take(now))
-                if tick % 2:
+                if tick % 2 and not self.opts.vad_every_tick:
                     continue  # VAD nur jeden zweiten Takt - sie ist der teure Teil
                 done = chunker.poll()
                 for utt in done:
@@ -250,8 +263,8 @@ class LiveSession:
             return
         if (
             self.opts.partials
-            and utt.duration_s >= _PARTIAL_MIN_S
-            and now - last_partial[name] >= _PARTIAL_INTERVAL_S
+            and utt.duration_s >= self.opts.partial_min_s
+            and now - last_partial[name] >= self.opts.partial_interval_s
             and self._board.backlog_s() <= _PARTIAL_MAX_BACKLOG_S
         ):
             last_partial[name] = now
@@ -363,10 +376,11 @@ class LiveSession:
     # --- Hilfen -------------------------------------------------------------
 
     def _load_asr(self):
-        from audioscribe.live.asr import LiveTranscriber
+        from audioscribe.live.asr import make_transcriber
 
         o = self.opts
-        return LiveTranscriber(
+        return make_transcriber(
+            o.backend,
             o.model,
             o.device,
             o.compute_type,
@@ -392,9 +406,9 @@ class LiveSession:
             return ReplayCapture(
                 self.clock, system=o.replay_system, mic=o.replay_mic, speed=o.speed, on_end=self._stop.set
             )
-        from audioscribe.live.devices import AudioCapture
+        from audioscribe.live.capture import open_capture
 
-        return AudioCapture(self.clock)
+        return open_capture(self.clock)
 
     def _enter_catchup(self, backlog_s: float) -> bool:
         """Sparmodus an/aus je nach Rückstand; der Wechsel wird einmal protokolliert."""
@@ -415,7 +429,7 @@ class LiveSession:
 
     def _limit_torch_threads(self) -> None:
         """torch (Sprecher-Embedding) auf dieselbe Threadzahl wie ctranslate2 begrenzen."""
-        if self.opts.cpu_threads <= 0 or self.opts.device.startswith("cuda"):
+        if self.opts.cpu_threads <= 0 or self.opts.device != "cpu":
             return
         try:
             import torch
@@ -492,6 +506,7 @@ class LiveSession:
             dir=str(self.dir),
             model=self.opts.model,
             device=self.opts.device,
+            backend=self.opts.backend,
             **extra,
         )
 
