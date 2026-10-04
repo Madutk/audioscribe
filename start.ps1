@@ -37,6 +37,11 @@ Set-Location $PSScriptRoot
 if (-not $env:UV_PROJECT_ENVIRONMENT) {
     $env:UV_PROJECT_ENVIRONMENT = Join-Path $PSScriptRoot '.venv-win'
 }
+# Hardlinks aus dem uv-Cache scheitern hier mit os error 396 ("Cloudvorgang ... inkompatible
+# feste Links", Cloud-Files-Filter von OneDrive & Co.) -> Dateien kopieren statt verlinken.
+if (-not $env:UV_LINK_MODE) {
+    $env:UV_LINK_MODE = 'copy'
+}
 
 if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
     Write-Error "uv fehlt -> winget install astral-sh.uv"
