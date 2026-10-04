@@ -283,6 +283,7 @@ def create_app():
         chosen["agent_output_dir"] = _remembered_dir(
             chosen["agent_output_dir"], settings.agent_output_dir
         )
+        acc = _accelerator()  # None = Probe nicht moeglich -> alle Geraete anbieten
         return JSONResponse(
             {
                 **chosen,
@@ -291,9 +292,9 @@ def create_app():
                 "devices": list(jobs.DEVICES),
                 "sensitivities": list(jobs.SENSITIVITIES),
                 "frame_formats": list(jobs.FRAME_FORMATS),
-                "cuda": _cuda(),
-                "mps": (acc := _accelerator()) and acc["mps"],
-                "backend": acc["backend"] if acc else None,
+                "cuda": None if acc is None else acc["cuda"],
+                "mps": None if acc is None else acc["mps"],
+                "backend": None if acc is None else acc["backend"],
                 # Steuert nur den Hinweistext der Oberflaeche: unter Windows werden
                 # Pfade nach C:\... umgesetzt, unter WSL nach /mnt/c/...., auf dem Mac
                 # bleiben Pfade, wie der Finder sie liefert.

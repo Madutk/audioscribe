@@ -112,11 +112,13 @@ def _live(args: argparse.Namespace) -> int:
         return 1
     device, compute_type = prepared
 
-    from audioscribe.config import settings
+    from audioscribe.config import resolve_asr_backend, settings
     from audioscribe.live.asr import default_model
     from audioscribe.live.session import LiveOptions, LiveSession
 
-    backend = settings.asr_backend  # von _prepare_backend aufgeloest
+    # settings ist beim Import eingefroren - den von _prepare_backend aufgeloesten Wert
+    # liefert die Umgebung, resolve_asr_backend ist darauf idempotent.
+    backend = resolve_asr_backend(os.environ.get("AUDIOSCRIBE_ASR_BACKEND", settings.asr_backend), device)
     model = args.model if args.model and args.model != "auto" else default_model(device, backend)
     replay = args.wav is not None or args.wav_mic is not None
     for pfad in (args.wav, args.wav_mic):

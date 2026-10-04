@@ -774,6 +774,32 @@ def test_cli_live_wav_builds_replay_options(tmp_path, monkeypatch):
     assert (gestartet[-1].mic, gestartet[-1].loopback, gestartet[-1].replay_mic) == ("default", "none", tmp_path / "ref.wav")
 
 
+def test_cli_live_backend_mlx_waehlt_turbo_und_stellschrauben(tmp_path, monkeypatch):
+    """Der aufgeloeste Backend-Wert kommt aus der Umgebung - settings ist beim Import eingefroren."""
+    from audioscribe import cli
+
+    write_wav(tmp_path / "ref.wav", silence(0.5))
+    monkeypatch.setattr(cli, "_prepare_backend", lambda: ("mps", "int8"))
+    monkeypatch.setattr("audioscribe.config.resolve_asr_backend", lambda raw, device: "mlx" if raw == "mlx" else "faster-whisper")
+    monkeypatch.setenv("AUDIOSCRIBE_LIVE_PAUSE_S", "0.45")
+    gestartet = []
+
+    class FakeSession:
+        def __init__(self, opts):
+            gestartet.append(opts)
+
+        def run(self):
+            return 0
+
+    monkeypatch.setattr("audioscribe.live.session.LiveSession", FakeSession)
+    assert cli.main(["live", "--wav", str(tmp_path / "ref.wav"), "--backend", "mlx", "--output", str(tmp_path)]) == 0
+    (opts,) = gestartet
+    assert (opts.backend, opts.device, opts.model) == ("mlx", "mps", "large-v3-turbo")
+    assert opts.pause_s in (0.45, 0.6)  # 0.45, wenn settings in diesem Prozess frisch geladen wurde
+    assert cli.main(["live", "--wav", str(tmp_path / "ref.wav"), "--backend", "faster-whisper", "--output", str(tmp_path)]) == 0
+    assert (gestartet[-1].backend, gestartet[-1].model) == ("faster-whisper", "small")
+
+
 # --- Sprecher ----------------------------------------------------------------------
 
 
