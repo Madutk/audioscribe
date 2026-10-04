@@ -81,6 +81,10 @@ benutzt, gehört `.venv` dem Linux-Python, und Windows-`uv` würde daran scheite
 MacBook Pro mit M4 oder M5 (M1–M3 laufen, langsamer), macOS 14 oder neuer. Alles bleibt in
 Python: kein Homebrew, kein virtuelles Audiogerät, nur `uv`-Pakete.
 
+> **Stand:** implementiert und mit Attrappen getestet, auf einem echten Mac aber noch nicht
+> geprüft. Die Abnahme-Checkliste steht in PRD §19.5; der erste Schritt ist
+> `./start.sh --doctor`, der zweite der ScreenCaptureKit-Spike (unten bei den Befehlen).
+
 ```bash
 ./start.sh                      # installiert uv und Python 3.12 bei Bedarf, synct .venv-mac, startet die Oberfläche
 ./start.sh --doctor             # Umgebung prüfen: macOS-Version, Chip, mps, mlx-whisper, Berechtigungen
