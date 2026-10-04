@@ -84,3 +84,20 @@ def test_manuelle_marks_werden_neu_annotiert(tmp_path, monkeypatch):
     text = (ziel / "transkript.annotiert.md").read_text(encoding="utf-8")
     assert "veraltet" not in text
     assert "Hallo Welt." in text
+
+
+def test_extrahiertes_wav_wird_nach_dem_laden_geloescht(tmp_path, monkeypatch):
+    video, _ = _vorbereiten(tmp_path, monkeypatch)
+    wav = tmp_path / "aufnahme.123.16k.wav"
+
+    def fake_extract(src, rep):
+        wav.write_bytes(b"x")
+        return wav
+
+    monkeypatch.setattr(orchestrator, "extract_audio", fake_extract)
+    monkeypatch.setattr(orchestrator, "_erkenne_bildwechsel", lambda *a: [])
+
+    orchestrator.run_pipeline(video, output_dir=tmp_path / "out", reporter=_StummerReporter())
+
+    assert not wav.exists()
+    assert video.exists()  # die Quelle selbst bleibt natuerlich

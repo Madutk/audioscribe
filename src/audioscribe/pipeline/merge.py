@@ -12,14 +12,34 @@ from audioscribe.models import Paragraph, Segment, Word
 
 UNKNOWN = "Unbekannt"
 
-# Satzende-Erkennung (grobe Heuristik; gelegentliche Fehlzaehler bei Abkuerzungen
-# verschieben nur einen Zeitstempel und sind unkritisch).
-_SENTENCE_TERMINATORS = re.compile(r"[.!?…]+")
+# Satzende-Erkennung (Heuristik). Ein Satzzeichen zaehlt nur, wenn danach kein Wortzeichen
+# folgt - das schliesst "10.000", "4.10.2026" und das innere "z.B" aus. Fuer einen
+# einzelnen Punkt gelten zusaetzlich die Ausnahmen unten.
+_SENTENCE_TERMINATORS = re.compile(r"(\w*)([.!?…]+)(?!\w)")
+
+# Gaengige deutsche Abkuerzungen, die fast nie am Satzende stehen. "usw."/"etc." fehlen
+# bewusst: die beenden oft genug tatsaechlich einen Satz.
+_ABKUERZUNGEN = frozenset(
+    {"bzw", "ca", "dr", "nr", "vgl", "ggf", "inkl", "evtl", "prof", "bspw", "sog", "zzgl", "abs"}
+)
 
 
 def _count_sentences(text: str) -> int:
-    """Zaehlt Satzenden (Gruppen aus . ! ? …) in einem Text-Stueck."""
-    return len(_SENTENCE_TERMINATORS.findall(text))
+    """Zaehlt Satzenden (Gruppen aus . ! ? …) in einem Text-Stueck.
+
+    Ein einzelner Punkt zaehlt NICHT nach einer ein- oder zweistelligen Zahl (Ordinalzahl:
+    "am 4. Oktober"), nach einem einzelnen Buchstaben ("z.B.", "d.h.") und nach einer
+    Abkuerzung aus ``_ABKUERZUNGEN``. Fehlzaehler verschieben nur einen Zeitstempel.
+    """
+    n = 0
+    for match in _SENTENCE_TERMINATORS.finditer(text):
+        wort, zeichen = match.groups()
+        if zeichen == "." and (
+            (wort.isdigit() and len(wort) <= 2) or len(wort) == 1 or wort.lower() in _ABKUERZUNGEN
+        ):
+            continue
+        n += 1
+    return n
 
 
 def _clean_join(parts: list[str]) -> str:

@@ -92,6 +92,27 @@ def make_progress_hook(
     return hook
 
 
+def _akzeptiert_hook(pipeline) -> bool:
+    """Kennt ``pipeline.apply`` den ``hook``-Parameter? (rein, testbar)
+
+    Vorab per Signatur pruefen statt einen ``TypeError`` abzufangen: der koennte auch tief
+    aus der Diarisierung kommen - dann liefe die ganze Datei ein zweites Mal, nur um am
+    Ende mit demselben Fehler ohne Kontext zu scheitern. Ein per
+    AUDIOSCRIBE_DIARIZATION_MODEL gesetztes anderes Modell kennt 'hook' evtl. nicht -
+    dann eben ohne Fortschrittsanzeige.
+    """
+    import inspect
+
+    apply = getattr(pipeline, "apply", None)
+    if apply is None:
+        return False
+    try:
+        params = inspect.signature(apply).parameters.values()
+    except (TypeError, ValueError):
+        return False
+    return any(p.name == "hook" or p.kind is inspect.Parameter.VAR_KEYWORD for p in params)
+
+
 def _ladefehler_meldung(status: str, detail: str, hint: str = "") -> str:
     """Nutzermeldung fuer ein fehlgeschlagenes Laden des Diarisierungsmodells (rein, testbar).
 
@@ -185,15 +206,9 @@ def diarize(audio, result: dict, reporter: Reporter | None = None) -> dict:
     try:
         pipeline.to(torch.device(torch_device(resolve_device(settings.device))))
         audio_data = {"waveform": torch.from_numpy(audio[None, :]), "sample_rate": SAMPLE_RATE}
-        if settings.emit_progress:
-            try:
-                diarization = pipeline(audio_data, hook=make_progress_hook(), **kwargs)
-            except TypeError:
-                # Ein per AUDIOSCRIBE_DIARIZATION_MODEL gesetztes anderes Modell kennt
-                # 'hook' moeglicherweise nicht - dann eben ohne Fortschrittsanzeige.
-                diarization = pipeline(audio_data, **kwargs)
-        else:
-            diarization = pipeline(audio_data, **kwargs)
+        if settings.emit_progress and _akzeptiert_hook(pipeline):
+            kwargs["hook"] = make_progress_hook()
+        diarization = pipeline(audio_data, **kwargs)
 
         diarize_df = pd.DataFrame(
             diarization.itertracks(yield_label=True),

@@ -1,8 +1,10 @@
 """Stufe 1 - Audio laden.
 
 WhisperX dekodiert die Eingabe (mp3/m4a/wav/...) per ffmpeg zu 16-kHz-Mono-float32.
-Wir geben das so geladene Array an alle weiteren Stufen weiter, damit ffmpeg nur
-einmal laeuft.
+Wir geben das so geladene Array an alle weiteren Stufen weiter, damit nicht jede Stufe
+neu dekodiert. (Bei Video laeuft ffmpeg zweimal: ``media.extract_audio`` schreibt ein
+16-kHz-WAV, das hier billig eingelesen wird - dafuer gibt es bei fehlender Tonspur eine
+verstaendliche Meldung statt der rohen ffmpeg-Ausgabe.)
 """
 
 from __future__ import annotations

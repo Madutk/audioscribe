@@ -65,7 +65,15 @@ def run_pipeline(
 
     step += 1
     reporter.stage(step, "Audio laden")
-    audio_arr, duration = load_audio(audio_path, reporter)
+    try:
+        audio_arr, duration = load_audio(audio_path, reporter)
+    finally:
+        if audio_path != source_path:
+            # Das extrahierte WAV wird danach nie wieder gelesen (~115 MB je Stunde).
+            try:
+                audio_path.unlink(missing_ok=True)
+            except OSError:
+                pass
 
     step += 1
     reporter.stage(step, f"Transkription (faster-whisper {settings.whisper_model})")
