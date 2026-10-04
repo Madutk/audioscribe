@@ -9,7 +9,7 @@ def inventory() -> dict:
     """Audio-Geräte, Monitore und Fenster; fehlende Teile stehen als Klartext in ``problems``."""
     out: dict = {"mics": [], "loopbacks": [], "monitors": [], "windows": [], "problems": []}
     try:
-        from audioscribe.live.devices import list_devices
+        from audioscribe.live.capture import list_devices
 
         out.update(list_devices())
     except Exception as exc:  # noqa: BLE001 - Treiberfehler dürfen die Abfrage nie kippen
@@ -19,7 +19,7 @@ def inventory() -> dict:
 
         out["monitors"] = list_monitors()
     except ImportError:
-        from audioscribe.live.devices import INSTALL_HINT
+        from audioscribe.live.capture import INSTALL_HINT
 
         out["problems"].append(f"mss fehlt -> {INSTALL_HINT}")
     except Exception as exc:  # noqa: BLE001
@@ -27,7 +27,7 @@ def inventory() -> dict:
     try:
         from audioscribe.live.fenster import list_windows
 
-        out["windows"] = list_windows()  # leer außerhalb von Windows
+        out["windows"] = list_windows()  # leer außerhalb von Windows und macOS
     except Exception as exc:  # noqa: BLE001
         out["problems"].append(f"Fenster nicht lesbar: {exc}")
     return out
@@ -44,7 +44,7 @@ def list_devices_text() -> str:
         ] or ["  -"]
     lines.append("Monitore:")
     lines += [f"  [{m['index']}] {m['width']}x{m['height']}" for m in inv["monitors"]] or ["  -"]
-    lines.append("Fenster (--window HWND):")
+    lines.append("Fenster (--window ID):")
     for gruppe in group_by_process(inv["windows"]):
         lines.append(f"  {gruppe['process']}")
         lines += [

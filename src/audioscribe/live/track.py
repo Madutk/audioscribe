@@ -65,12 +65,19 @@ class Track:
     """Nimmt Rohblöcke einer Quelle an und führt die 16-kHz-Zeitleiste samt WAV-Mitschnitt."""
 
     def __init__(
-        self, name: str, rate_in: int, channels: int, wav_path: Path | None = None
+        self,
+        name: str,
+        rate_in: int,
+        channels: int,
+        wav_path: Path | None = None,
+        *,
+        slack_s: float = _TAKE_SLACK_S,
     ) -> None:
         self.name = name
         self.channels = max(1, int(channels))
         self.written = 0  # Samples auf der Zeitleiste
         self.level = 0.0  # Spitzenpegel des letzten Blocks (0..1)
+        self._slack_s = slack_s
         self._resampler = Resampler(rate_in)
         self._lock = threading.Lock()
         self._pending: list[np.ndarray] = []
@@ -83,12 +90,21 @@ class Track:
             self._wav.setsampwidth(2)
             self._wav.setframerate(SAMPLE_RATE)
 
+    def reset_rate(self, rate_in: int) -> None:
+        """Eingangsrate nachträglich ändern (Gerät nahm die Wunschrate nicht an); vor dem ersten Block."""
+        with self._lock:
+            self._resampler = Resampler(rate_in)
+
     def feed(self, raw: bytes, t_arrival: float) -> None:
         """Rohblock (int16, interleaved), eingetroffen zur Sitzungszeit ``t_arrival``."""
         x = np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768.0
         if self.channels > 1:
             x = x[: len(x) - len(x) % self.channels].reshape(-1, self.channels).mean(axis=1)
-        y = self._resampler.process(x)
+        self.feed_mono(x, t_arrival)
+
+    def feed_mono(self, mono: np.ndarray, t_arrival: float) -> None:
+        """Block als float32 mono mit Eingangsrate (ScreenCaptureKit liefert Float32, kein int16)."""
+        y = self._resampler.process(np.asarray(mono, dtype=np.float32))
         if not len(y):
             return
         with self._lock:
@@ -99,7 +115,7 @@ class Track:
     def take(self, t_now: float) -> tuple[int, np.ndarray]:
         """Alle neuen Samples seit dem letzten Aufruf als ``(startsample, samples)``."""
         with self._lock:
-            self._fill_to(int((t_now - _TAKE_SLACK_S) * SAMPLE_RATE))
+            self._fill_to(int((t_now - self._slack_s) * SAMPLE_RATE))
             start = self._pending_start
             if self._pending:
                 samples = np.concatenate(self._pending)

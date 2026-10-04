@@ -1,11 +1,13 @@
-"""Einzelne Anwendungsfenster auflisten und aufnehmen - nur Windows, nur ``ctypes``.
+"""Einzelne Anwendungsfenster auflisten und aufnehmen - Windows per ``ctypes``, macOS per
+``fenster_mac`` (Quartz).
 
 Aufgenommen wird per ``PrintWindow(PW_RENDERFULLCONTENT)``: das liefert den Inhalt des
 gewählten Fensters auch dann, wenn andere Fenster davor liegen. Manche Anwendungen
 (erhöhte Prozesse, exklusive DirectX-Vollbilder) liefern damit nur Schwarz - dafür gibt
 es den ``fallback`` auf einen Bildschirmausschnitt.
 
-Außerhalb von Windows ist die Fensterliste leer; importierbar bleibt das Modul überall.
+Außerhalb von Windows und macOS ist die Fensterliste leer; importierbar bleibt das Modul
+überall. Die öffentlichen Funktionen leiten unter macOS an ``fenster_mac`` weiter.
 """
 
 from __future__ import annotations
@@ -178,10 +180,14 @@ def _api() -> SimpleNamespace | None:
     )
 
 
+def _mac() -> bool:
+    return sys.platform == "darwin"
+
+
 def _need_api() -> SimpleNamespace:
     api = _api()
     if api is None:
-        raise RuntimeError("Fensteraufnahme gibt es nur unter Windows")
+        raise RuntimeError("Fensteraufnahme gibt es nur unter Windows und macOS")
     return api
 
 
@@ -207,15 +213,27 @@ def dpi_aware() -> None:
 
 
 def is_window(hwnd: int) -> bool:
+    if _mac():
+        from audioscribe.live import fenster_mac
+
+        return fenster_mac.is_window(hwnd)
     api = _api()
     return bool(api and api.user32.IsWindow(hwnd))
 
 
 def is_iconic(hwnd: int) -> bool:
+    if _mac():
+        from audioscribe.live import fenster_mac
+
+        return fenster_mac.is_iconic(hwnd)
     return bool(_need_api().user32.IsIconic(hwnd))
 
 
 def window_title(hwnd: int) -> str:
+    if _mac():
+        from audioscribe.live import fenster_mac
+
+        return fenster_mac.window_title(hwnd)
     api = _need_api()
     n = api.user32.GetWindowTextLengthW(hwnd)
     if n <= 0:
@@ -247,6 +265,10 @@ def _get_window_rect(api, hwnd: int) -> Rect:
 
 def window_rect(hwnd: int) -> Rect:
     """Sichtbarer Rahmen (ohne die unsichtbaren Resize-Ränder), sonst ``GetWindowRect``."""
+    if _mac():
+        from audioscribe.live import fenster_mac
+
+        return fenster_mac.window_rect(hwnd)
     api = _need_api()
     r = _dwm_attr(api, hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, api.wt.RECT)
     if r is not None and r.right > r.left and r.bottom > r.top:
@@ -285,7 +307,14 @@ def _app_pid(api, hwnd: int, pid: int) -> int:
 
 
 def list_windows() -> list[dict]:
-    """Sichtbare Anwendungsfenster in Z-Order (vorderstes zuerst); leer außerhalb Windows."""
+    """Sichtbare Anwendungsfenster in Z-Order (vorderstes zuerst); leer außerhalb Windows/macOS."""
+    if _mac():
+        from audioscribe.live import fenster_mac
+
+        try:
+            return fenster_mac.list_windows()
+        except RuntimeError:
+            return []  # PyObjC fehlt: wie "keine Fenster", der doctor meldet das Paket
     api = _api()
     if api is None:
         return []
@@ -345,6 +374,10 @@ def grab_window(hwnd: int, fallback: Callable[[Rect], object] | None = None):
     ``fallback(rect)`` wird gerufen, wenn PrintWindow scheitert oder nur eine Farbe liefert
     (typisch: Schwarz bei erhöhten Prozessen und exklusiven DirectX-Vollbildern).
     """
+    if _mac():
+        from audioscribe.live import fenster_mac
+
+        return fenster_mac.grab_window(hwnd, fallback)
     from PIL import Image
 
     api = _need_api()
