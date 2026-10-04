@@ -132,6 +132,34 @@ def test_track_reset_rate_wechselt_den_resampler(tmp_path):
     assert len(samples) == 1600  # 1:1, kein Resampling mehr
 
 
+def test_mic_stream_setzt_rate_vor_dem_start_und_schliesst_fehlversuche(monkeypatch):
+    track = Track("mic", 96_000, 1, None)
+    geoeffnet = []
+
+    class FakeStream:
+        def __init__(self, samplerate, **_kw):
+            self.rate, self.closed = samplerate, False
+            geoeffnet.append(self)
+
+        def start(self):
+            # Beim Start muss der Resampler schon zur Rate passen - Callbacks kommen sofort.
+            self.resampler_down = track._resampler.down
+            if self.rate == 96_000:
+                raise RuntimeError("Invalid sample rate")
+
+        def close(self):
+            self.closed = True
+
+    monkeypatch.setattr(coreaudio, "_sounddevice", lambda: SimpleNamespace(InputStream=FakeStream))
+    log = []
+    device = {"index": 0, "name": "Mic", "rate": 96_000, "channels": 1}
+    coreaudio.MicStream(track, device, lambda: 0.0, log.append)
+    erst, dann = geoeffnet
+    assert erst.closed and not dann.closed
+    assert (dann.rate, dann.resampler_down) == (48_000, 3)
+    assert log == ["Mikrofon: 96000 Hz nicht möglich, nehme 48000 Hz"]
+
+
 def test_sck_stream_braucht_pyobjc(monkeypatch):
     monkeypatch.setitem(sys.modules, "ScreenCaptureKit", None)
     with pytest.raises(RuntimeError, match="PyObjC"):

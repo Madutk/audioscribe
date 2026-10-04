@@ -65,6 +65,31 @@ def test_resampler_blockwise_matches_one_shot():
     assert np.abs(y[50:] - ref[50 : len(y)]).max() < 1e-4
 
 
+def test_resampler_441_keeps_small_context_and_flushes_the_rest():
+    from scipy.signal import resample_poly
+
+    t = np.arange(44_100) / 44_100
+    x = (0.5 * np.sin(2 * np.pi * 440 * t)).astype(np.float32)
+    res = Resampler(44_100)
+    assert res._ctx == 441  # 10 ms, nicht 32 * 441 = 0,32 s
+    blocks = [res.process(x[pos : pos + 4410]) for pos in range(0, len(x), 4410)]
+    y = np.concatenate([*blocks, res.flush()])
+    ref = resample_poly(x, 160, 441)
+    assert len(y) == len(ref) == 16_000
+    assert np.abs(y[50:-50] - ref[50:-50]).max() < 1e-3
+
+
+def test_track_close_appends_held_back_resampler_rest(tmp_path):
+    track = Track("mic", 44_100, 1, tmp_path / "audio" / "mikrofon.wav")
+    track.feed(_pcm(1.0, 44_100), t_arrival=1.0)
+    _, vorher = track.take(1.0)
+    track.close()
+    track.close()  # zweites Schließen schadet nicht
+    _, rest = track.take(1.0)
+    assert len(vorher) < SAMPLE_RATE and len(vorher) + len(rest) == SAMPLE_RATE
+    assert len(load_wav(tmp_path / "audio" / "mikrofon.wav")) == SAMPLE_RATE
+
+
 def _pcm(seconds: float, rate: int, channels: int = 1, amp: float = 0.5) -> bytes:
     n = int(seconds * rate)
     mono = (amp * 32767 * np.sin(2 * np.pi * 300 * np.arange(n) / rate)).astype(np.int16)
@@ -176,6 +201,17 @@ def test_chunker_hard_cut_without_any_breath_pause():
     feed_all(chunker, [speech(13)])
     (utt,) = chunker.poll()
     assert (round(utt.start_s, 1), round(utt.end_s, 1), utt.schluss) == (0.0, 12.0, "zeitlimit")
+
+
+def test_chunker_hard_cut_does_not_pad_across_the_seam():
+    # Ohne Atempause liegt der Schnitt mitten im Wort; der Rest beginnt genau dort,
+    # also darf der geschlossene Teil nicht darüber hinaus gepolstert sein.
+    chunker = Chunker(energy_vad, max_s=12.0)
+    feed_all(chunker, [silence(1), speech(13)])
+    (utt,) = chunker.poll()
+    assert len(utt.audio) == int(12.15 * SR)  # 0,15 s Polster vorn, keins hinten
+    rest = chunker.open_utterance()
+    assert rest.start_s == utt.end_s
 
 
 def test_chunker_flush_closes_open_utterance():
@@ -429,6 +465,15 @@ def make_session(tmp_path, **kw):
     session._asr = FakeAsr()
     session._labeler = SpeakerLabeler(None)
     return session
+
+
+def test_persist_writes_recording_length_not_clock_after_drain(tmp_path):
+    session = make_session(tmp_path, language="de")
+    session.dir.mkdir(parents=True, exist_ok=True)
+    session._aufnahme_s = 600.0  # gestoppt bei 10 min; die Uhr läuft beim Abarbeiten weiter
+    session._persist()
+    data = json.loads((session.dir / "transcript.json").read_text(encoding="utf-8"))
+    assert data["duration_s"] == 600.0
 
 
 def test_ergebnis_von_accepts_text_and_ergebnis():

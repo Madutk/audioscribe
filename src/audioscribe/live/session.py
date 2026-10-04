@@ -86,6 +86,7 @@ class LiveSession:
         self._board = JobBoard(coalesce_s=opts.coalesce_s, catchup_s=opts.catchup_s)
         self._catchup = False
         self._t0 = 0.0
+        self._aufnahme_s: float | None = None  # gesetzt beim Stopp; danach läuft die Uhr weiter
         self._chunk_index = 0  # nur im Transkriptions-Thread
         # Diagnose-Log (FR-47); daraus entsteht am Ende das Fazit (FR-46).
         self._diagnose = Diagnose(self.dir / DIAGNOSE_NAME)
@@ -156,7 +157,7 @@ class LiveSession:
             self._state("laeuft")  # Maschinenwert wie ui.runner.RUNNING, darum ohne Umlaut
             self._main_loop(tracks)
         finally:
-            aufnahme_s = self.clock()
+            aufnahme_s = self._aufnahme_s = self.clock()
             self._state("stoppt")
             audio.close()
         if screen is not None:
@@ -183,7 +184,7 @@ class LiveSession:
         self._persist()
         bilanz = self._diagnose.bilanz(
             laden_s=laden_s, aufnahme_s=aufnahme_s, abschluss_s=abschluss_s, gesamt_s=gesamt_s,
-            schwelle_s=self.opts.max_chunk_s,
+            schwelle_s=self.opts.catchup_s,
         )
         bilanz = replace(bilanz, backend=self.opts.backend, geraet=self.opts.device, modell=self.opts.model)
         self._diagnose.close()
@@ -491,7 +492,7 @@ class LiveSession:
             write_transcript(
                 self.dir,
                 segments,
-                duration_s=self.clock(),
+                duration_s=self.clock() if self._aufnahme_s is None else self._aufnahme_s,
                 language=self._asr.detected or self.opts.language,
                 model=self.opts.model,
                 mode="live",

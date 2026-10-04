@@ -81,6 +81,10 @@ class MicStream:
 
         letzter: Exception | None = None
         for rate in (int(device["rate"]), *_RETRY_RATES):
+            # Vor dem Start: sonst laufen die ersten Callbacks noch durch den Resampler
+            # der alten Rate. Es kam noch kein Block, das Zurücksetzen kostet nichts.
+            track.reset_rate(rate)
+            stream = None
             try:
                 stream = sd.InputStream(
                     samplerate=rate,
@@ -93,10 +97,13 @@ class MicStream:
                 stream.start()
             except Exception as exc:  # noqa: BLE001 - z. B. PortAudioError bei fremder Rate
                 letzter = exc
+                if stream is not None:  # geöffnet, aber start() scheiterte
+                    try:
+                        stream.close()
+                    except Exception:  # noqa: BLE001
+                        pass
                 continue
             if rate != int(device["rate"]):
-                # Der Track wurde mit der Geräterate gebaut - Resampler auf die echte Rate.
-                track.reset_rate(rate)
                 if log:
                     log(f"Mikrofon: {device['rate']} Hz nicht möglich, nehme {rate} Hz")
             self._stream = stream
