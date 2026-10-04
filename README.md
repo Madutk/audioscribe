@@ -362,16 +362,19 @@ Designentscheidungen: PRD §17.
 
 **Im Reiter:** Bildquelle wählen (Monitor mit Vorschaubild, Anwendungsfenster oder „nur
 Ton“), Mikrofon und System-Audio wählen, „Aufnahme starten“. Oben laufen Laufzeit,
-**Verzögerung** (Ende des Gesprochenen bis zur Anzeige) und **Rückstand** (aufgenommen,
-noch nicht transkribiert) mit. Screenshots erscheinen rechts als Thumbnails. Gespeichert
+**Verzögerung** (Ende des Gesprochenen bis zur Anzeige) und **Rückstand** mit. Rückstand ist
+fertig gesprochenes Audio, das auf die Transkription *wartet*; der Abschnitt, der gerade
+gerechnet wird, zählt nicht mit. Screenshots erscheinen rechts als Thumbnails. Gespeichert
 wird im Ausgabeordner Transkription aus den Einstellungen:
 
 ```
 output/live-2026-09-19_14-30-05/
   transkript.md  transcript.json  transkript.annotiert.md  marks.json  frames/
-  transkript.live.md  transcript.live.json        # Live-Fassung (nach dem Stopp)
+  transkript.txt                                  # reiner Text ohne Zeitstempel/Sprecher (WER-Vergleich)
+  transkript.live.md  transcript.live.json  transkript.live.txt   # Live-Fassung (nach dem Stopp)
   audio/mikrofon.wav  audio/system.wav            # 16 kHz mono
-  bilanz.json                                     # Fazit: Rechendauer und Latenz
+  bilanz.json                                     # Fazit: Rechendauer und Latenz (live + nachschaerfen)
+  diagnose.jsonl                                  # je Abschnitt und Vorschau eine Zeile (Zeiten, Qualitaet)
 ```
 
 **Zwei Fallstricke:** Mit Lautsprechern statt Headset hört das Mikrofon die Gegenseite mit,
@@ -395,9 +398,19 @@ und Durcheinanderreden trennt erst das Nachschärfen sauber.
 Stopp nachschärfen“ läuft die Offline-Pipeline (Alignment, Diarisierung der System-Spur)
 über den Mitschnitt und ersetzt `transkript.md`; die Screenshots bleiben. Ein zweiter Klick
 auf Stoppen bricht hart ab. Danach zeigt der Reiter ein **Fazit**: Aufnahmedauer, Ladezeit,
-Rechenzeit und Tempo, Verzögerung (Ø, Median, max), Abschnitte, Zeit im Aufholmodus, nach
-dem Nachschärfen die Dauer je Stufe. Dieselben Zahlen stehen im Protokoll und in
-`bilanz.json`.
+Rechenzeit und Tempo (Rechenzeit je Audiosekunde, nur das Dekodieren; daneben „inkl.
+Vorschau“), Verzögerung (Ø, Median, max), Abschnitte (davon zusammengelegt bzw. sparsam
+dekodiert), höchster Rückstand und Zeit im Aufholmodus, nach dem Nachschärfen die Dauer je
+Stufe. Dieselben Zahlen stehen im Protokoll und in `bilanz.json`.
+
+**Diagnose-Log:** Das Fazit ist aus `diagnose.jsonl` abgeleitet, einer JSON-Lines-Datei mit
+einer Zeile je fertigem Abschnitt (`art: "abschnitt"`): Lage im Audio, Zeitpunkte auf der
+Sitzungsuhr, `wartezeit_s`, `rechenzeit_s`, `sprecher_s`, `latenz_s`, Modell, `eco`
+(sparsam dekodiert), Wortzahl, `schluss` (`pause`, `zeitlimit`, `flush`) und je
+Whisper-Segment `avg_logprob`, `compression_ratio`, `no_speech_prob`, `temperature` (> 0
+heißt: der Fallback hat gegriffen). Vorschauen stehen als eigene Zeilen, das Nachschärfen
+hängt je Segment und je Stufe eine Zeile an. Für Messläufe erzwingt `audioscribe live --eco`
+den Sparmodus für alle Abschnitte.
 
 **Zurücksetzen** leert nach Rückfrage Transkript, Screenshots und Protokoll. Während einer
 Aufnahme heißt der Knopf „Verwerfen und neu beginnen“: Die Sitzung wird hart beendet (ohne
@@ -415,6 +428,24 @@ ein. Der Tooltip der Rückstand-Anzeige zeigt das gemessene Tempo (Rechenzeit je
 Audiosekunde); liegt es dauerhaft über 1× Echtzeit, ist das Modell für den Rechner zu groß.
 `AUDIOSCRIBE_CPU_THREADS` bzw. `--cpu-threads` setzt die Rechen-Threads; sinnvoll ist die
 Zahl physischer Kerne.
+</details>
+
+<details>
+<summary>Messläufe ohne Aufnahme (WAV-Replay)</summary>
+
+`live --wav DATEI` schickt eine WAV-Datei als System-Audio durch dieselbe Pipeline, als käme
+sie gerade aus dem Lautsprecher: derselbe Schnitt, dieselbe Warteschlange, dasselbe Fazit und
+Diagnose-Log. `--wav-mic DATEI` spielt eine zweite Datei als Mikrofon. Standbilder gibt es
+dabei nicht, und es läuft auch unter Linux. Die Sitzung endet von selbst, sobald die Datei
+durch ist. So lassen sich Modelle und Schnitt-Einstellungen reproduzierbar gegen ein
+Referenztranskript messen, etwa mit `transkript.txt` und einem WER-Werkzeug. `--speed 4`
+lässt die Sitzungsuhr viermal so schnell laufen; das taugt für Funktionstests, nicht für
+Latenzwerte.
+
+```powershell
+.venv-win\Scripts\audioscribe.exe live --wav referenz.wav --model base --device cpu --no-speakers --no-partials
+.venv-win\Scripts\audioscribe.exe live --wav referenz.wav --model base --device cpu --no-speakers --eco
+```
 </details>
 
 <details>

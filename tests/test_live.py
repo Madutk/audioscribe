@@ -166,7 +166,15 @@ def test_chunker_forces_cut_at_breath_pause_of_long_utterance():
     feed_all(chunker, [speech(8), silence(0.4), speech(5)])
     (utt,) = chunker.poll()
     assert round(utt.end_s, 1) == 8.2  # Mitte der Atempause, nicht stumpf bei 12 s
+    assert utt.schluss == "zeitlimit"
     assert chunker.open_utterance() is not None
+
+
+def test_chunker_hard_cut_without_any_breath_pause():
+    chunker = Chunker(energy_vad, max_s=12.0)
+    feed_all(chunker, [speech(13)])
+    (utt,) = chunker.poll()
+    assert (round(utt.start_s, 1), round(utt.end_s, 1), utt.schluss) == (0.0, 12.0, "zeitlimit")
 
 
 def test_chunker_flush_closes_open_utterance():
@@ -175,15 +183,27 @@ def test_chunker_flush_closes_open_utterance():
     assert chunker.poll() == []
     (utt,) = chunker.poll(flush=True)
     assert round(utt.duration_s, 1) == 1.0
+    assert utt.schluss == "flush"
+
+
+def test_chunker_marks_pause_closed_utterance_also_on_flush():
+    chunker = Chunker(energy_vad)
+    feed_all(chunker, [speech(1), silence(1)])
+    (utt,) = chunker.poll(flush=True)
+    assert utt.schluss == "pause"  # die Pause war da, der Flush hat nichts abgeschnitten
 
 
 def test_merge_utterances_spans_parts_with_short_gap_of_silence():
     a = Utterance(SR, 3 * SR, speech(2))
-    b = Utterance(10 * SR, 11 * SR, speech(1))
+    b = Utterance(10 * SR, 11 * SR, speech(1), schluss="zeitlimit")
     merged = merge_utterances([a, b], gap_s=0.3)
     assert (merged.start_s, merged.end_s) == (1.0, 11.0)
     assert len(merged.audio) == int(3.3 * SR)  # 2 s + 0,3 s Stille + 1 s, nicht die echte Luecke
     assert merge_utterances([a]) is a
+    # Fuers Diagnose-Log: Schluss des letzten Teils, Latenz ab Ende des ersten Teils.
+    assert merged.schluss == "zeitlimit"
+    assert merged.teile_end_s == (3.0, 11.0) and merged.erster_teil_end_s == 3.0
+    assert a.erster_teil_end_s == 3.0
 
 
 # --- Auftragsbrett -----------------------------------------------------------------
@@ -200,13 +220,28 @@ def utt_at(start_s: float, seconds: float) -> Utterance:
 def test_board_coalesces_waiting_finals_of_same_track():
     board = JobBoard(coalesce_s=25.0)
     for start, dur in ((0, 2), (2.5, 3), (6, 4)):
-        board.put_final(Job("system", utt_at(start, dur), final=True))
+        board.put_final(Job("system", utt_at(start, dur), final=True, t_abgeschlossen=start + dur))
+    assert board.backlog_s() == 9.0
     job = board.get(0)
     assert job.parts == 3 and job.track == "system"
     assert (job.utterance.start_s, job.utterance.end_s) == (0.0, 10.0)
-    assert board.backlog_s() == 10.0
+    assert job.t_abgeschlossen == 10.0  # der letzte Teil
+    assert board.backlog_s() == 0.0  # in Arbeit heisst nicht wartend
     board.done(job)
     assert board.get(0) is None and board.backlog_s() == 0.0
+
+
+def test_board_backlog_excludes_active_but_wait_idle_waits_for_it():
+    board = JobBoard()
+    board.put_final(Job("system", utt_at(0.0, 12), final=True))
+    board.put_final(Job("system", utt_at(13.0, 2), final=True))
+    assert board.backlog_s() == 14.0
+    job = board.get(0)
+    assert job.utterance.duration_s == 12.0 and board.backlog_s() == 2.0
+    assert not board.wait_idle(0)
+    board.done(job)
+    board.done(board.get(0))
+    assert board.backlog_s() == 0.0 and board.wait_idle(0)
 
 
 @pytest.mark.parametrize(
@@ -244,7 +279,7 @@ def test_board_without_coalescing_returns_finals_one_by_one():
     board.put_final(Job("system", utt_at(0.0, 2), final=True))
     board.put_final(Job("system", utt_at(2.0, 2), final=True))
     assert board.get(0).parts == 1
-    assert board.backlog_s() == 4.0
+    assert board.backlog_s() == 2.0
 
 
 def test_board_prefers_finals_and_keeps_only_latest_partial():
@@ -253,7 +288,7 @@ def test_board_prefers_finals_and_keeps_only_latest_partial():
     board.put_partial(Job("mic", utt(start=2), final=False))
     board.put_final(Job("system", utt(3.0), final=True))
     first = board.get(0)
-    assert first.final and board.backlog_s() == 3.0
+    assert first.final and board.backlog_s() == 0.0
     board.done(first)
     second = board.get(0)
     assert not second.final and second.utterance.start == 2
@@ -363,10 +398,11 @@ class FakeAsr:
 
     def __init__(self):
         self.calls = []
+        self.antwort = "Text"  # str oder Ergebnis
 
-    def transcribe(self, audio, *, final, eco=False):
+    def transcribe(self, audio, *, final, eco=False, initial_prompt=None):
         self.calls.append(eco)
-        return "Text"
+        return self.antwort
 
 
 def make_session(tmp_path, **kw):
@@ -378,68 +414,150 @@ def make_session(tmp_path, **kw):
     return session
 
 
+def test_ergebnis_von_accepts_text_and_ergebnis():
+    from audioscribe.live.asr import Ergebnis, SegmentInfo
+
+    assert Ergebnis.von("  Hallo ") == Ergebnis("Hallo")
+    assert Ergebnis.von("") == Ergebnis("") and Ergebnis.von(None).text == ""
+    erg = Ergebnis("x", (SegmentInfo(-0.2, 1.1, 0.0, 0.0),))
+    assert Ergebnis.von(erg) is erg
+
+
 def test_do_final_switches_to_eco_only_while_behind(tmp_path, monkeypatch):
     emitted, logged = [], []
     monkeypatch.setattr(events, "emit", lambda typ, **d: emitted.append((typ, d)))
     monkeypatch.setattr(events, "log", logged.append)
-    session = make_session(tmp_path, catchup_s=5.0, coalesce_s=25.0)
+    session = make_session(tmp_path, catchup_s=5.0, coalesce_s=0.0)
     board = session._board
     for start in (0.0, 2.0, 4.0, 6.0):
         board.put_final(Job("system", utt_at(start, 2), final=True))
 
-    job = board.get(0)  # alle vier zusammengelegt: 8 s Rueckstand > 5 s -> Sparmodus
-    assert job.parts == 4
+    job = board.get(0)  # drei weitere warten: 6 s Rueckstand > 5 s -> Sparmodus
     session._do_final(job)
     board.done(job)
     assert session._asr.calls == [True]
     assert any("Aufholmodus" in line for line in logged)
     assert session.rtf() is not None
-    zaehler = session._zaehler
-    assert (zaehler._abschnitte, zaehler._zusammengelegt) == (1, 1) and zaehler._audio_s == 8.0
     (typ, seg) = emitted[-1]
-    assert typ == events.SEGMENT and (seg["start"], seg["end"], seg["speaker"]) == (0.0, 8.0, GEGENSEITE)
+    assert typ == events.SEGMENT and (seg["start"], seg["end"], seg["speaker"]) == (0.0, 2.0, GEGENSEITE)
 
-    board.put_final(Job("system", utt_at(9.0, 1), final=True))
-    job = board.get(0)
-    session._do_final(job)  # 1 s Rueckstand -> volle Qualitaet, Wechsel wird protokolliert
+    job = board.get(0)  # noch 4 s wartend -> volle Qualitaet, Wechsel wird protokolliert
+    session._do_final(job)
     assert session._asr.calls == [True, False]
     assert any("abgebaut" in line for line in logged)
+
+
+def test_do_final_alone_in_queue_is_never_eco_even_if_long(tmp_path, monkeypatch):
+    """Ein einzelner 12-s-Abschnitt ist kein Rueckstand - der alte Fehler zaehlte ihn mit."""
+    monkeypatch.setattr(events, "emit", lambda typ, **d: None)
+    session = make_session(tmp_path, catchup_s=5.0)
+    board = session._board
+    board.put_final(Job("system", utt_at(0.0, 12), final=True))
+    session._do_final(board.get(0))
+    assert session._asr.calls == [False]
+
+
+def test_do_final_force_eco_decodes_cheaply_regardless_of_backlog(tmp_path, monkeypatch):
+    monkeypatch.setattr(events, "emit", lambda typ, **d: None)
+    session = make_session(tmp_path, force_eco=True)
+    session._board.put_final(Job("mic", utt_at(0.0, 1), final=True))
+    session._do_final(session._board.get(0))
+    assert session._asr.calls == [True]
+    assert session._diagnose.abschnitte[0].eco is True
+
+
+def test_do_final_writes_diagnose_record(tmp_path, monkeypatch):
+    from audioscribe.live.asr import Ergebnis, SegmentInfo
+
+    monkeypatch.setattr(events, "emit", lambda typ, **d: None)
+    session = make_session(tmp_path, coalesce_s=25.0)
+    session._asr.antwort = Ergebnis("eins zwei drei", (SegmentInfo(-0.3, 1.2, 0.01, 0.2),))
+    board = session._board
+    a = Utterance(SR, 3 * SR, speech(2), schluss="zeitlimit")
+    b = Utterance(4 * SR, 5 * SR, speech(1))
+    board.put_final(Job("system", a, final=True, t_abgeschlossen=3.5))
+    board.put_final(Job("system", b, final=True, t_abgeschlossen=5.5))
+    session._do_final(board.get(0))
+
+    (rec,) = session._diagnose.abschnitte
+    assert (rec.chunk_index, rec.track, rec.parts, rec.schluss) == (1, "system", 2, "pause")
+    assert (rec.audio_start_s, rec.audio_end_s, rec.audio_dauer_s) == (1.0, 5.0, 4.0)
+    assert rec.t_abgeschlossen == 5.5 and rec.anzahl_woerter == 3 and rec.eco is False
+    assert rec.segmente == [{"avg_logprob": -0.3, "compression_ratio": 1.2, "no_speech_prob": 0.01, "temperature": 0.2}]
+    assert rec.latenz_s == pytest.approx(rec.t_ende - 5.0, abs=0.02)
+    assert rec.latenz_max_s == pytest.approx(rec.t_ende - 3.0, abs=0.02)  # ab Ende des ersten Teils
+    assert rec.wartezeit_s == pytest.approx(rec.t_start - 5.5, abs=0.02)
+    assert rec.rechenzeit_s >= 0 and rec.sprecher_s >= 0 and rec.t_ende >= rec.t_start
+    lines = [json.loads(line) for line in (session.dir / "diagnose.jsonl").read_text(encoding="utf-8").splitlines()]
+    assert len(lines) == 1 and lines[0]["art"] == "abschnitt" and lines[0]["modell"] == "m"
 
 
 # --- Fazit (FR-46) -----------------------------------------------------------------
 
 
-def test_zaehler_summarises_latency_and_compute():
-    from audioscribe.live.bilanz import Zaehler
+def abschnitt(i=1, *, dauer=2.0, rechen=0.5, sprecher=0.0, latenz=1.0, woerter=3, parts=1, eco=False):
+    from audioscribe.live.diagnose import Abschnitt
 
-    z = Zaehler()
-    z.final(2.0, 0.5, 1.0)
-    z.final(4.0, 1.0, 3.0, parts=3)
-    z.final(1.0, 0.3, None)  # leerer Abschnitt: nur Rechenzeit
-    z.final(2.0, 0.2, 2.0)
-    z.partial(0.1)
-    z.partial(0.2)
-    z.rueckstand(1.0)
-    z.rueckstand(6.5)
-    z.rueckstand(2.0)
-    z.aufholmodus(True, 100.0)
-    z.aufholmodus(False, 104.0)
-    z.aufholmodus(True, 110.0)  # noch an - laeuft bis "now"
-    b = z.bilanz(laden_s=3.04, aufnahme_s=60.0, abschluss_s=1.0, gesamt_s=65.0, now=112.0)
-    assert (b.abschnitte, b.zusammengelegt) == (3, 1)
-    assert (b.audio_s, b.rechenzeit_s, b.tempo) == (9.0, 2.0, 0.22)
+    return Abschnitt(
+        chunk_index=i, track="system", audio_start_s=0.0, audio_end_s=dauer, audio_dauer_s=dauer,
+        t_abgeschlossen=dauer, t_start=dauer + 0.1, t_ende=dauer + latenz, wartezeit_s=0.1,
+        rechenzeit_s=rechen, sprecher_s=sprecher, latenz_s=latenz, latenz_max_s=latenz, modell="m",
+        eco=eco, parts=parts, anzahl_woerter=woerter, schluss="pause",
+    )
+
+
+def test_diagnose_writes_jsonl_and_derives_bilanz(tmp_path):
+    from audioscribe.live.diagnose import Diagnose, Vorschau, lies_diagnose
+
+    d = Diagnose(tmp_path / "diagnose.jsonl")
+    d.abschnitt(abschnitt(1, dauer=2.0, rechen=0.5, latenz=1.0))
+    d.abschnitt(abschnitt(2, dauer=4.0, rechen=1.0, latenz=3.0, parts=3, eco=True))
+    d.abschnitt(abschnitt(3, dauer=1.0, rechen=0.3, woerter=0))  # leer: nur Rechenzeit
+    d.abschnitt(abschnitt(4, dauer=2.0, rechen=0.2, sprecher=0.4, latenz=2.0))
+    d.vorschau(Vorschau("system", 1.0, 1.5, 0.1, "m"))
+    d.vorschau(Vorschau("system", 3.0, 3.5, 0.2, "m"))
+    for t, backlog in ((0, 1.0), (1, 20.0), (2, 20.0), (3, 6.5), (4, 2.0)):
+        d.rueckstand(t, backlog)
+    b = d.bilanz(laden_s=3.04, aufnahme_s=60.0, abschluss_s=1.0, gesamt_s=65.0, schwelle_s=12.0)
+    d.close()
+
+    assert (b.abschnitte, b.zusammengelegt, b.eco_abschnitte) == (3, 1, 1)
+    assert (b.audio_s, b.rechenzeit_s, b.sprecher_s, b.tempo) == (9.0, 2.4, 0.4, 0.22)
+    assert b.tempo_inkl_vorschau == 0.3  # (2,0 + 0,4 + 0,3) / 9
     assert (b.verzoegerung_mittel_s, b.verzoegerung_median_s, b.verzoegerung_max_s) == (2.0, 2.0, 3.0)
     assert (b.vorschau_n, b.vorschau_s) == (2, 0.3)
-    assert (b.rueckstand_max_s, b.aufholmodus_s, b.laden_s) == (6.5, 6.0, 3.0)
+    assert (b.rueckstand_max_s, b.aufholmodus_s, b.aufholmodus_anteil, b.laden_s) == (20.0, 2.0, 0.03, 3.0)
+
+    zeilen = lies_diagnose(tmp_path)
+    assert [z["art"] for z in zeilen] == ["abschnitt"] * 4 + ["vorschau"] * 2
+    assert zeilen[1]["parts"] == 3 and zeilen[4]["fenster_s"] == 1.5
+    assert d.tempo_letzte(2) == 0.3  # (0,3 + 0,2 + 0,4) / 3
 
 
-def test_zaehler_without_measurements_has_no_tempo_or_latency():
-    from audioscribe.live.bilanz import Zaehler, beschreibe_live
+def test_diagnose_without_measurements_has_no_tempo_or_latency(tmp_path):
+    from audioscribe.live.bilanz import beschreibe_live
+    from audioscribe.live.diagnose import Diagnose
 
-    b = Zaehler().bilanz(laden_s=1.0, aufnahme_s=5.0, abschluss_s=0.0, gesamt_s=6.0, now=0.0)
+    b = Diagnose(None).bilanz(laden_s=1.0, aufnahme_s=5.0, abschluss_s=0.0, gesamt_s=6.0, schwelle_s=12.0)
     assert b.tempo is None and b.verzoegerung_max_s is None and b.abschnitte == 0
+    assert b.tempo_inkl_vorschau is None and b.aufholmodus_anteil == 0.0
     text = beschreibe_live(b)
     assert text.startswith("Fazit: Aufnahme 0:05") and "Verzögerung" not in text and "0 Abschnitte" in text
+    leer = Diagnose(tmp_path / "leer" / "diagnose.jsonl")
+    leer.close()  # ohne Abschnitte: Datei da, aber leer
+    assert (tmp_path / "leer" / "diagnose.jsonl").read_text(encoding="utf-8") == ""
+
+
+def test_beschreibe_live_mentions_preview_tempo_and_catchup_share():
+    from audioscribe.live.bilanz import LiveBilanz, beschreibe_live
+
+    b = LiveBilanz(laden_s=1.0, aufnahme_s=90.0, abschluss_s=1.0, gesamt_s=95.0, abschnitte=5, audio_s=80.0,
+                   rechenzeit_s=12.0, tempo=0.15, vorschau_n=20, vorschau_s=40.0, tempo_inkl_vorschau=0.65,
+                   verzoegerung_mittel_s=3.0, verzoegerung_median_s=3.0, verzoegerung_max_s=5.0,
+                   aufholmodus_s=9.0, aufholmodus_anteil=0.1, eco_abschnitte=2)
+    text = beschreibe_live(b)
+    assert "Rechenzeit 12,0 s (0,15× Echtzeit) · 20 Vorschauen 40,0 s (0,65× Echtzeit)" in text
+    assert "5 Abschnitte (2 sparsam)" in text and "Aufholmodus 9,0 s (10 %)" in text
 
 
 def test_beschreibe_live_mentions_all_the_numbers():
@@ -480,7 +598,7 @@ def test_session_finish_writes_bilanz_and_reports_before_fertig(tmp_path, monkey
     session = make_session(tmp_path)
     session.dir.mkdir()
     session._segments.append(Segment(0.0, 2.0, "Hallo", ICH))
-    session._zaehler.final(2.0, 0.4, 1.5)
+    session._diagnose.abschnitt(abschnitt(1, dauer=2.0, rechen=0.4, latenz=1.5))
     session._finish(laden_s=1.0, aufnahme_s=10.0, abschluss_s=0.5, gesamt_s=12.0)
 
     types = [(typ, d.get("teil") or d.get("phase")) for typ, d in emitted]
@@ -490,6 +608,7 @@ def test_session_finish_writes_bilanz_and_reports_before_fertig(tmp_path, monkey
     assert any(line.startswith("Fazit: Aufnahme 0:10") for line in logged)
     assert load_bilanz(session.dir)["live"]["rechenzeit_s"] == 0.4
     assert (session.dir / "transkript.live.md").exists()
+    assert (session.dir / "diagnose.jsonl").read_text(encoding="utf-8").count("\n") == 1
 
 
 def test_refine_session_times_its_stages(tmp_path, monkeypatch):
@@ -522,6 +641,137 @@ def test_refine_session_times_its_stages(tmp_path, monkeypatch):
     assert all(st["dauer_s"] >= 0 for st in data["stufen"])
     assert data["audio_s"] == 3.0 and data["modell"] == "tiny" and data["tempo"] is not None
     assert emitted[-1][0] == events.FAZIT and emitted[-1][1]["teil"] == "nachschaerfen"
+    # Diagnose-Log: je Segment und je Stufe eine Zeile, alle als Teil "nachschaerfen".
+    from audioscribe.live.diagnose import lies_diagnose
+
+    zeilen = lies_diagnose(tmp_path)
+    assert [z["art"] for z in zeilen] == ["nachschaerfen", "stufe", "stufe", "stufe"]
+    assert zeilen[0] == {"art": "nachschaerfen", "teil": "nachschaerfen", "spur": "Mikrofon", "start_s": 0.0,
+                         "end_s": 1.0, "dauer_s": 1.0, "anzahl_woerter": 1, "modell": "tiny"}
+    assert all(z["teil"] == "nachschaerfen" for z in zeilen)
+
+
+# --- WAV-Replay (FR-49) ------------------------------------------------------------
+
+
+def write_wav(path, samples: np.ndarray, rate: int = SR, channels: int = 1) -> None:
+    import wave
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    pcm = (np.clip(samples, -1, 1) * 32767).astype("<i2")
+    with wave.open(str(path), "wb") as wav:
+        wav.setnchannels(channels)
+        wav.setsampwidth(2)
+        wav.setframerate(rate)
+        wav.writeframes(np.repeat(pcm, channels).tobytes())
+
+
+def wait_until(cond, timeout: float = 10.0) -> bool:
+    import time
+
+    ende = time.monotonic() + timeout
+    while time.monotonic() < ende:
+        if cond():
+            return True
+        time.sleep(0.02)
+    return False
+
+
+def test_replay_capture_feeds_wav_on_session_clock(tmp_path):
+    import time
+
+    from audioscribe.live.replay import ReplayCapture
+
+    write_wav(tmp_path / "in.wav", np.full(int(1.2 * 8000), 0.4, dtype=np.float32), rate=8000, channels=2)
+    t0 = time.monotonic()
+    speed = 20.0
+    clock = lambda: (time.monotonic() - t0) * speed  # noqa: E731
+    ended = []
+    cap = ReplayCapture(clock, system=tmp_path / "in.wav", mic=None, speed=speed, on_end=lambda: ended.append(1),
+                        nachlauf_s=0.5)
+    assert cap.mics == [] and len(cap.loopbacks) == 1
+    dev = cap.loopbacks[0]
+    assert (dev["rate"], dev["channels"], dev["default"], round(dev["dauer_s"], 2)) == (8000, 2, True, 1.2)
+    track = cap.open("system", dev, tmp_path / "audio" / "system.wav")
+    assert wait_until(lambda: ended, timeout=10)
+    assert ended == [1]
+    start, samples = track.take(1.0)  # nicht clock(): take() fuellt bis "jetzt" mit Stille auf
+    assert start == 0 and abs(len(samples) - 1.2 * SR) < 0.05 * SR
+    assert np.abs(samples[SR // 2 : SR]).max() > 0.3  # Stereo heruntergemischt, auf 16 kHz gebracht
+    cap.close()
+    assert abs(len(load_wav(tmp_path / "audio" / "system.wav")) - 1.2 * SR) < 0.05 * SR
+
+
+def test_replay_capture_rejects_bad_files(tmp_path):
+    from audioscribe.live.replay import ReplayCapture
+
+    with pytest.raises(RuntimeError, match="nicht gefunden"):
+        ReplayCapture(lambda: 0.0, system=tmp_path / "fehlt.wav", mic=None, on_end=lambda: None)
+    (tmp_path / "kaputt.wav").write_bytes(b"nicht wav")
+    with pytest.raises(RuntimeError, match="keine lesbare WAV"):
+        ReplayCapture(lambda: 0.0, system=None, mic=tmp_path / "kaputt.wav", on_end=lambda: None)
+
+
+def test_live_session_replays_wav_end_to_end(tmp_path, monkeypatch):
+    from audioscribe.live.bilanz import load_bilanz
+    from audioscribe.live.diagnose import lies_diagnose
+    from audioscribe.live.session import LiveOptions, LiveSession
+
+    write_wav(tmp_path / "ref.wav", np.concatenate([silence(1.0), speech(1.5), silence(0.5)]))
+    emitted, logged = [], []
+    monkeypatch.setattr(events, "emit", lambda typ, **d: emitted.append((typ, d)))
+    monkeypatch.setattr(events, "log", logged.append)
+    opts = LiveOptions(output_dir=tmp_path / "out", model="m", device="cpu", compute_type="int8",
+                       replay_system=tmp_path / "ref.wav", speed=10.0, monitor=0, mic="none",
+                       partials=False, speakers=False)
+    session = LiveSession(opts)
+    monkeypatch.setattr(session, "_load_asr", lambda: FakeAsr())
+    monkeypatch.setattr(session, "_load_vad", lambda: energy_vad)
+    monkeypatch.setattr(session, "_watch_stdin", lambda: None)
+
+    assert session.run() == 0
+
+    segs = [d for typ, d in emitted if typ == events.SEGMENT]
+    assert len(segs) == 1
+    assert abs(segs[0]["start"] - 1.0) < 0.15 and abs(segs[0]["end"] - 2.5) < 0.15
+    assert segs[0]["text"] == "Text" and segs[0]["track"] == "system"
+    # Mitschnitt: die Datei plus die Nachlauf-Stille, mit der die Sitzung ausklingt.
+    mitschnitt = load_wav(session.dir / "audio" / "system.wav")
+    assert 3 * SR <= len(mitschnitt) < 6 * SR and np.abs(mitschnitt[int(1.2 * SR) : int(2.3 * SR)]).max() > 0.4
+    (rec,) = [z for z in lies_diagnose(session.dir) if z["art"] == "abschnitt"]
+    assert rec["schluss"] == "pause" and rec["eco"] is False and rec["anzahl_woerter"] == 1
+    assert load_bilanz(session.dir)["live"]["abschnitte"] == 1
+    assert (session.dir / "transkript.txt").read_text(encoding="utf-8") == "Text\n"
+    types = [(typ, d.get("teil") or d.get("phase")) for typ, d in emitted]
+    assert types.index((events.FAZIT, "live")) < types.index((events.STATE, "fertig"))
+    assert any("Replay statt Aufnahme" in line for line in logged)
+
+
+def test_cli_live_wav_builds_replay_options(tmp_path, monkeypatch):
+    from audioscribe import cli
+
+    write_wav(tmp_path / "ref.wav", silence(0.5))
+    monkeypatch.setattr(cli, "_prepare_backend", lambda: ("cpu", "int8"))
+    gestartet = []
+
+    class FakeSession:
+        def __init__(self, opts):
+            gestartet.append(opts)
+
+        def run(self):
+            return 0
+
+    monkeypatch.setattr("audioscribe.live.session.LiveSession", FakeSession)
+    assert cli.main(["live", "--wav", str(tmp_path / "ref.wav"), "--speed", "4", "--model", "base",
+                     "--output", str(tmp_path), "--eco", "--monitor", "2"]) == 0
+    (opts,) = gestartet
+    assert opts.replay_system == tmp_path / "ref.wav" and opts.replay_mic is None
+    assert (opts.speed, opts.model, opts.force_eco) == (4.0, "base", True)
+    assert (opts.monitor, opts.window, opts.mic, opts.loopback) == (0, 0, "none", "default")
+    assert cli.main(["live", "--wav", str(tmp_path / "fehlt.wav")]) == 1
+    assert cli.main(["live", "--wav-mic", str(tmp_path / "ref.wav"), "--speed", "0"]) == 1
+    assert cli.main(["live", "--wav-mic", str(tmp_path / "ref.wav")]) == 0
+    assert (gestartet[-1].mic, gestartet[-1].loopback, gestartet[-1].replay_mic) == ("default", "none", tmp_path / "ref.wav")
 
 
 # --- Sprecher ----------------------------------------------------------------------
@@ -758,6 +1008,8 @@ def test_session_folder_is_a_valid_analysis_source(tmp_path):
 
     md = (session / "transkript.md").read_text(encoding="utf-8")
     assert md.index("Ich:** Hallo") < md.index("Sprecher 1:** Guten")  # nach Zeit sortiert
+    # Reintext fuer WER-Vergleiche: ohne Zeitstempel und Sprecher, nach Zeit sortiert.
+    assert (session / "transkript.txt").read_text(encoding="utf-8") == "Hallo zusammen.\nGuten Morgen.\n"
     data = json.loads((session / "transcript.json").read_text(encoding="utf-8"))
     assert data["mode"] == "live" and data["num_speakers"] == 2
     assert "#0001" in (session / "transkript.annotiert.md").read_text(encoding="utf-8")
@@ -768,10 +1020,12 @@ def test_session_folder_is_a_valid_analysis_source(tmp_path):
 
 def test_keep_live_copy_never_overwrites_during_refine(tmp_path):
     (tmp_path / "transkript.md").write_text("live", encoding="utf-8")
+    (tmp_path / "transkript.txt").write_text("live txt", encoding="utf-8")
     keep_live_copy(tmp_path, overwrite=True)
     (tmp_path / "transkript.md").write_text("geschaerft", encoding="utf-8")
     keep_live_copy(tmp_path, overwrite=False)
     assert (tmp_path / "transkript.live.md").read_text(encoding="utf-8") == "live"
+    assert (tmp_path / "transkript.live.txt").read_text(encoding="utf-8") == "live txt"
 
 
 # --- LiveRunner (ohne Modelle: das Kind ist ein python -c-Einzeiler) ---------------

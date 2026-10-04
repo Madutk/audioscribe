@@ -11,14 +11,15 @@ from __future__ import annotations
 import sys
 import threading
 import time
-from collections import deque
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from audioscribe.live import events
-from audioscribe.live.bilanz import TEIL_LIVE, Zaehler, beschreibe_live, save_bilanz
+from audioscribe.live.asr import Ergebnis
+from audioscribe.live.bilanz import TEIL_LIVE, beschreibe_live, save_bilanz
 from audioscribe.live.board import Job, JobBoard
 from audioscribe.live.chunker import Chunker
+from audioscribe.live.diagnose import DIAGNOSE_NAME, Abschnitt, Diagnose, Vorschau
 from audioscribe.live.store import MIC_WAV, SYSTEM_WAV, keep_live_copy, session_name, write_transcript
 from audioscribe.models import Segment
 from audioscribe.review.marks import Mark, save_marks
@@ -51,10 +52,18 @@ class LiveOptions:
     hf_token: str | None = None
     sentences_per_timestamp: int = 2
     cpu_threads: int = 0  # 0 = Bibliotheks-Default
-    # Aufholmodus (PRD §17, NFR-15): ab catchup_s Rückstand billig dekodieren, wartende
-    # Abschnitte derselben Spur bis coalesce_s zusammenlegen (0 = nie).
+    # Schnitt: spätestens nach max_chunk_s wird ein Abschnitt geschlossen.
+    max_chunk_s: float = 12.0
+    # Aufholmodus (PRD §17, NFR-15): ab catchup_s WARTENDEM Rückstand billig dekodieren,
+    # wartende Abschnitte derselben Spur bis coalesce_s zusammenlegen (0 = nie).
     catchup_s: float = 5.0
     coalesce_s: float = 25.0
+    force_eco: bool = False  # Messläufe: jeden Abschnitt sparsam dekodieren (--eco)
+    # WAV-Replay statt Audio-Geräten (FR-49); speed > 1 lässt die Sitzungsuhr schneller
+    # laufen (nur für Funktionstests - Latenzen sind dann nicht mehr vergleichbar).
+    replay_system: Path | None = None
+    replay_mic: Path | None = None
+    speed: float = 1.0
 
 
 class LiveSession:
@@ -70,20 +79,20 @@ class LiveSession:
         self._open: dict[str, int | None] = {}
         self._last_delay: float | None = None
         self._board = JobBoard(coalesce_s=opts.coalesce_s)
-        self._timing: deque[tuple[float, float]] = deque(maxlen=_RTF_WINDOW)  # (audio_s, spent_s)
         self._catchup = False
         self._t0 = 0.0
-        self._zaehler = Zaehler()  # Fazit: Rechendauer und Latenz der ganzen Sitzung
+        self._chunk_index = 0  # nur im Transkriptions-Thread
+        # Diagnose-Log (FR-47); daraus entsteht am Ende das Fazit (FR-46).
+        self._diagnose = Diagnose(self.dir / DIAGNOSE_NAME)
 
     def clock(self) -> float:
-        return time.monotonic() - self._t0
+        """Sitzungsuhr in Sekunden seit Aufnahmestart; beim Replay ggf. beschleunigt."""
+        return (time.monotonic() - self._t0) * self.opts.speed
 
     # --- Ablauf -------------------------------------------------------------
 
     def run(self) -> int:
-        from audioscribe.live.asr import LiveTranscriber
-        from audioscribe.live.chunker import silero_vad
-        from audioscribe.live.devices import AudioCapture, pick
+        from audioscribe.live.devices import pick
         from audioscribe.live.speakers import SpeakerLabeler
 
         o = self.opts
@@ -91,29 +100,20 @@ class LiveSession:
         self._state("laden", step=f"Whisper {o.model}")
         events.log(f"Lade Modell {o.model} ({o.device}, {o.compute_type}) ...")
         started = time.monotonic()
-        self._asr = LiveTranscriber(
-            o.model,
-            o.device,
-            o.compute_type,
-            o.language,
-            on_progress=lambda done, total: events.emit(
-                events.DOWNLOAD, model=o.model, done=done, total=total
-            ),
-            cpu_threads=o.cpu_threads,
-        )
+        self._asr = self._load_asr()
         events.log(f"Whisper {o.model} geladen ({_took(started)})")
         # Vor dem Hintergrund-Thread: torch.set_num_threads wirkt prozessweit.
         self._limit_torch_threads()
         self._labeler = SpeakerLabeler(self._load_embedder())
         self._state("laden", step="Sprachaktivität (VAD)")
         started = time.monotonic()
-        vad = silero_vad()
+        vad = self._load_vad()
         events.log(f"Sprachaktivität bereit ({_took(started)})")
 
         self.dir.mkdir(parents=True, exist_ok=True)
         self._state("laden", step="Audio-Geräte")
         self._t0 = time.monotonic()
-        audio = AudioCapture(self.clock)
+        audio = self._open_capture()
         tracks: dict = {}
         screen = None
         try:
@@ -131,7 +131,7 @@ class LiveSession:
                 events.log("Weder Audio noch Bildquelle gewählt - nichts aufzunehmen.")
                 return 1
 
-            chunkers = {name: Chunker(vad) for name in tracks}
+            chunkers = {name: Chunker(vad, max_s=o.max_chunk_s) for name in tracks}
             threads = [
                 threading.Thread(target=self._cut_loop, args=(tracks, chunkers), daemon=True),
                 threading.Thread(target=self._asr_loop, daemon=True),
@@ -156,7 +156,7 @@ class LiveSession:
         for name, track in tracks.items():
             chunkers[name].feed(*track.take(self.clock()))
             for utt in chunkers[name].poll(flush=True):
-                self._board.put_final(Job(name, utt, final=True))
+                self._board.put_final(Job(name, utt, final=True, t_abgeschlossen=self.clock()))
         stopped = time.monotonic()
         self._drain()
         self._threads_stop.set()
@@ -169,10 +169,11 @@ class LiveSession:
     def _finish(self, *, laden_s: float, aufnahme_s: float, abschluss_s: float, gesamt_s: float) -> None:
         """Transkript und Live-Fassung sichern, Fazit ablegen und melden (FR-46)."""
         self._persist()
-        bilanz = self._zaehler.bilanz(
+        bilanz = self._diagnose.bilanz(
             laden_s=laden_s, aufnahme_s=aufnahme_s, abschluss_s=abschluss_s, gesamt_s=gesamt_s,
-            now=time.monotonic(),
+            schwelle_s=self.opts.max_chunk_s,
         )
+        self._diagnose.close()
         with self._io_lock:
             keep_live_copy(self.dir, overwrite=True)
             save_bilanz(self.dir, TEIL_LIVE, bilanz)
@@ -185,9 +186,9 @@ class LiveSession:
     def _main_loop(self, tracks: dict) -> None:
         last_persist = time.monotonic()
         try:
-            while not self._stop.wait(1.0):
+            while not self._stop.wait(1.0 / self.opts.speed):
                 backlog = self._board.backlog_s()
-                self._zaehler.rueckstand(backlog)
+                self._diagnose.rueckstand(self.clock(), backlog)
                 events.emit(
                     events.STATS,
                     elapsed=round(self.clock(), 1),
@@ -222,7 +223,7 @@ class LiveSession:
     def _cut_loop(self, tracks: dict, chunkers: dict[str, Chunker]) -> None:
         last_partial = dict.fromkeys(tracks, 0.0)
         tick = 0
-        while not self._stop.wait(_TICK_S):
+        while not self._stop.wait(_TICK_S / self.opts.speed):
             tick += 1
             now = self.clock()
             for name, track in tracks.items():
@@ -232,7 +233,7 @@ class LiveSession:
                     continue  # VAD nur jeden zweiten Takt - sie ist der teure Teil
                 done = chunker.poll()
                 for utt in done:
-                    self._board.put_final(Job(name, utt, final=True))
+                    self._board.put_final(Job(name, utt, final=True, t_abgeschlossen=now))
                 self._offer_partial(name, chunker, bool(done), now, last_partial)
 
     def _offer_partial(
@@ -278,32 +279,67 @@ class LiveSession:
     def _do_partial(self, job: Job) -> None:
         if not self._still_open(job):
             return
+        t_start = self.clock()
         started = time.monotonic()
-        text = self._asr.transcribe(job.utterance.audio, final=False)
-        self._zaehler.partial(time.monotonic() - started)
-        if text and self._still_open(job):
+        erg = Ergebnis.von(self._asr.transcribe(job.utterance.audio, final=False))
+        self._diagnose.vorschau(
+            Vorschau(
+                track=job.track,
+                t_start=round(t_start, 2),
+                fenster_s=round(job.utterance.duration_s, 2),
+                rechenzeit_s=round(time.monotonic() - started, 3),
+                modell=self.opts.model,
+            )
+        )
+        if erg.text and self._still_open(job):
             events.emit(
-                events.PARTIAL, track=job.track, start=round(job.utterance.start_s, 2), text=text
+                events.PARTIAL, track=job.track, start=round(job.utterance.start_s, 2), text=erg.text
             )
 
     def _do_final(self, job: Job) -> None:
         utt = job.utterance
-        eco = self._enter_catchup(self._board.backlog_s())
+        # Der Rückstand zählt nur wartende Abschnitte - dieser hier ist keiner mehr.
+        eco = self._enter_catchup(self._board.backlog_s()) or self.opts.force_eco
+        t_start = self.clock()
         started = time.monotonic()
-        text = self._asr.transcribe(utt.audio, final=True, eco=eco)
+        erg = Ergebnis.von(self._asr.transcribe(utt.audio, final=True, eco=eco))
+        text = erg.text
+        rechenzeit = time.monotonic() - started
+        started = time.monotonic()
         speaker = self._labeler.label(job.track, utt.audio) if text else None
-        spent = time.monotonic() - started
-        with self._lock:
-            self._timing.append((utt.duration_s, spent))
+        sprecher = time.monotonic() - started
+        t_ende = self.clock()
+        self._chunk_index += 1
+        self._diagnose.abschnitt(
+            Abschnitt(
+                chunk_index=self._chunk_index,
+                track=job.track,
+                audio_start_s=round(utt.start_s, 2),
+                audio_end_s=round(utt.end_s, 2),
+                audio_dauer_s=round(utt.duration_s, 2),
+                t_abgeschlossen=round(job.t_abgeschlossen, 2),
+                t_start=round(t_start, 2),
+                t_ende=round(t_ende, 2),
+                wartezeit_s=round(t_start - job.t_abgeschlossen, 2),
+                rechenzeit_s=round(rechenzeit, 3),
+                sprecher_s=round(sprecher, 3),
+                latenz_s=round(t_ende - utt.end_s, 2),
+                latenz_max_s=round(t_ende - utt.erster_teil_end_s, 2),
+                modell=self.opts.model,
+                eco=eco,
+                parts=job.parts,
+                anzahl_woerter=len(text.split()),
+                schluss=utt.schluss,
+                segmente=[asdict(s) for s in erg.segmente],
+            )
+        )
         if not text:
-            self._zaehler.final(utt.duration_s, spent, None)  # nur Rechenzeit, kein Abschnitt
             events.emit(events.PARTIAL, track=job.track, text="")
             return
         with self._lock:
             self._segments.append(Segment(utt.start_s, utt.end_s, text, speaker))
             number = len(self._segments)
-            self._last_delay = round(self.clock() - utt.end_s, 1)
-        self._zaehler.final(utt.duration_s, spent, self._last_delay, job.parts)
+            self._last_delay = round(t_ende - utt.end_s, 1)
         events.emit(
             events.SEGMENT,
             id=number,
@@ -326,12 +362,45 @@ class LiveSession:
 
     # --- Hilfen -------------------------------------------------------------
 
+    def _load_asr(self):
+        from audioscribe.live.asr import LiveTranscriber
+
+        o = self.opts
+        return LiveTranscriber(
+            o.model,
+            o.device,
+            o.compute_type,
+            o.language,
+            on_progress=lambda done, total: events.emit(
+                events.DOWNLOAD, model=o.model, done=done, total=total
+            ),
+            cpu_threads=o.cpu_threads,
+        )
+
+    def _load_vad(self):
+        from audioscribe.live.chunker import silero_vad
+
+        return silero_vad()
+
+    def _open_capture(self):
+        """Audio-Geräte - oder beim Replay die WAV-Dateien (FR-49)."""
+        o = self.opts
+        if o.replay_system is not None or o.replay_mic is not None:
+            from audioscribe.live.replay import ReplayCapture
+
+            events.log(f"Replay statt Aufnahme (Tempo {o.speed:g}×)")
+            return ReplayCapture(
+                self.clock, system=o.replay_system, mic=o.replay_mic, speed=o.speed, on_end=self._stop.set
+            )
+        from audioscribe.live.devices import AudioCapture
+
+        return AudioCapture(self.clock)
+
     def _enter_catchup(self, backlog_s: float) -> bool:
         """Sparmodus an/aus je nach Rückstand; der Wechsel wird einmal protokolliert."""
         catchup = backlog_s > self.opts.catchup_s
         if catchup != self._catchup:
             self._catchup = catchup
-            self._zaehler.aufholmodus(catchup, time.monotonic())
             if catchup:
                 events.log(
                     f"Rückstand {backlog_s:.0f} s - Aufholmodus: Abschnitte zusammenlegen, Beam 1"
@@ -342,10 +411,7 @@ class LiveSession:
 
     def rtf(self) -> float | None:
         """Rechenzeit je Audiosekunde über die letzten Abschnitte (None ohne Messung)."""
-        with self._lock:
-            audio_s = sum(a for a, _ in self._timing)
-            spent_s = sum(s for _, s in self._timing)
-        return round(spent_s / audio_s, 2) if audio_s > 0 else None
+        return self._diagnose.tempo_letzte(_RTF_WINDOW)
 
     def _limit_torch_threads(self) -> None:
         """torch (Sprecher-Embedding) auf dieselbe Threadzahl wie ctranslate2 begrenzen."""

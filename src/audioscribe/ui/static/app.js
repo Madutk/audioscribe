@@ -870,14 +870,22 @@ function renderFazit(f) {
   const l = f.live;
   if (l) {
     rows.push(['Aufnahme', `${hms(l.aufnahme_s)} · Modelle geladen in ${secs(l.laden_s)} · Abschluss ${secs(l.abschluss_s)}`]);
+    // Tempo = nur Dekodieren; "inkl. Vorschau" zeigt, was die Vorschau obendrauf kostet.
     let rechnen = `${secs(l.rechenzeit_s)}${tempo(l.tempo)} für ${l.abschnitte} Abschnitte`;
-    if (l.zusammengelegt) rechnen += ` (${l.zusammengelegt} zusammengelegt)`;
-    if (l.vorschau_n) rechnen += ` · ${l.vorschau_n} Vorschauen ${secs(l.vorschau_s)}`;
+    const klammer = [];
+    if (l.zusammengelegt) klammer.push(`${l.zusammengelegt} zusammengelegt`);
+    if (l.eco_abschnitte) klammer.push(`${l.eco_abschnitte} sparsam dekodiert`);
+    if (klammer.length) rechnen += ` (${klammer.join(', ')})`;
+    if (l.sprecher_s) rechnen += ` · davon Sprecher ${secs(l.sprecher_s)}`;
+    if (l.vorschau_n) rechnen += ` · ${l.vorschau_n} Vorschauen ${secs(l.vorschau_s)}${tempo(l.tempo_inkl_vorschau).replace('× Echtzeit', '× inkl. Vorschau')}`;
     rows.push(['Rechenzeit', rechnen]);
     if (l.abschnitte) {
       let lag = `Ø ${secs(l.verzoegerung_mittel_s)} · Median ${secs(l.verzoegerung_median_s)} · max ${secs(l.verzoegerung_max_s)}`;
       lag += ` · Rückstand max ${secs(l.rueckstand_max_s)}`;
-      if (l.aufholmodus_s) lag += ` · Aufholmodus ${secs(l.aufholmodus_s)}`;
+      if (l.aufholmodus_s) {
+        lag += ` · Aufholmodus ${secs(l.aufholmodus_s)}`;
+        if (l.aufholmodus_anteil) lag += ` (${Math.round(l.aufholmodus_anteil * 100)} %)`;
+      }
       rows.push(['Verzögerung', lag]);
     }
   }
