@@ -142,7 +142,7 @@ Die Oberfläche beginnt auf der **Startseite** mit vier Einstiegen; jede Karte h
 | **Neues Projekt** | Meetings mit Souffleur begleiten und ins LLM-Wiki überführen | Assistent in drei Schritten, dann der Arbeitsbereich des Projekts |
 | **Projekt öffnen** | Ein vorhandenes Projekt weiterführen | Liste „Zuletzt geöffnet“ oder Wahl des Wiki-Ordners |
 | **Aufnahme transkribieren** | Eine einzelne Audio- oder Videodatei in Text umwandeln, ohne Projekt | Nur die Transkription, dazu die KI-Analyse als nächster Schritt |
-| **Demo abspielen** | Vorführung mit Beispiel-Meeting und Beispiel-Wiki | Live-Ansicht mit einem Knopf „Demo starten“ |
+| **Demo abspielen** | Vorführung mit Beispiel-Meeting und Beispiel-Wiki | Live-Ansicht mit Zeitstrahl der bisherigen Meetings und einem Knopf „Demo starten“ |
 
 Der Kopf zeigt, wo du bist (Projektname, „Aufnahme transkribieren“ oder „Demo“); der Knopf
 daneben führt zurück zur Startseite. Läuft noch eine Sitzung, Transkription oder Analyse,
@@ -188,8 +188,9 @@ weiterverarbeiten“** in die KI-Analyse; die Aufnahme ist dort schon als Quelle
 **Demo abspielen** – spielt das Beispiel-Meeting aus `demo/llm-wiki` ab, als liefe es
 gerade; der Souffleur gleicht es mit dem Demo-Wiki ab. Ein Zeitstrahl zeigt die Meetings, die
 schon im Wiki stehen, und das heutige; jeder Hinweis nennt das Meeting, aus dem sein Beleg
-stammt. Es wird nichts aufgenommen und nichts ins Wiki geschrieben (die Demo-Sitzung liegt
-nur unter `~/.cache/audioscribe/demo`).
+stammt. Das Abspielen lässt sich mit „Pause“ anhalten und fortsetzen. Es wird nichts
+aufgenommen und nichts ins Wiki geschrieben (die Demo-Sitzung liegt nur unter
+`~/.cache/audioscribe/demo`).
 
 **Einstellungen** gibt es auf zwei Ebenen:
 
@@ -284,7 +285,7 @@ nicht auf der Kopie im Wiki.
 ```
 
 **Video** wird wie Audio behandelt: Die Tonspur wird mit dem gebündelten ffmpeg als
-16-kHz-Mono-WAV nach `work/<name>.16k.wav` geschrieben und bleibt dort liegen. Unterstützt:
+16-kHz-Mono-WAV nach `work/` extrahiert und nach dem Laden wieder gelöscht. Unterstützt:
 `mp4 mkv mov avi webm m4v wmv flv mpg mpeg ts m2ts 3gp ogv`. Ohne Tonspur bricht der Lauf
 mit klarer Meldung ab; Ton ohne Sprache ergibt ein leeres Transkript.
 
@@ -347,7 +348,8 @@ ein Fenster- oder Folienwechsel betrifft Dutzende. Zusammenhängende Trefferseri
 (Animationen, Scrollen) ergeben **ein** Bild, aufgenommen am Ende der Serie.
 
 Kosten: grob ein Achtel der Videolänge (80 Minuten ≈ 10 Minuten), deshalb standardmäßig
-aus. Ein erneuter Lauf ersetzt die automatischen Bilder und lässt von Hand gesetzte
+aus. Das Transkript ist zu diesem Zeitpunkt schon geschrieben; bricht die Erkennung ab,
+bleibt es erhalten. Ein erneuter Lauf ersetzt die automatischen Bilder und lässt von Hand gesetzte
 Markierungen unberührt. In der Oberfläche stehen Checkbox, Empfindlichkeit und Bildformat
 in der Karte „Optionen“; `--frame-fps` und `--frame-min-gap` gibt es nur auf der
 Kommandozeile.
@@ -526,6 +528,7 @@ nur das WAV-Replay. Designentscheidungen: PRD §17 und §19.
 .venv-win\Scripts\audioscribe.exe live --list-devices        # ohne Oberfläche: Geräte, Monitore, Fenster (HWND)
 .venv-win\Scripts\audioscribe.exe live --monitor 1 --mic 23  # Ende mit Strg+C oder "stop" + Enter
 .venv-win\Scripts\audioscribe.exe live --window 592902       # nur dieses Fenster
+.venv-win\Scripts\audioscribe.exe live --monitor 1 --loopback none   # ohne System-Audio (sonst Standardgerät oder Geräteindex)
 .venv-win\Scripts\audioscribe.exe refine output\live-2026-09-19_14-30-05 --model large-v3-turbo
 ```
 
@@ -744,6 +747,7 @@ Fazit verhalten sich wie im Betrieb. Auf der Kommandozeile:
 ```bash
 .venv-win\Scripts\audioscribe.exe live --transcript output\meeting\transcript.json --speed 5
 .venv-win\Scripts\audioscribe.exe live --transcript output\live-2026-10-06_09-00-00 --replay-delay 2
+.venv-win\Scripts\audioscribe.exe live --transcript output\meeting\transkript.md --raffen   # ohne Gesprächspausen (so läuft die Demo)
 ```
 
 **4. Ergebnis ablesen:** Je Sitzung entstehen Begleitdateien neben dem Transkript:
@@ -895,7 +899,7 @@ Basisstufe gemäß `PRD.md`: eine Datei pro CLI-Aufruf (die Oberfläche arbeitet
 gewählte Dateien nacheinander ab), Markdown-Ausgabe mit optionalem PDF, Sprecher als
 „Sprecher N“ ohne Personen-Identifikation. AudioScribe ist die Transkriptions-Basis für die
 übergeordnete Meeting-Protokoll-Pipeline; die Auswertung übernimmt optional der
-Claude-Agent. Alle Anforderungen und Designentscheidungen stehen nummeriert (FR-1 … FR-77)
+Claude-Agent. Alle Anforderungen und Designentscheidungen stehen nummeriert (FR-1 … FR-78)
 in `PRD.md`. Offen ist jeweils die Abnahme auf dem Gerät: die macOS-Portierung (PRD §19,
 Akzeptanzkriterien §19.5) sowie echte Aufnahme- und Absturztests der Projekte und der
 Wiederaufnahme (PRD §21.5).
