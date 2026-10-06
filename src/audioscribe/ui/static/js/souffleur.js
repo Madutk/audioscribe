@@ -3,6 +3,7 @@
 
 import { $, S, post, esc, icon, empty, tc, secs, sep, trimSep, projekt, reducedMotion } from './kern.js';
 import { renderWikiState } from './wiki.js';
+import { herkunft, blinke, demoAktiv } from './demo.js';
 
 // --- Souffleur (PRD §20): Hinweise aus Wiki und KI neben dem Transkript -----------
 // Ereignisse vom Typ "hinweis" kommen ueber /api/live/status wie Segmente und Standbilder.
@@ -69,6 +70,17 @@ function wikiQuoteHtml(h) {
     + `</div>${esc(zitat)}</blockquote>`;
 }
 
+const hatBeleg = (h) => !h.ohne_befund && !!(h.wiki_zitat || (h.fundstellen && h.fundstellen.length));
+
+/** Demo: der Beleg ist ein frueheres Gespraech - "Heute" neben "Meeting n" statt Datei im Wiki. */
+function gegenHtml(h, her) {
+  const f = (h.fundstellen && h.fundstellen[0]) || {};
+  const zitat = (h.wiki_zitat || f.auszug || '').replace(/\s*\[Q-\d+[^\]]*\]/g, '');
+  const heute = h.art === 'frage' ? '' : `<dt>Heute</dt><dd><q>${esc(h.aussage || '')}</q></dd>`;
+  return `<dl class="gegen">${heute}<dt>Meeting ${her.nr}<span>${esc(her.datum)}</span></dt>`
+    + `<dd class="frueher"><q>${esc(zitat)}</q></dd></dl>`;
+}
+
 const kiHtml = (rolle, text) => text
   ? `<div class="ki"><div class="ki-head">${tagKi()}${esc(rolle)}</div>${esc(text)}</div>` : '';
 
@@ -76,8 +88,12 @@ const kiHtml = (rolle, text) => text
  *  ohne Befund = nur "Im Wiki liegt dazu nichts vor." - bewusst kein KI-Text (Entscheidung des Auftraggebers). */
 function hintBodyHtml(h) {
   const said = `<p class="said">Gesagt${h.sprecher ? ` (${esc(h.sprecher)})` : ''}: <q>${esc(h.aussage || '')}</q></p>`;
-  const hasWiki = !h.ohne_befund && (h.wiki_zitat || (h.fundstellen && h.fundstellen.length));
-  if (!hasWiki) return `<p class="wiki none">${icon('book-x')}Im Wiki liegt dazu nichts vor.</p>`;
+  if (!hatBeleg(h)) {
+    return demoAktiv() ? `<p class="wiki none">${icon('plus')}Neu – steht noch nicht im Wiki.</p>`
+      : `<p class="wiki none">${icon('book-x')}Im Wiki liegt dazu nichts vor.</p>`;
+  }
+  const her = herkunft(h);
+  if (her) return gegenHtml(h, her) + kiHtml(h.art === 'frage' ? 'Antwortvorschlag' : 'Einschätzung', h.ki_text);
   if (h.art === 'frage') return wikiQuoteHtml(h) + kiHtml('Antwortvorschlag', h.ki_text);
   return said + wikiQuoteHtml(h) + kiHtml('Einschätzung', h.ki_text);
 }
@@ -109,6 +125,8 @@ export function addHint(h) {
   const el = hintItemEl(h);
   hintEls.set(h.id, el);
   list.prepend(el);  // neueste oben
+  const her = herkunft(h);
+  if (her) blinke(her.id);
   layoutHints();
   limitOpenHints();
   updateHintCount();
@@ -144,6 +162,17 @@ function limitOpenHints() {
 function updateHintCount() {
   const n = souffleurHints.length;
   $('souffleurCount').textContent = `${n} ${n === 1 ? 'Hinweis' : 'Hinweise'}`;
+}
+
+/** Bilanz fuer die Schlusszeile der Demo: Widersprueche, aus dem Wiki beantwortete Fragen, Neues ohne Beleg. */
+export function hinweisZahlen() {
+  const z = { widerspruch: 0, beantwortet: 0, neu: 0 };
+  for (const h of souffleurHints) {
+    if (!hatBeleg(h)) z.neu += 1;
+    else if (h.art === 'widerspruch') z.widerspruch += 1;
+    else if (h.art === 'frage') z.beantwortet += 1;
+  }
+  return z;
 }
 
 /** Offene Punkte: alle Hinweise mit offener_punkt=true (offener Punkt, Frage ohne Befund), neueste oben. */

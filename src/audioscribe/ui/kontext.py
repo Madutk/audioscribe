@@ -7,6 +7,7 @@ Servers beginnt die Oberfläche wieder auf der Startseite.
 
 from __future__ import annotations
 
+import re
 import threading
 from collections.abc import Mapping
 from pathlib import Path
@@ -26,6 +27,9 @@ DEMO_ORDNER = Path("demo") / "llm-wiki"
 DEMO_TRANSKRIPT = Path("live_bahn_test") / "transkript.md"
 DEMO_NAME = "Demo: Bahnbuchung"
 DEMO_TEMPO = 1.0
+# Thema des abgespielten Meetings - es folgt auf die Meetings, die schon im Demo-Wiki stehen.
+DEMO_HEUTE = "Nachschärfung"
+_QUELLE = re.compile(r"Q-\d+")
 
 
 class Kontext:
@@ -70,6 +74,46 @@ def demo_projekt() -> Projekt:
         wurzel=demo_wurzel(), name=DEMO_NAME, sitzungen_dir=ablage, assets_dir=ablage / "assets",
         wiki_speichern=modell.WIKI_NIE, wiki_bilder=False, demo=True,
     )
+
+
+def demo_vorgeschichte() -> dict:
+    """Was vor dem abgespielten Meeting war: die Meetings im Demo-Wiki (Quellenseiten), was das
+    Wiki daraus festhält und je Seite ihre Quellen - für den Zeitstrahl der Demo und die
+    Herkunft der Hinweise ("Meeting 1" statt Dateipfad)."""
+    from audioscribe.agent.skills import parse_frontmatter
+    from audioscribe.souffleur.wiki import seiten_dateien
+
+    wurzel = demo_wurzel()
+    meetings: list[dict] = []
+    seiten: dict[str, list[str]] = {}
+    anforderungen = offene_punkte = 0
+    for datei in seiten_dateien(wurzel):
+        try:
+            kopf = parse_frontmatter(datei.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError):
+            continue
+        rel = datei.relative_to(wurzel).as_posix()  # wie Fundstelle.datei
+        typ = kopf.get("typ", "")
+        if typ == "quelle" and kopf.get("id"):
+            # "Prozessaufnahme 1 – Prozessüberblick Bahnbuchung": das Thema steht hinter dem Strich.
+            titel = kopf.get("titel", "").split(" – ")[-1]
+            meetings.append({"id": kopf["id"], "datum": kopf.get("datum", ""), "titel": titel})
+            seiten[rel] = [kopf["id"]]
+            continue
+        seiten[rel] = _QUELLE.findall(kopf.get("quellen", ""))
+        if typ == "anforderung":
+            anforderungen += 1
+        elif typ == "offener-punkt" and kopf.get("status") == "offen":
+            offene_punkte += 1
+    meetings.sort(key=lambda m: (m["datum"], m["id"]))
+    for nr, m in enumerate(meetings, start=1):
+        m["nr"] = nr
+    return {
+        "meetings": meetings,
+        "heute": {"nr": len(meetings) + 1, "titel": DEMO_HEUTE},
+        "wiki": {"anforderungen": anforderungen, "offene_punkte": offene_punkte},
+        "seiten": seiten,
+    }
 
 
 def projekt_dict(projekt: Projekt, state: Mapping[str, object], *, mit_wiki: bool = True) -> dict:

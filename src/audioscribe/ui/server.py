@@ -1288,6 +1288,13 @@ def create_app():
             raise HTTPException(409, str(exc)) from exc
         return JSONResponse({"ok": True})
 
+    @app.get("/api/demo/vorgeschichte")
+    def api_demo_vorgeschichte():
+        """Demo: die Meetings, die schon im Demo-Wiki stehen - Zeitstrahl und Herkunft der Hinweise."""
+        if not kontext_modul.demo_verfuegbar():
+            raise HTTPException(400, "Die Demo-Daten fehlen (Ordner demo/llm-wiki).")
+        return JSONResponse(kontext_modul.demo_vorgeschichte())
+
     @app.post("/api/demo/start")
     def api_demo_start():
         """Demo (PRD §21): das Test-Meeting gegen das Demo-Wiki abspielen - ein Knopf, sonst nichts.

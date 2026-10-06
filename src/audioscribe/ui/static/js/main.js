@@ -23,7 +23,7 @@ const ROUTES = {
     hint: 'Ordner, Wiki-Ablage, KI und Sprache dieses Projekts' },
   '#/datei': { view: 'datei', modus: 'datei', hint: 'Aufnahme wählen, Speicherort festlegen, transkribieren' },
   '#/datei/ki': { view: 'ana', modus: 'datei', hint: 'Die KI wertet Transkript und Standbilder aus und legt Dokumente im Ausgabeordner ab' },
-  '#/demo': { view: 'live', modus: 'demo', hint: 'Vorführung: ein aufgezeichnetes Meeting läuft ab – nichts wird aufgenommen oder gespeichert' },
+  '#/demo': { view: 'live', modus: 'demo', hint: 'Vorführung – nichts wird aufgenommen oder gespeichert' },
   '#/einstellungen': { view: 'einstellungen', modus: null, hint: 'Globale Einstellungen – gelten für alle Projekte, die nichts Eigenes festlegen' },
 };
 

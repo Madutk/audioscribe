@@ -415,12 +415,12 @@
   <div class="live-main">
     <!-- Wiederaufnahme (PRD §21): nicht sauber beendete Sitzungen dieses Projekts -->
     <div id="liveResume"></div>
-    <!-- Demo: ein Knopf, sonst nichts (die Steuerspalte links ist in der Demo ausgeblendet) -->
+    <!-- Demo: ein Knopf, sonst nichts (die Steuerspalte links ist in der Demo ausgeblendet).
+         Der Zeitstrahl (demo.js) zeigt die Meetings, die schon im Demo-Wiki stehen, und das heutige. -->
     <div class="card demo-bar" id="demoBar" data-nur="demo">
       <div class="demo-text">
-        <b>Demo: Bahnbuchung</b>
-        <p class="hint">Spielt ein aufgezeichnetes Meeting ab, als liefe es gerade. Rechts gleicht der Souffleur das Gesagte
-          mit dem Demo-Wiki ab und zeigt Widersprüche, Fragen und offene Punkte.</p>
+        <div class="demo-zeit" id="demoZeit"><b>Demo: Bahnbuchung</b></div>
+        <div class="demo-schluss" id="demoSchluss" hidden></div>
       </div>
       <div class="demo-actions">
         <button class="start" id="demoStart" type="button"><svg class="ic" aria-hidden="true"><use href="#i-play"/></svg>Demo starten</button>

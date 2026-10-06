@@ -176,8 +176,10 @@ Speicherort, „Transkript ansehen“ und „Ordner öffnen“. Darunter führt 
 weiterverarbeiten“** in die KI-Analyse; die Aufnahme ist dort schon als Quelle gewählt.
 
 **Demo abspielen** – spielt das Beispiel-Meeting aus `demo/llm-wiki` ab, als liefe es
-gerade; der Souffleur gleicht es mit dem Demo-Wiki ab. Es wird nichts aufgenommen und nichts
-ins Wiki geschrieben (die Demo-Sitzung liegt nur unter `~/.cache/audioscribe/demo`).
+gerade; der Souffleur gleicht es mit dem Demo-Wiki ab. Ein Zeitstrahl zeigt die Meetings, die
+schon im Wiki stehen, und das heutige; jeder Hinweis nennt das Meeting, aus dem sein Beleg
+stammt. Es wird nichts aufgenommen und nichts ins Wiki geschrieben (die Demo-Sitzung liegt
+nur unter `~/.cache/audioscribe/demo`).
 
 **Einstellungen** gibt es auf zwei Ebenen:
 

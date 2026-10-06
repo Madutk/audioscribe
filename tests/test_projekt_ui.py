@@ -415,6 +415,24 @@ def test_demo_spielt_das_demo_transkript_ohne_ablage(client, tmp_path, monkeypat
     assert not (kontext.demo_wurzel() / ".audioscribe").exists()
 
 
+def test_demo_vorgeschichte_nennt_die_meetings_im_wiki(client):
+    from audioscribe.ui import kontext
+
+    if not kontext.demo_verfuegbar():
+        pytest.skip("Demo-Daten fehlen")
+    v = client.get("/api/demo/vorgeschichte").json()
+    # Drei Meetings stehen im Demo-Wiki, in Datumsfolge nummeriert; das abgespielte ist das vierte.
+    assert [(m["nr"], m["id"], m["datum"]) for m in v["meetings"]] == [
+        (1, "Q-001", "2026-09-08"), (2, "Q-002", "2026-09-15"), (3, "Q-003", "2026-09-22"),
+    ]
+    assert v["meetings"][0]["titel"] == "Prozessüberblick Bahnbuchung"  # ohne "Prozessaufnahme 1 –"
+    assert v["heute"]["nr"] == 4
+    assert v["wiki"] == {"anforderungen": 15, "offene_punkte": 12}  # OP-001 ist geklärt
+    # Je Seite ihre Quellen, unter demselben Pfad wie die Fundstelle eines Hinweises.
+    assert v["seiten"]["wiki/anforderungen/ANF-002-zweite-klasse-erste-ab-vier-stunden.md"] == ["Q-001"]
+    assert v["seiten"]["wiki/quellen/Q-002-bahn-02-buchung-und-bezahlung.md"] == ["Q-002"]
+
+
 def test_kontextwechsel_waehrend_eines_laufs_wird_abgewiesen(client, wiki, tmp_path, monkeypatch):
     from audioscribe.ui import runner as runner_modul
 

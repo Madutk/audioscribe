@@ -6,7 +6,8 @@ import { $, S, api, post, esc, icon, empty, hms, fill, markUnavailable, tc, secs
 import { go, ladeDefaults } from './kontext.js';
 import { askConfirm, pickFolder } from './dialoge.js';
 import { openWikiDialog } from './wiki.js';
-import { addHint, markSegment, hintBySeg, renderSouffleur, resetSouffleurView, gotoHint, setSouffleurHidden, renderHandover, zeigeWikiStatus } from './souffleur.js';
+import { addHint, markSegment, hintBySeg, renderSouffleur, resetSouffleurView, gotoHint, setSouffleurHidden, renderHandover, zeigeWikiStatus, hinweisZahlen } from './souffleur.js';
+import { ladeVorgeschichte, demoZustand, vorspann } from './demo.js';
 
 // --- Live Transcription -----------------------------------------------------
 
@@ -626,6 +627,8 @@ let liveSichtbar = false;  // die Ansicht ist betreten und nicht wieder verlasse
 
 export async function enterLive() {
   liveSichtbar = true;
+  // Die Demo zeigt zu jedem Beleg das Meeting, aus dem er stammt - gleich holen, vor dem ersten Hinweis da.
+  const vorgeschichte = modus() === 'demo' ? ladeVorgeschichte() : null;
   await ladeDefaults();
   if (modus() !== 'demo' && !liveBereit) {
     liveBereit = true;
@@ -637,6 +640,7 @@ export async function enterLive() {
       $('liveErr').textContent = err.message;
     }
   }
+  await vorgeschichte;
   // Waehrend des Ladens verlassen (die Geraete-Probe dauert): nicht unsichtbar weiter abfragen.
   if (!liveSichtbar) return;
   updateLiveTarget();
@@ -777,6 +781,7 @@ function renderDemo(s) {
   $('demoPauseLabel').textContent = pausiert ? 'Weiter' : 'Pause';
   $('demoPauseIcon').setAttribute('href', pausiert ? '#i-play' : '#i-pause');
   $('demoStart').lastChild.textContent = s.phase === 'beendet' || s.phase === 'fehler' ? 'Demo erneut starten' : 'Demo starten';
+  demoZustand(s, hinweisZahlen());
 }
 
 $('demoStart').onclick = async () => {
@@ -785,6 +790,7 @@ $('demoStart').onclick = async () => {
   try {
     await post('/api/demo/start');
     resetLiveView();
+    vorspann();
     pollLive();
   } catch (err) {
     $('demoErr').textContent = err.message;
