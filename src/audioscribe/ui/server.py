@@ -359,6 +359,9 @@ def create_app():
     class SouffleurToggleIn(BaseModel):
         aktiv: bool = True
 
+    class PauseIn(BaseModel):
+        pausiert: bool = True
+
     class StartIn(BaseModel):
         input_dir: str
         output_dir: str
@@ -1343,6 +1346,15 @@ def create_app():
         if p is not None and not p.demo and snap.get("dir") and not snap.get("running"):
             snap["wiki_ablage"] = wiki_ablage.letzte_ablage(Path(snap["dir"]), p)
         return JSONResponse(snap)
+
+    @app.post("/api/live/pause")
+    def api_live_pause(body: PauseIn):
+        """Abspielen eines Transkripts anhalten oder fortsetzen (Pauseknopf der Demo)."""
+        try:
+            live.pause(body.pausiert)
+        except RuntimeError as exc:
+            raise HTTPException(409, str(exc)) from exc
+        return JSONResponse({"ok": True, "pausiert": body.pausiert})
 
     @app.post("/api/live/stop")
     def api_live_stop():

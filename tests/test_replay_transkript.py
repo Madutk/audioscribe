@@ -305,3 +305,112 @@ def test_argv_und_cli_reichen_raffen_durch(tmp_path, monkeypatch):
     monkeypatch.setattr(replay_transkript, "TranskriptReplaySession", Sitzung)
     assert cli.main(["live", f"--output={tmp_path}", f"--transcript={quelle}", "--raffen"]) == 0
     assert gesehen["opts"].raffen is True
+
+
+# --- Pause (Demo) ------------------------------------------------------------------------
+
+
+def test_pause_haelt_die_sitzungsuhr_an(tmp_path, monkeypatch):
+    emitted = []
+    monkeypatch.setattr(events, "emit", lambda typ, **d: emitted.append((typ, d)))
+    monkeypatch.setattr(events, "log", lambda msg: None)
+    jetzt = [100.0]
+    from audioscribe.live import replay_transkript
+
+    monkeypatch.setattr(replay_transkript.time, "monotonic", lambda: jetzt[0])
+    session = TranskriptReplaySession(ReplayOptions(output_dir=tmp_path, quelle=MEETING, speed=2.0))
+    session._t0 = 100.0
+    jetzt[0] = 110.0
+    assert session.clock() == 20.0  # 10 s real bei Tempo 2
+    session.pausiere(True)
+    jetzt[0] = 170.0
+    assert session.clock() == 20.0  # eine Minute Pause: die Uhr steht
+    session.pausiere(True)  # doppelt gedrueckt: aendert nichts
+    session.pausiere(False)
+    jetzt[0] = 175.0
+    assert session.clock() == 30.0  # laeuft dort weiter, wo sie stand
+    zustaende = [(d["phase"], d["pausiert"]) for typ, d in emitted if typ == events.STATE]
+    assert zustaende == [("laeuft", True), ("laeuft", False)]
+
+
+def test_stdin_befehle_pause_und_weiter(tmp_path, monkeypatch):
+    import io
+
+    monkeypatch.setattr(events, "emit", lambda typ, **d: None)
+    monkeypatch.setattr(events, "log", lambda msg: None)
+    session = TranskriptReplaySession(ReplayOptions(output_dir=tmp_path, quelle=MEETING))
+    gesehen = []
+    monkeypatch.setattr(session, "pausiere", gesehen.append)
+    monkeypatch.setattr("sys.stdin", io.StringIO("pause\nquatsch\nWeiter\nstop\npause\n"))
+    session._watch_stdin()
+    assert gesehen == [True, False] and session._stop.is_set()  # nach "stop" wird nichts mehr gelesen
+
+
+def test_live_runner_pausiert_nur_ein_laufendes_replay(tmp_path):
+    import sys
+    import time
+
+    from audioscribe.ui.jobs import LiveJobOptions
+    from audioscribe.ui.runner import LiveRunner
+
+    kind = tmp_path / "kind.py"
+    kind.write_text(
+        "import json, sys\n"
+        "def state(**d): print('[Live] ' + json.dumps({'type': 'state', **d}), flush=True)\n"
+        "state(phase='laeuft')\n"
+        "for line in sys.stdin:\n"
+        "    b = line.strip()\n"
+        "    if b == 'stop': break\n"
+        "    state(phase='laeuft', pausiert=(b == 'pause'))\n"
+        "state(phase='fertig')\n",
+        encoding="utf-8",
+    )
+
+    def warte(runner, bedingung):
+        ende = time.monotonic() + 20
+        while time.monotonic() < ende:
+            if bedingung(runner.snapshot()):
+                return runner.snapshot()
+            time.sleep(0.05)
+        raise AssertionError(runner.snapshot())
+
+    runner = LiveRunner()
+    with pytest.raises(RuntimeError):
+        runner.pause(True)  # nichts laeuft
+    runner.start(LiveJobOptions(output_dir=tmp_path, replay_transcript=MEETING), argv_builder=lambda o: [sys.executable, str(kind)])
+    warte(runner, lambda s: s["phase"] == "laeuft")
+    assert runner.snapshot()["pausiert"] is False
+    runner.pause(True)
+    warte(runner, lambda s: s["pausiert"] is True)
+    runner.pause(False)
+    warte(runner, lambda s: s["pausiert"] is False)
+    runner.pause(True)
+    warte(runner, lambda s: s["pausiert"] is True)
+    runner.stop()
+    ende = warte(runner, lambda s: not s["running"])
+    assert ende["pausiert"] is False and ende["phase"] == "beendet"
+
+    # Eine echte Aufnahme laesst sich nicht pausieren.
+    aufnahme = LiveRunner()
+    aufnahme.start(LiveJobOptions(output_dir=tmp_path, refine=False), argv_builder=lambda o: [sys.executable, str(kind)])
+    warte(aufnahme, lambda s: s["phase"] == "laeuft")
+    with pytest.raises(RuntimeError, match="Aufnahme"):
+        aufnahme.pause(True)
+    aufnahme.stop()
+    warte(aufnahme, lambda s: not s["running"])
+
+
+def test_route_pause_ohne_laufendes_abspielen(tmp_path, monkeypatch):
+    pytest.importorskip("fastapi")
+    pytest.importorskip("httpx")
+    from fastapi.testclient import TestClient
+
+    from audioscribe.ui import runner as runner_modul
+    from audioscribe.ui import server
+
+    client = TestClient(server.create_app())
+    assert client.post("/api/live/pause", json={"pausiert": True}).status_code == 409
+    gesehen = []
+    monkeypatch.setattr(runner_modul.LiveRunner, "pause", lambda self, an: gesehen.append(an))
+    assert client.post("/api/live/pause", json={"pausiert": True}).json() == {"ok": True, "pausiert": True}
+    assert client.post("/api/live/pause", json={"pausiert": False}).status_code == 200 and gesehen == [True, False]

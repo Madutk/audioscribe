@@ -353,8 +353,10 @@ async function pollLive() {
   // Erst sichtbar, wenn es etwas zurueckzusetzen gibt; waehrend der Aufnahme heisst es "Neu beginnen".
   $('liveReset').hidden = !running && !s.dir && !s.phase;
   $('liveResetLabel').textContent = running ? 'Verwerfen und neu beginnen' : 'Zurücksetzen';
-  $('livePhase').textContent = (s.replay && s.phase === 'laeuft' ? 'Abspielen läuft' : PHASES[s.phase]) || 'bereit';
-  $('livePhase').className = 'badge ' + ({ laeuft: 'laeuft', abschluss: 'laeuft', fehler: 'fehler', beendet: 'fertig' }[s.phase] || '');
+  $('livePhase').textContent = (s.replay && s.phase === 'laeuft'
+    ? (s.pausiert ? 'angehalten' : 'Abspielen läuft') : PHASES[s.phase]) || 'bereit';
+  $('livePhase').className = 'badge ' + (s.pausiert ? 'warn'
+    : ({ laeuft: 'laeuft', abschluss: 'laeuft', fehler: 'fehler', beendet: 'fertig' }[s.phase] || ''));
   $('liveTestBadge').hidden = !s.replay;
   // Das Tempo gilt ab dem Start; ein Wechsel mitten im Abspielen haette keine Wirkung.
   $('liveTestSpeed').querySelectorAll('input').forEach((i) => { i.disabled = running; });
@@ -768,6 +770,12 @@ function renderDemo(s) {
   if (modus() !== 'demo') return;
   $('demoStart').hidden = !!s.running;
   $('demoStop').hidden = !s.running;
+  // Pause nur, solange abgespielt wird (nicht beim Laden oder Abschliessen).
+  const pausiert = !!s.pausiert;
+  $('demoPause').hidden = !(s.running && s.phase === 'laeuft');
+  $('demoPause').setAttribute('aria-pressed', String(pausiert));
+  $('demoPauseLabel').textContent = pausiert ? 'Weiter' : 'Pause';
+  $('demoPauseIcon').setAttribute('href', pausiert ? '#i-play' : '#i-pause');
   $('demoStart').lastChild.textContent = s.phase === 'beendet' || s.phase === 'fehler' ? 'Demo erneut starten' : 'Demo starten';
 }
 
@@ -785,6 +793,15 @@ $('demoStart').onclick = async () => {
   }
 };
 $('demoStop').onclick = () => api('/api/live/stop', { method: 'POST' }).catch(() => {});
+$('demoPause').onclick = async () => {
+  $('demoErr').textContent = '';
+  try {
+    await post('/api/live/pause', { pausiert: $('demoPause').getAttribute('aria-pressed') !== 'true' });
+    pollLive();
+  } catch (err) {
+    $('demoErr').textContent = err.message;
+  }
+};
 
 // --- Testmodus: Sitzungsordner waehlen --------------------------------------------------------
 

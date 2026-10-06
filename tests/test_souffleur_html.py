@@ -228,6 +228,13 @@ def test_reset_leert_souffleur(js):
         assert text in sreset, text
 
 
+def test_demo_hat_einen_pauseknopf(html, js):
+    leiste = html[html.index('id="demoBar"'):html.index('id="demoErr"')]
+    assert leiste.index('id="demoStart"') < leiste.index('id="demoPause"') < leiste.index('id="demoStop"')
+    assert 'aria-pressed="false"' in leiste and '<symbol id="i-pause"' in html
+    assert "post('/api/live/pause'" in js and "'Weiter' : 'Pause'" in js
+
+
 def test_phase_abschluss_bekannt(js):
     assert "abschluss: 'Souffleur schließt ab …'" in js
     assert "abschluss: 'laeuft'" in js

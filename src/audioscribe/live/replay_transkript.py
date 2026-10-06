@@ -142,7 +142,8 @@ def _aus_markdown(text: str) -> list[Segment]:
 
 
 class TranskriptReplaySession:
-    """Spielt ein Transkript als Live-Sitzung ab; ``stop`` über stdin beendet vorzeitig."""
+    """Spielt ein Transkript als Live-Sitzung ab. Befehle über stdin: ``stop`` beendet
+    vorzeitig, ``pause`` hält die Sitzungsuhr an, ``weiter`` lässt sie weiterlaufen."""
 
     def __init__(self, opts: ReplayOptions) -> None:
         self.opts = opts
@@ -151,9 +152,31 @@ class TranskriptReplaySession:
         self._t0 = 0.0
         self._segments: list[Segment] = []  # bereits ausgegebene, für die Ablage
         self._sitzung_id = uuid.uuid4().hex
+        # Pause (Demo): die Uhr steht, solange _pause_seit gesetzt ist; _pausiert_s summiert
+        # die abgeschlossenen Pausen.
+        self._pause_lock = threading.Lock()
+        self._pause_seit: float | None = None
+        self._pausiert_s = 0.0
 
     def clock(self) -> float:
-        return (time.monotonic() - self._t0) * self.opts.speed
+        """Sitzungsuhr: reale Zeit seit dem Start ohne die Pausen, mal Tempo."""
+        now = time.monotonic()
+        with self._pause_lock:
+            pause = self._pausiert_s + (now - self._pause_seit if self._pause_seit is not None else 0.0)
+        return (now - self._t0 - pause) * self.opts.speed
+
+    def pausiere(self, an: bool) -> None:
+        """Abspielen anhalten bzw. fortsetzen; die Zeitstempel der Absätze bleiben, wie sie sind."""
+        with self._pause_lock:
+            if an == (self._pause_seit is not None):
+                return
+            if an:
+                self._pause_seit = time.monotonic()
+            else:
+                self._pausiert_s += time.monotonic() - self._pause_seit
+                self._pause_seit = None
+        self._state("laeuft", pausiert=an)
+        events.log("Abspielen angehalten." if an else "Abspielen läuft weiter.")
 
     def run(self) -> int:
         o = self.opts
@@ -272,8 +295,11 @@ class TranskriptReplaySession:
             return
         try:
             for line in sys.stdin:
-                if line.strip().lower() == "stop":
+                befehl = line.strip().lower()
+                if befehl == "stop":
                     self._stop.set()
                     return
+                if befehl in ("pause", "weiter"):
+                    self.pausiere(befehl == "pause")
         except (OSError, ValueError):
             return

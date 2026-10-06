@@ -189,7 +189,11 @@ body[data-modus="demo"] #tabLive { grid-template-columns: minmax(0, 1.7fr) minma
 body[data-modus="demo"].souffleur-hidden #tabLive { grid-template-columns: minmax(0, 1fr) 36px; }
 body[data-modus="demo"] .gauge.level, body[data-modus="demo"] #liveTestBadge, body[data-modus="demo"] #liveShots { display: none !important; }
 .demo-bar { display: grid; grid-template-columns: 1fr auto; gap: var(--s4); align-items: center; }
-.demo-bar .start { width: auto; min-width: 200px; }
+.demo-actions { display: flex; gap: var(--s2); flex-wrap: wrap; }
+.demo-bar .start { width: auto; min-width: 160px; }
+.demo-bar .start.pause { background: var(--surface-2); color: var(--fg); border-color: var(--border-strong); }
+.demo-bar .start.pause:hover { background: var(--surface); border-color: var(--accent); }
+.demo-bar .start.pause[aria-pressed="true"] { background: var(--accent); color: var(--accent-fg); border-color: transparent; }
 .demo-bar .err { grid-column: 1 / -1; }
 .demo-bar b { font-size: 16px; }
 .live-main { gap: var(--s4); }
@@ -248,7 +252,7 @@ dialog.dialog .card-title .icon-btn { width: 30px; height: 30px; }
   .view { padding: var(--s5) var(--s4) var(--s6); }
   .ctx { max-width: 100%; }
   .demo-bar { grid-template-columns: 1fr; }
-  .demo-bar .start { width: 100%; }
+  .demo-bar .start { flex: 1; }
 }
 @media (max-width: 560px) {
   .launch-grid, .grid.two { grid-template-columns: 1fr; }

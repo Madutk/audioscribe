@@ -656,6 +656,7 @@ class LiveRunner(_ProcessRunner):
                 "replay_speed": opts.replay_speed if opts.replay_transcript is not None else None,
                 "titel": getattr(opts, "titel", "") or "",
                 "fortgesetzt": getattr(opts, "resume_dir", None) is not None,  # Wiederaufnahme (PRD §21)
+                "pausiert": False,  # Abspielen angehalten (nur Transkript-Replay, z. B. die Demo)
                 "nachlauf": None,  # Ergebnis von on_ende, z. B. {"wiki_ablage": {...}}
             }
             self._events = []
@@ -728,6 +729,24 @@ class LiveRunner(_ProcessRunner):
             proc.stdin.flush()
         except (OSError, ValueError):
             _terminate(proc)
+
+    def pause(self, an: bool) -> None:
+        """Abspielen eines Transkripts anhalten bzw. fortsetzen (``pause``/``weiter`` ueber stdin).
+        Eine echte Aufnahme laesst sich nicht pausieren - ``RuntimeError``."""
+        with self._lock:
+            laeuft = self._info.get("running") and self._info.get("phase") == "laeuft"
+            replay = self._info.get("replay")
+            proc = self._proc
+        if not laeuft or proc is None or proc.poll() is not None:
+            raise RuntimeError("Es läuft gerade nichts, das sich anhalten ließe.")
+        if not replay:
+            raise RuntimeError("Eine Aufnahme lässt sich nicht pausieren – nur das Abspielen eines Transkripts.")
+        try:
+            assert proc.stdin is not None
+            proc.stdin.write("pause\n" if an else "weiter\n")
+            proc.stdin.flush()
+        except (OSError, ValueError) as exc:
+            raise RuntimeError(f"Pause nicht möglich: {exc}") from exc
 
     def reset(self, *, timeout: float = 15.0) -> Path | None:
         """Alles auf Anfang: eine laufende Sitzung wird hart beendet (ohne Nachschaerfen),
@@ -822,7 +841,9 @@ class LiveRunner(_ProcessRunner):
                     self._append(f"Souffleur-Abschluss fehlgeschlagen: {exc}")
             self._nachlauf(code)
             with self._lock:
-                self._info.update(running=False, returncode=code, phase="beendet" if code == 0 else "fehler")
+                self._info.update(
+                    running=False, returncode=code, phase="beendet" if code == 0 else "fehler", pausiert=False
+                )
                 if code != 0:
                     self._info["error"] = self._last_line
             self._append("\nSitzung beendet." if code == 0 else f"\nBeendet mit Exit-Code {code}.")
@@ -873,6 +894,8 @@ class LiveRunner(_ProcessRunner):
                 for k in ("sitzung_id", "titel"):
                     if event.get(k):
                         self._info[k] = event[k]
+                # Das Kind meldet, ob das Abspielen steht - jede andere Phase hebt die Pause auf.
+                self._info["pausiert"] = bool(event.get("pausiert")) and event.get("phase") == "laeuft"
                 if event.get("phase") != "laden":
                     self._info["download"] = None
             elif typ == "download":
