@@ -202,6 +202,11 @@ select:disabled, input:disabled { opacity: .6; cursor: not-allowed; }
 .history-item .name { flex: 1; min-width: 140px; font-weight: 500; }
 
 /* --- Demo: Live-Ansicht ohne Steuerspalte ------------------------------------------ */
+/* Der Fall ist erfunden: plakativ ueber der ganzen Ansicht, dazu als Marke im Kopf (bleibt beim Scrollen sichtbar). */
+.demo-fiktiv { display: flex; align-items: center; gap: var(--s2) var(--s3); flex-wrap: wrap; margin: var(--s4) var(--s5) 0; padding: var(--s3) var(--s4);
+               border: 2px solid var(--warn); border-radius: var(--radius); background: var(--warn-soft); font-size: 15px; }
+.demo-fiktiv .ic { width: 24px; height: 24px; color: var(--warn); }
+.demo-fiktiv b { font-size: 17px; text-transform: uppercase; letter-spacing: .04em; color: var(--warn); }
 body[data-modus="demo"] .live-side { display: none; }
 body[data-modus="demo"] #tabLive { grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); }
 body[data-modus="demo"].souffleur-hidden #tabLive { grid-template-columns: minmax(0, 1fr) 36px; }
@@ -305,6 +310,7 @@ dialog.dialog .card-title .icon-btn { width: 30px; height: 30px; }
   .usage-pop { right: var(--s4); }
   button.usage:has(.usage-usd:not(:empty)) .usage-tok, button.usage:has(.usage-usd:not(:empty)) .usage-usd::before { display: none; }
   .demo-bar { grid-template-columns: 1fr; }
+  .demo-fiktiv { margin: var(--s3) var(--s4) 0; }
   .demo-bar .start { flex: 1; }
   .demo-actions { min-width: 0; }
 }

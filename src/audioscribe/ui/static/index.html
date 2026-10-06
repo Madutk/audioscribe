@@ -76,6 +76,7 @@
   <div class="ctx" id="ctx" hidden>
     <svg class="ic" aria-hidden="true"><use href="#i-book" id="ctxIcon"/></svg>
     <span class="ctx-name" id="ctxName"></span>
+    <span class="badge warn" data-nur="demo">erfundenes Beispiel</span>
     <button class="ghost sm" id="ctxClose" type="button" title="Zurück zur Startseite"><svg class="ic" aria-hidden="true"><use href="#i-home"/></svg><span id="ctxCloseLabel">Schließen</span></button>
   </div>
   <nav class="tabs" id="nav" aria-label="Bereiche">
@@ -109,6 +110,12 @@
 </header>
 <div class="conn" id="connLost" role="status" hidden><svg class="ic" aria-hidden="true"><use href="#i-wifi-off"/></svg>
   Keine Verbindung zu AudioScribe. Läuft das Programm noch? Die Seite verbindet sich von selbst wieder.</div>
+<!-- Demo: der Fall ist erfunden - das steht ueber allem, was die Demo zeigt -->
+<div class="demo-fiktiv" id="demoFiktiv" data-nur="demo" role="note">
+  <svg class="ic" aria-hidden="true"><use href="#i-alert"/></svg>
+  <b>Erfundenes Beispiel</b>
+  <span>Dieser Fall ist frei erfunden. Firma, Personen, Regeln und Zahlen beruhen nicht auf Tatsachen.</span>
+</div>
 <p class="pagehint" id="tabMeta"></p>
 
 <main id="main" tabindex="-1">
@@ -157,10 +164,10 @@
     <article class="launch" id="launchDemo">
       <span class="launch-icon"><svg class="ic" aria-hidden="true"><use href="#i-play-circle"/></svg></span>
       <h3>Demo abspielen <span class="badge">Vorführung</span></h3>
-      <p>Ein aufgezeichnetes Meeting läuft ab – mit Live-Transkript und Souffleur.</p>
+      <p>Ein erfundenes Beispiel-Meeting läuft ab – mit Live-Transkript und Souffleur.</p>
       <details class="more"><summary><svg class="ic" aria-hidden="true"><use href="#i-info"/></svg>Worum geht es?</summary>
         <p>Die Demo zeigt die Live-Ansicht mit einem Beispiel-Meeting zur Bahnbuchung und einem Beispiel-Wiki.
-          Es wird nichts aufgenommen und nichts gespeichert.</p></details>
+          Der Fall ist frei erfunden und beruht nicht auf Tatsachen. Es wird nichts aufgenommen und nichts gespeichert.</p></details>
       <button class="launch-go" type="button" data-launch="demo">Demo öffnen<svg class="ic" aria-hidden="true"><use href="#i-arrow-right"/></svg></button>
     </article>
   </div>

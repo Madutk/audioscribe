@@ -241,6 +241,16 @@ def test_reset_leert_souffleur(js):
         assert text in sreset, text
 
 
+def test_demo_sagt_dass_der_fall_erfunden_ist(html, css):
+    # Plakativ ueber der Ansicht und als Marke im Kopf - beides nur in der Demo sichtbar.
+    banner = html[html.index('id="demoFiktiv"'):html.index('id="tabMeta"')]
+    assert 'data-nur="demo"' in html[html.index('<div class="demo-fiktiv"'):html.index('id="tabMeta"')]
+    assert "Erfundenes Beispiel" in banner and "frei erfunden" in banner and "nicht auf Tatsachen" in banner
+    kopf = html[html.index('id="ctx"'):html.index('id="ctxClose"')]
+    assert 'data-nur="demo">erfundenes Beispiel<' in kopf
+    assert ".demo-fiktiv" in css
+
+
 def test_demo_hat_einen_pauseknopf(html, js):
     leiste = html[html.index('id="demoBar"'):html.index('id="demoErr"')]
     assert leiste.index('id="demoStart"') < leiste.index('id="demoPause"') < leiste.index('id="demoStop"')
