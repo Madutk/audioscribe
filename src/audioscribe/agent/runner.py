@@ -30,6 +30,7 @@ from audioscribe.agent.manifest import Manifest, load_manifest, save_manifest
 from audioscribe.agent.material import Auftrag, Material, copy_material
 from audioscribe.agent.prompt import build_task_prompt, system_append
 from audioscribe.agent.skills import Skill, install_skills
+from audioscribe.verbrauch import Verbrauch, aus_ergebnis, aus_usage
 
 LOG_NAME = "agent-log.txt"
 
@@ -90,6 +91,10 @@ class AnalyseSitzung:
         self._status_zeilen = status_zeilen
         self.fortschritt = Fortschritt(self.workspace)
         self._tool_names: dict[str, str] = {}  # tool_use_id -> Werkzeug
+        # KI-Verbrauch: der Dienst meldet je Ergebnis laufende Summen der Verbindung.
+        self._stand = Verbrauch()  # zuletzt gemeldete Summe
+        self._lauf = Verbrauch()  # Verbrauch dieses Laufs (abgeschlossene Nachrichten)
+        self._vorlaeufig: dict[str, Verbrauch] = {}  # Zwischenstand je Antwort bis zum Ergebnis
         self.manifest = Manifest(
             name=auftrag.name,
             quelle=str(auftrag.quelle),
@@ -117,6 +122,23 @@ class AnalyseSitzung:
         if self._status_zeilen:
             # Nur fuer die Oberflaeche, nicht ins agent-log.txt.
             self._emit(self.fortschritt.status_line())
+
+    def _zwischenstand(self, msg: Any) -> bool:
+        """Tokens einer Antwort vormerken, bis das Ergebnis die verbindlichen Zahlen bringt;
+        ``True``, wenn sich der Stand geaendert hat."""
+        message_id = getattr(msg, "message_id", None)
+        verbrauch = aus_usage(getattr(msg, "usage", None))
+        if not message_id or not verbrauch.tokens or self._vorlaeufig.get(message_id) == verbrauch:
+            return False
+        self._vorlaeufig[message_id] = verbrauch
+        self._verbrauch_melden()
+        return True
+
+    def _verbrauch_melden(self) -> None:
+        stand = self._lauf
+        for verbrauch in self._vorlaeufig.values():
+            stand = stand + verbrauch
+        self.fortschritt.verbrauch = {**stand.als_dict(), "vorlaeufig": bool(self._vorlaeufig)}
 
     # --- Lebenszyklus ------------------------------------------------------------
 
@@ -224,6 +246,8 @@ class AnalyseSitzung:
         ok = False
         async for msg in self._client.receive_response():
             if isinstance(msg, AssistantMessage):
+                if self._zwischenstand(msg):
+                    self._fortschritt_melden()
                 for block in msg.content:
                     if isinstance(block, TextBlock) and block.text.strip():
                         for line in block.text.strip().splitlines():
@@ -288,18 +312,30 @@ class AnalyseSitzung:
         if msg.session_id and msg.session_id not in m.sitzungen:
             m.sitzungen.append(msg.session_id)
         m.turns = (m.turns or 0) + (msg.num_turns or 0)
-        if msg.total_cost_usd is not None:
-            m.kosten_usd = round((m.kosten_usd or 0.0) + msg.total_cost_usd, 4)
+        # Der Dienst meldet laufende Summen der Verbindung: nur zaehlen, was dazukam.
+        gesamt = aus_ergebnis(msg)
+        dazu = gesamt.minus(self._stand)
+        self._stand = gesamt
+        self._lauf = self._lauf + dazu
+        self._vorlaeufig.clear()
+        self._verbrauch_melden()
+        if dazu.kosten_usd is not None:
+            m.kosten_usd = round((m.kosten_usd or 0.0) + dazu.kosten_usd, 4)
+        if dazu.tokens:
+            bisher = (Verbrauch.aus_dict(m.tokens) + dazu).als_dict()
+            m.tokens = {k: bisher[k] for k in ("eingabe", "ausgabe", "cache_lesen", "cache_schreiben")}
         if msg.is_error:
             m.status = "fehler"
             m.fehler = "; ".join(msg.errors or []) or msg.result or msg.subtype
         else:
             m.status = "fertig"
         save_manifest(self.workspace, m)
-        # Kosten bewusst nicht im Protokoll: bei Abo-Anmeldung ist total_cost_usd nur der
-        # Gegenwert zu API-Preisen und wurde als Rechnung missverstanden. Er steht weiter
-        # in analyse.json (kosten_usd).
+        # Der Preis ist der Gegenwert zu API-Preisen - bei Abo-Anmeldung keine Rechnung, deshalb
+        # steht "API-Gegenwert" dabei. Die Summe ueber alle Laeufe steht in analyse.json.
         self.log(f"[Ergebnis] {m.status}: {msg.num_turns} Runde(n), Session {msg.session_id}")
+        if dazu.tokens:
+            self.log(f"[Verbrauch] {dazu.text()}")
+        self._fortschritt_melden()
         return not msg.is_error
 
     async def _can_use_tool(self, tool_name: str, tool_input: dict[str, Any], context: Any):

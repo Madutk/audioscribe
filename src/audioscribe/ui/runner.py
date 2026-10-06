@@ -36,6 +36,7 @@ from audioscribe.ui.jobs import (
     parse_progress,
     parse_stage,
 )
+from audioscribe.verbrauch import QUELLE_ANALYSE, Verbrauch, Zaehler
 
 # Zustaende einer Datei im Stapel (Anzeige in der Oberflaeche).
 WAITING = "wartet"
@@ -479,9 +480,10 @@ class BatchRunner(_ProcessRunner):
 class AnalyseRunner(_ProcessRunner):
     """Ein Analyse-Lauf (``audioscribe analyze``) zur Zeit - Log per Polling wie beim Stapel."""
 
-    def __init__(self, *, max_lines: int = 5000) -> None:
+    def __init__(self, *, max_lines: int = 5000, zaehler: Zaehler | None = None) -> None:
         super().__init__(max_lines=max_lines)
         self._info: dict = {"running": False}
+        self._zaehler = zaehler  # KI-Verbrauch seit Programmstart (Kopfzeile der Oberflaeche)
 
     def start(
         self,
@@ -508,6 +510,8 @@ class AnalyseRunner(_ProcessRunner):
                 "progress": None,
             }
             self._reset_log()
+        if self._zaehler is not None:
+            self._zaehler.beginne(QUELLE_ANALYSE)
         self._thread = threading.Thread(
             target=self._run,
             args=(argv_builder(opts), workspace),
@@ -561,6 +565,8 @@ class AnalyseRunner(_ProcessRunner):
                         # Fortschritt ersetzt den vorigen Stand; nicht ins Protokoll.
                         with self._lock:
                             self._info["progress"] = progress
+                        if self._zaehler is not None and progress.get("verbrauch"):
+                            self._zaehler.setze(QUELLE_ANALYSE, Verbrauch.aus_dict(progress["verbrauch"]))
                         continue
                     self._append(line)
                 code = proc.wait()
@@ -574,7 +580,6 @@ class AnalyseRunner(_ProcessRunner):
         result = None
         if manifest is not None:
             index = workspace / "INDEX.md"
-            # Bewusst ohne kosten_usd: bei Abo-Anmeldung nur ein Gegenwert zu API-Preisen.
             result = {
                 "status": manifest.status,
                 "session_id": manifest.session_id,
@@ -582,6 +587,10 @@ class AnalyseRunner(_ProcessRunner):
                 "fehler": manifest.fehler,
             }
         with self._lock:
+            if result is not None:
+                # Verbrauch dieses Laufs (nicht die Summe aller Laeufe aus analyse.json); der
+                # Preis ist ein Gegenwert zu API-Preisen und heisst in der Oberflaeche auch so.
+                result["verbrauch"] = (self._info.get("progress") or {}).get("verbrauch")
             self._proc = None
             self._info.update(running=False, returncode=code, result=result)
             cancelled = self._info.get("cancelled")

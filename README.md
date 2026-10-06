@@ -408,6 +408,13 @@ das API-Guthaben ab; `audioscribe doctor` zeigt, welcher Weg aktiv ist. Jedes an
 Standbild kostet Tokens; bei Hunderten Bildern helfen `--frame-sensitivity grob` oder ein
 größerer `--frame-min-gap`.
 
+**KI-Verbrauch:** Sobald eine KI außer Haus gearbeitet hat (Souffleur, KI-Analyse), steht
+oben rechts neben dem Zahnrad der Verbrauch seit Programmstart: Tokens und ungefährer Preis
+in US-Dollar. Ein Klick zeigt die Aufteilung nach Souffleur-Sitzung und Analyse-Lauf. Der
+Preis („≈“) ist der Gegenwert zu API-Preisen, den der KI-Dienst selbst meldet – mit Abo ist
+das keine Rechnung. Lokale Arbeit (Transkription, Sprechertrennung) zählt nicht. Im Terminal
+nennt `audioscribe analyze` den Verbrauch in der Zeile `[Verbrauch]`.
+
 <details>
 <summary>Ergebnisordner</summary>
 
@@ -422,7 +429,7 @@ größerer `--frame-min-gap`.
   bpmn-modell.json          # dessen Fachlogik vom Agenten
   material/                 # Kopie von Transkript, frames/, marks.json
   kontext/                  # Kopie der Kontextdateien
-  analyse.json              # Protokoll: Skills, Modell, Session-ID, Dauer, kosten_usd (nur Gegenwert)
+  analyse.json              # Protokoll: Skills, Modell, Session-ID, Dauer, tokens, kosten_usd (nur Gegenwert)
   agent-log.txt             # vollständiger Verlauf
   .claude/skills/           # die verwendeten Skills (Stand der Analyse)
 ```

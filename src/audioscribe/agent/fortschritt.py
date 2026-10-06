@@ -42,6 +42,8 @@ class Fortschritt:
         self.skill: str | None = None
         self.frames_seen: set[str] = set()
         self.docs: list[str] = []
+        # KI-Verbrauch dieses Laufs (audioscribe.verbrauch); setzt die Sitzung, nicht ein Werkzeug.
+        self.verbrauch: dict | None = None
         # tool_use_id -> (Art, Wert); erst ein fehlerfreies Ergebnis zaehlt.
         self._pending: dict[str, tuple[str, object]] = {}
 
@@ -124,6 +126,7 @@ class Fortschritt:
             "frames_seen": len(self.frames_seen),
             "frames_total": self.frames_total,
             "docs": list(self.docs),
+            "verbrauch": self.verbrauch,
         }
 
     def plan_line(self) -> str | None:

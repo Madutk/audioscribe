@@ -9,6 +9,7 @@ import { enterDatei, leaveDatei, resetDatei } from './datei.js';
 import { enterAna, leaveAna, resetAna } from './nachbereitung.js';
 import { enterLive, leaveLive, leereLive, aktualisiereLiveSprache } from './live.js';
 import { loadWikiStatus } from './wiki.js';
+import { starteVerbrauch } from './verbrauch.js';
 
 // Adresse -> Ansicht. `modus` sagt, in welchem Kontext die Adresse gilt (null = ueberall).
 const ROUTES = {
@@ -152,6 +153,7 @@ async function boot() {
     return;
   }
   await show();
+  starteVerbrauch();
 }
 
 boot();

@@ -29,7 +29,8 @@ class Manifest:
     sitzungen: list[str] = field(default_factory=list)  # alle Session-IDs, aelteste zuerst
     turns: int | None = None
     dauer_s: float | None = None
-    kosten_usd: float | None = None
+    kosten_usd: float | None = None  # Preis zu API-Tarifen; bei Abo-Anmeldung nur ein Gegenwert
+    tokens: dict | None = None  # eingabe/ausgabe/cache_lesen/cache_schreiben, über alle Läufe
     fehler: str | None = None
     version: int = MANIFEST_VERSION
 

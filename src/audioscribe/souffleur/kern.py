@@ -330,6 +330,7 @@ class Souffleur:
             "ki_start_s": round(antwort.start_s, 3), "ki_antwort_s": round(antwort.antwort_s, 3),
             "befunde": len(antwort.daten.get("befunde", [])), "markiert": [m.id for m in neue], "verworfen": verworfen,
             "uebergangen": antwort.daten.get("uebergangen", []),
+            **({"verbrauch": antwort.verbrauch.als_dict()} if antwort.verbrauch is not None else {}),
         })
         if neue:
             self._schreibe_stand()

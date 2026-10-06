@@ -521,7 +521,8 @@ def test_analyse_runner_log_manifest_und_doppelstart(tmp_path):
     assert snap["returncode"] == 0
     assert "[Agent] hallo" in snap["lines"]
     assert snap["result"]["status"] == "fertig"
-    assert "kosten_usd" not in snap["result"]  # Abo: nur Gegenwert, nicht anzeigen
+    # Die Summe aller Laeufe aus analyse.json wird nicht angezeigt - nur der Verbrauch dieses Laufs.
+    assert "kosten_usd" not in snap["result"] and snap["result"]["verbrauch"] is None
     # Status-Zeilen landen im Fortschritt, nicht im Protokoll.
     assert snap["progress"] == {"todos": [], "done": 1, "total": 3}
     assert not any(line.startswith("[Agent-Status]") for line in snap["lines"])

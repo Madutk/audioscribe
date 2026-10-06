@@ -5,6 +5,7 @@ import { $, S, api, post, esc, icon, empty, hms, fill, appendLog, poller, modus,
 import { ladeDefaults } from './kontext.js';
 import { pickFolder, showTranscript } from './dialoge.js';
 import { openWikiDialog, slugify } from './wiki.js';
+import { verbrauchText } from './verbrauch.js';
 
 let anaOffset = 0;
 let anaSource = null;     // Pfad der gewaehlten Transkription
@@ -190,6 +191,9 @@ async function pollAnalyse() {
     const status = r ? r.status : (s.returncode === 0 ? 'fertig' : 'fehler');
     const index = r && r.index ? `<br>Übersicht: <code>${esc(r.index)}</code>` : '';
     const err = r && r.fehler ? `<br>${esc(r.fehler)}` : '';
+    // Verbrauch dieses Laufs; der Preis ist der Gegenwert zu API-Preisen (bei Abo keine Rechnung).
+    const verbrauch = r && r.verbrauch && r.verbrauch.tokens
+      ? `<br>KI-Verbrauch: ${esc(verbrauchText(r.verbrauch))} <span class="hint">(Gegenwert zu API-Preisen)</span>` : '';
     const key = JSON.stringify([s.workspace, status, imProjekt()]);
     if ($('anaResult').dataset.key !== key) {
       $('anaResult').dataset.key = key;
@@ -199,7 +203,7 @@ async function pollAnalyse() {
           + '</div>'
         : '';
       $('anaResult').innerHTML = `<div class="result ${status === 'fertig' ? '' : 'fehler'}">
-        <b>${esc(status)}</b><br>Ergebnisordner: <code>${esc(s.workspace)}</code>${index}${err}${knoepfe}</div>`;
+        <b>${esc(status)}</b><br>Ergebnisordner: <code>${esc(s.workspace)}</code>${index}${verbrauch}${err}${knoepfe}</div>`;
     }
   }
   // Eine eben beendete Analyse erscheint in der Liste der Nachbereitungen.

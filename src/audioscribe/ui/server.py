@@ -33,6 +33,7 @@ from audioscribe.projekt import einstellungen, modell, wiki_ablage
 from audioscribe.projekt.modell import ProjektFehler
 from audioscribe.ui import browse, jobs, kontext as kontext_modul, state
 from audioscribe.ui.runner import AnalyseRunner, BatchRunner, LiveRunner
+from audioscribe.verbrauch import QUELLE_SOUFFLEUR, Zaehler
 
 _STATIC_DIR = Path(__file__).parent / "static"
 # Ausgeliefert werden nur diese Dateiarten aus static/ (samt Unterordnern js/, css/).
@@ -201,7 +202,9 @@ def create_app():
 
     app = FastAPI(title="AudioScribe UI")
     runner = BatchRunner()
-    analyse = AnalyseRunner()
+    # KI-Verbrauch seit Programmstart: Souffleur bucht je Aufruf, die Analyse meldet ihren Stand.
+    zaehler = Zaehler()
+    analyse = AnalyseRunner(zaehler=zaehler)
     live = LiveRunner()
     kontext = kontext_modul.Kontext()
 
@@ -535,6 +538,12 @@ def create_app():
         state.save_state(einstellungen.als_state(werte))
         saved = state.load_state()
         return JSONResponse({"werte": einstellungen.globale(saved), "optionen": einstellungen.optionen(saved)})
+
+    @app.get("/api/verbrauch")
+    def api_verbrauch():
+        """KI-Verbrauch seit Programmstart (Tokens, Preis zu API-Tarifen) - nur Aufrufe, die das
+        Haus verlassen; je Quelle die laufende Aktivitaet und die Summe."""
+        return JSONResponse(zaehler.snapshot())
 
     # --- Wiki-Ablage (PRD §21) ----------------------------------------------------------------
 
@@ -1095,7 +1104,11 @@ def create_app():
 
         speed = opts.replay_speed if opts.replay_transcript is not None else 1.0
         konfig = lade_konfig(state.load_state(), projekt=_projekt(), speed=speed)
-        ki, ki_status = make_ki(konfig.backend, konfig.modell, cache_dir=settings.cache_dir, log=live._append)
+        zaehler.beginne(QUELLE_SOUFFLEUR)
+        ki, ki_status = make_ki(
+            konfig.backend, konfig.modell, cache_dir=settings.cache_dir, log=live._append,
+            on_verbrauch=lambda verbrauch: zaehler.buche(QUELLE_SOUFFLEUR, verbrauch),
+        )
         return Souffleur(konfig, ki=ki, ki_status=ki_status, log=live._append)
 
     @app.post("/api/live/start")

@@ -27,6 +27,24 @@ a.icon-btn { display: inline-flex; align-items: center; justify-content: center;
 a.icon-btn:hover, a.icon-btn[aria-current="page"] { background: var(--surface-2); color: var(--fg); }
 a.icon-btn .ic { width: 18px; height: 18px; }
 .pagehint:empty { display: none; }
+/* KI-Verbrauch: dezent neben dem Zahnrad, Einzelheiten im Popover */
+button.usage { background: transparent; color: var(--fg-muted); border-color: var(--border); border-radius: var(--radius-pill);
+               font-size: 12px; font-weight: 500; padding: 4px 11px; min-height: 28px; white-space: nowrap;
+               font-variant-numeric: tabular-nums; }
+button.usage:hover { background: var(--surface-2); color: var(--fg); }
+button.usage .ic { width: 14px; height: 14px; }
+.usage-usd:empty { display: none; }
+.usage-usd::before { content: "·"; margin-right: 7px; color: var(--fg-faint); }
+.usage-pop { position: fixed; inset: 64px var(--s5) auto auto; margin: 0; width: min(400px, calc(100% - 2 * var(--s4)));
+             padding: var(--s4); border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface);
+             color: var(--fg); box-shadow: var(--shadow-md); }
+.usage-pop h2 { font-size: 14px; font-weight: 600; margin-bottom: var(--s2); }
+.usage-pop table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+.usage-pop th, .usage-pop td { padding: 5px 0 5px var(--s3); text-align: right; font-weight: 400; white-space: nowrap; }
+.usage-pop thead th { color: var(--fg-muted); font-size: 12px; }
+.usage-pop th:first-child { text-align: left; padding-left: 0; white-space: normal; }
+.usage-pop tr.sum > * { border-top: 1px solid var(--border); font-weight: 600; }
+.usage-pop .hint { margin-top: var(--s3); }
 main:focus { outline: none; }
 
 /* Verbindung zum Server verloren */
@@ -251,6 +269,9 @@ dialog.dialog .card-title .icon-btn { width: 30px; height: 30px; }
 @media (max-width: 860px) {
   .view { padding: var(--s5) var(--s4) var(--s6); }
   .ctx { max-width: 100%; }
+  /* Schmal: nur der Preis; die Tokens stehen im Popover. */
+  .usage-pop { right: var(--s4); }
+  button.usage:has(.usage-usd:not(:empty)) .usage-tok, button.usage:has(.usage-usd:not(:empty)) .usage-usd::before { display: none; }
   .demo-bar { grid-template-columns: 1fr; }
   .demo-bar .start { flex: 1; }
 }

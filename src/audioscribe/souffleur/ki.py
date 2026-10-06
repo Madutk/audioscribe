@@ -21,6 +21,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Protocol
 
+from audioscribe.verbrauch import Verbrauch, aus_ergebnis
+
 BACKEND_CLAUDE = "claude-agent"
 BACKEND_ATTRAPPE = "attrappe"
 BACKENDS: tuple[str, ...] = (BACKEND_CLAUDE, BACKEND_ATTRAPPE)
@@ -61,6 +63,7 @@ class KiAntwort:
     antwort_s: float  # gesamt: vom Aufruf bis zum Ergebnis
     modell: str
     session_id: str | None = None
+    verbrauch: Verbrauch | None = None  # None = lokal, nichts verbraucht
 
 
 class KiDienst(Protocol):
@@ -86,12 +89,20 @@ def claude_config_dir() -> Path:
 class ClaudeAgentKi:
     backend = BACKEND_CLAUDE
 
-    def __init__(self, modell: str, *, cwd: Path, log: Callable[[str], None] | None = None) -> None:
+    def __init__(
+        self,
+        modell: str,
+        *,
+        cwd: Path,
+        log: Callable[[str], None] | None = None,
+        on_verbrauch: Callable[[Verbrauch], None] | None = None,
+    ) -> None:
         self.modell = modell
         # Ein leerer, eigener Ordner - nie der Wiki-Pfad und nie ein Transkriptordner: die CLI
         # legt Sitzungsdateien nach dem Arbeitsverzeichnis ab.
         self.cwd = Path(cwd)
         self._log = log or (lambda msg: None)
+        self._on_verbrauch = on_verbrauch or (lambda verbrauch: None)
 
     def antworte(self, auftrag: KiAuftrag) -> KiAntwort:
         import anyio
@@ -138,6 +149,9 @@ class ClaudeAgentKi:
         if ergebnis is None:
             raise KiFehler("KI-Aufruf ohne Ergebnis")
         self._loesche_sitzungsdatei(ergebnis.session_id)
+        # Vor der Fehlerprüfung: auch ein gescheiterter Aufruf hat Tokens verbraucht.
+        verbrauch = aus_ergebnis(ergebnis)
+        self._on_verbrauch(verbrauch)
         if ergebnis.is_error:
             raise KiFehler(f"KI-Dienst meldet Fehler: {ergebnis.result or ergebnis.subtype}")
         daten = ergebnis.structured_output
@@ -145,7 +159,7 @@ class ClaudeAgentKi:
             raise KiFehler("KI-Antwort ohne strukturierte Daten")
         return KiAntwort(
             daten=daten, start_s=start_s if start_s is not None else antwort_s, antwort_s=antwort_s,
-            modell=self.modell, session_id=ergebnis.session_id,
+            modell=self.modell, session_id=ergebnis.session_id, verbrauch=verbrauch,
         )
 
     def _loesche_sitzungsdatei(self, session_id: str | None) -> None:
@@ -306,6 +320,7 @@ def make_ki(
     cache_dir: Path,
     log: Callable[[str], None] | None = None,
     regeln: list[AttrappenRegel] | None = None,
+    on_verbrauch: Callable[[Verbrauch], None] | None = None,
 ) -> tuple[Any | None, KiStatus]:
     """Den konfigurierten Dienst bauen. Fehlt er, kommt ``None`` und ein Status, der das sagt -
     der Souffleur läuft dann ohne KI weiter (Fragen-Erkennung und Essenz entfallen)."""
@@ -317,5 +332,5 @@ def make_ki(
         return None, KiStatus("fehlt", backend, modell, f"Unbekanntes KI-Backend: {backend}")
     if not sdk_verfuegbar():
         return None, KiStatus("fehlt", backend, modell, INSTALL_HINT)
-    ki = ClaudeAgentKi(modell, cwd=Path(cache_dir) / "souffleur", log=log)
+    ki = ClaudeAgentKi(modell, cwd=Path(cache_dir) / "souffleur", log=log, on_verbrauch=on_verbrauch)
     return ki, KiStatus("bereit", backend, modell, f"KI bereit (Modell {modell})")
