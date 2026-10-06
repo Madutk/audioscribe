@@ -92,6 +92,61 @@ def make_progress_hook(
     return hook
 
 
+def _akzeptiert_hook(pipeline) -> bool:
+    """Kennt ``pipeline.apply`` den ``hook``-Parameter? (rein, testbar)
+
+    Vorab per Signatur pruefen statt einen ``TypeError`` abzufangen: der koennte auch tief
+    aus der Diarisierung kommen - dann liefe die ganze Datei ein zweites Mal, nur um am
+    Ende mit demselben Fehler ohne Kontext zu scheitern. Ein per
+    AUDIOSCRIBE_DIARIZATION_MODEL gesetztes anderes Modell kennt 'hook' evtl. nicht -
+    dann eben ohne Fortschrittsanzeige.
+    """
+    import inspect
+
+    apply = getattr(pipeline, "apply", None)
+    if apply is None:
+        return False
+    try:
+        params = inspect.signature(apply).parameters.values()
+    except (TypeError, ValueError):
+        return False
+    return any(p.name == "hook" or p.kind is inspect.Parameter.VAR_KEYWORD for p in params)
+
+
+def _ladefehler_meldung(status: str, detail: str, hint: str = "") -> str:
+    """Nutzermeldung fuer ein fehlgeschlagenes Laden des Diarisierungsmodells (rein, testbar).
+
+    ``UNPRUEFBAR`` (kein Netz, Proxy, huggingface_hub fehlt) braucht einen eigenen Zweig:
+    sonst hiesse es "Token gueltig, Bedingungen akzeptieren", obwohl schlicht Hugging Face
+    nicht erreichbar ist.
+    """
+    from audioscribe.hf import TOKENS_URL
+
+    if status in ("FEHLT", "UNGUELTIG"):
+        return (
+            f"Diarisierungsmodell konnte nicht geladen werden: {detail}\n"
+            f"Neuen Token erstellen ({TOKENS_URL}, Rolle 'read'), in die .env eintragen "
+            "und mit 'audioscribe doctor' pruefen. "
+            "Alternativ ohne Sprecher-Trennung: '--no-diarize'." + hint
+        )
+    if status == "UNPRUEFBAR":
+        return (
+            "Diarisierungsmodell konnte nicht geladen werden - Hugging Face ist nicht "
+            f"erreichbar oder der Token nicht pruefbar ({detail}). Netzwerk/Proxy pruefen "
+            "und mit 'audioscribe doctor' gegenchecken. "
+            "Alternativ ohne Sprecher-Trennung: '--no-diarize'." + hint
+        )
+    return (
+        "Diarisierungsmodell konnte nicht geladen werden - der HF_TOKEN ist gueltig, also "
+        "sind die Modell-Bedingungen noch nicht (vollstaendig) akzeptiert. BEIDE Seiten "
+        "muessen EINGELOGGT akzeptiert werden:\n"
+        "  https://huggingface.co/pyannote/speaker-diarization-3.1\n"
+        "  https://huggingface.co/pyannote/segmentation-3.0\n"
+        "Status pruefen mit 'audioscribe doctor'. Alternativ ohne Sprecher-Trennung: '--no-diarize'."
+        + hint
+    )
+
+
 def diarize(audio, result: dict, reporter: Reporter | None = None) -> dict:
     """Weist Sprecher zu und liefert das angereicherte Result-Dict zurueck."""
     if not result.get("segments"):
@@ -132,25 +187,10 @@ def diarize(audio, result: dict, reporter: Reporter | None = None) -> dict:
         # Ein abgelehnter Token sieht fuer Hugging Face aus wie ein anonymer Zugriff, das
         # gesperrte Repo meldet dann ebenfalls "gated". Erst nachfragen, dann anleiten -
         # sonst klickt der Nutzer 'Agree', obwohl sein Token widerrufen ist.
-        from audioscribe.hf import TOKENS_URL, token_status
+        from audioscribe.hf import token_status
 
         status, detail = token_status(settings.hf_token)
-        if status in ("FEHLT", "UNGUELTIG"):
-            raise RuntimeError(
-                f"Diarisierungsmodell konnte nicht geladen werden: {detail}\n"
-                f"Neuen Token erstellen ({TOKENS_URL}, Rolle 'read'), in die .env eintragen "
-                "und mit 'audioscribe doctor' pruefen. "
-                "Alternativ ohne Sprecher-Trennung: '--no-diarize'." + hint
-            )
-        raise RuntimeError(
-            "Diarisierungsmodell konnte nicht geladen werden - der HF_TOKEN ist gueltig, also "
-            "sind die Modell-Bedingungen noch nicht (vollstaendig) akzeptiert. BEIDE Seiten "
-            "muessen EINGELOGGT akzeptiert werden:\n"
-            "  https://huggingface.co/pyannote/speaker-diarization-3.1\n"
-            "  https://huggingface.co/pyannote/segmentation-3.0\n"
-            "Status pruefen mit 'audioscribe doctor'. Alternativ ohne Sprecher-Trennung: '--no-diarize'."
-            + hint
-        )
+        raise RuntimeError(_ladefehler_meldung(status, detail, hint))
 
     assign_word_speakers = _assign_word_speakers()
 
@@ -166,15 +206,9 @@ def diarize(audio, result: dict, reporter: Reporter | None = None) -> dict:
     try:
         pipeline.to(torch.device(torch_device(resolve_device(settings.device))))
         audio_data = {"waveform": torch.from_numpy(audio[None, :]), "sample_rate": SAMPLE_RATE}
-        if settings.emit_progress:
-            try:
-                diarization = pipeline(audio_data, hook=make_progress_hook(), **kwargs)
-            except TypeError:
-                # Ein per AUDIOSCRIBE_DIARIZATION_MODEL gesetztes anderes Modell kennt
-                # 'hook' moeglicherweise nicht - dann eben ohne Fortschrittsanzeige.
-                diarization = pipeline(audio_data, **kwargs)
-        else:
-            diarization = pipeline(audio_data, **kwargs)
+        if settings.emit_progress and _akzeptiert_hook(pipeline):
+            kwargs["hook"] = make_progress_hook()
+        diarization = pipeline(audio_data, **kwargs)
 
         diarize_df = pd.DataFrame(
             diarization.itertracks(yield_label=True),

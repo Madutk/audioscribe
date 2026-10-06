@@ -1,14 +1,17 @@
 """Video-Unterstuetzung: Audiospur aus einer Videodatei extrahieren (ffmpeg).
 
 Whisper braucht 16-kHz-Mono-Audio; genau das erzeugen wir hier in einem ffmpeg-Lauf
-und legen es als WAV in ``work/`` ab (wiederverwendbares Artefakt).
+und legen es als WAV in ``work/`` ab. Die Datei ist ein Zwischenprodukt je Lauf: der
+Orchestrator loescht sie, sobald das Audio geladen ist.
 """
 
 from __future__ import annotations
 
+import os
 import re
 import shutil
 import subprocess
+import tempfile
 from pathlib import Path
 
 from audioscribe.config import ensure_ffmpeg_on_path, settings
@@ -31,22 +34,35 @@ def is_video(path: Path) -> bool:
 
 
 def extract_audio(video: Path, reporter: Reporter | None = None) -> Path:
-    """Extrahiert die Audiospur als 16-kHz-Mono-WAV nach ``work/`` und liefert den Pfad."""
+    """Extrahiert die Audiospur als 16-kHz-Mono-WAV nach ``work/`` und liefert den Pfad.
+
+    Der Dateiname ist je Aufruf eindeutig: zwei gleichnamige Videos aus verschiedenen
+    Ordnern (oder zwei parallele Laeufe) ueberschreiben sich sonst gegenseitig das WAV.
+    Aufraeumen ist Sache des Aufrufers.
+    """
     video = Path(video)
     ffmpeg = ensure_ffmpeg_on_path()
     settings.work_dir.mkdir(parents=True, exist_ok=True)
-    out = settings.work_dir / f"{video.stem}.16k.wav"
+    fd, name = tempfile.mkstemp(prefix=f"{video.stem}.", suffix=".16k.wav", dir=settings.work_dir)
+    os.close(fd)
+    out = Path(name)
 
     cmd = [
-        ffmpeg, "-y", "-i", str(video),
+        ffmpeg, "-y", "-nostdin", "-i", str(video),
         "-vn",                 # kein Video
         "-ac", "1",            # mono
         "-ar", "16000",        # 16 kHz (Whisper-Eingang)
         "-c:a", "pcm_s16le",   # unkomprimiertes WAV
         str(out),
     ]
-    proc = subprocess.run(cmd, capture_output=True, text=True)
+    # stdin=DEVNULL wie in _run_probe (sonst blockiert ffmpeg im Serverprozess);
+    # errors="replace": ffmpeg schreibt UTF-8, Windows dekodiert sonst mit cp1252 und
+    # scheitert an Dateinamen wie 'Łódź.mp4', obwohl die Extraktion geklappt hat.
+    proc = subprocess.run(  # noqa: S603 - festes Kommando
+        cmd, capture_output=True, text=True, errors="replace", stdin=subprocess.DEVNULL
+    )
     if proc.returncode != 0 or not out.exists() or out.stat().st_size == 0:
+        out.unlink(missing_ok=True)
         tail = (proc.stderr or "").strip().splitlines()[-8:]
         raise RuntimeError(
             f"Audio-Extraktion aus '{video.name}' fehlgeschlagen "

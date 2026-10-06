@@ -24,14 +24,40 @@ WINDOW_S = 30.0  # Whisper-Fenster
 PAD_S = 0.3  # Rand um jede Sprachspanne
 
 
+SUCH_S = 5.0  # so weit vor der Fenstergrenze wird nach der leisesten Stelle gesucht
+_SUCH_RASTER_S = 0.05
+
+
+def _leiseste_stelle(audio: np.ndarray, von: int, bis: int, rate: int) -> int:
+    """Mitte des energieaermsten 50-ms-Rasters in ``audio[von:bis]`` (rein, testbar)."""
+    raster = max(1, int(_SUCH_RASTER_S * rate))
+    n = (bis - von) // raster
+    if n < 1:
+        return bis
+    stueck = audio[von : von + n * raster].astype(np.float32).reshape(n, raster)
+    i = int(np.argmin((stueck * stueck).mean(axis=1)))
+    return von + i * raster + raster // 2
+
+
 def speech_windows(
-    spans: list[tuple[int, int]], total: int, *, max_s: float = WINDOW_S, pad_s: float = PAD_S, rate: int = SAMPLE_RATE
+    spans: list[tuple[int, int]],
+    total: int,
+    *,
+    max_s: float = WINDOW_S,
+    pad_s: float = PAD_S,
+    rate: int = SAMPLE_RATE,
+    audio: np.ndarray | None = None,
 ) -> list[tuple[int, int]]:
     """VAD-Spannen (Samples) -> Fenster bis ``max_s`` fuer je einen Whisper-Aufruf (rein, testbar).
 
     Benachbarte Spannen werden zusammengefasst, solange das Fenster unter ``max_s`` bleibt;
     eine einzelne zu lange Spanne wird in Stuecke von hoechstens ``max_s`` geschnitten.
     Ohne Spannen: leer (stilles Audio -> leeres Transkript).
+
+    Fenster ueberlappen nie: die Polsterung einer neuen Spanne endet am Ende des vorigen
+    Fensters - sonst stuenden die Randwoerter doppelt im Transkript. Ist ``audio``
+    gegeben, wird eine zu lange Spanne an der leisesten Stelle der letzten ``SUCH_S``
+    Sekunden geschnitten statt hart nach ``max_s`` mitten im Wort.
     """
     max_n = int(max_s * rate)
     pad = int(pad_s * rate)
@@ -39,22 +65,29 @@ def speech_windows(
     cur: tuple[int, int] | None = None
     for a, b in sorted(spans):
         a, b = max(0, a - pad), min(total, b + pad)
+        if cur is not None:
+            if b <= cur[1]:
+                continue  # liegt schon im laufenden Fenster
+            if b - cur[0] <= max_n:
+                cur = (cur[0], b)
+                continue
+            out.append(cur)
+            a = max(a, cur[1])
         if b <= a:
             continue
-        if cur is not None and b - cur[0] <= max_n:
-            cur = (cur[0], max(cur[1], b))
-            continue
-        if cur is not None:
-            out.append(cur)
         cur = (a, b)
     if cur is not None:
         out.append(cur)
     # Zu lange Einzelstuecke zerteilen.
+    such_n = int(SUCH_S * rate)
     final: list[tuple[int, int]] = []
     for a, b in out:
         while b - a > max_n:
-            final.append((a, a + max_n))
-            a += max_n
+            schnitt = a + max_n
+            if audio is not None:
+                schnitt = _leiseste_stelle(audio, max(a + max_n // 2, schnitt - such_n), schnitt, rate)
+            final.append((a, schnitt))
+            a = schnitt
         final.append((a, b))
     return final
 
@@ -92,7 +125,7 @@ def transcribe_mlx(
     path = fetch_mlx_model(mlx_repo(model, settings.mlx_repo or None), progress)
 
     spans = (vad or _vad_spans)(audio) if len(audio) else []
-    windows = speech_windows(spans, len(audio))
+    windows = speech_windows(spans, len(audio), audio=audio)
     if reporter:
         reporter.info(f"Transkribiere {len(windows)} Fenster ...")
     segments: list[dict] = []

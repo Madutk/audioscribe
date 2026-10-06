@@ -28,14 +28,19 @@ class Resampler:
 
     ``resample_poly`` nimmt an den Blockrändern Nullen an; bei zehn Blöcken je Sekunde
     gäbe das ein 10-Hz-Knacken. Darum läuft je Seite ein kleiner Kontext mit, der aus der
-    Ausgabe wieder herausgeschnitten wird (Preis: 2 ms Latenz).
+    Ausgabe wieder herausgeschnitten wird (Preis: 2 ms Latenz bei 48 kHz, 10 ms bei 44,1 kHz).
     """
 
     def __init__(self, rate_in: int, rate_out: int = SAMPLE_RATE) -> None:
         g = gcd(int(rate_in), int(rate_out))
         self.up = int(rate_out) // g
         self.down = int(rate_in) // g
-        self._ctx = 32 * self.down
+        # Gut dreimal die halbe Filterbreite von resample_poly (10 * max(up, down) / up
+        # Eingangssamples), aufgerundet auf ein Vielfaches von ``down``, damit der Schnitt
+        # in der Ausgabe auf ein ganzes Sample fällt. Nicht 32 * down: bei 44,1 kHz
+        # (down=441) wären das 0,32 s Versatz und viel Rechenzeit im Audio-Callback.
+        need = 32 * -(-max(self.up, self.down) // self.up)
+        self._ctx = -(-need // self.down) * self.down
         self._buf = np.zeros(self._ctx, dtype=np.float32)
         # Hier laden, nicht erst in process(): das läuft im Audio-Callback, und ein
         # DLL-Import dort verklemmt sich unter Windows mit Importen anderer Threads
@@ -59,6 +64,14 @@ class Resampler:
         out = y[head : head + payload * self.up // self.down]
         self._buf = self._buf[payload:]
         return out.astype(np.float32)
+
+    def flush(self) -> np.ndarray:
+        """Den zurückgehaltenen Rest ausgeben (mit Stille dahinter) - beim Schließen."""
+        rest = len(self._buf) - self._ctx  # noch nicht ausgegebene Eingangssamples
+        if self._poly is None or rest <= 0:
+            return np.zeros(0, dtype=np.float32)
+        out = self.process(np.zeros(self._ctx + self.down, dtype=np.float32))
+        return out[: rest * self.up // self.down]
 
 
 class Track:
@@ -86,6 +99,7 @@ class Track:
         self._lock = threading.Lock()
         self._pending: list[np.ndarray] = []
         self._pending_start = self.start_sample
+        self._closed = False
         self._wav: wave.Wave_write | None = None
         if wav_path is not None:
             wav_path.parent.mkdir(parents=True, exist_ok=True)
@@ -134,7 +148,14 @@ class Track:
             return start, samples
 
     def close(self) -> None:
+        """Nach dem Stopp des Streams: Rest des Resamplers anhängen, WAV schließen."""
         with self._lock:
+            if self._closed:
+                return
+            self._closed = True
+            rest = self._resampler.flush()
+            if len(rest):
+                self._append(rest)
             if self._wav is not None:
                 self._wav.close()
                 self._wav = None

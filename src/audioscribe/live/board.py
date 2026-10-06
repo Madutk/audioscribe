@@ -4,8 +4,9 @@ Vorschau-Aufträge sind Wegwerfware - je Spur zählt nur der neueste, und sie ko
 dran, wenn kein fertiger Abschnitt wartet. So kann die Vorschau den Rückstand nie
 vergrößern, nur freie Rechenzeit nutzen.
 
-Aufholmodus: Warten mehrere fertige Abschnitte derselben Spur, gehen sie zusammengelegt
-als ein Stück (bis ``coalesce_s``) an den Transkriptions-Thread. Whisper polstert jede
+Aufholmodus: Warten mehr als ``catchup_s`` Sekunden fertiger Abschnitte, gehen die direkt
+aufeinander folgenden derselben Spur zusammengelegt als ein Stück (bis ``coalesce_s``) an
+den Transkriptions-Thread. Whisper polstert jede
 Eingabe auf 30 s, ein Stück kostet also fast so viel wie ein einzelner Abschnitt - so
 holt die CPU auf. Bei leerem Brett ändert sich nichts.
 """
@@ -29,13 +30,16 @@ class Job:
 
 
 class JobBoard:
-    def __init__(self, coalesce_s: float = 0.0, max_gap_s: float = 3.0) -> None:
+    def __init__(
+        self, coalesce_s: float = 0.0, max_gap_s: float = 3.0, catchup_s: float = 0.0
+    ) -> None:
         self._cond = threading.Condition()
         self._finals: deque[Job] = deque()
         self._partials: dict[str, Job] = {}
         self._active = False  # ein fertiger Abschnitt wird gerade gerechnet (wait_idle)
         self._coalesce_s = coalesce_s  # 0 = nie zusammenlegen
         self._max_gap_s = max_gap_s
+        self._catchup_s = catchup_s  # erst ab so viel wartendem Rückstand zusammenlegen
 
     def put_final(self, job: Job) -> None:
         with self._cond:
@@ -67,7 +71,11 @@ class JobBoard:
         """Nächster fertiger Abschnitt - im Aufholmodus samt seinen direkten Nachfolgern."""
         first = self._finals.popleft()
         jobs = [first]
-        while self._finals and self._coalesce_s > 0:
+        # Gleiche Schwelle wie der Sparmodus der Sitzung: wartender Rückstand ohne ``first``.
+        # Darunter bleibt jeder Abschnitt einzeln - sonst bekämen kurze Beiträge
+        # verschiedener Sprecher ein gemeinsames Embedding und ein Label.
+        aufholen = sum(j.utterance.duration_s for j in self._finals) > self._catchup_s
+        while self._finals and self._coalesce_s > 0 and aufholen:
             nxt = self._finals[0]
             gap_s = nxt.utterance.start_s - jobs[-1].utterance.end_s
             total_s = nxt.utterance.end_s - first.utterance.start_s

@@ -33,6 +33,9 @@ from audioscribe.review.marks import Mark
 _JPEG_QUALITY = 88  # entspricht grob ffmpegs -q:v 3 der Offline-Standbilder
 
 
+MSS_FEHLT = "mss fehlt - keine Standbilder (uv sync ... --extra live)"
+
+
 class SourceUnavailable(RuntimeError):
     """Die gewählte Bildquelle gibt es nicht (Monitor-Index, geschlossenes Fenster)."""
 
@@ -282,6 +285,8 @@ class ScreenWatcher(threading.Thread):
                 self._loop(source)
         except SourceUnavailable as exc:
             self._log(f"{exc} - keine Standbilder")
+        except ImportError:  # mss wird erst hier, im Thread, geladen
+            self._log(MSS_FEHLT)
 
     def _loop(self, source) -> None:
         frames = self._out_dir / "frames"

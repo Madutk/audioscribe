@@ -76,7 +76,17 @@ Danach läuft alles offline.
 
 `start.ps1` legt die Windows-Umgebung bewusst in `.venv-win` an: Wird das Repo auch aus WSL
 benutzt, gehört `.venv` dem Linux-Python, und Windows-`uv` würde daran scheitern. Wer
-`uv sync` von Hand aufruft, setzt vorher `$env:UV_PROJECT_ENVIRONMENT = '.venv-win'`.
+`uv sync` von Hand aufruft, setzt vorher `$env:UV_PROJECT_ENVIRONMENT = '.venv-win'` und
+`$env:UV_LINK_MODE = 'copy'`.
+
+`start.ps1` setzt `UV_LINK_MODE=copy`: uv kopiert Pakete aus seinem Cache, statt sie per
+Hardlink zu verknüpfen. Hat ein anderes Projekt in einem OneDrive-Ordner seine `.venv` per
+Hardlink aus demselben Cache gefüllt, macht OneDrive die Cache-Dateien zu Cloud-Dateien –
+`uv sync` scheitert dann mit `os error 396` („inkompatible feste Links“) oder `os error 32`
+(Datei in Benutzung). Abhilfe: `.venv-win` löschen, die betroffenen Cache-Einträge entfernen
+(`uv cache clean <paket>` oder ganz `uv cache clean`) und neu starten. Damit es nicht
+wiederkommt, `UV_LINK_MODE=copy` dauerhaft setzen:
+`[Environment]::SetEnvironmentVariable('UV_LINK_MODE','copy','User')`.
 
 ### macOS (`start.sh` / `AudioScribe.command`)
 

@@ -33,7 +33,7 @@ def test_open_capture_verweist_linux_auf_das_replay():
 def test_open_capture_dispatcht_nach_plattform(monkeypatch):
     aufrufe = []
     fake_mac = types.ModuleType("audioscribe.live.capture.mac")
-    fake_mac.MacCapture = lambda clock: aufrufe.append(("mac", clock)) or "MAC"
+    fake_mac.MacCapture = lambda clock, log=None: aufrufe.append(("mac", log)) or "MAC"
     fake_win = types.ModuleType("audioscribe.live.capture.wasapi")
     fake_win.AudioCapture = lambda clock: aufrufe.append(("win", clock)) or "WIN"
     monkeypatch.setitem(sys.modules, "audioscribe.live.capture.mac", fake_mac)
@@ -41,6 +41,9 @@ def test_open_capture_dispatcht_nach_plattform(monkeypatch):
     assert open_capture(lambda: 1.0, platform="darwin") == "MAC"
     assert open_capture(lambda: 1.0, platform="win32") == "WIN"
     assert [a[0] for a in aufrufe] == ["mac", "win"]
+    meldung = print
+    open_capture(lambda: 1.0, platform="darwin", log=meldung)
+    assert aufrufe[-1] == ("mac", meldung)  # MacCapture-Diagnosen erreichen das Log
 
 
 def test_pick_findet_synthetischen_loopback_mit_negativem_index():
@@ -129,6 +132,34 @@ def test_track_reset_rate_wechselt_den_resampler(tmp_path):
     assert len(samples) == 1600  # 1:1, kein Resampling mehr
 
 
+def test_mic_stream_setzt_rate_vor_dem_start_und_schliesst_fehlversuche(monkeypatch):
+    track = Track("mic", 96_000, 1, None)
+    geoeffnet = []
+
+    class FakeStream:
+        def __init__(self, samplerate, **_kw):
+            self.rate, self.closed = samplerate, False
+            geoeffnet.append(self)
+
+        def start(self):
+            # Beim Start muss der Resampler schon zur Rate passen - Callbacks kommen sofort.
+            self.resampler_down = track._resampler.down
+            if self.rate == 96_000:
+                raise RuntimeError("Invalid sample rate")
+
+        def close(self):
+            self.closed = True
+
+    monkeypatch.setattr(coreaudio, "_sounddevice", lambda: SimpleNamespace(InputStream=FakeStream))
+    log = []
+    device = {"index": 0, "name": "Mic", "rate": 96_000, "channels": 1}
+    coreaudio.MicStream(track, device, lambda: 0.0, log.append)
+    erst, dann = geoeffnet
+    assert erst.closed and not dann.closed
+    assert (dann.rate, dann.resampler_down) == (48_000, 3)
+    assert log == ["Mikrofon: 96000 Hz nicht möglich, nehme 48000 Hz"]
+
+
 def test_sck_stream_braucht_pyobjc(monkeypatch):
     monkeypatch.setitem(sys.modules, "ScreenCaptureKit", None)
     with pytest.raises(RuntimeError, match="PyObjC"):
@@ -208,6 +239,16 @@ def test_ensure_permissions_fragt_mikrofon_an(monkeypatch):
     with pytest.raises(RuntimeError, match="Mikrofon nicht erlaubt.*'iTerm'"):
         ensure_permissions(mic=True, system=False, log=log.append, platform="darwin")
     assert any("Mikrofon-Berechtigung" in z for z in log)
+
+
+def test_ensure_permissions_laesst_unbekannten_stand_durch(monkeypatch):
+    # PyObjC fehlt oder die Abfrage scheitert: kein Verbot behaupten, der Stream versucht es.
+    monkeypatch.setattr(berechtigungen, "mikrofon_status", lambda: berechtigungen.UNBEKANNT)
+    monkeypatch.setattr(berechtigungen, "bildschirm_erlaubt", lambda: None)
+    angefragt = []
+    monkeypatch.setattr(berechtigungen, "bildschirm_anfragen", lambda: angefragt.append(1))
+    ensure_permissions(mic=True, system=True, log=lambda _t: None, platform="darwin")
+    assert angefragt == []
 
 
 # --- MLX-Backend --------------------------------------------------------------------------

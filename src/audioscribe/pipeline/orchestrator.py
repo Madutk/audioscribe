@@ -65,7 +65,15 @@ def run_pipeline(
 
     step += 1
     reporter.stage(step, "Audio laden")
-    audio_arr, duration = load_audio(audio_path, reporter)
+    try:
+        audio_arr, duration = load_audio(audio_path, reporter)
+    finally:
+        if audio_path != source_path:
+            # Das extrahierte WAV wird danach nie wieder gelesen (~115 MB je Stunde).
+            try:
+                audio_path.unlink(missing_ok=True)
+            except OSError:
+                pass
 
     step += 1
     reporter.stage(step, f"Transkription (faster-whisper {settings.whisper_model})")
@@ -81,16 +89,11 @@ def run_pipeline(
         reporter.stage(step, "Diarisierung (pyannote)")
         result = diarize(audio_arr, result, reporter)
 
-    # Zielordner schon hier: die Bildwechsel-Stufe legt ihre Standbilder daneben ab.
     out_dir = Path(output_dir) if output_dir else settings.output_dir
     ziel_dir = out_dir / source_path.stem
 
-    screens: list = []
-    if do_screens:
-        step += 1
-        reporter.stage(step, "Bildwechsel erkennen (Bildschirmaufnahme)")
-        screens = _erkenne_bildwechsel(source_path, ziel_dir, duration, reporter)
-
+    # Export VOR der Bildwechsel-Erkennung: der Video-Scan kann bei langen Aufnahmen
+    # dauern, und ein Abbruch dort darf die fertige Transkription nicht mitreissen.
     step += 1
     reporter.stage(step, "Zusammenfuehren & Export")
     segments = result_to_segments(result)
@@ -120,25 +123,49 @@ def run_pipeline(
         pdf_path = write_pdf(transcript, md_path.with_suffix(".pdf"))
         reporter.info(f"PDF: {pdf_path}")
 
-    if screens:
-        # Erst JETZT moeglich: der annotierte Export liest die eben geschriebene
-        # transcript.json und ordnet jedes Bild dem Absatz mit naechstem start <= t zu.
-        from audioscribe.review.exporter import export_annotated
-
-        try:
-            annot = export_annotated(ziel_dir, make_pdf=make_pdf)
-            reporter.info(f"Annotiertes Transkript: {annot}")
-        except (OSError, ValueError) as exc:  # noqa: BLE001 - Bilder sind da, Text ebenso
-            reporter.info(f"Annotiertes Transkript uebersprungen: {exc}")
+    if do_screens:
+        step += 1
+        reporter.stage(step, "Bildwechsel erkennen (Bildschirmaufnahme)")
+        _erkenne_bildwechsel(source_path, ziel_dir, duration, reporter)
+        _annotiert_aktualisieren(ziel_dir, make_pdf, reporter)
 
     return transcript
+
+
+def _annotiert_aktualisieren(ziel_dir: Path, make_pdf: bool, reporter) -> None:
+    """Bringt ``transkript.annotiert.*`` auf den Stand des eben geschriebenen Transkripts.
+
+    Massgeblich ist ``marks.json`` NACH der Erkennung, nicht nur die neuen Bilder: auch
+    verbliebene manuelle Marks muessen gegen die neue transcript.json gerendert werden.
+    Gibt es gar keine Marks mehr, wird eine alte annotierte Fassung entfernt - sonst
+    bevorzugt ``find_transcript`` eine Datei, die nicht mehr zum Transkript passt.
+    """
+    from audioscribe.review.marks import load_marks
+
+    if not load_marks(ziel_dir):
+        for name in ("transkript.annotiert.md", "transkript.annotiert.pdf"):
+            try:
+                (ziel_dir / name).unlink(missing_ok=True)
+            except OSError:  # noqa: PERF203 - gesperrte Datei darf den Lauf nicht kippen
+                pass
+        return
+
+    # Der annotierte Export liest die eben geschriebene transcript.json und ordnet jedes
+    # Bild dem Absatz mit naechstem start <= t zu.
+    from audioscribe.review.exporter import export_annotated
+
+    try:
+        annot = export_annotated(ziel_dir, make_pdf=make_pdf)
+        reporter.info(f"Annotiertes Transkript: {annot}")
+    except (OSError, ValueError) as exc:  # noqa: BLE001 - Bilder sind da, Text ebenso
+        reporter.info(f"Annotiertes Transkript uebersprungen: {exc}")
 
 
 def _erkenne_bildwechsel(video: Path, ziel_dir: Path, dauer_s: float, reporter) -> list:
     """Fuehrt die Bildwechsel-Erkennung aus; Fehler duerfen den Lauf nie kippen.
 
-    Das Transkript ist an dieser Stelle fertig - eine fehlende numpy-Installation oder ein
-    stolperndes ffmpeg darf nicht dazu fuehren, dass die eigentliche Arbeit verloren geht.
+    Das Transkript ist an dieser Stelle bereits geschrieben - eine fehlende
+    numpy-Installation oder ein stolperndes ffmpeg kostet hoechstens die Standbilder.
     """
     from audioscribe.pipeline import screens as screens_mod
 

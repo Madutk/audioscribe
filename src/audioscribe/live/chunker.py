@@ -134,7 +134,9 @@ class Chunker:
                 consumed = g_end
             elif g_end - g_start >= self._max:
                 cut = self._forced_cut(g_start, gaps)
-                done.append(self._cut(g_start, cut, SCHLUSS_ZEITLIMIT))
+                # Kein Polster über den Schnitt: der Rest beginnt genau dort, sonst
+                # stünden die Wörter an der Naht doppelt im Transkript.
+                done.append(self._cut(g_start, cut, SCHLUSS_ZEITLIMIT, pad_end=False))
                 consumed = cut
                 self._open = cut
             else:
@@ -177,9 +179,9 @@ class Chunker:
         usable = [(b - a, (a + b) // 2) for a, b in gaps if g_start + self._max // 2 <= a and b <= limit]
         return max(usable)[1] if usable else limit
 
-    def _cut(self, start: int, end: int, schluss: str) -> Utterance:
+    def _cut(self, start: int, end: int, schluss: str, *, pad_end: bool = True) -> Utterance:
         a = max(0, start - self._pad)
-        b = min(len(self._buf), end + self._pad)
+        b = min(len(self._buf), end + self._pad) if pad_end else end
         return Utterance(
             self._buf_start + start, self._buf_start + end, self._buf[a:b].copy(), schluss=schluss
         )

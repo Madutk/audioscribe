@@ -25,9 +25,11 @@ laesst sich bei Bildschirmarbeit (viele kleine Teilaenderungen) nicht sinnvoll s
 from __future__ import annotations
 
 import subprocess
+import tempfile
 from datetime import datetime
 from pathlib import Path
 
+from audioscribe.config import settings
 from audioscribe.models import format_timecode
 from audioscribe.progress import Reporter, emit_progress
 from audioscribe.review.marks import Mark, load_marks, save_marks
@@ -243,34 +245,47 @@ def detect_changes(
     treffer: list[float] = []
     vorher = None
     index = 0
-    # stderr verwerfen statt abgreifen: sonst kann ffmpeg blockieren, wenn niemand die
-    # Fehlerpipe leert, waehrend wir nur stdout lesen.
-    proc = subprocess.Popen(  # noqa: S603 - festes Kommando, keine Nutzereingabe
-        cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL
-    )
-    try:
-        assert proc.stdout is not None
-        while True:
-            buf = proc.stdout.read(frame_bytes)
-            if buf is None or len(buf) < frame_bytes:
-                break
-            jetzt = block_means(
-                np.frombuffer(buf, dtype=np.uint8).reshape(SCAN_HEIGHT, SCAN_WIDTH).astype(np.int16)
+    melde = bool(erwartet) and settings.emit_progress
+    # stderr in eine Temp-Datei statt in eine Pipe: eine ungeleerte Fehlerpipe kann ffmpeg
+    # blockieren, waehrend wir nur stdout lesen - verwerfen wuerde aber einen
+    # gescheiterten Scan (kaputte Datei, keine Videospur) wie "keine Wechsel" aussehen lassen.
+    with tempfile.TemporaryFile() as fehler:
+        proc = subprocess.Popen(  # noqa: S603 - festes Kommando, keine Nutzereingabe
+            cmd, stdout=subprocess.PIPE, stderr=fehler, stdin=subprocess.DEVNULL
+        )
+        bis_zum_ende = False
+        try:
+            assert proc.stdout is not None
+            while True:
+                buf = proc.stdout.read(frame_bytes)
+                if buf is None or len(buf) < frame_bytes:
+                    bis_zum_ende = True
+                    break
+                jetzt = block_means(
+                    np.frombuffer(buf, dtype=np.uint8).reshape(SCAN_HEIGHT, SCAN_WIDTH).astype(np.int16)
+                )
+                if vorher is not None and changed_blocks(vorher, jetzt, schwelle) >= min_bloecke:
+                    treffer.append(index / fps)
+                vorher = jetzt
+                index += 1
+                if melde and index % 50 == 0:
+                    emit_progress(100.0 * index / erwartet)
+        finally:
+            if proc.stdout is not None:
+                proc.stdout.close()
+            if not bis_zum_ende and proc.poll() is None:
+                # Bei einem Abbruch im Elternprozess sonst ein ffmpeg, das weiter auf einer
+                # mehrere GB grossen Datei rechnet.
+                proc.kill()
+            proc.wait()
+
+        if proc.returncode != 0:
+            fehler.seek(0)
+            tail = fehler.read().decode("utf-8", errors="replace").strip().splitlines()[-3:]
+            raise RuntimeError(
+                f"Video-Analyse fehlgeschlagen (ffmpeg-Code {proc.returncode})"
+                + (": " + " / ".join(tail) if tail else "")
             )
-            if vorher is not None and changed_blocks(vorher, jetzt, schwelle) >= min_bloecke:
-                treffer.append(index / fps)
-            vorher = jetzt
-            index += 1
-            if erwartet and index % 50 == 0:
-                emit_progress(100.0 * index / erwartet)
-    finally:
-        if proc.stdout is not None:
-            proc.stdout.close()
-        if proc.poll() is None:
-            # Bei einem Abbruch im Elternprozess sonst ein ffmpeg, das weiter auf einer
-            # mehrere GB grossen Datei rechnet.
-            proc.kill()
-        proc.wait()
 
     zeitpunkte = merge_runs(treffer, fps=fps, min_gap=min_gap)
     if reporter:
@@ -340,7 +355,9 @@ def capture_screens(
     """Erkennt Bildwechsel, sichert je einen Screenshot und schreibt ``marks.json``.
 
     Liefert die neu erzeugten Marks. Bereits vorhandene manuelle Markierungen bleiben
-    erhalten, automatische aus frueheren Laeufen werden samt Bilddatei ersetzt.
+    erhalten, automatische aus frueheren Laeufen werden samt Bilddatei ersetzt - auch
+    dann, wenn dieser Lauf gar keine Wechsel findet (sonst blieben Bilder eines frueheren
+    Laufs stehen, die zum neuen Transkript nicht mehr passen).
     """
     out_dir = Path(out_dir)
     ffmpeg = _ffmpeg_exe()
@@ -355,6 +372,11 @@ def capture_screens(
         reporter=reporter,
     )
     if not zeitpunkte:
+        vorhandene = load_marks(out_dir)
+        # Nur schreiben, wenn es etwas aufzuraeumen gibt - kein leeres marks.json anlegen.
+        if any(m.kind == KIND_AUTO for m in vorhandene):
+            _alte_bilder_loeschen(out_dir, vorhandene)
+            save_marks(out_dir, merge_marks(vorhandene, []))
         return []
 
     suffix, max_breite, qualitaet = FORMATS.get(bildformat, FORMATS[DEFAULT_FORMAT])

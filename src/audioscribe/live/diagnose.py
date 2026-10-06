@@ -161,7 +161,7 @@ class Diagnose:
     def bilanz(
         self, *, laden_s: float, aufnahme_s: float, abschluss_s: float, gesamt_s: float, schwelle_s: float
     ) -> LiveBilanz:
-        """Fazit aus den Datensätzen; ``schwelle_s`` = eine Chunk-Länge (Aufholmodus)."""
+        """Fazit aus den Datensätzen; ``schwelle_s`` = Rückstand, ab dem der Aufholmodus greift."""
         with self._lock:
             abschnitte = list(self.abschnitte)
             vorschauen = list(self.vorschauen)
