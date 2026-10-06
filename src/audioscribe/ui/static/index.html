@@ -5,9 +5,11 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>AudioScribe</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232f6be6' stroke-width='2.4' stroke-linecap='round'%3E%3Cpath d='M2 10v3M6 6v11M10 3v18M14 8v7M18 5v13M22 10v3'/%3E%3C/svg%3E" />
 <link rel="stylesheet" href="/static/style.css" />
+<link rel="stylesheet" href="/static/css/shell.css" />
 </head>
-<body>
+<body data-modus="start" data-view="start">
 <!-- Icon-Sprite (Lucide-Linien). Bewusst nicht 'hidden': [hidden] wuerde die <use>-Verweise leeren. -->
 <svg style="position:absolute;width:0;height:0;overflow:hidden" aria-hidden="true" focusable="false">
   <symbol id="i-wave" viewBox="0 0 24 24"><path d="M2 10v3"/><path d="M6 6v11"/><path d="M10 3v18"/><path d="M14 8v7"/><path d="M18 5v13"/><path d="M22 10v3"/></symbol>
@@ -46,42 +48,244 @@
   <symbol id="i-fast-forward" viewBox="0 0 24 24"><polygon points="13 19 22 12 13 5 13 19"/><polygon points="2 19 11 12 2 5 2 19"/></symbol>
   <symbol id="i-copy" viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></symbol>
   <symbol id="i-lightbulb" viewBox="0 0 24 24"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></symbol>
+  <!-- Startseite, Projekte (PRD §21) -->
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M12 5v14"/></symbol>
+  <symbol id="i-folder-plus" viewBox="0 0 24 24"><path d="M12 10v6"/><path d="M9 13h6"/><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></symbol>
+  <symbol id="i-folder-open" viewBox="0 0 24 24"><path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"/></symbol>
+  <symbol id="i-film" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M7 3v18"/><path d="M3 7.5h4"/><path d="M3 12h18"/><path d="M3 16.5h4"/><path d="M17 3v18"/><path d="M17 7.5h4"/><path d="M17 16.5h4"/></symbol>
+  <symbol id="i-play-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></symbol>
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+  <symbol id="i-arrow-left" viewBox="0 0 24 24"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></symbol>
+  <symbol id="i-arrow-right" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></symbol>
+  <symbol id="i-external" viewBox="0 0 24 24"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></symbol>
+  <symbol id="i-book-plus" viewBox="0 0 24 24"><path d="M12 7v6"/><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20"/><path d="M9 10h6"/></symbol>
+  <symbol id="i-history" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></symbol>
+  <symbol id="i-triangle" viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></symbol>
+  <symbol id="i-file-text" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></symbol>
+  <symbol id="i-wifi-off" viewBox="0 0 24 24"><path d="M12 20h.01"/><path d="M8.5 16.429a5 5 0 0 1 7 0"/><path d="M5 12.859a10 10 0 0 1 5.17-2.69"/><path d="M19 12.859a10 10 0 0 0-2.007-1.523"/><path d="M2 8.82a15 15 0 0 1 4.177-2.643"/><path d="M22 8.82a15 15 0 0 0-11.288-3.764"/><path d="m2 2 20 20"/></symbol>
 </svg>
+
+<a class="skip" href="#main">Zum Inhalt springen</a>
 
 <header class="top">
   <div class="brand"><svg class="ic" aria-hidden="true"><use href="#i-wave"/></svg><h1>AudioScribe</h1></div>
-  <nav class="tabs" role="tablist" aria-label="Bereiche">
-    <button role="tab" data-tab="Trans" class="active" aria-selected="true" aria-controls="tabTrans">Offline Transcription</button>
-    <button role="tab" data-tab="Live" aria-selected="false" aria-controls="tabLive">Live Transcription</button>
-    <button role="tab" data-tab="Ana" aria-selected="false" aria-controls="tabAna">KI-Analyse</button>
-    <button role="tab" data-tab="Set" aria-selected="false" aria-controls="tabSet"><svg class="ic" aria-hidden="true"><use href="#i-settings"/></svg>Einstellungen</button>
+  <!-- Kontext: geoeffnetes Projekt, einzelne Aufnahme oder Demo - mit Rueckweg zur Startseite -->
+  <div class="ctx" id="ctx" hidden>
+    <svg class="ic" aria-hidden="true"><use href="#i-book" id="ctxIcon"/></svg>
+    <span class="ctx-name" id="ctxName"></span>
+    <button class="ghost sm" id="ctxClose" type="button" title="Zurück zur Startseite"><svg class="ic" aria-hidden="true"><use href="#i-home"/></svg><span id="ctxCloseLabel">Schließen</span></button>
+  </div>
+  <nav class="tabs" id="nav" aria-label="Bereiche">
+    <a href="#/projekt/live" data-nur="projekt">Live-Sitzung</a>
+    <a href="#/projekt/nachbereitung" data-nur="projekt">Nachbereitung</a>
+    <a href="#/projekt/einstellungen" data-nur="projekt">Projekt</a>
+    <a href="#/datei" data-nur="datei">Transkribieren</a>
+    <a href="#/datei/ki" data-nur="datei">KI-Analyse</a>
   </nav>
   <span class="spacer"></span>
+  <a class="icon-btn" id="openSettings" href="#/einstellungen" aria-label="Globale Einstellungen" title="Globale Einstellungen">
+    <svg class="ic" aria-hidden="true"><use href="#i-settings"/></svg></a>
   <button class="icon-btn" id="themeToggle" type="button" aria-label="Design: System – klicken zum Wechseln" title="Design wechseln">
     <svg class="ic sys" aria-hidden="true"><use href="#i-monitor"/></svg>
     <svg class="ic sun" aria-hidden="true"><use href="#i-sun"/></svg>
     <svg class="ic moon" aria-hidden="true"><use href="#i-moon"/></svg>
   </button>
 </header>
-<p class="pagehint" id="tabMeta">Stapelverarbeitung: Ordner wählen, Dateien ankreuzen, transkribieren</p>
+<div class="conn" id="connLost" role="status" hidden><svg class="ic" aria-hidden="true"><use href="#i-wifi-off"/></svg>
+  Keine Verbindung zu AudioScribe. Läuft das Programm noch? Die Seite verbindet sich von selbst wieder.</div>
+<p class="pagehint" id="tabMeta"></p>
 
-<div class="wrap" id="tabTrans" role="tabpanel">
+<main id="main" tabindex="-1">
+<!-- ===== Startseite ====================================================================== -->
+<section class="view start" id="viewStart" data-view="start">
+  <div class="start-head">
+    <h2>Womit möchtest du beginnen?</h2>
+    <p class="lead">Arbeite in einem Projekt mit eigenem LLM-Wiki – oder transkribiere einfach eine einzelne Aufnahme.</p>
+  </div>
+  <div id="startBanner"></div>
+  <div class="err" id="launchErr" role="alert"></div>
+
+  <div class="launch-grid">
+    <article class="launch" id="launchNeu">
+      <span class="launch-icon"><svg class="ic" aria-hidden="true"><use href="#i-folder-plus"/></svg></span>
+      <h3>Neues Projekt</h3>
+      <p>Ein Projekt für Live-Sitzungen mit Souffleur, verbunden mit einem LLM-Wiki.</p>
+      <details class="more"><summary><svg class="ic" aria-hidden="true"><use href="#i-info"/></svg>Worum geht es?</summary>
+        <p>Du gibst an, wo das LLM-Wiki liegt (oder lässt ein neues anlegen) und wohin Mitschnitte und Analysen
+          gehören. Während des Meetings gleicht der Souffleur das Gesagte mit dem Wiki ab; danach speicherst du
+          Transkript und Bilder als neue Quelle ins Wiki oder bereitest sie mit der KI nach.</p></details>
+      <button class="launch-go" type="button" data-launch="neu">Projekt anlegen<svg class="ic" aria-hidden="true"><use href="#i-arrow-right"/></svg></button>
+    </article>
+
+    <article class="launch" id="launchOeffnen">
+      <span class="launch-icon"><svg class="ic" aria-hidden="true"><use href="#i-folder-open"/></svg></span>
+      <h3>Projekt öffnen</h3>
+      <p>Ein vorhandenes Projekt mit seinen Ordnern und Einstellungen weiterführen.</p>
+      <details class="more"><summary><svg class="ic" aria-hidden="true"><use href="#i-info"/></svg>Worum geht es?</summary>
+        <p>Die Projektdatei liegt im LLM-Wiki-Ordner. Wähle diesen Ordner – oder nimm eines der zuletzt
+          geöffneten Projekte weiter unten. Wiki, Sitzungsordner, KI und Sprache werden geladen.</p></details>
+      <button class="launch-go" type="button" data-launch="oeffnen">Ordner wählen<svg class="ic" aria-hidden="true"><use href="#i-arrow-right"/></svg></button>
+    </article>
+
+    <article class="launch" id="launchDatei">
+      <span class="launch-icon"><svg class="ic" aria-hidden="true"><use href="#i-film"/></svg></span>
+      <h3>Aufnahme transkribieren</h3>
+      <p>Ein Video oder eine Audiodatei in Text umwandeln – ohne Projekt.</p>
+      <details class="more"><summary><svg class="ic" aria-hidden="true"><use href="#i-info"/></svg>Worum geht es?</summary>
+        <p>Du wählst die Datei und den Speicherort. Heraus kommt ein Transkript mit Sprechern und Zeitstempeln,
+          auf Wunsch mit Standbildern bei jedem Bildschirmwechsel. Anschließend kannst du Transkript und Bilder
+          von der KI weiterverarbeiten lassen.</p></details>
+      <button class="launch-go" type="button" data-launch="datei">Aufnahme wählen<svg class="ic" aria-hidden="true"><use href="#i-arrow-right"/></svg></button>
+    </article>
+
+    <article class="launch" id="launchDemo">
+      <span class="launch-icon"><svg class="ic" aria-hidden="true"><use href="#i-play-circle"/></svg></span>
+      <h3>Demo abspielen <span class="badge">Vorführung</span></h3>
+      <p>Ein aufgezeichnetes Meeting läuft ab – mit Live-Transkript und Souffleur.</p>
+      <details class="more"><summary><svg class="ic" aria-hidden="true"><use href="#i-info"/></svg>Worum geht es?</summary>
+        <p>Die Demo zeigt die Live-Ansicht mit einem Beispiel-Meeting zur Bahnbuchung und einem Beispiel-Wiki.
+          Es wird nichts aufgenommen und nichts gespeichert.</p></details>
+      <button class="launch-go" type="button" data-launch="demo">Demo öffnen<svg class="ic" aria-hidden="true"><use href="#i-arrow-right"/></svg></button>
+    </article>
+  </div>
+
+  <section class="recents" id="recentsBox" aria-labelledby="recentsTitle" hidden>
+    <h2 id="recentsTitle"><svg class="ic" aria-hidden="true"><use href="#i-history"/></svg>Zuletzt geöffnet</h2>
+    <div class="recent-list" id="recents"></div>
+  </section>
+</section>
+
+<!-- ===== Assistent "Neues Projekt" ====================================================== -->
+<section class="view wizard" id="viewNeu" data-view="neu" hidden>
+  <div class="card wiz">
+    <a class="back" href="#/"><svg class="ic" aria-hidden="true"><use href="#i-arrow-left"/></svg>Startseite</a>
+    <h2 class="wiz-title">Neues Projekt</h2>
+    <ol class="steps" id="wizSteps">
+      <li data-step="1" class="active"><span class="num">1</span>Wiki</li>
+      <li data-step="2"><span class="num">2</span>Ordner</li>
+      <li data-step="3"><span class="num">3</span>KI und Sprache</li>
+    </ol>
+
+    <div class="wiz-panel" id="wiz1">
+      <div class="field"><label for="wizName">Projektname</label>
+        <input type="text" id="wizName" maxlength="80" placeholder="z. B. Bahnbuchung" autocomplete="off" />
+        <p class="hint">Unter diesem Namen findest du das Projekt später wieder.</p>
+        <div class="err" id="wizErrName"></div></div>
+
+      <fieldset class="field choice">
+        <legend>LLM-Wiki</legend>
+        <label class="option"><input type="radio" name="wizWikiArt" value="vorhanden" checked />
+          <span><b>Vorhandenes Wiki verknüpfen</b><small>Der Ordner enthält schon <code>wiki/</code> mit Seiten (und <code>raw/</code> für Quellen).</small></span></label>
+        <label class="option"><input type="radio" name="wizWikiArt" value="neu" />
+          <span><b>Neues Wiki anlegen</b><small>AudioScribe legt in einem neuen Ordner das Gerüst an: <code>raw/</code>, <code>wiki/</code> mit Startseiten und Glossar.</small></span></label>
+      </fieldset>
+
+      <div class="field"><label for="wizWurzel">Ordner des LLM-Wikis</label>
+        <div class="input-group">
+          <input type="text" id="wizWurzel" placeholder="C:\Users\…\mein-wiki" autocomplete="off" />
+          <button class="secondary" type="button" id="pickWizWurzel"><svg class="ic" aria-hidden="true"><use href="#i-folder"/></svg>Wählen</button>
+        </div>
+        <p class="hint">Das Wiki ist das Gedächtnis des Projekts: Der Souffleur liest die Seiten unter <code>wiki/</code>,
+          beendete Sitzungen landen als neue Quelle unter <code>raw/</code>. Die Wiki-Seiten selbst verändert AudioScribe nie.
+          Die Projekteinstellungen liegen im Wiki-Ordner (<code>.audioscribe/</code>) und ziehen mit ihm um.</p>
+        <div class="wiki-state none" id="wizWikiState" hidden></div>
+        <div class="err" id="wizErrWurzel"></div></div>
+    </div>
+
+    <div class="wiz-panel" id="wiz2" hidden>
+      <div class="field"><label for="wizSitzungen">Ordner für Sitzungen</label>
+        <div class="input-group">
+          <input type="text" id="wizSitzungen" autocomplete="off" />
+          <button class="secondary" type="button" id="pickWizSitzungen"><svg class="ic" aria-hidden="true"><use href="#i-folder"/></svg>Wählen</button>
+        </div>
+        <p class="hint">Hier landet jede Live-Sitzung mit Mitschnitt, Transkript und Standbildern
+          (<code>live-JJJJ-MM-TT_hh-mm-ss/</code>), dazu die KI-Analysen (<code>analysen/</code>). Mitschnitte sind groß –
+          der Vorschlag liegt deshalb neben dem Wiki, nicht darin.</p>
+        <div class="err" id="wizErrSitzungen"></div></div>
+
+      <div class="field"><label id="wizRawLabel">Transkripte im Wiki</label>
+        <p class="path" id="wizRaw" aria-labelledby="wizRawLabel"></p>
+        <p class="hint">Hierhin kommt beim „Ins Wiki speichern“ je Sitzung ein Ordner mit Transkript und Markierungen –
+          eine Kopie aus dem Arbeitsordner oben. <code>raw/</code> ist der feste Quellen-Ordner des Wikis; der Unterordner
+          entsteht aus Datum und Sitzungstitel.</p></div>
+
+      <div class="field"><label for="wizAssets">Ordner für Bilder im Wiki (Assets)</label>
+        <div class="input-group">
+          <input type="text" id="wizAssets" autocomplete="off" />
+          <button class="secondary" type="button" id="pickWizAssets"><svg class="ic" aria-hidden="true"><use href="#i-folder"/></svg>Wählen</button>
+        </div>
+        <p class="hint">Speicherst du eine Sitzung ins Wiki, kommen ihre Standbilder hierher. Das Transkript im Wiki
+          verweist an der passenden Stelle auf jedes Bild. Der Ordner muss im Wiki liegen, aber nicht unter <code>wiki/</code>.</p>
+        <div class="err" id="wizErrAssets"></div></div>
+
+      <fieldset class="field choice">
+        <legend>Nach einer Sitzung</legend>
+        <label class="option"><input type="radio" name="wizSpeichern" value="fragen" checked />
+          <span><b>Nachfragen</b><small>Du entscheidest je Sitzung, ob sie ins Wiki gespeichert wird.</small></span></label>
+        <label class="option"><input type="radio" name="wizSpeichern" value="immer" />
+          <span><b>Immer ins Wiki speichern</b><small>Jede beendete Sitzung wird ohne Nachfrage als neue Quelle abgelegt.</small></span></label>
+        <label class="option"><input type="radio" name="wizSpeichern" value="nie" />
+          <span><b>Nicht anbieten</b><small>Sitzungen bleiben im Sitzungsordner; ins Wiki speicherst du nur über die Nachbereitung.</small></span></label>
+      </fieldset>
+      <div class="checks"><label><input type="checkbox" id="wizBilder" checked /><span>Bilder mit ins Wiki übertragen
+        <small>Standbilder der Sitzung in den Assets-Ordner kopieren und im Transkript verlinken.</small></span></label></div>
+    </div>
+
+    <div class="wiz-panel" id="wiz3" hidden>
+      <p class="hint lead-hint">Vorgabe sind die globalen Einstellungen. Lege hier nur fest, was für dieses Projekt anders sein soll –
+        alles lässt sich später in den Projekteinstellungen ändern.</p>
+      <div class="grid two">
+        <div class="field"><label for="wizKiDienst">KI-Dienst</label><select id="wizKiDienst"></select>
+          <p class="hint">Der Dienst hinter Souffleur und KI-Analyse.</p></div>
+        <div class="field"><label for="wizSprache">Sprache der Aufnahmen</label><select id="wizSprache"></select>
+          <p class="hint">Sprache, in der gesprochen und transkribiert wird.</p></div>
+        <div class="field"><label for="wizSouffleurModel">Modell für den Souffleur</label><select id="wizSouffleurModel"></select>
+          <p class="hint">Antwortet während des Meetings – Tempo zählt.</p></div>
+        <div class="field"><label for="wizAgentModel">Modell für die KI-Analyse</label><select id="wizAgentModel"></select>
+          <p class="hint">Bereitet nach dem Meeting nach – Gründlichkeit zählt.</p></div>
+      </div>
+    </div>
+
+    <div class="err" id="wizErr" role="alert"></div>
+    <footer class="wiz-foot">
+      <button class="secondary" type="button" id="wizBack" hidden><svg class="ic" aria-hidden="true"><use href="#i-arrow-left"/></svg>Zurück</button>
+      <span class="spacer"></span>
+      <a class="btn ghost" href="#/">Abbrechen</a>
+      <button type="button" id="wizNext">Weiter<svg class="ic" aria-hidden="true"><use href="#i-arrow-right"/></svg></button>
+      <button type="button" id="wizCreate" hidden><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg>Projekt anlegen</button>
+    </footer>
+  </div>
+</section>
+
+<!-- ===== Aufnahme transkribieren (ohne Projekt) ========================================= -->
+<section class="wrap" id="tabTrans" data-view="datei" hidden>
   <div class="left">
     <div class="card">
-      <h2 class="card-title"><span class="step">1</span>Dateien
+      <h2 class="card-title"><span class="step">1</span>Aufnahme
         <span class="hint" id="fileCount"></span>
         <span class="spacer"></span>
-        <button class="ghost sm" data-pick="all">Alle</button>
-        <button class="ghost sm" data-pick="open">Nur offene</button>
-        <button class="ghost sm" data-pick="none">Keine</button>
+        <button class="secondary sm" type="button" id="pickFiles"><svg class="ic" aria-hidden="true"><use href="#i-film"/></svg>Dateien wählen</button>
       </h2>
-      <div class="files" id="files"><div class="empty"><svg class="ic" aria-hidden="true"><use href="#i-folder"/></svg>Ordner wählen …</div></div>
+      <div class="files" id="files"><div class="empty"><svg class="ic" aria-hidden="true"><use href="#i-film"/></svg>Noch keine Aufnahme gewählt.</div></div>
       <p class="hint target" id="transTarget" style="margin-top:8px"></p>
       <div class="err" id="pathErr" role="alert"></div>
     </div>
 
     <div class="card">
-      <h2 class="card-title"><span class="step">2</span>Optionen</h2>
+      <h2 class="card-title"><span class="step">2</span>Speicherort</h2>
+      <div class="field"><label for="outDir">Ordner für die Transkripte</label>
+        <div class="input-group">
+          <input type="text" id="outDir" autocomplete="off" />
+          <button class="secondary" type="button" id="pickOutDir"><svg class="ic" aria-hidden="true"><use href="#i-folder"/></svg>Wählen</button>
+        </div>
+        <p class="hint">Je Aufnahme entsteht ein Unterordner mit <code>transkript.md</code>, <code>transcript.json</code> und –
+          mit Bildwechsel-Erkennung – den Standbildern. <span id="pathHint"></span></p>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 class="card-title"><span class="step">3</span>Optionen</h2>
       <div class="grid">
         <div class="field"><label for="model">Modell</label><select id="model"></select></div>
         <div class="field"><label for="language">Sprache</label><select id="language"></select></div>
@@ -124,11 +328,20 @@
         <pre id="log"></pre>
       </details>
     </div>
+    <!-- Ergebnis je Aufnahme mit Vorschau - und der Weg weiter zur KI -->
+    <div id="transResult"></div>
   </div>
-</div>
+</section>
 
-<div class="wrap" id="tabLive" role="tabpanel" hidden>
+<section class="wrap" id="tabLive" data-view="live" hidden>
   <div class="live-side">
+    <div class="card" id="liveSessionCard">
+      <h2 class="card-title"><svg class="ic" aria-hidden="true"><use href="#i-mic"/></svg>Sitzung</h2>
+      <div class="field"><label for="liveTitle">Sitzungstitel (optional)</label>
+        <input type="text" id="liveTitle" maxlength="120" placeholder="z. B. Workshop Reisebuchung" autocomplete="off" />
+        <p class="hint">Benennt die Sitzung – und später ihren Ordner im Wiki.</p></div>
+    </div>
+
     <div class="card">
       <h2 class="card-title"><span class="step">1</span>Bildquelle <span class="spacer"></span>
         <button class="ghost sm" id="liveRefresh"><svg class="ic" aria-hidden="true"><use href="#i-refresh"/></svg>Aktualisieren</button></h2>
@@ -183,6 +396,19 @@
   </div>
 
   <div class="live-main">
+    <!-- Wiederaufnahme (PRD §21): nicht sauber beendete Sitzungen dieses Projekts -->
+    <div id="liveResume"></div>
+    <!-- Demo: ein Knopf, sonst nichts (die Steuerspalte links ist in der Demo ausgeblendet) -->
+    <div class="card demo-bar" id="demoBar" data-nur="demo">
+      <div class="demo-text">
+        <b>Demo: Bahnbuchung</b>
+        <p class="hint">Spielt ein aufgezeichnetes Meeting ab, als liefe es gerade. Rechts gleicht der Souffleur das Gesagte
+          mit dem Demo-Wiki ab und zeigt Widersprüche, Fragen und offene Punkte.</p>
+      </div>
+      <button class="start" id="demoStart" type="button"><svg class="ic" aria-hidden="true"><use href="#i-play"/></svg>Demo starten</button>
+      <button class="start danger" id="demoStop" type="button" hidden><svg class="ic" aria-hidden="true"><use href="#i-square"/></svg>Stoppen</button>
+      <div class="err" id="demoErr" role="alert"></div>
+    </div>
     <div class="card">
       <div class="gauges">
         <span class="badge" id="livePhase" aria-live="polite">bereit</span>
@@ -203,6 +429,8 @@
       </div>
       <div id="liveFazit" hidden></div>
       <div id="liveResult"></div>
+      <!-- Nach dem Stopp: ins Wiki speichern und/oder mit KI nachbereiten (PRD §21) -->
+      <div class="next" id="liveNext" hidden></div>
       <div id="liveText"><div class="empty"><svg class="ic" aria-hidden="true"><use href="#i-mic"/></svg>Noch keine Sitzung.</div></div>
       <details class="log">
         <summary><svg class="ic" aria-hidden="true"><use href="#i-chevron-right"/></svg>Protokoll anzeigen</summary>
@@ -228,7 +456,7 @@
 
       <div class="wiki-state none compact" id="souffleurWiki">
         <span class="badge">kein Wiki</span>
-        <span class="body">Kein Wiki verknüpft. <a class="goto" data-goto="Set" href="#set">ändern</a></span>
+        <span class="body">Kein Wiki verknüpft. <a class="goto" href="#/projekt/einstellungen">ändern</a></span>
       </div>
 
       <div class="souffleur-tools">
@@ -257,7 +485,7 @@
       <div class="thumbs" id="liveThumbs"><div class="empty"><svg class="ic" aria-hidden="true"><use href="#i-image"/></svg>Bildwechsel erscheinen hier.</div></div>
     </details>
   </div>
-</div>
+</section>
 
 <div class="overlay" id="lightbox" role="dialog" aria-modal="true" aria-label="Standbild">
   <img id="lightboxImg" alt="" />
@@ -268,11 +496,12 @@
   </div>
 </div>
 
-<div class="wrap" id="tabAna" role="tabpanel" hidden>
+<!-- ===== Nachbereitung / KI-Analyse ===================================================== -->
+<section class="wrap" id="tabAna" data-view="ana" hidden>
   <div class="left">
     <div class="card">
-      <h2 class="card-title"><span class="step">1</span>Quelle
-        <span class="hint">fertige Transkriptionen im Ausgabeordner</span>
+      <h2 class="card-title"><span class="step">1</span><span id="anaSourceTitle">Quelle</span>
+        <span class="hint" id="anaSourceHint">fertige Transkriptionen</span>
         <span class="spacer"></span>
         <button class="ghost sm" id="anaRefresh"><svg class="ic" aria-hidden="true"><use href="#i-refresh"/></svg>Aktualisieren</button>
       </h2>
@@ -280,8 +509,14 @@
       <p class="hint" id="anaSourceDir" style="margin-top:8px"></p>
     </div>
 
+    <!-- Projekt: Ablage der gewaehlten Sitzung im Wiki (PRD §21) -->
+    <div class="card" id="anaWikiCard" data-nur="projekt">
+      <h2 class="card-title"><svg class="ic" aria-hidden="true"><use href="#i-book-plus"/></svg>Im Wiki</h2>
+      <div id="anaWiki"><p class="hint">Sitzung wählen …</p></div>
+    </div>
+
     <div class="card">
-      <h2 class="card-title"><span class="step">2</span>Auftrag</h2>
+      <h2 class="card-title"><span class="step">2</span>Auftrag an die KI</h2>
       <div class="field"><label for="anaName">Prozessname</label>
         <input type="text" id="anaName" placeholder="z. B. Rechnungsprüfung Kreditoren" /></div>
       <p class="hint target" id="anaTarget" style="margin:-4px 0 12px"></p>
@@ -299,13 +534,19 @@
     <div class="card">
       <h2 class="card-title"><span class="step">4</span>Optionen</h2>
       <div class="grid">
-        <div class="field"><label for="anaModel">Claude-Modell</label><select id="anaModel"></select></div>
+        <div class="field"><label for="anaModel">KI-Modell</label><select id="anaModel"></select></div>
       </div>
+      <div class="field" data-nur="datei" style="margin-top:12px"><label for="anaOut">Ausgabeordner Analysen</label>
+        <div class="input-group">
+          <input type="text" id="anaOut" autocomplete="off" />
+          <button class="secondary" type="button" id="pickAnaOut"><svg class="ic" aria-hidden="true"><use href="#i-folder"/></svg>Wählen</button>
+        </div></div>
       <div class="checks">
         <label><input type="checkbox" id="anaBash" checked /><span>Skill-Skripte ausführen (Bash)</span></label>
       </div>
-      <p class="hint" style="margin-top:8px">Abgerechnet wird über die Claude-Code-Anmeldung (Claude-Abo). Ein gesetzter
-        <code>ANTHROPIC_API_KEY</code> hat Vorrang und rechnet über die API ab.</p>
+      <p class="hint" style="margin-top:8px">Die Vorgabe für das Modell steht in den <a class="goto" href="#/einstellungen">Einstellungen</a>.
+        Abgerechnet wird über die Claude-Code-Anmeldung (Claude-Abo); ein gesetzter <code>ANTHROPIC_API_KEY</code> hat
+        Vorrang und rechnet über die API ab.</p>
     </div>
 
     <div class="actionbar">
@@ -334,65 +575,36 @@
         <pre id="anaLog"></pre>
       </details>
     </div>
+    <!-- Bisherige Nachbereitungen der gewaehlten Sitzung -->
+    <div class="card" id="anaHistoryCard" data-nur="projekt" hidden>
+      <h2 class="card-title"><svg class="ic" aria-hidden="true"><use href="#i-file-text"/></svg>Nachbereitungen dieser Sitzung</h2>
+      <div id="anaHistory"></div>
+    </div>
   </div>
-</div>
+</section>
 
-<div class="wrap" id="tabSet" role="tabpanel" hidden>
+<!-- ===== Globale Einstellungen ========================================================== -->
+<section class="wrap" id="tabSet" data-view="einstellungen" hidden>
   <div class="left">
     <div class="card">
-      <h2 class="card-title"><svg class="ic" aria-hidden="true"><use href="#i-folder"/></svg>Ordner</h2>
-      <div class="field"><label for="setIn">Eingangsordner</label>
-        <div class="input-group">
-          <input type="text" id="setIn" placeholder="/home/... oder C:\Users\..." />
-          <button class="secondary" id="pickSetIn"><svg class="ic" aria-hidden="true"><use href="#i-folder"/></svg>Wählen</button>
-        </div>
-        <p class="hint">Hier sucht „Offline Transcription“ nach Audio- und Videodateien.</p>
+      <h2 class="card-title"><svg class="ic" aria-hidden="true"><use href="#i-sparkles"/></svg>KI</h2>
+      <p class="hint lead-hint">Gilt für alle Projekte. Ein Projekt kann jeden Wert für sich überschreiben
+        (Projekt → Einstellungen).</p>
+      <div class="field"><label for="gKiDienst">KI-Dienst</label><select id="gKiDienst"></select>
+        <p class="hint">Der Dienst hinter Souffleur und KI-Analyse. Er nutzt die Anmeldung von Claude Code auf diesem Rechner.</p></div>
+      <div class="grid two">
+        <div class="field"><label for="gSouffleurModel">Modell für den Souffleur</label><select id="gSouffleurModel"></select>
+          <p class="hint">Antwortet während des Meetings – ein schnelles Modell hält die Verzögerung klein.</p></div>
+        <div class="field"><label for="gAgentModel">Modell für die KI-Analyse</label><select id="gAgentModel"></select>
+          <p class="hint">Bereitet Transkript und Bilder nach – ein starkes Modell lohnt sich.</p></div>
       </div>
-      <div class="field"><label for="setOut">Ausgabeordner Transkription</label>
-        <div class="input-group">
-          <input type="text" id="setOut" placeholder="C:\Users\...\output" />
-          <button class="secondary" id="pickSetOut"><svg class="ic" aria-hidden="true"><use href="#i-folder"/></svg>Wählen</button>
-        </div>
-        <p class="hint">Offline-Ergebnisse landen in <code>&lt;Ordner&gt;/&lt;Dateiname&gt;/</code>, Live-Sitzungen in
-          <code>&lt;Ordner&gt;/live-JJJJ-MM-TT_hh-mm-ss/</code>. Die KI-Analyse findet hier ihre Quellen.</p>
-      </div>
-      <div class="field"><label for="setAna">Ausgabeordner Analysen</label>
-        <div class="input-group">
-          <input type="text" id="setAna" placeholder="C:\Users\...\analysen" />
-          <button class="secondary" id="pickSetAna"><svg class="ic" aria-hidden="true"><use href="#i-folder"/></svg>Wählen</button>
-        </div>
-        <p class="hint">Dokumente des Claude-Agenten, je Prozess in <code>&lt;Ordner&gt;/&lt;prozessname&gt;/</code>.</p>
-      </div>
-      <p class="hint" id="pathHint"></p>
-      <div class="err" id="setErr" role="alert"></div>
-      <p class="hint" style="margin-top:8px">Änderungen gelten sofort für alle Reiter und werden serverseitig gemerkt –
-        unabhängig von Browser und Adresse.</p>
     </div>
-
-    <div class="card" id="setWikiCard">
-      <h2 class="card-title"><svg class="ic" aria-hidden="true"><use href="#i-book"/></svg>Wiki (Souffleur)</h2>
-      <div class="field"><label for="setWiki">Wiki-Ordner (Markdown)</label>
-        <div class="input-group">
-          <input type="text" id="setWiki" placeholder="C:\Users\...\prozess-wiki" />
-          <button class="secondary" id="pickSetWiki"><svg class="ic" aria-hidden="true"><use href="#i-folder"/></svg>Wählen</button>
-        </div>
-        <div class="wiki-state none" id="setWikiState">
-          <span class="badge">kein Wiki</span>
-          <span class="body">Kein Wiki verknüpft. Der Souffleur erkennt nur Fragen und liefert Essenzen – ohne Belege und ohne Widersprüche.<br>Glossar: keins im Wiki</span>
-        </div>
-      </div>
-      <div class="grid">
-        <div class="field"><label for="setSouffleurModel">KI-Modell Souffleur</label><select id="setSouffleurModel"></select></div>
-      </div>
-      <div class="field" style="margin-top:12px"><label for="setHandover">Übergabeordner</label>
-        <div class="input-group">
-          <input type="text" id="setHandover" placeholder="C:\Users\...\wiki-uebergabe" />
-          <button class="secondary" id="pickSetHandover"><svg class="ic" aria-hidden="true"><use href="#i-folder"/></svg>Wählen</button>
-        </div>
-        <p class="hint">Beim Stopp landen hier Transkript und Markierungen (offene Punkte, Widersprüche, Fragen) je Sitzung in
-          <code>&lt;Ordner&gt;/live-…/</code> – zur Pflege des Wikis, ohne das Wiki selbst zu verändern.</p>
-      </div>
-      <div class="err" id="setWikiErr"></div>
+    <div class="card">
+      <h2 class="card-title"><svg class="ic" aria-hidden="true"><use href="#i-mic"/></svg>Sprache</h2>
+      <div class="field"><label for="gSprache">Sprache der Aufnahmen</label><select id="gSprache"></select>
+        <p class="hint">Vorgabe für Transkription und Live-Sitzung. „Automatisch erkennen“ kostet etwas Zeit je Lauf.</p></div>
+      <div class="err" id="gErr" role="alert"></div>
+      <p class="hint" style="margin-top:8px">Änderungen gelten sofort und werden auf diesem Rechner gemerkt.</p>
     </div>
   </div>
 
@@ -408,33 +620,139 @@
         (unter macOS samt Berechtigungen).</p>
     </div>
   </div>
-</div>
+</section>
 
-<div class="overlay" id="overlay">
-  <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="dlgTitle">
-    <h2 class="card-title" id="dlgTitle">Ordner wählen</h2>
-    <div class="links" id="dlgLinks"></div>
-    <div class="crumbs" id="dlgCrumbs"></div>
-    <div class="dirlist" id="dlgList"></div>
-    <footer>
-      <span class="hint" id="dlgInfo"></span>
-      <button class="secondary" id="dlgCancel">Abbrechen</button>
-      <button id="dlgOk"><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg>Diesen Ordner wählen</button>
-    </footer>
-  </div>
-</div>
+<!-- ===== Projekteinstellungen =========================================================== -->
+<section class="wrap" id="tabProj" data-view="projekt" hidden>
+  <div class="left">
+    <div class="card" id="setWikiCard">
+      <h2 class="card-title"><svg class="ic" aria-hidden="true"><use href="#i-book"/></svg>Projekt und Wiki</h2>
+      <div class="field"><label for="pName">Projektname</label>
+        <input type="text" id="pName" maxlength="80" autocomplete="off" /></div>
+      <div class="field"><label>LLM-Wiki</label>
+        <p class="path" id="pWurzel"></p>
+        <div class="wiki-state none" id="setWikiState">
+          <span class="badge">kein Wiki</span>
+          <span class="body">…</span>
+        </div>
+        <p class="hint">Der Souffleur liest die Seiten unter <code>wiki/</code>; Änderungen am Wiki gelten ab der nächsten Sitzung.
+          Projekt und Wiki gehören fest zusammen – für ein anderes Wiki legst du ein neues Projekt an.</p>
+      </div>
+    </div>
 
-<div class="overlay" id="confirm">
-  <div class="dialog confirm" role="alertdialog" aria-modal="true" aria-labelledby="confirmTitle" aria-describedby="confirmText">
-    <h2 class="card-title" id="confirmTitle"><svg class="ic" aria-hidden="true"><use href="#i-alert"/></svg><span></span></h2>
-    <p id="confirmText"></p>
-    <footer>
-      <span class="spacer"></span>
-      <button class="secondary" id="confirmCancel">Abbrechen</button>
-      <button class="danger" id="confirmOk"></button>
-    </footer>
+    <div class="card">
+      <h2 class="card-title"><svg class="ic" aria-hidden="true"><use href="#i-folder"/></svg>Ordner</h2>
+      <div class="field"><label for="pSitzungen">Ordner für Sitzungen</label>
+        <div class="input-group">
+          <input type="text" id="pSitzungen" autocomplete="off" />
+          <button class="secondary" type="button" id="pickPSitzungen"><svg class="ic" aria-hidden="true"><use href="#i-folder"/></svg>Wählen</button>
+        </div>
+        <p class="hint">Live-Sitzungen (<code>live-…/</code>) und KI-Analysen (<code>analysen/</code>) dieses Projekts.</p></div>
+      <div class="field"><label id="pRawLabel">Transkripte im Wiki</label>
+        <p class="path" id="pRaw" aria-labelledby="pRawLabel"></p>
+        <p class="hint">Hierhin kommt beim „Ins Wiki speichern“ je Sitzung ein Ordner mit Transkript und Markierungen –
+          eine Kopie aus dem Arbeitsordner oben. <code>raw/</code> ist der feste Quellen-Ordner des Wikis; der Unterordner
+          entsteht aus Datum und Sitzungstitel.</p></div>
+
+      <div class="field"><label for="pAssets">Ordner für Bilder im Wiki (Assets)</label>
+        <div class="input-group">
+          <input type="text" id="pAssets" autocomplete="off" />
+          <button class="secondary" type="button" id="pickPAssets"><svg class="ic" aria-hidden="true"><use href="#i-folder"/></svg>Wählen</button>
+        </div>
+        <p class="hint">Hierher kommen die Standbilder einer ins Wiki gespeicherten Sitzung. Muss im Wiki liegen, nicht unter <code>wiki/</code>.</p></div>
+    </div>
+
+    <div class="card">
+      <h2 class="card-title"><svg class="ic" aria-hidden="true"><use href="#i-book-plus"/></svg>Ablage ins Wiki</h2>
+      <fieldset class="field choice">
+        <legend>Nach einer Sitzung</legend>
+        <label class="option"><input type="radio" name="pSpeichern" value="fragen" />
+          <span><b>Nachfragen</b><small>Du entscheidest je Sitzung.</small></span></label>
+        <label class="option"><input type="radio" name="pSpeichern" value="immer" />
+          <span><b>Immer ins Wiki speichern</b><small>Ohne Nachfrage als neue Quelle unter <code>raw/</code>.</small></span></label>
+        <label class="option"><input type="radio" name="pSpeichern" value="nie" />
+          <span><b>Nicht anbieten</b><small>Nur über die Nachbereitung.</small></span></label>
+      </fieldset>
+      <div class="checks"><label><input type="checkbox" id="pBilder" /><span>Bilder mit ins Wiki übertragen
+        <small>Standbilder in den Assets-Ordner kopieren; das Transkript verweist an der passenden Stelle darauf.</small></span></label></div>
+    </div>
+
+    <div class="err" id="pErr" role="alert"></div>
   </div>
-</div>
+
+  <div class="right">
+    <div class="card">
+      <h2 class="card-title"><svg class="ic" aria-hidden="true"><use href="#i-sparkles"/></svg>KI und Sprache</h2>
+      <p class="hint lead-hint">Vorgabe sind die <a class="goto" href="#/einstellungen">globalen Einstellungen</a>.
+        Was du hier festlegst, gilt nur für dieses Projekt.</p>
+      <div class="field"><label for="pKiDienst">KI-Dienst</label><select id="pKiDienst"></select></div>
+      <div class="field"><label for="pSouffleurModel">Modell für den Souffleur</label><select id="pSouffleurModel"></select></div>
+      <div class="field"><label for="pAgentModel">Modell für die KI-Analyse</label><select id="pAgentModel"></select></div>
+      <div class="field"><label for="pSprache">Sprache der Aufnahmen</label><select id="pSprache"></select></div>
+    </div>
+    <div class="card flow">
+      <h2 class="card-title"><svg class="ic" aria-hidden="true"><use href="#i-info"/></svg>So fließen die Daten</h2>
+      <ol class="flow-list">
+        <li><b>Live-Sitzung</b><span>Mitschnitt, Transkript und Standbilder entstehen im Sitzungsordner und werden laufend gesichert.</span></li>
+        <li><b>Ins Wiki speichern</b><span>Transkript und Markierungen gehen als neue Quelle nach <code>raw/</code>, Bilder in den Assets-Ordner.</span></li>
+        <li><b>Nachbereitung</b><span>Die KI wertet Transkript und Bilder aus; das Ergebnis kann ebenfalls ins Wiki – als KI-erzeugt gekennzeichnet.</span></li>
+      </ol>
+    </div>
+  </div>
+</section>
+</main>
+
+<!-- ===== Dialoge ========================================================================= -->
+<dialog class="dialog" id="pickDlg" aria-labelledby="dlgTitle">
+  <h2 class="card-title" id="dlgTitle">Ordner wählen</h2>
+  <div class="links" id="dlgLinks"></div>
+  <div class="crumbs" id="dlgCrumbs"></div>
+  <div class="dirlist" id="dlgList"></div>
+  <footer>
+    <span class="hint" id="dlgInfo"></span>
+    <button class="secondary" type="button" id="dlgCancel">Abbrechen</button>
+    <button type="button" id="dlgOk"><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg><span id="dlgOkLabel">Diesen Ordner wählen</span></button>
+  </footer>
+</dialog>
+
+<dialog class="dialog confirm" id="confirm" role="alertdialog" aria-labelledby="confirmTitle" aria-describedby="confirmText">
+  <h2 class="card-title" id="confirmTitle"><svg class="ic" aria-hidden="true"><use href="#i-alert"/></svg><span></span></h2>
+  <p id="confirmText"></p>
+  <footer>
+    <span class="spacer"></span>
+    <button class="secondary" type="button" id="confirmCancel">Abbrechen</button>
+    <button class="danger" type="button" id="confirmOk"></button>
+  </footer>
+</dialog>
+
+<!-- Sitzung ins Wiki speichern (PRD §21) -->
+<dialog class="dialog wikisave" id="wikiDlg" aria-labelledby="wikiDlgTitle">
+  <h2 class="card-title" id="wikiDlgTitle"><svg class="ic" aria-hidden="true"><use href="#i-book-plus"/></svg>Ins Wiki speichern</h2>
+  <p class="hint" id="wikiDlgInfo"></p>
+  <div class="field"><label for="wikiDlgName">Titel der Quelle</label>
+    <input type="text" id="wikiDlgName" maxlength="120" autocomplete="off" />
+    <p class="hint target" id="wikiDlgTarget"></p></div>
+  <div class="checks">
+    <label><input type="checkbox" id="wikiDlgBilder" /><span><span id="wikiDlgBilderLabel">Bilder mit übertragen</span>
+      <small>Standbilder in den Assets-Ordner kopieren; das Transkript im Wiki verweist an der passenden Stelle darauf.</small></span></label>
+    <label id="wikiDlgImmerRow"><input type="checkbox" id="wikiDlgImmer" /><span>Künftig immer so speichern
+      <small>Beendete Sitzungen dieses Projekts gehen dann ohne Nachfrage ins Wiki (änderbar in den Projekteinstellungen).</small></span></label>
+  </div>
+  <div class="err" id="wikiDlgErr" role="alert"></div>
+  <footer>
+    <span class="spacer"></span>
+    <button class="secondary" type="button" id="wikiDlgCancel">Abbrechen</button>
+    <button type="button" id="wikiDlgOk"><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg>Speichern</button>
+  </footer>
+</dialog>
+
+<!-- Vorschau eines Transkripts -->
+<dialog class="dialog preview" id="previewDlg" aria-labelledby="previewTitle">
+  <h2 class="card-title" id="previewTitle"><svg class="ic" aria-hidden="true"><use href="#i-file-text"/></svg><span>Transkript</span>
+    <span class="spacer"></span><button class="icon-btn" type="button" id="previewClose" aria-label="Schließen"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button></h2>
+  <p class="hint" id="previewPath"></p>
+  <pre id="previewText" tabindex="0"></pre>
+</dialog>
 
 <div class="overlay" id="winPick">
   <div class="dialog winpick" role="dialog" aria-modal="true" aria-labelledby="winPickTitle">
@@ -450,6 +768,8 @@
   </div>
 </div>
 
-<script src="/static/app.js" defer></script>
+<div class="toasts" id="toasts" aria-live="polite" aria-atomic="false"></div>
+
+<script type="module" src="/static/js/main.js"></script>
 </body>
 </html>

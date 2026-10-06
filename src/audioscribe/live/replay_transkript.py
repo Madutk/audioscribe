@@ -14,10 +14,11 @@ import re
 import sys
 import threading
 import time
+import uuid
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-from audioscribe.live import events
+from audioscribe.live import events, journal
 from audioscribe.live.bilanz import TEIL_LIVE, LiveBilanz, beschreibe_live, save_bilanz
 from audioscribe.live.store import keep_live_copy, session_name, write_transcript
 from audioscribe.models import Segment
@@ -30,6 +31,12 @@ _PERSIST_S = 30.0
 _NACHLAUF_S = 1.0
 # Letzter Absatz ohne Folgeabsatz: angenommene Sprechdauer.
 _LETZTE_DAUER_S = 3.0
+# Pausen raffen (Demo): ein Absatz dauert hoechstens so lange, wie sein Text zum Sprechen
+# braucht - zuegiges Sprechtempo plus ein Atemzug. Gespraechspausen und Leerlauf entfallen.
+_RAFF_ZEICHEN_JE_S = 20.0
+_RAFF_PAUSE_S = 0.6
+_RAFF_MIN_S = 1.5
+_RAFF_VORLAUF_S = 1.0
 
 # ``**[HH:MM:SS] Sprecher:** Text`` - die Zeilenform von export.render_markdown; von Hand
 # geschriebene Transkripte kommen oft ohne Fettdruck (``[HH:MM:SS] Sprecher: Text``).
@@ -48,6 +55,9 @@ class ReplayOptions:
     # Spracherkennung, die im Replay sonst 0 wäre.
     delay_s: float = 0.0
     sentences_per_timestamp: int = 2
+    titel: str = ""
+    # Pausen raffen: die Absaetze folgen im Sprechtempo aufeinander statt zu ihren Zeitstempeln.
+    raffen: bool = False
 
 
 # --- Transkript lesen ------------------------------------------------------------------
@@ -74,6 +84,25 @@ def lade_transkript(quelle: Path) -> list[Segment]:
     if not segmente:
         raise ValueError(f"Keine Absätze mit Zeitstempel in {pfad}")
     return sorted(segmente, key=lambda s: (s.start, s.end))
+
+
+def raffe(segmente: list[Segment]) -> list[Segment]:
+    """Zeitleiste ohne Leerlauf: Reihenfolge, Sprecher und Wortlaut bleiben, aber jeder Absatz
+    bekommt nur die Zeit, die sein Text zum Sprechen braucht (nie mehr als im Original).
+
+    Für die Demo: in einem echten Meeting liegen zwischen den Beiträgen Pausen, beim Vorführen
+    soll es zügig zur Sache gehen - ohne dass der Text im Zeitraffer vorbeifliegt.
+    """
+    out: list[Segment] = []
+    t = min(segmente[0].start, _RAFF_VORLAUF_S) if segmente else 0.0
+    for i, seg in enumerate(segmente):
+        # Bis zum nächsten Absatz: bei Markdown-Transkripten Sprechzeit samt Pause danach.
+        original = (segmente[i + 1].start if i + 1 < len(segmente) else seg.end) - seg.start
+        sprechzeit = max(_RAFF_MIN_S, len(seg.text) / _RAFF_ZEICHEN_JE_S + _RAFF_PAUSE_S)
+        dauer = min(max(original, _RAFF_MIN_S), sprechzeit)
+        out.append(Segment(round(t, 2), round(t + dauer, 2), seg.text, seg.speaker))
+        t += dauer
+    return out
 
 
 def _aus_json(text: str) -> list[Segment]:
@@ -121,6 +150,7 @@ class TranskriptReplaySession:
         self._stop = threading.Event()
         self._t0 = 0.0
         self._segments: list[Segment] = []  # bereits ausgegebene, für die Ablage
+        self._sitzung_id = uuid.uuid4().hex
 
     def clock(self) -> float:
         return (time.monotonic() - self._t0) * self.opts.speed
@@ -134,11 +164,21 @@ class TranskriptReplaySession:
         except (OSError, ValueError) as exc:
             events.log(str(exc))
             return 1
+        if o.raffen:
+            original_s = alle[-1].end
+            alle = raffe(alle)
+            events.log(f"Pausen gerafft: {original_s:.0f} s -> {alle[-1].end:.0f} s")
         events.log(
             f"Replay von {finde_transkript(o.quelle)}: {len(alle)} Absätze, "
             f"{alle[-1].end:.0f} s, Tempo {o.speed:g}×, Verzögerung {o.delay_s:g} s"
         )
         self.dir.mkdir(parents=True, exist_ok=True)
+        # Zustandsdatei wie bei einer echten Sitzung (PRD §21) - als Replay gekennzeichnet:
+        # ein Replay wird nie fortgesetzt und taucht nicht unter den unterbrochenen auf.
+        journal.schreibe_status(
+            self.dir, sitzung_id=self._sitzung_id, status=journal.LAEUFT, titel=o.titel.strip(), sprache="de",
+            modell=MODELL_REPLAY, replay=True,
+        )
         threading.Thread(target=self._watch_stdin, daemon=True).start()
 
         self._t0 = time.monotonic()
@@ -212,6 +252,7 @@ class TranskriptReplaySession:
         )
         keep_live_copy(self.dir, overwrite=True)
         save_bilanz(self.dir, TEIL_LIVE, bilanz)
+        journal.schreibe_status(self.dir, status=journal.BEENDET)
         events.log(beschreibe_live(bilanz))
         events.emit(events.FAZIT, teil=TEIL_LIVE, **asdict(bilanz))
         self._state("fertig")
@@ -221,7 +262,10 @@ class TranskriptReplaySession:
         # Den Ordner erst nennen, wenn es ihn gibt - scheitert schon das Lesen, verwiese die
         # Oberfläche sonst auf einen Sitzungsordner, der nie angelegt wurde.
         ordner = {"session": self.dir.name, "dir": str(self.dir)} if self.dir.is_dir() else {}
-        events.emit(events.STATE, phase=phase, model=MODELL_REPLAY, device="-", replay=True, **ordner, **extra)
+        events.emit(
+            events.STATE, phase=phase, model=MODELL_REPLAY, device="-", replay=True,
+            sitzung_id=self._sitzung_id, titel=self.opts.titel.strip(), **ordner, **extra,
+        )
 
     def _watch_stdin(self) -> None:
         if sys.stdin is None:

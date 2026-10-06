@@ -72,19 +72,27 @@ class Track:
         wav_path: Path | None = None,
         *,
         slack_s: float = _TAKE_SLACK_S,
+        start_sample: int = 0,
     ) -> None:
         self.name = name
         self.channels = max(1, int(channels))
-        self.written = 0  # Samples auf der Zeitleiste
+        # Wiederaufnahme (PRD §21): die Zeitleiste beginnt bei start_sample statt bei 0. Die
+        # WAV dieses Teils enthält nur, was ab dort kommt - Dateiposition 0 = start_sample.
+        self.start_sample = max(0, int(start_sample))
+        self.written = self.start_sample  # Samples auf der Zeitleiste
         self.level = 0.0  # Spitzenpegel des letzten Blocks (0..1)
         self._slack_s = slack_s
         self._resampler = Resampler(rate_in)
         self._lock = threading.Lock()
         self._pending: list[np.ndarray] = []
-        self._pending_start = 0
+        self._pending_start = self.start_sample
         self._wav: wave.Wave_write | None = None
         if wav_path is not None:
             wav_path.parent.mkdir(parents=True, exist_ok=True)
+            if self.start_sample and wav_path.exists():
+                # "wb" würde den Mitschnitt der unterbrochenen Sitzung löschen - eine
+                # Fortsetzung schreibt immer in eine neue Teil-Datei.
+                raise RuntimeError(f"Mitschnitt existiert bereits und wird nicht überschrieben: {wav_path}")
             self._wav = wave.open(str(wav_path), "wb")
             self._wav.setnchannels(1)
             self._wav.setsampwidth(2)

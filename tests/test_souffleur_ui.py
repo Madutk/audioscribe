@@ -50,7 +50,7 @@ ev(type='state', phase='fertig', session='live-x', dir=d, model='m', device='cpu
 
 
 def test_live_runner_fuettert_den_souffleur(tmp_path):
-    konfig = SouffleurKonfig(wiki_dir=None, uebergabe_dir=tmp_path / "ueb", backend="attrappe")
+    konfig = SouffleurKonfig(wiki_dir=None, backend="attrappe")
     gebaut = []
 
     def factory(opts):
@@ -107,7 +107,7 @@ def test_hinweis_callback_landet_in_den_ereignissen(tmp_path):
     runner.start(
         LiveJobOptions(output_dir=tmp_path, refine=False),
         argv_builder=lambda o: [sys.executable, "-c", "import time; time.sleep(0.3)"],
-        souffleur_factory=lambda o: _attrappe(SouffleurKonfig(wiki_dir=None, uebergabe_dir=tmp_path)),
+        souffleur_factory=lambda o: _attrappe(SouffleurKonfig(wiki_dir=None)),
     )
     runner.souffleur().on_hinweis({"id": 1, "art": "frage", "aussage": "Wer?"})
     snap = _warte(runner)
@@ -173,7 +173,7 @@ def test_toggle_route_merkt_zustand(client):
 def test_state_route_merkt_souffleur_einstellungen(client, tmp_path):
     from audioscribe.ui import state
 
-    r = client.post("/api/state", json={"wiki_dir": str(WIKI), "souffleur_model": "claude-opus-5", "uebergabe_dir": str(tmp_path)})
+    r = client.post("/api/state", json={"wiki_dir": str(WIKI), "souffleur_model": "claude-opus-5"})
     assert r.status_code == 200
     saved = state.load_state()
     assert saved["wiki_dir"] == str(WIKI) and saved["souffleur_model"] == "claude-opus-5"
@@ -198,7 +198,7 @@ def test_defaults_liefern_souffleur_felder(client):
     data = client.get("/api/defaults").json()
     assert data["souffleur_models"][0]["id"] == "claude-sonnet-5" and "Standard" in data["souffleur_models"][0]["label"]
     assert all("claude" not in m["label"].lower() for m in data["souffleur_models"])
-    assert data["souffleur_aktiv"] is True and "uebergabe_dir" in data and "wiki_dir" in data
+    assert data["souffleur_aktiv"] is True and "uebergabe_dir" not in data and "wiki_dir" in data
 
 
 def test_offene_punkte_route(client):

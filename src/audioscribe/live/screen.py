@@ -248,8 +248,12 @@ class ScreenWatcher(threading.Thread):
         max_bilder: int = DEFAULT_MAX_BILDER,
         log: Callable[[str], None] = print,
         source_factory: Callable[[], object] | None = None,
+        start_id: int = 0,
     ) -> None:
         super().__init__(name="audioscribe-screen", daemon=True)
+        # Wiederaufnahme (PRD §21): Bild-IDs zählen ab der höchsten vorhandenen weiter, sonst
+        # stünde "Bild #0001" zweimal im annotierten Transkript.
+        self._start_id = max(0, int(start_id))
         self._monitor = monitor
         self._window = window
         self._out_dir = out_dir
@@ -283,7 +287,7 @@ class ScreenWatcher(threading.Thread):
         frames = self._out_dir / "frames"
         frames.mkdir(parents=True, exist_ok=True)
         suffix = FORMATS[self._bildformat][0]
-        anzahl = 0
+        anzahl = self._start_id
         pausiert = False
         while not self._halt.wait(1.0 / self._fps):
             try:

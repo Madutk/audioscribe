@@ -7,9 +7,12 @@ laufenden Zentroiden zugeordnet; so bleibt "Sprecher 2" über die Sitzung dersel
 
 from __future__ import annotations
 
+import json
+import os
 import threading
 import time
 from collections.abc import Callable
+from pathlib import Path
 
 import numpy as np
 
@@ -22,6 +25,10 @@ GEGENSEITE = "Gegenseite"
 
 # Unter dieser Länge ist ein Embedding Rauschen; der Abschnitt erbt den letzten Sprecher.
 MIN_EMBED_S = 1.5
+
+# Begleitdatei im Sitzungsordner: die laufenden Zentroiden. Ohne sie hieße nach einer
+# Wiederaufnahme (PRD §21) der erste System-Sprecher wieder "Sprecher 1", egal wer spricht.
+SPRECHER_DATEI = "sprecher.json"
 
 
 class OnlineClusterer:
@@ -45,6 +52,15 @@ class OnlineClusterer:
             return best
         self._sums.append(e.copy())
         return len(self._sums) - 1
+
+    def __len__(self) -> int:
+        return len(self._sums)
+
+    def zustand(self) -> list[list[float]]:
+        return [[float(v) for v in s] for s in self._sums]
+
+    def setze_zustand(self, sums: list[list[float]]) -> None:
+        self._sums = [np.asarray(s, dtype=np.float32) for s in sums if len(s)]
 
 
 class SpeakerEmbedder:
@@ -114,10 +130,41 @@ class BackgroundEmbedder:
 class SpeakerLabeler:
     """Sprecher-Label je Abschnitt: Mikrofon = Ich, System = Sprecher N bzw. Gegenseite."""
 
-    def __init__(self, embedder=None, clusterer: OnlineClusterer | None = None) -> None:
+    def __init__(
+        self, embedder=None, clusterer: OnlineClusterer | None = None, *, pfad: Path | None = None
+    ) -> None:
         self._embedder = embedder
         self._clusterer = clusterer or OnlineClusterer()
         self._last: str | None = None
+        # ``pfad``: Begleitdatei mit den Zentroiden - beim Start geladen (Wiederaufnahme),
+        # bei jedem neuen Sprecher und bei jedem Sichern der Sitzung geschrieben.
+        self._pfad = Path(pfad) if pfad is not None else None
+        if self._pfad is not None:
+            self._lade()
+
+    def sichere(self) -> None:
+        """Zentroiden atomar ablegen; ohne Pfad oder ohne Sprecher passiert nichts."""
+        if self._pfad is None or not len(self._clusterer):
+            return
+        try:
+            self._pfad.parent.mkdir(parents=True, exist_ok=True)
+            tmp = self._pfad.with_suffix(".json.tmp")
+            tmp.write_text(
+                json.dumps({"version": 1, "sums": self._clusterer.zustand(), "last": self._last}),
+                encoding="utf-8",
+            )
+            os.replace(tmp, self._pfad)
+        except OSError:
+            pass  # Sprechertrennung ist Zugabe - die Sitzung läuft weiter
+
+    def _lade(self) -> None:
+        try:
+            data = json.loads(self._pfad.read_text(encoding="utf-8"))
+            self._clusterer.setze_zustand(list(data.get("sums") or []))
+            last = data.get("last")
+            self._last = last if isinstance(last, str) and last else None
+        except (OSError, ValueError, TypeError, AttributeError):
+            pass
 
     def label(self, track: str, audio: np.ndarray) -> str:
         if track == "mic":
@@ -128,8 +175,11 @@ class SpeakerLabeler:
             return GEGENSEITE
         if len(audio) < MIN_EMBED_S * SAMPLE_RATE and self._last:
             return self._last
+        bekannt = len(self._clusterer)
         index = self._clusterer.assign(self._embedder(audio))
         if index is None:
             return self._last or GEGENSEITE
         self._last = f"Sprecher {index + 1}"
+        if len(self._clusterer) != bekannt:
+            self.sichere()
         return self._last

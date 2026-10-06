@@ -96,6 +96,7 @@ class Chunker:
         max_s: float = 12.0,
         pad_s: float = 0.15,
         keep_s: float = 0.5,
+        start: int = 0,
     ) -> None:
         self._vad = vad
         self._pause = int(pause_s * SAMPLE_RATE)
@@ -103,7 +104,8 @@ class Chunker:
         self._pad = int(pad_s * SAMPLE_RATE)
         self._keep = int(keep_s * SAMPLE_RATE)
         self._buf = np.zeros(0, dtype=np.float32)
-        self._buf_start = 0
+        # Absolute Position des Pufferanfangs; > 0 nach einer Wiederaufnahme (PRD §21).
+        self._buf_start = max(0, int(start))
         self._open: int | None = None  # Pufferposition des offenen Abschnitts
 
     def feed(self, start: int, samples: np.ndarray) -> None:

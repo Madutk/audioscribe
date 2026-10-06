@@ -23,7 +23,6 @@ from pathlib import Path
 from audioscribe.souffleur import essenz as essenz_modul
 from audioscribe.souffleur import markierung as mk
 from audioscribe.souffleur import prompt as prompt_modul
-from audioscribe.souffleur import uebergabe as uebergabe_modul
 from audioscribe.souffleur import wiki as wiki_modul
 from audioscribe.souffleur.ki import KiAuftrag, KiDienst, KiFehler, KiStatus
 from audioscribe.souffleur.konfig import SouffleurKonfig
@@ -85,7 +84,6 @@ class Souffleur:
         self._worker: threading.Thread | None = None
         self._wecker = threading.Event()
         self._letzte_verzoegerung: float | None = None
-        self.uebergabe: uebergabe_modul.Uebergabe | None = None
 
     # --- Lebenszyklus --------------------------------------------------------------
 
@@ -95,6 +93,7 @@ class Souffleur:
                 return
             self._gestartet = True
             self.session_dir = Path(session_dir)
+        self._uebernehme_stand()
         self._log(f"Souffleur: {self.ki_status.meldung}")
         if self.konfig.wiki_dir is not None:
             self._wiki_laedt = True
@@ -103,6 +102,22 @@ class Souffleur:
             self._log(f"Souffleur: {self._wiki_status.meldung}")
         self._worker = threading.Thread(target=self._arbeite, name="souffleur", daemon=True)
         self._worker.start()
+
+    def _uebernehme_stand(self) -> None:
+        """Wiederaufnahme (PRD §21): liegt im Sitzungsordner schon ein Stand, werden seine
+        Markierungen übernommen und erneut gemeldet. Ohne das überschriebe der Abschluss die
+        Hinweise der unterbrochenen Sitzung."""
+        stand = mk.lade(self.session_dir) if self.session_dir is not None else None
+        if stand is None or not stand.markierungen:
+            return
+        with self._lock:
+            self._markierungen = list(stand.markierungen)
+            self._ki_aufrufe = int(stand.bilanz.get("ki_aufrufe") or 0)
+            self._ki_fehler = int(stand.bilanz.get("ki_fehler") or 0)
+            self._fenster_id = int(stand.bilanz.get("fenster") or 0)
+        self._log(f"Souffleur: {len(stand.markierungen)} Markierungen der unterbrochenen Sitzung übernommen")
+        for m in stand.markierungen:
+            self.on_hinweis(m.als_dict())
 
     def _lade_wiki(self) -> None:
         t0 = time.monotonic()
@@ -132,22 +147,6 @@ class Souffleur:
         if self._worker is not None and self._worker is not threading.current_thread():
             self._worker.join(timeout=self.konfig.ki_timeout_s + 10)
         self._schreibe_stand()
-        self._uebergabe()
-
-    def _uebergabe(self) -> None:
-        """A4: Transkript und Markierungen in den Übergabeordner legen (anhängend, nie ins Wiki)."""
-        with self._lock:
-            ziel = self.session_dir
-        if ziel is None or not (ziel / "transkript.md").is_file():
-            return
-        try:
-            u = uebergabe_modul.schreibe(
-                ziel, self.stand(), uebergabe_dir=self.konfig.uebergabe_dir, wiki_dir=self.konfig.wiki_dir
-            )
-            self.uebergabe = u
-            self._log(f"Souffleur: Übergabe ans Wiki bereitgestellt: {u.ordner} ({u.markierungen} Markierungen)")
-        except (OSError, RuntimeError) as exc:
-            self._log(f"Souffleur: Übergabe nicht möglich: {exc}")
 
     def stop(self) -> None:
         """Harter Abbruch (Reset): keine Spätresultate mehr nach außen, nicht lange warten."""
@@ -178,6 +177,15 @@ class Souffleur:
         if jetzt is None or jetzt < float(segment["end"]):
             self.uhr.sync(float(segment["end"]) + float(segment.get("delay") or 0.0))
         self._wecker.set()
+
+    def uebernehme(self, segment: dict) -> None:
+        """Ein wiederhergestelltes Segment (Wiederaufnahme): nur Kontext für Abgleich und Essenz -
+        es wird nicht erneut beurteilt und stellt die Uhr nicht."""
+        if not str(segment.get("text", "")).strip():
+            return
+        with self._lock:
+            self._segmente.append({**segment, "empfangen_mono": None})
+            self._segmente.sort(key=lambda s: (float(s["start"]), int(s.get("id", 0))))
 
     def setze_aktiv(self, aktiv: bool) -> None:
         with self._lock:
@@ -496,7 +504,6 @@ class Souffleur:
                 "letzte_verzoegerung_s": self._letzte_verzoegerung,
                 "essenzen": len(self._essenzen),
                 "uhr": self.uhr.jetzt(),
-                "uebergabe": str(self.uebergabe.ordner) if self.uebergabe else None,
             }
 
     def status_text(self) -> str:

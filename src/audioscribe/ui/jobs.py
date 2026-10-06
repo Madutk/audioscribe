@@ -466,6 +466,12 @@ class LiveJobOptions:
     # gibt es weder Audio noch Bild noch Nachschaerfen - nur die Ereignisse der Absaetze.
     replay_transcript: Path | None = None
     replay_speed: float = 1.0
+    # Pausen raffen (Demo): Absaetze im Sprechtempo statt zu ihren Zeitstempeln.
+    replay_raffen: bool = False
+    # Wiederaufnahme (PRD §21): eine unterbrochene Sitzung in ihrem Ordner fortsetzen.
+    resume_dir: Path | None = None
+    # Optionaler Sitzungstitel - landet in sitzung.json und benennt später die Wiki-Ablage.
+    titel: str = ""
 
 
 REPLAY_SPEEDS: tuple[float, ...] = (1.0, 2.0, 5.0, 10.0, 20.0)
@@ -474,6 +480,7 @@ REPLAY_SPEEDS: tuple[float, ...] = (1.0, 2.0, 5.0, 10.0, 20.0)
 def build_live_argv(opts: LiveJobOptions, *, prefix: Sequence[str] | None = None) -> list[str]:
     """Baut den vollstaendigen ``audioscribe live``-Aufruf."""
     argv = list(prefix if prefix is not None else cli_prefix())
+    titel = [f"--titel={opts.titel.strip()}"] if opts.titel.strip() else []
     if opts.replay_transcript is not None:
         return [
             *argv,
@@ -481,6 +488,8 @@ def build_live_argv(opts: LiveJobOptions, *, prefix: Sequence[str] | None = None
             f"--output={Path(opts.output_dir)}",
             f"--transcript={Path(opts.replay_transcript)}",
             f"--speed={opts.replay_speed:g}",
+            *(["--raffen"] if opts.replay_raffen else []),
+            *titel,
         ]
     argv += [
         "live",
@@ -500,7 +509,15 @@ def build_live_argv(opts: LiveJobOptions, *, prefix: Sequence[str] | None = None
         argv.append("--no-partials")
     if not opts.speakers:
         argv.append("--no-speakers")
-    return argv
+    if opts.resume_dir is not None:
+        argv.append(f"--resume={Path(opts.resume_dir)}")
+    return [*argv, *titel]
+
+
+def build_finalize_argv(session_dir: Path, *, prefix: Sequence[str] | None = None) -> list[str]:
+    """Baut ``audioscribe live --finalize`` - eine unterbrochene Sitzung ohne Modelle abschließen."""
+    argv = list(prefix if prefix is not None else cli_prefix())
+    return [*argv, "live", f"--finalize={Path(session_dir)}"]
 
 
 def build_refine_argv(

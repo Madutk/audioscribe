@@ -124,13 +124,43 @@ def _live_transcript(args: argparse.Namespace) -> int:
         speed=args.speed,
         delay_s=args.replay_delay,
         sentences_per_timestamp=settings.sentences_per_timestamp,
+        titel=args.titel or "",
+        raffen=bool(args.raffen),
     )
     return TranskriptReplaySession(opts).run()
 
 
+def _live_finalize(args: argparse.Namespace) -> int:
+    """Unterbrochene Sitzung abschließen (PRD §21): vor jedem Backend-Bootstrap - kein Modell."""
+    from audioscribe.config import settings
+    from audioscribe.live.session import finalisiere_sitzung
+
+    ordner = Path(args.finalize)
+    if not ordner.is_dir():
+        print(f"Sitzungsordner nicht gefunden: {ordner}")
+        return 1
+    return finalisiere_sitzung(ordner, sentences_per_timestamp=settings.sentences_per_timestamp)
+
+
 def _live(args: argparse.Namespace) -> int:
+    if args.finalize:
+        return _live_finalize(args)
     if args.transcript:
+        if args.resume:
+            print("--resume und --transcript schliessen sich aus: ein Transkript-Replay wird nicht fortgesetzt.")
+            return 1
         return _live_transcript(args)
+    resume_dir = None
+    if args.resume:
+        from audioscribe.live import journal
+
+        resume_dir = Path(args.resume)
+        if not resume_dir.is_dir():
+            print(f"Sitzungsordner nicht gefunden: {resume_dir}")
+            return 1
+        if journal.lebt(resume_dir):
+            print(f"Die Sitzung laeuft bereits in einem anderen Prozess: {resume_dir}")
+            return 1
     _set("WHISPER_LANGUAGE", args.language)
     _set("WHISPER_COMPUTE_TYPE", args.compute_type)
     _set("DEVICE", args.device)
@@ -157,7 +187,12 @@ def _live(args: argparse.Namespace) -> int:
         print("--speed muss groesser als 0 sein")
         return 1
     opts = LiveOptions(
-        output_dir=Path(args.output) if args.output else settings.output_dir,
+        output_dir=(
+            resume_dir.parent if resume_dir is not None
+            else Path(args.output) if args.output else settings.output_dir
+        ),
+        resume_dir=resume_dir,
+        titel=args.titel or "",
         model=model,
         device=device,
         compute_type=compute_type,
@@ -453,6 +488,24 @@ def main(argv: list[str] | None = None) -> int:
         default=1.0,
         metavar="X",
         help="Abspieltempo beim Replay (1.0 = Echtzeit; schneller nur fuer Funktionstests)",
+    )
+    live.add_argument(
+        "--raffen",
+        action="store_true",
+        help="mit --transcript: Pausen raffen - die Absaetze folgen im Sprechtempo aufeinander (Demo)",
+    )
+    live.add_argument("--titel", metavar="TEXT", help="Sitzungstitel (steht in sitzung.json)")
+    live.add_argument(
+        "--resume",
+        metavar="ORDNER",
+        help="unterbrochene Sitzung in ihrem Ordner fortsetzen: Transkript, Standbilder und "
+        "Zeitleiste laufen weiter, der Mitschnitt kommt in eine neue Teil-Datei",
+    )
+    live.add_argument(
+        "--finalize",
+        metavar="ORDNER",
+        help="unterbrochene Sitzung ohne Modelle abschliessen: Transkript aus dem Journal, "
+        "Mitschnitt-Teile verbinden (danach optional 'audioscribe refine')",
     )
 
     ref = sub.add_parser(

@@ -181,10 +181,9 @@ class Settings:
     # KI-Dienst austauschbar: "claude-agent" (Agent SDK, Anmeldung von Claude Code) | "attrappe".
     souffleur_backend: str = field(default_factory=lambda: _env("SOUFFLEUR_BACKEND", "claude-agent"))
     souffleur_model: str = field(default_factory=lambda: _env("SOUFFLEUR_MODEL", "claude-sonnet-5"))
-    # Wiki-Pfad (K1) und Uebergabeordner (A4) sind Einstellungen der Oberflaeche (ui/state.py);
-    # hier stehen nur die Vorgaben aus der Umgebung fuer Erststart und Kommandozeile.
+    # Der Wiki-Pfad (K1) gehoert zum Projekt (projekt/modell.py); hier steht nur die Vorgabe
+    # aus der Umgebung fuer den Betrieb ohne Projekt (Kommandozeile, Tests).
     wiki_dir: str = field(default_factory=lambda: _env("WIKI_DIR", ""))
-    uebergabe_dir: str = field(default_factory=lambda: _env("UEBERGABE_DIR", ""))
     agent_output_dir: Path = field(
         default_factory=lambda: Path(_env("AGENT_OUTPUT_DIR", str(PROJECT_ROOT / "analysen")))
     )

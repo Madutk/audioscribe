@@ -243,3 +243,65 @@ def test_live_runner_meldet_letzte_zeile_als_fehler(tmp_path):
     snap = runner.snapshot()
     assert snap["phase"] == "fehler" and snap["dir"] is None
     assert snap["error"] == "Keine Absätze mit Zeitstempel in x.md"
+
+
+# --- Pausen raffen (Demo) ----------------------------------------------------------------
+
+
+def test_raffen_behaelt_reihenfolge_und_wortlaut_und_streicht_leerlauf():
+    from audioscribe.live.replay_transkript import raffe
+    from audioscribe.models import Segment
+
+    original = [
+        Segment(3.0, 60.0, "Guten Morgen.", "Moderator"),  # 57 s bis zum naechsten Beitrag
+        Segment(60.0, 61.0, "Ja.", "Assistenz"),  # schon kurz - wird nicht laenger
+        Segment(61.0, 200.0, "x" * 200, "Moderator"),  # langer Beitrag: Sprechzeit zaehlt
+    ]
+    gerafft = raffe(original)
+    assert [(s.text, s.speaker) for s in gerafft] == [(s.text, s.speaker) for s in original]
+    assert gerafft[0].start == 1.0 and gerafft[0].end == 2.5  # Vorlauf 1 s, Mindestdauer 1,5 s
+    assert gerafft[1].start == gerafft[0].end and gerafft[1].end - gerafft[1].start == 1.5
+    assert round(gerafft[2].end - gerafft[2].start, 2) == 10.6  # 200 Zeichen / 20 + 0,6 s
+    assert all(a.end == b.start for a, b in zip(gerafft, gerafft[1:]))  # lueckenlos
+    assert raffe([]) == []
+
+
+def test_demo_transkript_ist_gerafft_nach_einer_halben_minute_beim_thema():
+    from pathlib import Path
+
+    from audioscribe.live.replay_transkript import lade_transkript, raffe
+
+    demo = Path(__file__).resolve().parents[1] / "demo" / "llm-wiki" / "live_bahn_test" / "transkript.md"
+    if not demo.is_file():
+        pytest.skip("Demo-Daten fehlen")
+    original = lade_transkript(demo)
+    gerafft = raffe(original)
+    klasse = next(i for i, s in enumerate(original) if "länger als drei Stunden" in s.text)
+    assert original[klasse].end > 80  # im Original erst nach knapp anderthalb Minuten ausgesprochen
+    assert 25 <= gerafft[klasse].end <= 40  # gerafft nach rund einer halben Minute
+    assert gerafft[-1].end < original[-1].end / 3
+
+
+def test_argv_und_cli_reichen_raffen_durch(tmp_path, monkeypatch):
+    from audioscribe import cli
+    from audioscribe.live import replay_transkript
+    from audioscribe.ui.jobs import LiveJobOptions, build_live_argv
+
+    quelle = tmp_path / "transkript.md"
+    quelle.write_text("[00:00:03] A: Hallo.\n", encoding="utf-8")
+    argv = build_live_argv(LiveJobOptions(output_dir=tmp_path, replay_transcript=quelle, replay_raffen=True), prefix=["x"])
+    assert "--raffen" in argv
+    assert "--raffen" not in build_live_argv(LiveJobOptions(output_dir=tmp_path, replay_transcript=quelle), prefix=["x"])
+
+    gesehen = {}
+
+    class Sitzung:
+        def __init__(self, opts):
+            gesehen["opts"] = opts
+
+        def run(self):
+            return 0
+
+    monkeypatch.setattr(replay_transkript, "TranskriptReplaySession", Sitzung)
+    assert cli.main(["live", f"--output={tmp_path}", f"--transcript={quelle}", "--raffen"]) == 0
+    assert gesehen["opts"].raffen is True

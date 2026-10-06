@@ -1,59 +1,36 @@
 /* AudioScribe – Oberflaeche. Reines CSS ohne Build-Schritt.
-   Farben ausschliesslich ueber die Tokens unten; helle Werte sind der Standard,
-   die dunklen stehen ZWEIMAL (Systemvorgabe und erzwungen) - beide Bloecke synchron halten. */
+   Farben ausschliesslich ueber die Tokens unten. Jedes Token traegt beide Werte:
+   light-dark(hell, dunkel) folgt color-scheme - "system" uebernimmt die Vorgabe des
+   Betriebssystems, data-theme="light|dark" erzwingt eine Seite.
+   Aufbau: style.css = Tokens, Bausteine, Arbeitsansichten; css/shell.css = Kopf, Startseite,
+   Assistent, Dialoge und alles, was mit den Projekten (PRD §21) dazukam. */
 
 :root {
-  color-scheme: light;
-  --bg: #f4f5f8;          --surface: #ffffff;      --surface-2: #eef0f4;
-  --input-bg: #ffffff;    --code-bg: #f0f2f5;
-  --border: #e1e4ea;      --border-strong: #c9ced8;
-  --fg: #171a20;          --fg-muted: #5f6673;     --fg-faint: #8a919e;
-  --accent: #2f6be6;      --accent-hover: #2559c4; --accent-fg: #ffffff; --accent-soft: #e6eefc;
-  --ok: #176b3c;   --ok-soft: #e2f4e9;
-  --warn: #9a5b00; --warn-soft: #fff0d6;
-  --err: #c22e4a;  --err-soft: #fce6ea;
-  --focus: 0 0 0 3px rgba(47, 107, 230, .35);
-  --shadow-sm: 0 1px 2px rgba(16, 20, 28, .06);
-  --shadow-md: 0 8px 24px rgba(16, 20, 28, .12);
-  --backdrop: rgba(18, 22, 30, .45);
-  --radius-sm: 6px; --radius: 10px; --radius-lg: 14px; --radius-pill: 999px;
-  --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px; --s6: 32px;
-  --dur: 160ms; --ease: cubic-bezier(.2, .7, .2, 1);
-  --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
-  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color-scheme: light dark;
+  --bg: light-dark(#f5f6f8, #0f1115);          --surface: light-dark(#ffffff, #171a20);
+  --surface-2: light-dark(#eef0f4, #20242c);   --input-bg: light-dark(#ffffff, #12151a);
+  --code-bg: light-dark(#f1f3f6, #0c0e11);
+  --border: light-dark(#e2e5eb, #2a2f39);      --border-strong: light-dark(#c8cdd7, #3a404c);
+  --fg: light-dark(#14171c, #e8eaef);          --fg-muted: light-dark(#5a6170, #9aa1ad);
+  --fg-faint: light-dark(#858c99, #6c7380);
+  --accent: light-dark(#2f6be6, #6f9dff);      --accent-hover: light-dark(#2559c4, #88afff);
+  --accent-fg: light-dark(#ffffff, #0b1426);   --accent-soft: light-dark(#e6eefc, #1c2942);
+  --ok: light-dark(#176b3c, #4fd08a);          --ok-soft: light-dark(#e2f4e9, #153524);
+  --warn: light-dark(#8f5400, #f0b657);        --warn-soft: light-dark(#fff0d6, #3a2c10);
+  --err: light-dark(#c22e4a, #ff7b93);         --err-soft: light-dark(#fce6ea, #44202a);
+  --focus: 0 0 0 3px light-dark(rgba(47, 107, 230, .35), rgba(111, 157, 255, .45));
+  --shadow-sm: 0 1px 2px light-dark(rgba(16, 20, 28, .06), rgba(0, 0, 0, .4));
+  --shadow-md: 0 8px 24px light-dark(rgba(16, 20, 28, .12), rgba(0, 0, 0, .5));
+  --shadow-lg: 0 18px 48px light-dark(rgba(16, 20, 28, .16), rgba(0, 0, 0, .6));
+  --backdrop: light-dark(rgba(18, 22, 30, .45), rgba(0, 0, 0, .6));
+  --radius-sm: 8px; --radius: 12px; --radius-lg: 16px; --radius-pill: 999px;
+  --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px; --s6: 32px; --s7: 48px;
+  --dur: 180ms; --dur-fast: 120ms; --ease: cubic-bezier(.2, .7, .2, 1);
+  --font: system-ui, -apple-system, "Segoe UI Variable Text", "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  --mono: ui-monospace, SFMono-Regular, "Cascadia Mono", Menlo, Consolas, monospace;
 }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    color-scheme: dark;
-    --bg: #111317;          --surface: #1a1d23;      --surface-2: #22262e;
-    --input-bg: #14171c;    --code-bg: #0e1013;
-    --border: #2c313b;      --border-strong: #3b414d;
-    --fg: #e7e9ee;          --fg-muted: #9aa1ad;     --fg-faint: #6c7380;
-    --accent: #6f9dff;      --accent-hover: #88afff; --accent-fg: #0b1426; --accent-soft: #1c2942;
-    --ok: #4fd08a;   --ok-soft: #153524;
-    --warn: #f0b657; --warn-soft: #3a2c10;
-    --err: #ff7b93;  --err-soft: #44202a;
-    --focus: 0 0 0 3px rgba(111, 157, 255, .45);
-    --shadow-sm: 0 1px 2px rgba(0, 0, 0, .4);
-    --shadow-md: 0 8px 24px rgba(0, 0, 0, .5);
-    --backdrop: rgba(0, 0, 0, .6);
-  }
-}
-:root[data-theme="dark"] {
-  color-scheme: dark;
-  --bg: #111317;          --surface: #1a1d23;      --surface-2: #22262e;
-  --input-bg: #14171c;    --code-bg: #0e1013;
-  --border: #2c313b;      --border-strong: #3b414d;
-  --fg: #e7e9ee;          --fg-muted: #9aa1ad;     --fg-faint: #6c7380;
-  --accent: #6f9dff;      --accent-hover: #88afff; --accent-fg: #0b1426; --accent-soft: #1c2942;
-  --ok: #4fd08a;   --ok-soft: #153524;
-  --warn: #f0b657; --warn-soft: #3a2c10;
-  --err: #ff7b93;  --err-soft: #44202a;
-  --focus: 0 0 0 3px rgba(111, 157, 255, .45);
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, .4);
-  --shadow-md: 0 8px 24px rgba(0, 0, 0, .5);
-  --backdrop: rgba(0, 0, 0, .6);
-}
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }
 
 /* --- Basis ------------------------------------------------------------------ */
 * { box-sizing: border-box; }
@@ -75,9 +52,9 @@ header.top { display: flex; align-items: center; gap: var(--s4); padding: var(--
 .brand .ic { width: 26px; height: 26px; color: var(--accent); stroke-width: 2.2; }
 .brand h1 { font-size: 17px; font-weight: 700; letter-spacing: -.01em; }
 .tabs { display: inline-flex; gap: 2px; padding: 3px; background: var(--surface-2); border-radius: var(--radius-pill); margin-left: var(--s2); }
-.tabs button { background: transparent; color: var(--fg-muted); font-weight: 500; padding: 6px 14px; border-radius: var(--radius-pill); white-space: nowrap; }
-.tabs button:hover { color: var(--fg); }
-.tabs button.active { background: var(--surface); color: var(--fg); box-shadow: var(--shadow-sm); }
+.tabs button, .tabs a { background: transparent; color: var(--fg-muted); font-weight: 500; padding: 6px 14px; border-radius: var(--radius-pill); white-space: nowrap; }
+.tabs button:hover, .tabs a:hover { color: var(--fg); }
+.tabs button.active, .tabs a[aria-current="page"] { background: var(--surface); color: var(--fg); box-shadow: var(--shadow-sm); }
 .pagehint { color: var(--fg-muted); font-size: 13px; padding: var(--s3) var(--s5) 0; }
 
 /* Theme-Schalter: zeigt das Symbol des gewaehlten Modus */
@@ -535,7 +512,7 @@ details.shots > summary .hint { font-weight: 400; }
 @media (max-width: 560px) {
   header.top { padding: var(--s2) var(--s3); gap: var(--s2); flex-wrap: wrap; }
   .tabs { order: 3; width: 100%; margin-left: 0; overflow-x: auto; }
-  .tabs button { flex: 1; padding: 6px 10px; font-size: 13px; }
+  .tabs button, .tabs a { flex: 1; padding: 6px 10px; font-size: 13px; text-align: center; }
   .brand { flex: 1; }
   .grid { grid-template-columns: 1fr; }
   .monitor img, .monitor .none, .monitor .title { width: 120px; max-width: 120px; }

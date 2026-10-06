@@ -17,7 +17,7 @@ import wave
 from collections.abc import Callable
 from pathlib import Path
 
-from audioscribe.live.track import Track
+from audioscribe.live.track import SAMPLE_RATE, Track
 
 BLOCK_S = 0.1  # wie der PortAudio-Callback: rate // 10 Frames je Block
 NACHLAUF_S = 2.0  # Stille nach dem Dateiende, bis die Sitzung stoppt (> pause_s + Poll-Raster)
@@ -35,6 +35,7 @@ class ReplayCapture:
         speed: float = 1.0,
         on_end: Callable[[], None],
         nachlauf_s: float = NACHLAUF_S,
+        start_sample: int = 0,
     ) -> None:
         if speed <= 0:
             raise RuntimeError("--speed muss größer als 0 sein")
@@ -42,6 +43,9 @@ class ReplayCapture:
         self._speed = speed
         self._on_end = on_end
         self._nachlauf = nachlauf_s
+        # Wiederaufnahme (PRD §21): die Datei beginnt auf der Sitzungsuhr bei diesem Versatz.
+        self._start_sample = max(0, int(start_sample))
+        self._basis_s = self._start_sample / SAMPLE_RATE
         self._stop = threading.Event()
         self._lock = threading.Lock()
         self._threads: list[threading.Thread] = []
@@ -60,7 +64,7 @@ class ReplayCapture:
 
     def open(self, name: str, device: dict, wav_path: Path) -> Track:  # noqa: ARG002 - wie AudioCapture
         path = self._files[name]
-        track = Track(name, device["rate"], device["channels"], wav_path)
+        track = Track(name, device["rate"], device["channels"], wav_path, start_sample=self._start_sample)
         with self._lock:
             self._offen += 1
             self._dauer_max = max(self._dauer_max, device["dauer_s"])
@@ -101,13 +105,13 @@ class ReplayCapture:
                     break
                 i += 1
                 # Ankunft am Blockende, wie beim echten Callback.
-                if not self._warte_bis(i * BLOCK_S):
+                if not self._warte_bis(self._basis_s + i * BLOCK_S):
                     return
-                track.feed(raw, i * BLOCK_S)
+                track.feed(raw, self._basis_s + i * BLOCK_S)
         with self._lock:
             self._offen -= 1
             letzter = self._offen == 0
-        if letzter and self._warte_bis(self._dauer_max + self._nachlauf):
+        if letzter and self._warte_bis(self._basis_s + self._dauer_max + self._nachlauf):
             self._on_end()
 
 

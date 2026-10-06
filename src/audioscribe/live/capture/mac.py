@@ -23,8 +23,11 @@ def list_devices() -> dict:
 
 
 class MacCapture:
-    def __init__(self, clock: Callable[[], float], log: Callable[[str], None] | None = None) -> None:
+    def __init__(
+        self, clock: Callable[[], float], log: Callable[[str], None] | None = None, *, start_sample: int = 0
+    ) -> None:
         self._clock = clock
+        self._start_sample = start_sample
         self._log = log or (lambda _text: None)
         self._streams: list = []
         self._tracks: list[Track] = []
@@ -33,7 +36,9 @@ class MacCapture:
         self.loopbacks = geraete["loopbacks"]
 
     def open(self, name: str, device: dict, wav_path: Path) -> Track:
-        track = Track(name, device["rate"], device["channels"], wav_path, slack_s=SLACK_S)
+        track = Track(
+            name, device["rate"], device["channels"], wav_path, slack_s=SLACK_S, start_sample=self._start_sample
+        )
         if name == "system":
             self._streams.append(sck.SckStream(track, self._clock, self._log))
         else:

@@ -179,7 +179,7 @@ def test_kern_puffert_segmente_und_liefert_essenz(tmp_path):
     from audioscribe.souffleur.ki import KiStatus
     from audioscribe.souffleur.konfig import SouffleurKonfig
 
-    konfig = SouffleurKonfig(wiki_dir=None, uebergabe_dir=tmp_path / "ueb", backend="attrappe")
+    konfig = SouffleurKonfig(wiki_dir=None, backend="attrappe")
     s = Souffleur(konfig, ki=AttrappeKi(), ki_status=KiStatus("bereit", "attrappe", "attrappe", "ok"))
     s.starte(tmp_path)
     for seg in _segmente():
@@ -197,7 +197,7 @@ def test_kern_ohne_ki_meldet_zustand_statt_abzubrechen(tmp_path):
     from audioscribe.souffleur.ki import KiFehler, KiStatus
     from audioscribe.souffleur.konfig import SouffleurKonfig
 
-    konfig = SouffleurKonfig(wiki_dir=None, uebergabe_dir=tmp_path)
+    konfig = SouffleurKonfig(wiki_dir=None)
     s = Souffleur(konfig, ki=None, ki_status=KiStatus("fehlt", "claude-agent", "x", "KI-Dienst nicht verfügbar"))
     s.beobachte({"id": 1, "start": 0, "end": 3, "text": "Hallo zusammen, guten Morgen."})
     assert s.status()["ki"]["zustand"] == "fehlt"
@@ -211,12 +211,24 @@ def test_kern_ohne_ki_meldet_zustand_statt_abzubrechen(tmp_path):
 def test_lade_konfig_liest_wiki_pfad_nur_aus_dem_stand(tmp_path, monkeypatch):
     from audioscribe.souffleur import konfig
 
-    k = konfig.lade_konfig({}, output_dir=tmp_path)
-    assert k.wiki_dir is None and k.uebergabe_dir == tmp_path / "wiki-uebergabe"
-    k = konfig.lade_konfig({"wiki_dir": str(WIKI), "souffleur_model": "claude-opus-5", "souffleur_aktiv": False,
-                            "uebergabe_dir": str(tmp_path / "u")}, output_dir=tmp_path, speed=5.0)
+    k = konfig.lade_konfig({})
+    assert k.wiki_dir is None
+    k = konfig.lade_konfig({"wiki_dir": str(WIKI), "souffleur_model": "claude-opus-5", "souffleur_aktiv": False},
+                           speed=5.0)
     assert k.wiki_dir == WIKI.resolve() and k.modell == "claude-opus-5" and k.aktiv is False and k.speed == 5.0
-    assert k.uebergabe_dir == (tmp_path / "u").resolve()
+
+
+def test_lade_konfig_nimmt_wiki_und_ki_aus_dem_projekt(tmp_path):
+    """PRD §21: mit Projekt kommt der Wiki-Pfad aus dem Projekt; KI-Werte des Projekts schlagen die globalen."""
+    from audioscribe.projekt.modell import Projekt
+    from audioscribe.souffleur import konfig
+
+    projekt = Projekt(wurzel=WIKI, name="Test", sitzungen_dir=tmp_path / "s", assets_dir=WIKI / "raw" / "assets",
+                      souffleur_model="claude-haiku-4-5-20251001")
+    k = konfig.lade_konfig({"wiki_dir": str(tmp_path / "anderes"), "souffleur_model": "claude-opus-5"}, projekt=projekt)
+    assert k.wiki_dir == WIKI and k.modell == "claude-haiku-4-5-20251001"
+    ohne = Projekt(wurzel=WIKI, name="Test", sitzungen_dir=tmp_path / "s", assets_dir=WIKI / "raw" / "assets")
+    assert konfig.lade_konfig({"souffleur_model": "claude-opus-5"}, projekt=ohne).modell == "claude-opus-5"
 
 
 def test_wiki_pfad_wird_nur_in_konfig_gelesen():
@@ -237,7 +249,7 @@ def _souffleur(tmp_path, *, wiki=None, ki=None, aktiv=True, **extra):
     from audioscribe.souffleur.ki import KiStatus
     from audioscribe.souffleur.konfig import SouffleurKonfig
 
-    konfig = SouffleurKonfig(wiki_dir=wiki, uebergabe_dir=tmp_path / "ueb", backend="attrappe", aktiv=aktiv,
+    konfig = SouffleurKonfig(wiki_dir=wiki, backend="attrappe", aktiv=aktiv,
                              fenster_leerlauf_s=0.0, **extra)
     hinweise = []
     s = Souffleur(konfig, ki=ki if ki is not None else AttrappeKi(),
@@ -499,9 +511,8 @@ def test_abgleich_findet_widersprueche_an_der_richtigen_wiki_stelle(tmp_path):
     protokoll = (tmp_path / "souffleur-protokoll.md").read_text(encoding="utf-8")
     assert "freigaben.md › Grenzen" in protokoll and "Widerspruch" in protokoll
     assert stand.bilanz["verzoegerung_s"]["max"] is not None
-    # A4: Uebergabe liegt im Uebergabeordner, nie im Wiki
-    assert s.uebergabe is not None and s.uebergabe.ordner.parent == tmp_path / "ueb"
-    assert s.status()["uebergabe"] == str(s.uebergabe.ordner)
+    # Der Souffleur selbst legt nichts mehr ins Wiki - die Ablage ist ein eigener Schritt (PRD §21).
+    assert "uebergabe" not in s.status()
 
 
 def test_wiki_pfad_kaputt_meldet_zustand_und_laeuft_weiter(tmp_path):
@@ -520,41 +531,23 @@ def test_wiki_pfad_kaputt_meldet_zustand_und_laeuft_weiter(tmp_path):
     assert s.status_text().startswith("Souffleur ohne Wiki")
 
 
-# --- A4: Uebergabe ---------------------------------------------------------------------
+# --- A4: Markierungen im Uebergabeformat (Ablage: tests/test_wiki_ablage.py) -----------
 
 
-def test_uebergabe_ist_anhaengend_bytegleich_und_nie_im_wiki(tmp_path):
-    import filecmp
-
-    from audioscribe.live.store import write_transcript
-    from audioscribe.models import Segment
+def test_uebergabe_baut_markierungen_ohne_zu_schreiben(tmp_path):
     from audioscribe.souffleur import markierung, uebergabe
 
-    sitzung = tmp_path / "live-2026-01-06_10-00-00"
-    sitzung.mkdir()
-    segs = _segmente()
-    write_transcript(sitzung, [Segment(s["start"], s["end"], s["text"], s["speaker"]) for s in segs],
-                     duration_s=60, language="de", model="t", mode="live")
     m = markierung.Markierung(id=1, art="widerspruch", segment_id=2, t_start=5.0, t_end=12.0, sprecher="Sprecher 1",
                               aussage="ab 10.000 Euro", wiki_zitat="Rechnungen ab 5.000 Euro gibt die Teamleitung frei.",
                               fundstellen=[markierung.Fundstelle("wiki/freigaben.md", "Grenzen", 5, "…")], ki_text="weicht ab",
                               verzoegerung_s=4.2)
-    stand = markierung.SouffleurStand(sitzung=sitzung.name, markierungen=[m])
-    ziel = tmp_path / "ueb"
-    u1 = uebergabe.schreibe(sitzung, stand, uebergabe_dir=ziel, wiki_dir=WIKI)
-    u2 = uebergabe.schreibe(sitzung, stand, uebergabe_dir=ziel, wiki_dir=WIKI)
-    assert u1.ordner == ziel / sitzung.name and u2.ordner == ziel / f"{sitzung.name}-2"
-    assert u1.uebergabe_id != u2.uebergabe_id and u1.transkript_fassung == "live"
-    assert filecmp.cmp(sitzung / "transkript.md", u1.ordner / "transkript.md", shallow=False)
-    daten = json.loads((u1.ordner / "markierungen.json").read_text(encoding="utf-8"))
+    stand = markierung.SouffleurStand(sitzung="live-x", markierungen=[m])
+    daten = uebergabe.daten(stand, sitzung="live-x", transkript_fassung="live")
     assert daten["format_version"] == 1 and daten["markierungen"][0]["zeitstempel"] == "00:00:05"
     assert daten["markierungen"][0]["wiki"]["zitat"].startswith("Rechnungen ab 5.000")
     assert daten["markierungen"][0]["ki_erzeugt"] == {"text": "weicht ab"}
-    assert (u1.ordner / "README.md").is_file() and "Widerspruch" in (u1.ordner / "markierungen.md").read_text(encoding="utf-8")
-    assert not any(p.name == "souffleur-essenz.jsonl" for p in u1.ordner.iterdir())
-    with pytest.raises(RuntimeError):
-        uebergabe.schreibe(sitzung, stand, uebergabe_dir=WIKI / "eingang", wiki_dir=WIKI)
-    assert not (WIKI / "eingang").exists()
+    assert "Widerspruch" in uebergabe.render_md("live-x", stand, "live")
+    assert uebergabe.fassung(tmp_path) == "unbekannt" and not any(tmp_path.iterdir())
 
 
 # --- Ablageort der Einstellungen ------------------------------------------------------
@@ -606,3 +599,15 @@ def test_doctor_souffleur_check(monkeypatch, tmp_path):
     state.save_state({"wiki_dir": str(WIKI), "souffleur_backend": "attrappe"})
     r = doctor._check_souffleur()
     assert r.status == "OK" and "4 Seiten" in r.detail and "attrappe" in r.detail
+
+    # PRD §21: ohne Wiki der Installation zaehlen die Wikis der bekannten Projekte.
+    from audioscribe.projekt import modell
+
+    wiki = tmp_path / "pw"
+    (wiki / "wiki").mkdir(parents=True)
+    (wiki / "wiki" / "index.md").write_text("# P\n", encoding="utf-8")
+    projekt = modell.lege_an(name="Bahn", wurzel=wiki, sitzungen_dir=tmp_path / "s", assets_dir=wiki / "raw" / "assets")
+    state.save_state({"wiki_dir": ""})
+    state.merke_projekt(projekt.wurzel, projekt.name)
+    r = doctor._check_souffleur()
+    assert r.status == "OK" and "Wiki je Projekt: Bahn (1 Seiten)" in r.detail

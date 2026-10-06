@@ -67,16 +67,17 @@ def list_devices() -> dict:
 class AudioCapture:
     """Hält die offenen Eingabe-Streams einer Sitzung."""
 
-    def __init__(self, clock: Callable[[], float]) -> None:
+    def __init__(self, clock: Callable[[], float], *, start_sample: int = 0) -> None:
         self._pa = _pyaudio()
         self._p = self._pa.PyAudio()
         self._clock = clock
+        self._start_sample = start_sample
         self._streams: list = []
         self._tracks: list[Track] = []
         self.mics, self.loopbacks = _scan(self._pa, self._p)
 
     def open(self, name: str, device: dict, wav_path: Path) -> Track:
-        track = Track(name, device["rate"], device["channels"], wav_path)
+        track = Track(name, device["rate"], device["channels"], wav_path, start_sample=self._start_sample)
         pa = self._pa
 
         def callback(in_data, frame_count, time_info, status):  # noqa: ARG001

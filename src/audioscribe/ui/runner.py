@@ -78,6 +78,7 @@ class _State:
     """Alles, was hinter dem Lock liegt."""
 
     running: bool = False
+    output_dir: str = ""  # Zielordner des Laufs - fuer die Ergebniskarte
     files: list[FileState] = field(default_factory=list)
     current: int | None = None
     stage: _Stage | None = None
@@ -269,6 +270,7 @@ class BatchRunner(_ProcessRunner):
                 raise RuntimeError("Es laeuft bereits ein Durchlauf.")
             self._state = _State(
                 running=True,
+                output_dir=str(opts.output_dir),
                 started=time.monotonic(),
                 files=[
                     FileState(
@@ -294,6 +296,17 @@ class BatchRunner(_ProcessRunner):
             daemon=True,
         )
         self._thread.start()
+
+    def laeuft(self) -> bool:
+        with self._lock:
+            return self._state.running
+
+    def leeren(self) -> None:
+        """Stand und Protokoll des letzten Laufs vergessen (Kontextwechsel); nie im Lauf."""
+        with self._lock:
+            if not self._state.running:
+                self._state = _State()
+                self._reset_log()
 
     def cancel(self) -> None:
         """Bricht den laufenden Stapel ab (aktueller Prozess inkl. seiner Kinder)."""
@@ -324,6 +337,7 @@ class BatchRunner(_ProcessRunner):
             return {
                 "running": state.running,
                 "cancelled": state.cancelled,
+                "output_dir": state.output_dir,
                 "total": len(state.files),
                 "done": sum(1 for f in state.files if f.state not in (WAITING, RUNNING)),
                 "current": (
@@ -487,6 +501,7 @@ class AnalyseRunner(_ProcessRunner):
                 "cancelled": False,
                 "name": opts.name,
                 "workspace": str(workspace),
+                "source": str(opts.source),
                 "started": time.time(),
                 "returncode": None,
                 "result": None,
@@ -501,6 +516,17 @@ class AnalyseRunner(_ProcessRunner):
         )
         self._thread.start()
         return workspace
+
+    def laeuft(self) -> bool:
+        with self._lock:
+            return bool(self._info.get("running"))
+
+    def leeren(self) -> None:
+        """Ergebnis und Protokoll der letzten Analyse vergessen (Kontextwechsel); nie im Lauf."""
+        with self._lock:
+            if not self._info.get("running"):
+                self._info = {"running": False}
+                self._reset_log()
 
     def cancel(self) -> None:
         with self._lock:
@@ -583,6 +609,15 @@ class LiveRunner(_ProcessRunner):
         self._last_line: str | None = None  # letzte Protokollzeile - Fehlertext fuer die Oberflaeche
         # Souffleur (PRD §20): hoert die Segmente mit und haengt "hinweis"-Ereignisse an.
         self._souffleur = None
+        # Nachlauf (PRD §21): laeuft nach dem Ende einer Sitzung, z. B. die Wiki-Ablage "immer".
+        self._on_ende: Callable[[Path], dict | None] | None = None
+        # Zaehlt Starts und Resets: ein Reset, der einen Start noch beim Aufbau des Souffleurs
+        # erwischt, macht diesen Start ungueltig (sonst liefe das Kind ohne Runner weiter).
+        self._gen = 0
+
+    def laeuft(self) -> bool:
+        with self._lock:
+            return bool(self._info.get("running"))
 
     def start(
         self,
@@ -591,10 +626,16 @@ class LiveRunner(_ProcessRunner):
         argv_builder: Callable[[LiveJobOptions], list[str]] = build_live_argv,
         refine_builder: Callable[[Path, LiveJobOptions], list[str]] = build_refine_argv,
         souffleur_factory: Callable[[LiveJobOptions], object | None] | None = None,
+        on_ende: Callable[[Path], dict | None] | None = None,
+        finalize_builder: Callable[[Path], list[str]] | None = None,
     ) -> None:
+        """``on_ende`` bekommt nach einem sauberen Ende den Sitzungsordner; sein Ergebnis steht
+        als ``nachlauf`` im Status. ``finalize_builder`` schliesst eine unterbrochene Sitzung
+        ab, statt aufzunehmen (``opts.resume_dir`` nennt den Ordner)."""
         with self._lock:
             if self._info.get("running"):
                 raise RuntimeError("Es laeuft bereits eine Live-Sitzung.")
+            self._on_ende = on_ende
             self._info = {
                 "running": True,
                 "phase": "startet",
@@ -613,12 +654,18 @@ class LiveRunner(_ProcessRunner):
                 "error": None,  # letzte Protokollzeile, wenn die Sitzung mit Fehler endet
                 "replay": opts.replay_transcript is not None,  # Testmodus: Transkript abspielen (FR-64)
                 "replay_speed": opts.replay_speed if opts.replay_transcript is not None else None,
+                "titel": getattr(opts, "titel", "") or "",
+                "fortgesetzt": getattr(opts, "resume_dir", None) is not None,  # Wiederaufnahme (PRD §21)
+                "nachlauf": None,  # Ergebnis von on_ende, z. B. {"wiki_ablage": {...}}
             }
             self._events = []
             self._discard = False
             self._last_line = None
             self._reset_log()
             self._souffleur = None
+            self._gen += 1
+            gen = self._gen
+        souffleur = None
         if souffleur_factory is not None:
             try:
                 souffleur = souffleur_factory(opts)
@@ -629,9 +676,31 @@ class LiveRunner(_ProcessRunner):
                 souffleur.on_hinweis = self._on_hinweis
                 with self._lock:
                     self._souffleur = souffleur
+        resume_dir = getattr(opts, "resume_dir", None)
+        if souffleur is not None and resume_dir is not None:
+            # Wiederaufnahme: der Ordner steht fest - die bisherigen Hinweise sofort zeigen,
+            # nicht erst nach dem Laden der Modelle.
+            try:
+                souffleur.starte(Path(resume_dir))
+            except Exception as exc:  # noqa: BLE001
+                self._append(f"Souffleur-Fehler: {exc}")
+        if finalize_builder is not None and resume_dir is not None:
+            argv = finalize_builder(Path(resume_dir))
+        else:
+            argv = argv_builder(opts)
+        with self._lock:
+            ueberholt = self._gen != gen
+        if ueberholt:
+            # Inzwischen zurueckgesetzt (z. B. "Demo beenden" direkt nach dem Start): nichts starten.
+            if souffleur is not None:
+                souffleur.stop()
+                with self._lock:
+                    if self._souffleur is souffleur:
+                        self._souffleur = None
+            return
         self._thread = threading.Thread(
             target=self._run,
-            args=(argv_builder(opts), opts, refine_builder),
+            args=(argv, opts, refine_builder),
             name="audioscribe-live",
             daemon=True,
         )
@@ -688,6 +757,8 @@ class LiveRunner(_ProcessRunner):
             self._events = []
             self._discard = False
             self._souffleur = None
+            self._on_ende = None
+            self._gen += 1
             self._reset_log()
         return Path(old_dir) if old_dir else None
 
@@ -749,11 +820,30 @@ class LiveRunner(_ProcessRunner):
                     souffleur.abschliessen()
                 except Exception as exc:  # noqa: BLE001 - Abschluss des Souffleurs ist Zugabe
                     self._append(f"Souffleur-Abschluss fehlgeschlagen: {exc}")
+            self._nachlauf(code)
             with self._lock:
                 self._info.update(running=False, returncode=code, phase="beendet" if code == 0 else "fehler")
                 if code != 0:
                     self._info["error"] = self._last_line
             self._append("\nSitzung beendet." if code == 0 else f"\nBeendet mit Exit-Code {code}.")
+
+    def _nachlauf(self, code: int) -> None:
+        """Nach einem sauberen Ende: ``on_ende`` ausfuehren (z. B. Wiki-Ablage "immer"). Solange
+        gilt die Sitzung als laufend - sonst boete die Oberflaeche das Speichern doppelt an."""
+        with self._lock:
+            on_ende, session, verworfen = self._on_ende, self._info.get("dir"), self._discard
+        if on_ende is None or code != 0 or verworfen or not session:
+            return
+        with self._lock:
+            self._info["phase"] = "abschluss"
+        try:
+            ergebnis = on_ende(Path(session))
+        except Exception as exc:  # noqa: BLE001 - der Nachlauf darf das Ende nie verhindern
+            self._append(f"Nachlauf fehlgeschlagen: {exc}")
+            ergebnis = {"fehler": str(exc)}
+        if ergebnis:
+            with self._lock:
+                self._info["nachlauf"] = ergebnis
 
     def _pump(self, proc: subprocess.Popen[str] | None, on_line: Callable[[str], None]) -> int:
         if proc is None:
@@ -780,6 +870,9 @@ class LiveRunner(_ProcessRunner):
                 self._info.update(
                     {k: event.get(k) for k in ("phase", "session", "dir", "model", "device", "step")}
                 )
+                for k in ("sitzung_id", "titel"):
+                    if event.get(k):
+                        self._info[k] = event[k]
                 if event.get("phase") != "laden":
                     self._info["download"] = None
             elif typ == "download":
@@ -805,6 +898,8 @@ class LiveRunner(_ProcessRunner):
                 souffleur.uhr_sync(float(event["elapsed"]))
             elif typ == "state" and event.get("phase") == "laeuft" and event.get("dir"):
                 souffleur.starte(Path(event["dir"]))
+            elif typ == "segment" and event.get("restored"):
+                souffleur.uebernehme(event)  # Wiederaufnahme: nur Kontext, nicht neu beurteilen
             elif typ == "segment":
                 souffleur.beobachte(event, empfangen_mono=empfangen)
         except Exception as exc:  # noqa: BLE001 - der Souffleur darf die Sitzung nie stoeren

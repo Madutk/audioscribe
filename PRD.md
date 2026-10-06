@@ -6,6 +6,7 @@
 |---|---|
 | **Status** | Entwurf |
 | **Datum** | 2026-06-30 |
+| **Fortschreibung** | 2026-10-06: §21 Projekte, Startseite, Wiki-Ablage und Wiederaufnahme (FR-66 … FR-77, NFR-25 … NFR-29) |
 | **Autor** | Marek (madutkow@googlemail.com) |
 
 ---
@@ -148,6 +149,9 @@ einer Pipeline, ist auf der vorhandenen Hardware lauffähig und etabliert.
 - **Visuelle Bild-Annotation** – wichtige Standbilder aus dem Video dem Transkript
   zeitlich zuordnen. Ausspezifiziert in **§13**.
 - **CPU-only-Betrieb** – Nutzung auf Rechnern ohne NVIDIA-Karte. Ausspezifiziert in **§14**.
+- **Projekte** – Startseite, Projekt je LLM-Wiki, Ablage ins Wiki, Wiederaufnahme nach einem
+  Absturz. Ausspezifiziert in **§21** (dazwischen: §15 Bildwechsel, §16 KI-Analyse, §17 Live,
+  §18 Einstellungen, §19 macOS, §20 Souffleur).
 
 ## 13. Ausbaustufe: Visuelle Bild-Annotation (Review-Oberfläche)
 
@@ -607,6 +611,11 @@ Compliance-Anforderungen.
 
 ## 18. Ausbaustufe: Reiter „Einstellungen“
 
+> Abgelöst durch §21: Den Reiter mit den drei Standardordnern (FR-47) gibt es nicht mehr.
+> Ordner gehören zum Projekt bzw. zur Ansicht „Aufnahme transkribieren“; global bleiben KI,
+> Sprache und die Karte „Umgebung“ (FR-69). Der Umgebungs-Check samt `doctor --json` gilt
+> unverändert.
+
 ### 18.1 Ziel
 
 Die drei Standardordner der Oberfläche liegen an **einer** Stelle statt verteilt über die
@@ -739,6 +748,13 @@ pip-/uv-Pakete. Ein Doppelklick startet die Oberfläche.
 
 ## 20. Ausbaustufe: Souffleur – Live-Abgleich mit dem LLM-Wiki
 
+> Fortgeschrieben durch §21: „Projekt = Installation“ (§20.2) gilt nicht mehr – das Wiki
+> gehört zum Projekt, die Verknüpfung (FR-56) steht in den Projekteinstellungen statt in
+> einer Karte „Wiki (Souffleur)“. Die automatische Übergabe in einen Übergabeordner (FR-60
+> und das zugehörige Akzeptanzkriterium) ist entfallen; Transkript und Markierungen gehen
+> über die Wiki-Ablage nach `raw/` (FR-71). Ohne Projekt (Kommandozeile, Tests) gilt weiter
+> der Wiki-Pfad der Installation.
+
 ### 20.1 Ziel
 
 Der Souffleur hört beim Meeting über das Live-Transkript mit, gleicht das Gesagte mit dem
@@ -814,3 +830,148 @@ mehrere Wikis sind nicht enthalten.
       `-2` an statt zu überschreiben.
 - [ ] `pytest` grün: `tests/test_souffleur.py`, `tests/test_souffleur_ui.py`,
       `tests/test_replay_transkript.py`, `tests/test_souffleur_html.py`.
+
+## 21. Ausbaustufe: Projekte, Startseite, Wiki-Ablage und Wiederaufnahme
+
+> Status: umgesetzt · Umbau der Browser-Oberfläche (`audioscribe ui`) · löst „Projekt =
+> Installation“ (§20.2), den Reiter „Einstellungen“ (§18) und die automatische Übergabe
+> (FR-60) ab · echte Aufnahme- und Absturztests auf dem Gerät stehen aus (§21.5).
+
+### 21.1 Ziel
+
+Die Oberfläche beginnt mit einer **Startseite** statt mit vier gleichrangigen Reitern. Von
+dort führen vier Einstiege weiter: neues Projekt, Projekt öffnen, eine einzelne Aufnahme
+transkribieren, Demo abspielen. Ein **Projekt** gehört zu genau einem LLM-Wiki und trägt
+seine eigenen Einstellungen (Ordner, Wiki-Ablage, KI, Sprache); die Arbeitsansichten zeigen
+nur noch, was zum gewählten Einstieg gehört. Nach einer Sitzung geht das Material auf Wunsch
+als neue Quelle ins Wiki – Transkript und Markierungen nach `raw/`, Bilder in einen
+Assets-Ordner, die Zuordnung Zeitstempel ↔ Bild bleibt erhalten – und/oder in die
+KI-Nachbereitung. Eine Sitzung, die durch einen Absturz unterbrochen wurde, lässt sich nach
+dem Neustart fortsetzen oder sauber abschließen.
+
+### 21.2 Designentscheidungen (festgelegt)
+
+- **Ein Projekt = ein LLM-Wiki.** Der Wiki-Ordner (Wurzel mit `raw/` und `wiki/`) ist die
+  Identität des Projekts. Beim Anlegen wird ein vorhandenes Wiki verknüpft oder ein neues
+  Gerüst angelegt (`projekt/vorlage.py`: `raw/`, `wiki/` mit Unterordnern, `index.md`,
+  `log.md`, `uebersicht.md`, `glossar.md`, `README.md`; nur was fehlt). Ein zweites Projekt
+  im selben Wiki wird abgewiesen.
+- **Projektdatei im Wiki.** `<wiki>/.audioscribe/projekt.json` (atomar geschrieben). Der
+  Punktordner wird vom Wiki-Index übersprungen. Pfade stehen relativ zur Wiki-Wurzel in der
+  Datei, wo das geht – das Projekt zieht mit dem Wiki um (anderer Rechner, Git). Die
+  Installation merkt sich nur die zuletzt geöffneten Projekte (`einstellungen.json`,
+  Schlüssel `zuletzt_projekte`).
+- **Ordner des Projekts.** Sitzungsordner (Pflicht; Vorschlag `<wiki>-sitzungen` neben dem
+  Wiki, weil Mitschnitte groß sind) für Live-Sitzungen und – darunter in `analysen/` – die
+  KI-Analysen. Assets-Ordner für Bilder (Vorschlag `raw/assets`): muss im Wiki liegen, nie
+  unter `wiki/`. Auch der Sitzungsordner darf nicht unter `wiki/` liegen.
+- **Der Server hält den Kontext** (`ui/kontext.py`): Startseite, Projekt, einzelne Aufnahme
+  oder Demo – genau einer, so wie er genau eine Live-Sitzung, einen Stapel und eine Analyse
+  hält. Ein Neuladen der Seite ändert nichts; nach einem Neustart des Servers beginnt die
+  Oberfläche auf der Startseite. Ein Kontextwechsel während eines Laufs wird abgewiesen
+  (409); nur die Demo-Sitzung wird beim Verlassen abgebrochen. Im Projekt bestimmt der
+  Server die Ordner – Angaben des Browsers werden dann nicht verwendet.
+- **Einstellungen in zwei Ebenen.** Global je Installation: KI-Dienst, Modell für den
+  Souffleur, Modell für die KI-Analyse, Sprache der Aufnahmen. Ein Projekt kann jeden dieser
+  Werte überschreiben; fehlt er im Projekt, gilt der globale (`projekt/einstellungen.py:
+  effektiv`). Sprache und Modell werden nicht mehr „vom letzten Lauf“ gemerkt; Gerät,
+  Whisper-Modell und Bildoptionen bleiben Lauf-Optionen wie in §18.
+- **Wiki-Ablage ist ein Export** (`projekt/wiki_ablage.py`). Quelle für KI-Analyse und
+  Review bleibt der Sitzungsordner (dort gilt überall `frames/`). Ziel ist
+  `raw/<JJJJ-MM-TT>_<kurzname>/` – das Namensschema der Rohquellen im Wiki; der Kurzname
+  kommt aus dem Sitzungstitel, sonst aus dem Ordnernamen.
+- **Bewusste Änderung der Leitplanke „nie in den Wiki-Pfad“.** Bisher schrieb AudioScribe
+  nichts unter den Wiki-Pfad (FR-60, NFR-21). Neu gilt: Die Seiten unter `wiki/` werden
+  weiter **nur gelesen**. Nach `raw/` und in den Assets-Ordner wird **nur angehängt**
+  (nichts überschrieben, Namenskollision → `-2`, `-3` …) und **nur auf Nutzeraktion** bzw.
+  auf die ausdrücklich gewählte Projekteinstellung „immer“. Das Paket `souffleur/` selbst
+  schreibt weiterhin nichts ins Wiki; `souffleur/uebergabe.py` baut nur noch die Inhalte von
+  `markierungen.json/.md`.
+- **Die automatische Übergabe entfällt.** Übergabeordner, `AUDIOSCRIBE_UEBERGABE_DIR` und der
+  Abschluss-Schritt des Souffleurs (FR-60) gibt es nicht mehr; die Markierungen gehen mit der
+  Wiki-Ablage in dieselbe Quelle wie das Transkript.
+- **Absturzsicherung im Aufnahmeprozess** (`live/journal.py`). Drei Grundsätze: erst laden,
+  dann schreiben (Transkript, `marks.json`, `souffleur.json` und WAV würden sonst den Bestand
+  überschreiben); eine Zeitbasis (Sample-Position der fertigen WAV = Sitzungszeit); ein
+  definierter Lebenszyklus mit den Zuständen `laeuft | unterbrochen | beendet | verworfen`.
+  Lebenszeichen ist eine Sperre des Betriebssystems auf `sitzung.lock` (`msvcrt.locking` /
+  `fcntl.flock`) – keine PID-Probe, keine neue Abhängigkeit.
+- **Fortsetzen nimmt neu auf, Abschließen nicht.** Fortsetzen startet eine Aufnahme mit den
+  aktuell gewählten Geräten im alten Sitzungsordner; Geräte und Bildquelle der alten Sitzung
+  werden nicht blind übernommen (Indizes und Fenster-Handles gelten nach einem Neustart
+  nicht mehr). Eine Aufnahme startet nie ohne Klick.
+- **Bekannte Grenzen.** Was beim Absturz noch nicht transkribiert war, fehlt im
+  Live-Transkript und steht nur im Mitschnitt – das Nachschärfen schließt die Lücke.
+  Rückstandswerte im Fazit gelten nur für den laufenden Teil. Ein Transkript-Replay
+  (Demo, Testmodus) wird nie fortgesetzt.
+- **Frontend ohne Build-Schritt.** Native ES-Module unter `ui/static/js/` (`main`, `kern`,
+  `kontext`, `dialoge`, `wiki`, `start`, `einstellungen`, `datei`, `nachbereitung`, `live`,
+  `souffleur`), ein Hash-Router (`#/`, `#/neu`, `#/projekt/live`, `#/projekt/nachbereitung`,
+  `#/projekt/einstellungen`, `#/datei`, `#/datei/ki`, `#/demo`, `#/einstellungen`), Abfragen
+  nur für die sichtbare Ansicht. Stylesheets: `style.css` (Tokens mit `light-dark()`,
+  Bausteine, Arbeitsansichten) und `css/shell.css` (Kopf, Startseite, Assistent, Dialoge).
+  Dialoge sind native `<dialog>`-Elemente. `app.js` gibt es nicht mehr; der Server liefert
+  aus `static/` nur `.css`, `.js` und `.svg` aus.
+- **Dateiinhalte über den Server.** Neben den Standbildern der eigenen Live-Sitzung (§17)
+  liefert der Server für die Transkript-Vorschau genau zwei Dateien eines Ergebnisordners aus:
+  `transkript.annotiert.md` bzw. `transkript.md`, gedeckelt auf 400 000 Zeichen
+  (`GET /api/transkript`). „Ordner öffnen“ ruft den Dateimanager des Systems auf. Der Server
+  bindet weiter nur an `localhost` und weist fremde Herkünfte ab (NFR-8).
+- **Demo ist Wegwerfware.** Fester Einstieg, leicht entfernbar (eine Route, eine Leiste in
+  der Live-Ansicht): spielt `demo/llm-wiki/live_bahn_test/transkript.md` gegen das Demo-Wiki
+  ab, schreibt nur nach `~/.cache/audioscribe/demo` und nie ins Wiki.
+
+### 21.3 Funktionale Anforderungen
+
+| ID | Anforderung |
+|----|-------------|
+| FR-66 | **Startseite.** Beim Start zeigt die Oberfläche vier Einstiege als Karten – „Neues Projekt“, „Projekt öffnen“, „Aufnahme transkribieren“, „Demo abspielen“ –, jede mit einem Satz Beschreibung und einer ausklappbaren Kurzhilfe. Darunter die zuletzt geöffneten Projekte (öffnen, aus der Liste entfernen; nicht erreichbare sind gekennzeichnet). Die Demo-Karte ist ohne Demo-Daten deaktiviert. |
+| FR-67 | **Projekt anlegen.** Assistent in drei Schritten: (1) Projektname und LLM-Wiki – vorhandenes verknüpfen oder neues Gerüst anlegen, mit Sofortprüfung des Wikis; (2) Ordner für Sitzungen und Ordner für Bilder (Assets), beide vorgeschlagen, dazu das Verhalten nach einer Sitzung; (3) KI und Sprache mit der Vorgabe „globale Einstellung“. Pflicht sind Name, Wiki-Ordner, Sitzungsordner und Assets-Ordner; jedes Feld trägt eine Kurzbeschreibung, Fehler stehen am Feld. Ergebnis ist `<wiki>/.audioscribe/projekt.json`; ein vorhandenes Wiki bleibt dabei unverändert. |
+| FR-68 | **Projekt öffnen.** Über die Liste der zuletzt geöffneten oder durch Wahl des Wiki-Ordners. Ordner, Wiki, KI und Sprache des Projekts gelten danach in allen Arbeitsansichten; der Projektname steht im Kopf, „Projekt schließen“ führt zur Startseite. Laufende Arbeit sperrt den Wechsel mit verständlicher Meldung. |
+| FR-69 | **Einstellungen global und je Projekt.** Die globale Seite (Zahnrad) pflegt KI-Dienst, Modell für den Souffleur, Modell für die KI-Analyse und Sprache der Aufnahmen und zeigt die Umgebungs-Prüfung aus FR-47. Die Projektseite pflegt Name, Ordner, Wiki-Ablage (`fragen` \| `immer` \| `nie`, Bilder ja/nein) und kann jeden globalen Wert überschreiben oder wieder auf „globale Einstellung“ stellen. Änderungen gelten sofort. |
+| FR-70 | **Arbeitsbereich des Projekts.** Drei Bereiche: *Live-Sitzung* (Live-Transkription mit Souffleur wie §17/§20, dazu ein optionaler Sitzungstitel), *Nachbereitung* (Sitzungen des Projekts mit Marken „im Wiki“, „nachbereitet“, „unterbrochen“; Wiki-Ablage, Transkript-Vorschau und KI-Analyse je Sitzung) und *Projekt* (Einstellungen). Nach dem Ende einer Sitzung erscheint die Karte „Wie geht es weiter?“ mit „Ins Wiki speichern“ und „Mit KI nachbereiten“ – beides möglich, in beliebiger Reihenfolge. |
+| FR-71 | **Sitzung ins Wiki speichern.** Dialog mit Titel der Quelle, Vorschau des Zielordners und „Bilder mit übertragen“. Abgelegt wird nach `raw/<JJJJ-MM-TT>_<kurzname>/`: `transkript.md` (byte-gleich), `transcript.json` (ohne den lokalen `source_path`), `markierungen.json`/`markierungen.md` des Souffleurs, `README.md`. Mit Bildern zusätzlich: die Standbilder nach `<assets>/<ordnername>/`, `marks.json` mit Zeitstempel → Bild (Pfad relativ zur Ablage) und `transkript.annotiert.md`, in dem jedes Bild am selben Absatz steht wie im Sitzungsordner. Ein Vermerk `wiki-ablage.json` im Sitzungsordner hält fest, was abgelegt wurde. |
+| FR-72 | **„Immer so speichern“.** Im Dialog wählbar und in den Projekteinstellungen änderbar: Steht das Projekt auf `immer`, geht jede sauber beendete Sitzung nach dem Nachschärfen ohne Nachfrage ins Wiki; das Ergebnis (oder der Fehler) steht in der Karte „Wie geht es weiter?“. Bei `nie` bietet die Karte die Ablage nicht an; sie bleibt über die Nachbereitung erreichbar. |
+| FR-73 | **Nachbereitung ins Wiki.** Die Dokumente einer fertigen KI-Analyse lassen sich nach `<raw-Sitzung>/nachbereitung-ki/<analyse>/` legen – ohne Materialkopie, Skills und Protokoll, mit einer `README.md`, die sie als KI-erzeugt und nicht als Quelle kennzeichnet. Liegt die Sitzung noch nicht im Wiki, wird sie zuerst gespeichert. Mit Bildern verweisen die Dokumente auf die Bilder im Assets-Ordner der Sitzung (keine zweite Kopie), ohne Bilder werden Bildzeilen zu Textverweisen. |
+| FR-74 | **Aufnahme transkribieren (ohne Projekt).** Die Ansicht zeigt nur diesen Weg: Datei(en) im Dialog wählen (der Ordner-Dialog listet dafür die Mediendateien), Speicherort, Optionen, Fortschritt. Je fertiger Aufnahme – auch einer früher schon transkribierten – eine Ergebniskarte mit Pfad, Transkript-Vorschau und „Ordner öffnen“, dazu die deutliche Folgeaktion „Mit KI weiterverarbeiten“; die KI-Analyse wählt die Aufnahme dann als Quelle vor. |
+| FR-75 | **Demo abspielen.** Die Demo zeigt die Live-Ansicht ohne Steuerspalte mit einem Knopf „Demo starten“ (Stoppen, erneut starten). Sie spielt das Beispiel-Meeting gegen das Demo-Wiki ab; es wird nichts aufgenommen, nichts ins Wiki gespeichert und nichts in der Projektliste gemerkt. |
+| FR-76 | **Laufende Sicherung.** Während einer Live-Sitzung schreibt der Aufnahmeprozess in den Sitzungsordner: `sitzung.json` (Zustand, stabile `sitzung_id`, Titel, Sprache/Modell, Aufnahme-Teile mit `start_sample`), `sitzung.journal.jsonl` (jedes Segment sofort und mit `fsync`, jedes Standbild, alle 5 s eine Takt-Zeile), `sitzung.lock` (Lebenszeichen) und `sprecher.json` (Stimmprofile, damit „Sprecher 1/2“ dieselben bleiben). `marks.json` wird atomar geschrieben. Fällt der Server weg, schließt der Aufnahmeprozess geordnet ab (Audio schließen, sichern, Zustand `unterbrochen`). |
+| FR-77 | **Wiederaufnahme.** Nicht sauber beendete Sitzungen erscheinen als Banner auf der Startseite („Projekt öffnen und fortsetzen“) und in der Live-Ansicht des Projekts mit drei Wegen: **Fortsetzen** (`audioscribe live --resume ORDNER`: bisheriges Transkript, Standbilder und Souffleur-Hinweise erscheinen sofort, Zeitleiste, Segment- und Bildnummern laufen weiter, Audio in neue Teil-Dateien, die beim sauberen Ende je Spur zu einer WAV verbunden werden), **Abschließen** (`audioscribe live --finalize ORDNER`: Transkript aus dem Gesicherten ohne Modelle, danach wie gewohnt Nachschärfen) und **Verwerfen** (die Sitzung wird nicht mehr angeboten, die Dateien bleiben liegen). `--titel TEXT` setzt den Sitzungstitel. Verliert der Browser die Verbindung zum Server, zeigt er das an und verbindet sich von selbst wieder. |
+
+### 21.4 Nicht-funktionale Anforderungen
+
+| ID | Anforderung |
+|----|-------------|
+| NFR-25 | **Leitplanke nachweisbar.** Die Wiki-Ablage schreibt nur unter `raw/` und in den Assets-Ordner, nie unter `wiki/`, überschreibt nichts und läuft nur auf Nutzeraktion bzw. gewähltes „immer“; `transkript.md` der Ablage ist byte-gleich zur Sitzung (Tests in `tests/test_wiki_ablage.py`). NFR-21 gilt für das Paket `souffleur/` unverändert. |
+| NFR-26 | **Wiederaufnahme zerstört nichts.** Beim Fortsetzen wird der Bestand zuerst geladen und erst dann geschrieben; eine vorhandene WAV wird nie zum Schreiben geöffnet; das Verbinden der Teile ist streamend und wiederholbar (temporäre Datei + Umbenennen). Sitzungen ohne `--resume` verhalten sich wie bisher. |
+| NFR-27 | **Lebenszeichen ohne neue Abhängigkeit.** Ob eine Sitzung noch läuft, entscheidet die Betriebssystem-Sperre auf `sitzung.lock` (Windows und macOS/Linux, Standardbibliothek); sie verhindert zugleich ein doppeltes Fortsetzen desselben Ordners. |
+| NFR-28 | **Kein Build-Schritt, zugänglich.** Die Oberfläche läuft ohne Node und ohne Fremdbibliothek; `start.ps1`/`start.sh` bleiben unverändert. Hell/Dunkel über einen Satz Tokens (`light-dark()`), Tastaturbedienung, sichtbarer Fokus, `prefers-reduced-motion` wird beachtet, Statusmeldungen über `aria-live`. |
+| NFR-29 | **Tests ohne Rechnerzustand.** Die Tests lesen und schreiben nie die Einstellungen des Rechners (`tests/conftest.py`); Wiederaufnahme, Wiki-Ablage und Projekt-Routen sind ohne Hardware und ohne KI-Dienst geprüft. |
+
+### 21.5 Akzeptanzkriterien
+
+- [ ] Start zeigt die Startseite mit vier Einstiegen; jeder hat eine Kurzhilfe.
+- [ ] Neues Projekt mit vorhandenem Wiki und mit „Neues Wiki anlegen“: Projektdatei liegt
+      unter `<wiki>/.audioscribe/`, das vorhandene Wiki ist sonst unverändert, das neue Wiki
+      ist sofort lesbar (Zustand „Wiki“ mit Seitenzahl).
+- [ ] Projekt schließen und über „Zuletzt geöffnet“ wieder öffnen: Ordner, Wiki-Ablage, KI
+      und Sprache stehen wieder da; eine Sprache im Projekt schlägt die globale, „globale
+      Einstellung“ stellt sie zurück.
+- [ ] Sitzung beenden → „Wie geht es weiter?“ → „Ins Wiki speichern“ mit Bildern: Ordner
+      unter `raw/`, Bilder im Assets-Ordner, `transkript.annotiert.md` zeigt jedes Bild am
+      richtigen Absatz, `transkript.md` byte-gleich, `wiki/` unverändert; ein zweites
+      Speichern hängt `-2` an.
+- [ ] Projekt auf „immer“: die nächste beendete Sitzung liegt ohne Nachfrage im Wiki.
+- [ ] KI-Analyse einer Sitzung → „Nachbereitung ins Wiki speichern“: Dokumente unter
+      `nachbereitung-ki/`, als KI-erzeugt gekennzeichnet, Bildverweise zeigen in die Assets.
+- [ ] „Aufnahme transkribieren“: Datei wählen, transkribieren, Ergebniskarte mit Vorschau,
+      „Mit KI weiterverarbeiten“ führt zur KI-Analyse mit vorgewählter Quelle.
+- [ ] Demo: ein Knopf startet das Beispiel-Meeting, Souffleur-Hinweise erscheinen, im
+      Demo-Wiki entsteht nichts.
+- [ ] Absturztest auf dem Gerät: Server während einer Aufnahme beenden, neu starten →
+      Banner; „Fortsetzen“ zeigt das bisherige Transkript und nimmt weiter auf, nach dem
+      Stopp gibt es je Spur eine WAV und das Nachschärfen läuft durch; „Abschließen“
+      schreibt das Transkript ohne weitere Aufnahme.
+- [ ] `pytest` grün: `tests/test_projekt.py`, `tests/test_wiki_ablage.py`,
+      `tests/test_projekt_ui.py`, `tests/test_wiederaufnahme.py` sowie die bestehenden
+      Dateien aus §20.5.

@@ -12,8 +12,9 @@ unter Windows. Auf dem Mac gibt es kein ``/mnt/c`` - Pfade bleiben, wie der Find
 
 Sicherheit: Das Blaettern ist absichtlich nicht auf ein Wurzelverzeichnis beschraenkt -
 genau das ist das Feature. Abgesichert wird es dadurch, dass der Server ausschliesslich
-an ``127.0.0.1`` bindet (NFR-8), das Listing rein lesend ist und - anders als die
-Review-Oberflaeche - **keinerlei Dateiinhalte** ausliefert.
+an ``127.0.0.1`` bindet (NFR-8) und das Listing rein lesend ist: es nennt Ordner und
+Mediendateien, liefert aber **keine Dateiinhalte** aus (die Vorschau fertiger Transkripte ist
+eine eigene, eng gefasste Route in ``ui/server.py``).
 """
 
 from __future__ import annotations
@@ -42,7 +43,8 @@ _HIDDEN_ATTRS = 0x2 | 0x4
 
 def _clean(text: str) -> str:
     """Nutzereingabe entzwirbeln: Leerraum und die Anfuehrungszeichen aus dem Explorer weg."""
-    return (text or "").strip().strip('"').strip("'")
+    # NUL-Zeichen sind in keinem Pfad gueltig und liessen Path.resolve() mit ValueError scheitern.
+    return (text or "").replace("\x00", "").strip().strip('"').strip("'")
 
 
 def windows_to_wsl(text: str) -> str:

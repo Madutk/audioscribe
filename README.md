@@ -9,11 +9,12 @@ Modellgewichte.
 
 | Funktion | Kurz gesagt | Details |
 |---|---|---|
-| Offline-Transkription | Datei oder ganzer Ordner → `transkript.md` (+ PDF), Sprecher getrennt | [Kommandozeile](#kommandozeile), [Oberfläche](#browser-oberfläche) |
+| Projekte | Ein Projekt je LLM-Wiki mit eigenen Ordnern und Einstellungen; beendete Sitzungen gehen als neue Quelle ins Wiki | [→](#projekte-und-ablage-ins-wiki) |
+| Aufnahme transkribieren | Audio- oder Videodatei → `transkript.md` (+ PDF), Sprecher getrennt | [Kommandozeile](#kommandozeile), [Oberfläche](#browser-oberfläche) |
 | Bildwechsel-Erkennung | Bei Bildschirmaufnahmen je Folien-/Fensterwechsel ein Standbild im Transkript | [→](#bildwechsel-automatisch-erkennen) |
 | Bild-Annotation | Standbilder von Hand markieren und ins Transkript einfügen | [→](#bild-annotation-von-hand) |
 | KI-Analyse | Claude-Agent macht aus Transkript und Bildern Prozessdoku, Prozessbild, BPMN | [→](#ki-analyse-per-claude-agent) |
-| Live-Transkription | Monitor, System-Audio und Mikrofon live mitschneiden (Windows, macOS) | [→](#live-transkription-windows-und-macos) |
+| Live-Transkription | Monitor, System-Audio und Mikrofon live mitschneiden (Windows, macOS); nach einem Absturz fortsetzbar | [→](#live-transkription-windows-und-macos), [Wiederaufnahme](#absturzsicherung-und-wiederaufnahme) |
 | Souffleur | Live-Abgleich des Gesagten mit einem LLM-Wiki: Widersprüche, offene Punkte, Fragen mit Antwort aus dem Wiki, Essenz der letzten Minuten – nur für den Moderator | [→](#souffleur-live-abgleich-mit-dem-wiki) |
 
 **Technik:** WhisperX mit faster-whisper `large-v3` (Transkription) → wav2vec2
@@ -100,8 +101,8 @@ Kommt das Repo als ZIP statt per `git clone`, blockt Gatekeeper die Datei einmal
 **Berechtigungen:** Beim ersten „Aufnahme starten“ fragt macOS nach **Mikrofon** und
 **Bildschirmaufnahme** (letztere liefert über ScreenCaptureKit auch das System-Audio).
 Beide gehören der *startenden App* (Terminal, iTerm, VS Code), nicht „Python“, und die
-Bildschirmaufnahme wirkt erst, nachdem diese App neu gestartet wurde. `doctor` und der
-Live-Reiter sagen, was fehlt und wo es steht (Systemeinstellungen › Datenschutz &
+Bildschirmaufnahme wirkt erst, nachdem diese App neu gestartet wurde. `doctor` und die
+Live-Ansicht sagen, was fehlt und wo es steht (Systemeinstellungen › Datenschutz &
 Sicherheit).
 
 **Was wo rechnet:** faster-whisper/CTranslate2 kennt kein Metal und liefe auf dem Mac nur
@@ -114,40 +115,142 @@ zum Vergleich. Die Umgebung heißt `.venv-mac` – aus demselben Grund wie `.ven
 
 ## Browser-Oberfläche
 
-`audioscribe ui` startet eine schlanke lokale Oberfläche (nur `localhost`, kein Upload) mit
-vier Reitern. Alle Läufe laufen **im Server weiter**, der Browser-Tab darf geschlossen
-werden; beendet wird mit „Abbrechen“ oder Strg+C im Terminal.
+`audioscribe ui` startet eine schlanke lokale Oberfläche (nur `localhost`, kein Upload).
+Alle Läufe laufen **im Server weiter**, der Browser-Tab darf geschlossen werden; beendet
+wird mit „Abbrechen“ oder Strg+C im Terminal.
 
 ```bash
 .venv/bin/audioscribe ui                      # http://127.0.0.1:8766
 .venv/bin/audioscribe ui --port 9000 --no-browser
 ```
 
-**Einstellungen** – die drei Standardordner für alle Reiter: Eingangsordner,
-Ausgabeordner Transkription (gemeinsam für Offline und Live) und Ausgabeordner Analysen.
-Pfade aus dem Explorer (`C:\Users\…`) lassen sich direkt einfügen; „Wählen“ öffnet einen
-Ordner-Browser mit Schnellzielen (Laufwerke, Home, Desktop, Downloads, Videos). Alle
-Einstellungen werden **serverseitig gemerkt** und überleben Neustart und Adresswechsel.
-Die Karte **Umgebung** zeigt die Prüfzeilen von `audioscribe doctor` (ffmpeg, Gerät,
-WhisperX, HF-Token, Live-Geräte) direkt in der Seite.
+Die Oberfläche beginnt auf der **Startseite** mit vier Einstiegen; jede Karte hat unter
+„Worum geht es?“ eine kurze Erklärung.
 
-**Offline Transcription** – Stapelverarbeitung des Eingangsordners. Die Dateiliste zeigt
-alle Medien mit Länge und Größe; vorausgewählt sind die noch offenen („Alle“, „Nur offene“,
-„Keine“). Optionen: Modell, Sprache, Gerät, Sprecher-Trennung, Bildwechsel-Erkennung.
-Je Datei ein Fortschrittsbalken, dazu Gesamtbalken und **Restzeit** (geschätzt aus den
-bereits fertigen Dateien, erscheint also ab der zweiten). Schlägt eine Datei fehl, läuft
-der Stapel weiter; das Protokoll klappt dann von selbst auf.
+| Einstieg | Wofür | Was du danach siehst |
+|---|---|---|
+| **Neues Projekt** | Meetings mit Souffleur begleiten und ins LLM-Wiki überführen | Assistent in drei Schritten, dann der Arbeitsbereich des Projekts |
+| **Projekt öffnen** | Ein vorhandenes Projekt weiterführen | Liste „Zuletzt geöffnet“ oder Wahl des Wiki-Ordners |
+| **Aufnahme transkribieren** | Eine einzelne Audio- oder Videodatei in Text umwandeln, ohne Projekt | Nur die Transkription, dazu die KI-Analyse als nächster Schritt |
+| **Demo abspielen** | Vorführung mit Beispiel-Meeting und Beispiel-Wiki | Live-Ansicht mit einem Knopf „Demo starten“ |
 
-**Live Transcription** – siehe [Live-Transkription](#live-transkription-nur-windows).
+Der Kopf zeigt, wo du bist (Projektname, „Aufnahme transkribieren“ oder „Demo“); der Knopf
+daneben führt zurück zur Startseite. Läuft noch eine Sitzung, Transkription oder Analyse,
+bleibt der Wechsel gesperrt, bis sie beendet ist. Der Server merkt sich, was geöffnet ist:
+Ein Neuladen der Seite ändert nichts, nach einem Neustart von AudioScribe beginnst du wieder
+auf der Startseite.
 
-**KI-Analyse** – siehe [KI-Analyse](#ki-analyse-per-claude-agent).
+**Neues Projekt** – der Assistent fragt:
 
-Die Reiter sind auch per Adresse erreichbar (`#trans`, `#live`, `#ana`, `#set`). Der Knopf
-oben rechts schaltet das Design (System / Hell / Dunkel).
+1. **Wiki:** Projektname und Ordner des LLM-Wikis. Entweder ein vorhandenes Wiki verknüpfen
+   (es wird sofort geprüft: Name, Seiten, Glossar) oder ein neues anlegen lassen – dann
+   entsteht im gewählten Ordner das Gerüst aus `raw/`, `wiki/` mit Startseiten und Glossar.
+2. **Ordner:** der **Ordner für Sitzungen** (Mitschnitte, Transkripte, Standbilder und
+   KI-Analysen; vorgeschlagen wird `<wiki>-sitzungen` neben dem Wiki, weil Mitschnitte groß
+   sind) und der **Ordner für Bilder im Wiki** (Assets; vorgeschlagen `raw/assets`). Dazu,
+   was nach einer Sitzung geschehen soll: nachfragen, immer ins Wiki speichern oder nicht
+   anbieten.
+3. **KI und Sprache:** Vorgabe sind die globalen Einstellungen; hier legst du nur fest, was
+   für dieses Projekt anders sein soll.
+
+**Im Projekt** gibt es drei Bereiche:
+
+- **Live-Sitzung** – Mitschnitt mit Transkript, Screenshots und Souffleur, siehe
+  [Live-Transkription](#live-transkription-windows-und-macos) und
+  [Souffleur](#souffleur-live-abgleich-mit-dem-wiki). Nach dem Stopp erscheint die Karte
+  **„Wie geht es weiter?“**: „Ins Wiki speichern“ und/oder „Mit KI nachbereiten“.
+- **Nachbereitung** – alle Sitzungen des Projekts mit Marken (*im Wiki*, *nachbereitet*,
+  *unterbrochen*). Je Sitzung: ins Wiki speichern, Transkript ansehen, die
+  [KI-Analyse](#ki-analyse-per-claude-agent) starten und deren Ergebnis ebenfalls ins Wiki
+  legen.
+- **Projekt** – Name, Ordner, Wiki-Ablage sowie KI und Sprache dieses Projekts.
+
+**Aufnahme transkribieren** – „Dateien wählen“ öffnet einen Dialog, der die Audio- und
+Videodateien eines Ordners zeigt; weitere Dateien desselben Ordners lassen sich danach
+ankreuzen. Dann Speicherort und Optionen (Modell, Sprache, Gerät, Sprecher-Trennung,
+Bildwechsel-Erkennung). Je Datei ein Fortschrittsbalken, dazu Gesamtbalken und **Restzeit**
+(geschätzt aus den bereits fertigen Dateien, erscheint also ab der zweiten). Schlägt eine
+Datei fehl, läuft der Rest weiter; das Protokoll klappt dann von selbst auf. Je fertiger
+Aufnahme – auch einer früher schon transkribierten – erscheint eine Ergebniskarte mit dem
+Speicherort, „Transkript ansehen“ und „Ordner öffnen“. Darunter führt **„Mit KI
+weiterverarbeiten“** in die KI-Analyse; die Aufnahme ist dort schon als Quelle gewählt.
+
+**Demo abspielen** – spielt das Beispiel-Meeting aus `demo/llm-wiki` ab, als liefe es
+gerade; der Souffleur gleicht es mit dem Demo-Wiki ab. Es wird nichts aufgenommen und nichts
+ins Wiki geschrieben (die Demo-Sitzung liegt nur unter `~/.cache/audioscribe/demo`).
+
+**Einstellungen** gibt es auf zwei Ebenen:
+
+- **Global** (Zahnrad oben rechts): KI-Dienst, Modell für den Souffleur, Modell für die
+  KI-Analyse und Sprache der Aufnahmen. Sie gelten für alle Projekte, die nichts Eigenes
+  festlegen, und für „Aufnahme transkribieren“. Die Karte **Umgebung** zeigt die Prüfzeilen
+  von `audioscribe doctor` (ffmpeg, Gerät, WhisperX, HF-Token, Live-Geräte) direkt in der
+  Seite.
+- **Je Projekt** (Bereich „Projekt“): Jeder dieser Werte lässt sich überschreiben oder
+  wieder auf „Globale Einstellung“ stellen.
+
+Änderungen gelten sofort. Globale Einstellungen und die Liste der zuletzt geöffneten Projekte
+liegen auf dem Rechner (Windows `%APPDATA%\audioscribe\einstellungen.json`, macOS
+`~/Library/Application Support/audioscribe/`), die Projekteinstellungen im Wiki-Ordner.
+Pfade aus dem Explorer (`C:\Users\…`) lassen sich überall direkt einfügen; „Wählen“ öffnet
+einen Ordner-Browser mit Schnellzielen (Laufwerke, Home, Desktop, Downloads, Videos).
+
+Die Ansichten sind per Adresse erreichbar (`#/`, `#/projekt/live`,
+`#/projekt/nachbereitung`, `#/projekt/einstellungen`, `#/datei`, `#/datei/ki`, `#/demo`,
+`#/einstellungen`); passt eine Adresse nicht zu dem, was gerade geöffnet ist, landest du auf
+der passenden Startansicht. Der Knopf oben rechts schaltet das Design (System / Hell /
+Dunkel).
 
 **Unter WSL** die Adresse im Windows-Browser öffnen; WSL2 leitet `127.0.0.1` durch. Pfade
 werden in beide Richtungen umgesetzt (`C:\Users\…` ↔ `/mnt/c/Users/…`). Medien auf dem
 WSL-Dateisystem werden spürbar schneller gelesen als unter `/mnt/c`.
+
+---
+
+## Projekte und Ablage ins Wiki
+
+Ein Projekt gehört zu genau **einem LLM-Wiki** – einem Markdown-Ordner mit `wiki/` (die
+Seiten) und `raw/` (die Rohquellen). Die Projekteinstellungen liegen im Wiki selbst und
+ziehen mit ihm um (anderer Rechner, Git); die Seiten unter `wiki/` verändert AudioScribe nie.
+
+```
+mein-wiki/                          # LLM-Wiki = Projekt
+  .audioscribe/projekt.json         # Projekteinstellungen (Pfade relativ, wo möglich)
+  wiki/                             # Wiki-Seiten – werden nur gelesen (Souffleur)
+  raw/                              # Rohquellen – hier legt AudioScribe Sitzungen ab
+    2026-10-06_workshop-reisebuchung/
+      transkript.md                 # Wortlaut unverändert (byte-gleiche Kopie)
+      transcript.json               # dasselbe maschinenlesbar
+      transkript.annotiert.md       # mit Bildern an der passenden Stelle (nur mit Bildern)
+      marks.json                    # Zeitstempel → Bild (nur mit Bildern)
+      markierungen.json / .md       # Markierungen des Souffleurs
+      README.md
+      nachbereitung-ki/<analyse>/   # optional: Dokumente der KI-Analyse, als KI-erzeugt gekennzeichnet
+    assets/                         # Assets-Ordner (Vorschlag) für die Bilder
+      2026-10-06_workshop-reisebuchung/0001_00-01-23.jpg …
+mein-wiki-sitzungen/                # Ordner für Sitzungen (Vorschlag: neben dem Wiki)
+  live-2026-10-06_14-30-05/         # Mitschnitt, Transkript, frames/, Begleitdateien
+  analysen/<prozessname>/           # Ergebnisse der KI-Analyse
+```
+
+**Ins Wiki speichern** (Karte „Wie geht es weiter?“ nach der Sitzung oder Bereich
+„Nachbereitung“): Du vergibst einen Titel – daraus und aus dem Datum entsteht der
+Ordnername – und entscheidest, ob die Bilder mitgehen. Mit Bildern werden die Standbilder
+in den Assets-Ordner kopiert, und `transkript.annotiert.md` verweist an derselben Stelle
+auf jedes Bild wie im Sitzungsordner (`![Bild #0001 – 00:01:23](../assets/…/0001_00-01-23.jpg)`).
+„Künftig immer so speichern“ stellt das Projekt auf **immer**: Jede beendete Sitzung geht
+dann nach dem Nachschärfen ohne Nachfrage ins Wiki (änderbar im Bereich „Projekt“).
+
+**Nachbereitung ins Wiki:** Das Ergebnis einer fertigen KI-Analyse lässt sich unter
+`nachbereitung-ki/` zur Sitzung legen. Die Dokumente sind dort als **KI-erzeugt** und nicht
+als Quelle gekennzeichnet; Bildverweise zeigen auf die Bilder im Assets-Ordner. Liegt die
+Sitzung noch nicht im Wiki, wird sie dabei zuerst gespeichert.
+
+Die Ablage ist **rein anhängend**: Es wird nichts überschrieben (ein zweites Speichern
+hängt `-2` an), geschrieben wird nur nach `raw/` und in den Assets-Ordner, und nur, wenn du
+es auslöst oder „immer“ gewählt hast. Was aus einer Quelle im Wiki wird, entscheidet dessen
+eigener Ingest- bzw. Lint-Prozess. Die KI-Analyse arbeitet weiter auf dem Sitzungsordner,
+nicht auf der Kopie im Wiki.
 
 ---
 
@@ -286,11 +389,16 @@ Fehlen `--name` oder `--out`, fragt der Befehl nach. Weitere Schalter: `--no-ski
 `--skills-dir PFAD` (Default `~/.claude/skills`, rekursiv), `--model` (Default
 `claude-opus-5`), `--max-turns N`, `--no-bash`, `--no-prozessbild`, `--no-bpmn`.
 
-**In der Oberfläche** (Reiter „KI-Analyse“): fertige Transkription aus dem Ausgabeordner
-wählen, Prozessname und Kontext eingeben, Skills ankreuzen. Der Ausgabeordner kommt aus
-den Einstellungen. Der Fortschritt zeigt den Plan des Agenten als Schrittliste, den aktiven
-Skill, angesehene Standbilder und geschriebene Dokumente. Einen Prozentwert gibt es bewusst
-nicht; ergänzt der Agent Schritte, läuft der Balken auch zurück.
+**In der Oberfläche:** im Projekt der Bereich „Nachbereitung“ (Sitzung wählen), bei
+„Aufnahme transkribieren“ die Lasche „KI-Analyse“ (fertige Transkription wählen). Dann
+Prozessname und Kontext eingeben, Skills ankreuzen. Im Projekt landen die Ergebnisse unter
+`<Sitzungsordner>/analysen/<prozessname>/`, ohne Projekt im Ausgabeordner, den die Karte
+„Optionen“ zeigt. Das vorgewählte Modell kommt aus den Einstellungen. Der Fortschritt zeigt
+den Plan des Agenten als Schrittliste, den aktiven Skill, angesehene Standbilder und
+geschriebene Dokumente. Einen Prozentwert gibt es bewusst nicht; ergänzt der Agent Schritte,
+läuft der Balken auch zurück. Im Projekt lässt sich das fertige Ergebnis mit
+„Nachbereitung ins Wiki speichern“ zur Sitzung ins Wiki legen
+(siehe [Projekte](#projekte-und-ablage-ins-wiki)).
 
 **Abrechnung:** Die Anbindung läuft über das
 [Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk) und nutzt die Anmeldung von
@@ -390,7 +498,7 @@ System-Audio, sounddevice das Mikrofon – ohne BlackHole oder andere Treiber); 
 nur das WAV-Replay. Designentscheidungen: PRD §17 und §19.
 
 ```powershell
-.\start.ps1                                                  # Oberfläche, Reiter „Live Transcription“
+.\start.ps1                                                  # Oberfläche: Projekt öffnen › „Live-Sitzung“
 .venv-win\Scripts\audioscribe.exe doctor                     # Zeile „Live“: Mikrofone, Loopback, Monitore
 .venv-win\Scripts\audioscribe.exe live --list-devices        # ohne Oberfläche: Geräte, Monitore, Fenster (HWND)
 .venv-win\Scripts\audioscribe.exe live --monitor 1 --mic 23  # Ende mit Strg+C oder "stop" + Enter
@@ -399,28 +507,34 @@ nur das WAV-Replay. Designentscheidungen: PRD §17 und §19.
 ```
 
 ```bash
-./start.sh                                                   # macOS: Oberfläche, Reiter „Live Transcription“
+./start.sh                                                   # macOS: Oberfläche, Projekt öffnen › „Live-Sitzung“
 .venv-mac/bin/audioscribe live --list-devices                # Mikrofone, „System-Audio (ScreenCaptureKit)“, Monitore, Fenster
 .venv-mac/bin/audioscribe live --monitor 1                   # Ende mit Strg+C oder "stop" + Enter
 .venv-mac/bin/audioscribe refine output/live-2026-09-19_14-30-05
 ```
 
-**Im Reiter:** Bildquelle wählen (Monitor mit Vorschaubild, Anwendungsfenster oder „nur
-Ton“), Mikrofon und System-Audio wählen, „Aufnahme starten“. Oben laufen Laufzeit,
-**Verzögerung** (Ende des Gesprochenen bis zur Anzeige) und **Rückstand** mit. Rückstand ist
-fertig gesprochenes Audio, das auf die Transkription *wartet*; der Abschnitt, der gerade
-gerechnet wird, zählt nicht mit. Screenshots erscheinen rechts als Thumbnails. Gespeichert
-wird im Ausgabeordner Transkription aus den Einstellungen:
+**In der Oberfläche** (Projekt › „Live-Sitzung“): optional einen **Sitzungstitel** vergeben
+(er benennt später den Ordner im Wiki), Bildquelle wählen (Monitor mit Vorschaubild,
+Anwendungsfenster oder „nur Ton“), Mikrofon und System-Audio wählen, „Aufnahme starten“.
+Oben laufen Laufzeit, **Verzögerung** (Ende des Gesprochenen bis zur Anzeige) und
+**Rückstand** mit. Rückstand ist fertig gesprochenes Audio, das auf die Transkription
+*wartet*; der Abschnitt, der gerade gerechnet wird, zählt nicht mit. Screenshots erscheinen
+rechts als Thumbnails. Gespeichert wird im Ordner für Sitzungen des Projekts (auf der
+Kommandozeile unter `--output`, Default `output/`):
 
 ```
-output/live-2026-09-19_14-30-05/
+<Sitzungsordner>/live-2026-09-19_14-30-05/
   transkript.md  transcript.json  transkript.annotiert.md  marks.json  frames/
   transkript.txt                                  # reiner Text ohne Zeitstempel/Sprecher (WER-Vergleich)
   transkript.live.md  transcript.live.json  transkript.live.txt   # Live-Fassung (nach dem Stopp)
   audio/mikrofon.wav  audio/system.wav            # 16 kHz mono
   bilanz.json                                     # Fazit: Rechendauer und Latenz (live + nachschaerfen)
   diagnose.jsonl                                  # je Abschnitt und Vorschau eine Zeile (Zeiten, Qualitaet)
+  sitzung.json  sitzung.journal.jsonl  sitzung.lock  sprecher.json   # Absturzsicherung (siehe unten)
 ```
+
+Nach dem Stopp zeigt die Karte **„Wie geht es weiter?“** die beiden nächsten Schritte: „Ins
+Wiki speichern“ und „Mit KI nachbereiten“ (siehe [Projekte](#projekte-und-ablage-ins-wiki)).
 
 **Zwei Fallstricke:** Mit Lautsprechern statt Headset hört das Mikrofon die Gegenseite mit,
 dann stehen Textstellen doppelt. Und bei Monitoraufnahme gehört die AudioScribe-Oberfläche
@@ -450,7 +564,7 @@ und Durcheinanderreden trennt erst das Nachschärfen sauber.
 **Nach dem Stopp** bleibt die Live-Fassung als `transkript.live.md` erhalten. Mit „nach
 Stopp nachschärfen“ läuft die Offline-Pipeline (Alignment, Diarisierung der System-Spur)
 über den Mitschnitt und ersetzt `transkript.md`; die Screenshots bleiben. Ein zweiter Klick
-auf Stoppen bricht hart ab. Danach zeigt der Reiter ein **Fazit**: Aufnahmedauer, Ladezeit,
+auf Stoppen bricht hart ab. Danach zeigt die Ansicht ein **Fazit**: Aufnahmedauer, Ladezeit,
 Rechenzeit und Tempo (Rechenzeit je Audiosekunde, nur das Dekodieren; daneben „inkl.
 Vorschau“), Verzögerung (Ø, Median, max), Abschnitte (davon zusammengelegt bzw. sparsam
 dekodiert), höchster Rückstand und Zeit im Aufholmodus, nach dem Nachschärfen die Dauer je
@@ -515,11 +629,58 @@ davor liegt.
 
 ---
 
+## Absturzsicherung und Wiederaufnahme
+
+Eine Live-Sitzung wird laufend gesichert. Stürzt AudioScribe ab, fällt der Strom aus oder
+wird das Serverfenster geschlossen, geht höchstens verloren, was in diesem Moment noch nicht
+transkribiert war – und auch das steht noch im Mitschnitt.
+
+Beim nächsten Start zeigt die Startseite ein Banner **„Unterbrochene Sitzung …“**; ein Klick
+öffnet das Projekt. In der Live-Ansicht stehen dann drei Wege zur Wahl:
+
+| Weg | Was geschieht |
+|---|---|
+| **Fortsetzen** | Das bisherige Transkript, die Standbilder und die Hinweise des Souffleurs erscheinen sofort wieder; die Aufnahme läuft mit den links gewählten Geräten im selben Sitzungsordner weiter. Zeitstempel, Abschnitts- und Bildnummern zählen fort. |
+| **Abschließen** | Keine weitere Aufnahme: Aus dem Gesicherten entsteht das Transkript, danach läuft – wenn eingeschaltet – das Nachschärfen über den Mitschnitt. Anschließend wie nach jeder Sitzung: ins Wiki speichern, nachbereiten. |
+| **Verwerfen** | Die Sitzung wird nicht mehr angeboten. Mitschnitt und bisheriges Transkript bleiben im Sitzungsordner liegen. |
+
+Eine Aufnahme startet nie von selbst – auch „Fortsetzen“ ist ein bewusster Klick. Verliert
+nur der Browser die Verbindung (AudioScribe wurde beendet), zeigt die Seite einen Hinweis
+und verbindet sich von selbst wieder.
+
+```powershell
+.venv-win\Scripts\audioscribe.exe live --resume output\live-2026-10-06_09-00-00 --mic 23   # fortsetzen
+.venv-win\Scripts\audioscribe.exe live --finalize output\live-2026-10-06_09-00-00          # ohne Aufnahme abschließen
+.venv-win\Scripts\audioscribe.exe live --monitor 1 --titel "Workshop Reisebuchung"          # Sitzungstitel setzen
+```
+
+<details>
+<summary>Was gesichert wird und wo die Grenzen liegen</summary>
+
+Im Sitzungsordner liegen dafür `sitzung.json` (Zustand `laeuft`, `unterbrochen`, `beendet`
+oder `verworfen`, Titel, Sprache, Modell, Aufnahme-Teile), `sitzung.journal.jsonl` (jeder
+fertige Abschnitt sofort, jedes Standbild, alle paar Sekunden die Sitzungszeit),
+`sitzung.lock` (zeigt, ob der Aufnahmeprozess noch lebt) und `sprecher.json` (Stimmprofile,
+damit „Sprecher 1/2“ nach dem Fortsetzen dieselben bleiben). Der Mitschnitt wird fortlaufend
+geschrieben und ist auch nach einem Absturz lesbar. Beim Fortsetzen entstehen neue
+Teil-Dateien (`audio/mikrofon.teil2.wav` …); eine vorhandene Aufnahme wird nie überschrieben.
+Nach dem sauberen Ende werden die Teile je Spur wieder zu einer WAV zusammengesetzt.
+
+Grenzen: Was beim Absturz gesprochen, aber noch nicht transkribiert war, fehlt im
+Live-Transkript; das Nachschärfen holt es aus dem Mitschnitt nach. Aussagen, die der
+Souffleur noch nicht beurteilt hatte, werden nicht nachträglich beurteilt. Ein abgespieltes
+Transkript (Demo, Testmodus) wird nicht fortgesetzt. `--resume` und `--finalize` lehnen
+Sitzungen ab, die schon beendet oder verworfen sind oder noch in einem anderen Prozess
+laufen.
+</details>
+
+---
+
 ## Souffleur: Live-Abgleich mit dem Wiki
 
 Der Souffleur hört während einer Live-Sitzung über das Transkript mit, gleicht das Gesagte
-mit einem **LLM-Wiki** (Markdown-Ordner, nur lesend) ab und zeigt **nur dem Moderator**
-Hinweise in der rechten Spalte des Live-Reiters:
+mit dem **LLM-Wiki des Projekts** (Markdown-Ordner, nur lesend) ab und zeigt **nur dem
+Moderator** Hinweise in der rechten Spalte der Live-Ansicht:
 
 | Hinweis | Was er bedeutet |
 |---|---|
@@ -531,26 +692,27 @@ Hinweise in der rechten Spalte des Live-Reiters:
 Belegtes und KI-Erzeugtes bleiben sichtbar getrennt: Wiki-Zitate tragen eine Fundstelle,
 alles, was die KI selbst formuliert, ist mit „KI“ markiert (gestrichelter Rahmen). Der
 Wortlaut des Transkripts wird nie verändert; Markierungen liegen als Begleitdateien daneben.
-Das Wiki wird ausschließlich gelesen.
+Die Wiki-Seiten werden ausschließlich gelesen.
 
-**1. Wiki verknüpfen** (Reiter *Einstellungen*, Karte *Wiki (Souffleur)*): Pfad zum
-Wiki-Ordner eintragen oder wählen. Direkt darunter steht das Prüfergebnis: *kein Wiki
-verknüpft*, *verbunden* (Name, Seiten, Glossar-Einträge, Lesezeitpunkt) oder *nicht
-erreichbar* mit Grund. Der Pfad bleibt gespeichert und gilt ab der nächsten Sitzung. Erwartet
-wird ein Markdown-Ordner im Karpathy-Muster (`index.md`, `wiki/` mit den Seiten, `raw/` mit
-Quellen, `log.md`); ohne `wiki/` werden alle `*.md` unter dem Pfad gelesen. Ein Glossar
-bestätigter Fehlerkennungen (Datei `glossar.md` oder eine Seite mit „Glossar“ in der
-Überschrift, Tabelle `Fehlerkennung | Korrekt | Kontext`) nutzt der Souffleur automatisch,
-damit verstümmelte Fachbegriffe keine falschen Widersprüche auslösen. Dazu das
-**KI-Modell** (neutrale Stufen, Standard „schnell“) und der **Übergabeordner** (siehe 4).
+**1. Wiki verknüpfen:** Das Wiki gehört zum **Projekt** – du gibst es beim Anlegen an
+(siehe [Browser-Oberfläche](#browser-oberfläche)). Im Bereich „Projekt“ steht das
+Prüfergebnis: *verbunden* (Name, Seiten, Glossar-Einträge, Lesezeitpunkt) oder *nicht
+erreichbar* mit Grund. Änderungen am Wiki gelten ab der nächsten Sitzung. Erwartet wird ein
+Markdown-Ordner im Karpathy-Muster (`wiki/` mit den Seiten, `raw/` mit Quellen); ohne
+`wiki/` werden alle `*.md` unter dem Pfad gelesen. Ein Glossar bestätigter Fehlerkennungen
+(Datei `glossar.md` oder eine Seite mit „Glossar“ in der Überschrift, Tabelle
+`Fehlerkennung | Korrekt | Kontext`) nutzt der Souffleur automatisch, damit verstümmelte
+Fachbegriffe keine falschen Widersprüche auslösen. KI-Dienst und **Modell für den
+Souffleur** stehen in den Einstellungen (global, je Projekt überschreibbar).
 
-**2. Souffleur starten:** Im Live-Reiter läuft er automatisch mit jeder Sitzung
+**2. Souffleur starten:** In der Live-Ansicht läuft er automatisch mit jeder Sitzung
 (Schalter in der Souffleur-Karte; „Ausblenden“ oder Alt+S klappt die Spalte samt
 Markierungen weg, etwa beim Bildschirmteilen). Die Statuszeile zeigt, mit welchem Wiki
-abgeglichen wird. Ohne Wiki oder ohne KI-Dienst läuft die Transkription normal weiter; der
-Souffleur meldet seinen Zustand („ohne Wiki – nur Fragen und Essenz“, „KI nicht verfügbar“).
+abgeglichen wird. Ohne lesbares Wiki oder ohne KI-Dienst läuft die Transkription normal
+weiter; der Souffleur meldet seinen Zustand („ohne Wiki – nur Fragen und Essenz“, „KI nicht
+verfügbar“).
 
-**3. Transkript abspielen (Testmodus, ohne Audio):** Im Live-Reiter die Kachel
+**3. Transkript abspielen (Testmodus, ohne Audio):** In der Live-Ansicht die Kachel
 *Transkript abspielen* wählen, eine gespeicherte `transcript.json`, ein `transkript.md` oder
 einen ganzen Sitzungsordner angeben, Tempo 1× bis 20× wählen, *Abspielen starten*. Die
 Absätze erscheinen zu ihren Zeitstempeln, als kämen sie live; Souffleur, Sitzungsordner und
@@ -566,11 +728,11 @@ Fazit verhalten sich wie im Betrieb. Auf der Kommandozeile:
 `souffleur-protokoll.md` (Abnahmetabelle: Zeitstempel, Art, Aussage, Fundstelle, Wiki-Zitat,
 KI-Text, Verzögerung „Hinweis nach“ inklusive Anteil des KI-Prozessstarts, reale
 Verzögerung), `souffleur-diagnose.jsonl` (je Fenster: Treffer, Suchzeit, KI-Zeiten,
-verworfene Befunde), `souffleur-essenz.jsonl` (Essenzen, KI-erzeugt). Nach dem Ende liegt
-die **Übergabe ans Wiki** im Übergabeordner (`<Ausgabeordner>/wiki-uebergabe/<sitzung>/`):
-unveränderte Kopie des Transkripts, `markierungen.json`, `markierungen.md`, `README.md`.
-Die Übergabe ist rein anhängend und liegt nie im Wiki-Pfad; was daraus im Wiki wird,
-entscheidet dessen Lint-Prozess.
+verworfene Befunde), `souffleur-essenz.jsonl` (Essenzen, KI-erzeugt). Ins Wiki gelangen
+die Markierungen zusammen mit dem Transkript über **„Ins Wiki speichern“**
+(`markierungen.json`, `markierungen.md` in der Quelle unter `raw/`, siehe
+[Projekte](#projekte-und-ablage-ins-wiki)). Die Essenzen gehen nicht mit – sie sind
+KI-erzeugt und keine Quelle. Einen eigenen Übergabeordner gibt es nicht mehr.
 
 <details>
 <summary>Wie der Abgleich arbeitet, KI-Dienst, Verzögerung</summary>
@@ -583,9 +745,10 @@ Aussage muss wörtlich im Segment stehen, das Zitat wörtlich im gelieferten Aus
 Widerspruch ohne Zitat wird verworfen, Dubletten werden unterdrückt, unsichere Befunde
 nur mit Einstellung `souffleur_sensibel`. Erst dann wird markiert.
 
-**KI-Dienst:** austauschbar über `AUDIOSCRIBE_SOUFFLEUR_BACKEND` (`claude-agent` nutzt das
-Agent SDK mit der Anmeldung von Claude Code, `attrappe` ist ein regelbasierter Ersatz für
-Tests). Das Modell steht in den Einstellungen; in der Oberfläche heißt es nur „KI“. Jeder
+**KI-Dienst:** austauschbar; in den Einstellungen steht „Claude (Agent SDK)“, das die
+Anmeldung von Claude Code nutzt. `AUDIOSCRIBE_SOUFFLEUR_BACKEND=attrappe` schaltet für Tests
+auf einen regelbasierten Ersatz ohne Netz. Dienst und Modell stehen in den Einstellungen;
+in der Souffleur-Karte selbst heißt es nur „KI“. Jeder
 Aufruf läuft ohne Werkzeuge in einem leeren Arbeitsordner unter `~/.cache/audioscribe/souffleur`,
 Sitzungsdateien des KI-Prozesses werden abgeschaltet bzw. gelöscht: keine Transkript- oder
 Wiki-Auszüge bleiben außerhalb des Sitzungsordners liegen.
@@ -597,11 +760,14 @@ stehen in `souffleur.json` und im Protokoll. Beim Abspielen mit Tempo > 1 sind d
 Sitzungswerte gestreckt, die reale Spalte bleibt vergleichbar. Einen festen Grenzwert gibt
 es noch nicht; als Richtwert gilt: unter 15 s ist ein Hinweis noch im Raum.
 
-**Einstellungen** liegen seit dieser Stufe im Konfigurationsordner der Plattform
+**Einstellungen** der Installation liegen im Konfigurationsordner der Plattform
 (Windows `%APPDATA%\audioscribe\einstellungen.json`, macOS
 `~/Library/Application Support/audioscribe/`); eine ältere `ui-state.json` aus
 `~/.cache/audioscribe` wird beim ersten Start übernommen. `audioscribe doctor` zeigt die
-Zeile „Souffleur“ mit Wiki-Zustand, KI-Backend und Pfad der Einstellungsdatei.
+Zeile „Souffleur“ mit dem Wiki-Zustand der zuletzt geöffneten Projekte, dem KI-Dienst und
+dem Pfad der Einstellungsdatei. `AUDIOSCRIBE_WIKI_DIR` wirkt nur noch, solange kein Projekt
+geöffnet ist (Tests, direkte Aufrufe der Server-Schnittstelle), und belegt den Assistenten
+„Neues Projekt“ vor.
 </details>
 
 ---
@@ -655,7 +821,7 @@ uv sync --extra cu124 --extra review --extra agent   # GPU-Rechner; CPU: --extra
 claude                                               # einmal mit dem Claude-Abo anmelden (für analyze)
 .venv/bin/audioscribe doctor                         # Umgebung prüfen (--json für Maschinen)
 
-# Oberfläche
+# Oberfläche (Startseite: Neues Projekt | Projekt öffnen | Aufnahme transkribieren | Demo)
 .venv/bin/audioscribe ui                             # http://127.0.0.1:8766
 .venv/bin/audioscribe ui --port 9000 --no-browser
 
@@ -682,7 +848,9 @@ claude                                               # einmal mit dem Claude-Abo
 # Live (Windows)
 .venv-win\Scripts\audioscribe.exe live --transcript output\meeting\transcript.json --speed 5   # Souffleur-Testmodus ohne Audio
 .venv-win\Scripts\audioscribe.exe live --list-devices
-.venv-win\Scripts\audioscribe.exe live --monitor 1 --mic 23
+.venv-win\Scripts\audioscribe.exe live --monitor 1 --mic 23 --titel "Workshop Reisebuchung"
+.venv-win\Scripts\audioscribe.exe live --resume output\live-… --mic 23     # unterbrochene Sitzung fortsetzen
+.venv-win\Scripts\audioscribe.exe live --finalize output\live-…            # unterbrochene Sitzung ohne Aufnahme abschließen
 .venv-win\Scripts\audioscribe.exe refine output\live-…
 
 # macOS (Apple Silicon)
@@ -700,10 +868,11 @@ claude                                               # einmal mit dem Claude-Abo
 
 ## Status
 
-Basisstufe gemäß `PRD.md`: eine Datei pro CLI-Aufruf (die Oberfläche arbeitet Ordner
-nacheinander ab), Markdown-Ausgabe mit optionalem PDF, Sprecher als „Sprecher N“ ohne
-Personen-Identifikation. AudioScribe ist die Transkriptions-Basis für die übergeordnete
-Meeting-Protokoll-Pipeline; die Auswertung übernimmt optional der Claude-Agent. Alle
-Anforderungen und Designentscheidungen stehen nummeriert (FR-1 … FR-55) in `PRD.md`; die
-macOS-Portierung (PRD §19) ist implementiert und wartet auf die Validierung auf dem Gerät
-(Akzeptanzkriterien §19.5).
+Basisstufe gemäß `PRD.md`: eine Datei pro CLI-Aufruf (die Oberfläche arbeitet mehrere
+gewählte Dateien nacheinander ab), Markdown-Ausgabe mit optionalem PDF, Sprecher als
+„Sprecher N“ ohne Personen-Identifikation. AudioScribe ist die Transkriptions-Basis für die
+übergeordnete Meeting-Protokoll-Pipeline; die Auswertung übernimmt optional der
+Claude-Agent. Alle Anforderungen und Designentscheidungen stehen nummeriert (FR-1 … FR-77)
+in `PRD.md`. Offen ist jeweils die Abnahme auf dem Gerät: die macOS-Portierung (PRD §19,
+Akzeptanzkriterien §19.5) sowie echte Aufnahme- und Absturztests der Projekte und der
+Wiederaufnahme (PRD §21.5).

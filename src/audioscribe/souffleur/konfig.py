@@ -1,9 +1,9 @@
 """Konfiguration des Souffleurs - und die EINE Stelle, die den Wiki-Pfad liest (K1).
 
-„Projekt“ ist in dieser Stufe die Audioscribe-Installation mit ihrem Einstellungsstand.
-Sollen Projekte später je ein eigenes Wiki bekommen, bekommt ``lade_konfig`` den
-Projektschlüssel und liest den Pfad aus dem Projekt statt aus dem globalen Stand - der Rest
-des Souffleurs merkt davon nichts.
+Mit einem geöffneten Projekt (PRD §21) kommt der Wiki-Pfad aus dem Projekt, KI-Dienst und
+Modell aus den Projekteinstellungen bzw. den globalen Vorgaben (``projekt/einstellungen``).
+Ohne Projekt gilt der Einstellungsstand der Installation, sonst die Umgebung - so arbeiten
+Kommandozeile und Tests weiter wie bisher. Der Rest des Souffleurs merkt davon nichts.
 """
 
 from __future__ import annotations
@@ -11,25 +11,25 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from audioscribe.config import settings
 from audioscribe.souffleur.ki import DEFAULT_MODEL
 
+if TYPE_CHECKING:
+    from audioscribe.projekt.modell import Projekt
+
 # Schluessel im Einstellungsstand der Oberflaeche (ui/state.py)
 KEY_WIKI = "wiki_dir"
-KEY_UEBERGABE = "uebergabe_dir"
 KEY_MODELL = "souffleur_model"
 KEY_BACKEND = "souffleur_backend"
 KEY_AKTIV = "souffleur_aktiv"
 KEY_SENSIBEL = "souffleur_sensibel"
 
-UEBERGABE_ORDNER = "wiki-uebergabe"
-
 
 @dataclass(frozen=True)
 class SouffleurKonfig:
     wiki_dir: Path | None
-    uebergabe_dir: Path
     modell: str = DEFAULT_MODEL
     backend: str = "claude-agent"
     aktiv: bool = True
@@ -55,30 +55,28 @@ def _pfad(raw: object) -> Path | None:
     return None
 
 
-def wiki_pfad(state: Mapping[str, object], projekt: str | None = None) -> Path | None:
-    """Der Wiki-Pfad des Projekts. ``projekt`` ist für die spätere Stufe mit mehreren
-    Projekten vorgesehen; jetzt gilt der Pfad der Installation (Einstellungen, sonst Umgebung)."""
-    del projekt  # Stufe 1: ein Wiki je Installation
+def wiki_pfad(state: Mapping[str, object], projekt: Projekt | None = None) -> Path | None:
+    """Der Wiki-Pfad: der Wiki-Ordner des Projekts, ohne Projekt der Pfad der Installation
+    (Einstellungen, sonst Umgebung)."""
+    if projekt is not None:
+        return Path(projekt.wurzel)
     return _pfad(state.get(KEY_WIKI)) or _pfad(settings.wiki_dir)
 
 
 def lade_konfig(
     state: Mapping[str, object],
     *,
-    projekt: str | None = None,
-    output_dir: Path | None = None,
+    projekt: Projekt | None = None,
     speed: float = 1.0,
 ) -> SouffleurKonfig:
-    """Konfiguration aus dem Einstellungsstand der Oberfläche; Umgebungswerte sind Vorgaben."""
-    ausgabe = Path(output_dir) if output_dir is not None else settings.output_dir
-    uebergabe = _pfad(state.get(KEY_UEBERGABE)) or _pfad(settings.uebergabe_dir) or ausgabe / UEBERGABE_ORDNER
-    modell = state.get(KEY_MODELL)
-    backend = state.get(KEY_BACKEND)
+    """Konfiguration aus Projekt und Einstellungsstand; Umgebungswerte sind Vorgaben."""
+    from audioscribe.projekt.einstellungen import effektiv
+
+    eff = effektiv(state, projekt)
     return SouffleurKonfig(
         wiki_dir=wiki_pfad(state, projekt),
-        uebergabe_dir=uebergabe,
-        modell=modell.strip() if isinstance(modell, str) and modell.strip() else settings.souffleur_model,
-        backend=backend.strip() if isinstance(backend, str) and backend.strip() else settings.souffleur_backend,
+        modell=eff["souffleur_model"],
+        backend=eff["ki_dienst"],
         aktiv=bool(state.get(KEY_AKTIV, True)),
         sensibel=bool(state.get(KEY_SENSIBEL, False)),
         speed=speed,

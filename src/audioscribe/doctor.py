@@ -419,6 +419,20 @@ def _check_live() -> CheckResult:
     )
 
 
+def _bekannte_projekte(saved: dict, limit: int = 5) -> list[tuple[str, Path]]:
+    """Zuletzt geoeffnete Projekte, deren Projektdatei noch erreichbar ist (Name, Wiki-Ordner)."""
+    from audioscribe.projekt import modell
+
+    out: list[tuple[str, Path]] = []
+    for eintrag in saved.get("zuletzt_projekte") or []:
+        try:
+            projekt = modell.lade(eintrag["pfad"])
+        except (modell.ProjektFehler, KeyError, TypeError):
+            continue
+        out.append((projekt.name, projekt.wurzel))
+    return out[:limit]
+
+
 def _check_souffleur() -> CheckResult:
     """Souffleur (PRD §20, optional, daher hoechstens WARN): Wiki-Verknuepfung und KI-Dienst."""
     from audioscribe.souffleur.ki import BACKEND_CLAUDE, sdk_verfuegbar
@@ -426,10 +440,21 @@ def _check_souffleur() -> CheckResult:
     from audioscribe.souffleur.wiki import ZUSTAND_OK, pruefe_wiki
     from audioscribe.ui import state
 
-    konfig = lade_konfig(state.load_state())
-    wiki = pruefe_wiki(konfig.wiki_dir)
-    teile = [f"Wiki: {wiki.meldung}" if wiki.zustand == ZUSTAND_OK else f"Wiki: {wiki.meldung}"]
-    status = "OK" if wiki.zustand == ZUSTAND_OK else "WARN"
+    saved = state.load_state()
+    konfig = lade_konfig(saved)
+    projekte = _bekannte_projekte(saved)
+    if projekte and konfig.wiki_dir is None:
+        # Seit den Projekten (PRD §21) gehoert das Wiki zum Projekt - geprueft werden die bekannten.
+        zustaende = [(name, pruefe_wiki(wurzel)) for name, wurzel in projekte]
+        teile = ["Wiki je Projekt: " + ", ".join(
+            f"{name} ({w.seiten} Seiten)" if w.zustand == ZUSTAND_OK else f"{name} (nicht erreichbar)"
+            for name, w in zustaende
+        )]
+        status = "OK" if all(w.zustand == ZUSTAND_OK for _, w in zustaende) else "WARN"
+    else:
+        wiki = pruefe_wiki(konfig.wiki_dir)
+        teile = [f"Wiki: {wiki.meldung}"]
+        status = "OK" if wiki.zustand == ZUSTAND_OK else "WARN"
     if konfig.backend == BACKEND_CLAUDE and not sdk_verfuegbar():
         teile.append("KI: Agent SDK fehlt -> 'uv sync --extra agent'")
         status = "WARN"

@@ -10,6 +10,7 @@ erneute Transkription).
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
@@ -60,8 +61,12 @@ def save_marks(out_dir: str | Path, marks: list[Mark]) -> Path:
     path = marks_path(out_dir)
     path.parent.mkdir(parents=True, exist_ok=True)
     ordered = sorted(marks, key=lambda m: m.t)
-    path.write_text(
+    # Atomar: die Live-Sitzung schreibt die Datei bei jedem Standbild neu, und eine beim
+    # Absturz halb geschriebene marks.json kippte danach jeden Export (load_marks wirft).
+    tmp = path.with_suffix(".json.tmp")
+    tmp.write_text(
         json.dumps([asdict(m) for m in ordered], ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
+    os.replace(tmp, path)
     return path

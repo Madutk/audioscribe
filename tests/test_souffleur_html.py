@@ -1,4 +1,7 @@
-"""Souffleur-Oberflaeche (PRD §20): Struktur von index.html, style.css und app.js.
+"""Souffleur-Oberflaeche (PRD §20): Struktur von index.html, den Stylesheets und den Skripten.
+
+Seit den Projekten (PRD §21) ist das Skript in Module aufgeteilt (static/js/*.js); die
+Pruefungen laufen ueber alle Module zusammen bzw. gezielt ueber ``souffleur.js``.
 
 Reine Textpruefungen nach dem Muster in tests/test_ui.py - kein Browser, kein Server.
 Sie sichern die im UX-Konzept vereinbarten IDs, Klassen und Texte, auf die der
@@ -22,12 +25,17 @@ def html() -> str:
 
 @pytest.fixture(scope="module")
 def css() -> str:
-    return (STATIC / "style.css").read_text(encoding="utf-8")
+    return "\n".join(p.read_text(encoding="utf-8") for p in (STATIC / "style.css", STATIC / "css" / "shell.css"))
 
 
 @pytest.fixture(scope="module")
 def js() -> str:
-    return (STATIC / "app.js").read_text(encoding="utf-8")
+    return "\n".join(p.read_text(encoding="utf-8") for p in sorted((STATIC / "js").glob("*.js")))
+
+
+@pytest.fixture(scope="module")
+def souffleur_js() -> str:
+    return (STATIC / "js" / "souffleur.js").read_text(encoding="utf-8")
 
 
 # --- Sprite -------------------------------------------------------------------------------
@@ -98,15 +106,17 @@ def test_testmodus_unteroptionen_und_badge(html, js):
     # Badge neben dem Phasen-Badge in den Gauges
     assert html.index('id="livePhase"') < html.index('id="liveTestBadge"') < html.index('id="liveElapsed"')
     assert 'id="liveStartLabel"' in html and "Aufnahme starten" in html
-    # Die Kachel entsteht in app.js in derselben Zeile wie die anderen Quellen.
+    # Die Kachel entsteht im Skript (live.js) in derselben Zeile wie die anderen Quellen.
     assert 'id="liveTestTile"' in js and 'data-kind="transcript"' in js
     assert "Transkript abspielen" in js and "Abspielen starten" in js
 
 
 def test_startlive_sendet_replay_felder_und_keine_geraete_im_testmodus(js):
-    start = js[js.index("async function startLive()"):js.index("function insertByTime")]
+    start = js[js.index("async function startLive(resume)"):js.index("function insertByTime")]
     assert "replay_transcript: replay" in start and "replay_speed: replaySpeed()" in start
     assert "mic: test ? 'none'" in start and "loopback: test ? 'none'" in start
+    # PRD §21: Sitzungstitel und - bei einer Wiederaufnahme - der Ordner der unterbrochenen Sitzung
+    assert "titel: $('liveTitle').value.trim()" in start and "resume: resume || ''" in start
 
 
 def test_live_defaults_belegen_testmodus_vor(js):
@@ -117,30 +127,26 @@ def test_live_defaults_belegen_testmodus_vor(js):
 # --- Einstellungen: Karte Wiki (Souffleur) ----------------------------------------------------
 
 
-def test_einstellungen_karte_wiki(html):
-    assert "Wiki (Souffleur)" in html
-    assert 'id="setWiki"' in html and 'id="pickSetWiki"' in html
-    assert 'id="setWikiState"' in html and 'class="wiki-state none"' in html
-    assert '<select id="setSouffleurModel">' in html and "KI-Modell Souffleur" in html
-    assert 'id="setHandover"' in html and 'id="pickSetHandover"' in html
-    # Unter der Ordner-Karte in der linken Spalte; kein Glossar-Feld (Glossar ist Teil des Wikis).
-    assert html.index('id="setAna"') < html.index('id="setWiki"') < html.index('id="envChecks"')
-    assert 'id="setGlossar"' not in html and 'id="setGlossary"' not in html
-    # Zustand direkt unter dem Feld, vor dem Modell-Select
-    assert html.index('id="setWiki"') < html.index('id="setWikiState"') < html.index('id="setSouffleurModel"')
+def test_projekteinstellungen_karte_wiki(html):
+    """K1 seit PRD §21: das Wiki gehoert zum Projekt - Zustand in den Projekteinstellungen."""
+    karte = html[html.index('id="setWikiCard"'):html.index('id="pSitzungen"')]
+    assert "Projekt und Wiki" in karte and 'id="pWurzel"' in karte
+    assert 'id="setWikiState"' in karte and 'class="wiki-state none"' in karte
+    # Kein freies Wiki-Feld und kein Uebergabeordner mehr; kein Glossar-Feld (Glossar ist Teil des Wikis).
+    for alt in ("setWiki", "pickSetWiki", "setHandover", "pickSetHandover", "setGlossar", "setGlossary"):
+        assert f'id="{alt}"' not in html
+    # Das Modell des Souffleurs ist eine Einstellung: global und je Projekt ueberschreibbar.
+    assert '<select id="gSouffleurModel">' in html and '<select id="pSouffleurModel">' in html
 
 
-def test_folder_fields_und_dialog_kennen_wiki_und_uebergabe(js):
-    assert "wiki_dir: 'setWiki'" in js and "uebergabe_dir: 'setHandover'" in js
-    assert "wiki: 'Wiki-Ordner wählen'" in js and "handover: 'Übergabeordner wählen'" in js
-    assert "openDialog('wiki')" in js and "openDialog('handover')" in js and "openDialog('test')" in js
+def test_wiki_zustand_und_ordnerwahl_im_skript(js):
     assert "/api/wiki/status?path=" in js
-    assert "souffleur_model: $('setSouffleurModel').value" in js
-    # Nur das neutrale label im Select, die id als value
-    assert "m.id" in js and "m.label" in js
+    assert "export function renderWikiState(box, w, compact)" in js
+    assert "pickFolder({ title: 'Sitzungsordner zum Abspielen wählen'" in js
+    assert "'/api/projekt/pruefen'" in js and "'/api/wiki/speichern'" in js
 
 
-# --- app.js: Souffleur-Logik -------------------------------------------------------------------
+# --- Skripte: Souffleur-Logik ------------------------------------------------------------------
 
 
 def test_segmente_tragen_data_id_und_markierung_laesst_text_unveraendert(js):
@@ -171,10 +177,10 @@ def test_hinweisinhalt_wiki_beleg_ki_und_ohne_befund(js):
     assert 'class="tag ki"' in js and "KI</span>" in js
 
 
-def test_kein_produktname_in_der_oberflaeche(html, js):
+def test_kein_produktname_in_der_oberflaeche(html, souffleur_js):
+    """Der Souffleur sagt nur „KI“. Welcher Dienst dahintersteht, steht allein in den Einstellungen."""
     aside = html[html.index('id="liveAside"'):html.index('id="lightbox"')]
-    karte = html[html.index('id="setWikiCard"'):html.index('class="right"', html.index('id="setWikiCard"'))]
-    souffleur_js = js[js.index("// --- Souffleur (PRD"):js.index("$('liveStart').onclick")]
+    karte = html[html.index('id="setWikiCard"'):html.index('id="pSitzungen"')]
     for text in (aside, karte, souffleur_js):
         assert not re.search(r"claude|anthropic|gpt|openai|sonnet|opus|haiku", text, re.I)
 
@@ -198,9 +204,10 @@ def test_zustaende_und_essenz(js):
     assert "erzeugt in" in js
 
 
-def test_offene_punkte_aus_hinweisen_und_uebergabe(js):
+def test_offene_punkte_aus_hinweisen_und_wiki_ablage(js):
     assert "h.offener_punkt" in js
-    assert "sf.uebergabe" in js and "markierungen.md" in js
+    # Statt der automatischen Uebergabe zeigt die Karte die Wiki-Ablage der Sitzung (PRD §21).
+    assert "ablage.ordner" in js and "markierungen.md" in js and "sf.uebergabe" not in js
     # keine eigene Route noetig
     assert "/api/souffleur/offene-punkte" not in js
 
@@ -246,8 +253,12 @@ def test_css_formen_der_drei_arten(css):
     assert ".ki { border: 1px dashed var(--border-strong);" in css
 
 
-def test_css_dunkelmodus_bleibt_zweimal_definiert_und_ohne_harte_farben_im_souffleur(css):
-    assert css.count("--bg: #111317;") == 2
+def test_css_tokens_tragen_beide_modi_und_souffleur_bleibt_ohne_harte_farben(css):
+    # Ein Satz Tokens mit light-dark() statt dreier Bloecke; data-theme erzwingt eine Seite.
+    assert "--bg: light-dark(" in css and "color-scheme: light dark;" in css
+    assert ':root[data-theme="light"] { color-scheme: light; }' in css
+    assert ':root[data-theme="dark"] { color-scheme: dark; }' in css
+    assert "@media (prefers-color-scheme: dark)" not in css
     block = css[css.index("/* --- Souffleur"):css.index("/* --- Responsiv")]
     assert not re.search(r"#[0-9a-fA-F]{3,6}\b", block)
 

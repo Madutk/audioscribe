@@ -43,17 +43,24 @@ def pick(devices: list[dict], wahl: str) -> dict | None:
         raise RuntimeError(f"Audio-Gerät '{wahl}' nicht gefunden") from None
 
 
-def open_capture(clock: Callable[[], float], platform: str | None = None) -> Capture:
-    """Die Aufnahme der laufenden Plattform; außerhalb von Windows/macOS bleibt nur das Replay."""
+def open_capture(
+    clock: Callable[[], float], platform: str | None = None, *, start_sample: int = 0
+) -> Capture:
+    """Die Aufnahme der laufenden Plattform; außerhalb von Windows/macOS bleibt nur das Replay.
+
+    ``start_sample`` ist der Startversatz der Spuren nach einer Wiederaufnahme (PRD §21);
+    die Uhr ``clock`` läuft dann schon ab diesem Versatz.
+    """
     platform = sys.platform if platform is None else platform
+    versatz = {"start_sample": start_sample} if start_sample else {}
     if platform == "win32":
         from audioscribe.live.capture.wasapi import AudioCapture
 
-        return AudioCapture(clock)
+        return AudioCapture(clock, **versatz)
     if platform == "darwin":
         from audioscribe.live.capture.mac import MacCapture
 
-        return MacCapture(clock)
+        return MacCapture(clock, **versatz)
     raise RuntimeError(
         "Live-Aufnahme braucht Windows (WASAPI) oder macOS (ScreenCaptureKit); unter Linux/WSL "
         "geht nur das Replay: audioscribe live --wav DATEI"

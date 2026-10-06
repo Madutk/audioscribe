@@ -673,7 +673,10 @@ def test_static_assets(ui_client):
     css = ui_client.get("/static/style.css")
     assert css.status_code == 200 and css.headers["content-type"].startswith("text/css")
     assert css.headers["cache-control"] == "no-cache"
-    assert ui_client.get("/static/app.js").status_code == 200
+    js = ui_client.get("/static/js/main.js")
+    assert js.status_code == 200 and js.headers["content-type"].startswith("text/javascript")
+    assert ui_client.get("/static/css/shell.css").status_code == 200
+    assert ui_client.get("/static/app.js").status_code == 404  # aufgeteilt in js/*.js (PRD §21)
     assert ui_client.get("/static/server.py").status_code == 404
     assert ui_client.get("/static/..%2Fserver.py").status_code == 404
 
@@ -699,13 +702,35 @@ def test_defaults_verwerfen_fremden_analyse_ordner(ui_client, tmp_path):
     assert data["agent_output_dir"] == str(settings.agent_output_dir)
 
 
-def test_index_hat_einstellungen_reiter_ohne_alte_ordnerfelder(ui_client):
+def test_index_hat_globale_und_projekt_einstellungen(ui_client):
+    """PRD §21: die Ordner gehoeren zum Projekt bzw. zur Ansicht - global bleiben KI, Sprache, Umgebung."""
     html = ui_client.get("/").text
-    assert 'id="tabSet"' in html and 'data-tab="Set"' in html
-    for feld in ("setIn", "setOut", "setAna", "envChecks", "transTarget", "liveTarget", "anaTarget"):
+    assert 'id="tabSet" data-view="einstellungen"' in html and 'href="#/einstellungen"' in html
+    for feld in ("gKiDienst", "gSouffleurModel", "gAgentModel", "gSprache", "envChecks"):
         assert f'id="{feld}"' in html
-    for alt in ("inDir", "outDir", "anaOut", "pickIn", "pickOut", "pickAna"):
+    assert 'id="tabProj" data-view="projekt"' in html
+    for feld in ("pName", "pSitzungen", "pRaw", "pAssets", "pBilder", "pKiDienst", "pSprache", "setWikiState"):
+        assert f'id="{feld}"' in html
+    # Die drei globalen Ordnerfelder des alten Reiters gibt es nicht mehr.
+    for alt in ("setIn", "setOut", "setAna", "setHandover"):
         assert f'id="{alt}"' not in html
+    # "Aufnahme transkribieren" pflegt Speicherort und Analyse-Ordner selbst.
+    for feld in ("outDir", "pickFiles", "anaOut", "transTarget", "liveTarget", "anaTarget"):
+        assert f'id="{feld}"' in html
+
+
+def test_index_hat_startseite_mit_vier_einstiegen_und_assistent(ui_client):
+    html = ui_client.get("/").text
+    assert 'id="viewStart" data-view="start"' in html
+    for einstieg in ("neu", "oeffnen", "datei", "demo"):
+        assert f'data-launch="{einstieg}"' in html
+    for titel in ("Neues Projekt", "Projekt öffnen", "Aufnahme transkribieren", "Demo abspielen"):
+        assert f"<h3>{titel}" in html
+    assert html.count('<details class="more">') == 4  # je Einstieg eine kleine Hilfe
+    assert 'id="viewNeu" data-view="neu"' in html
+    for feld in ("wizName", "wizWurzel", "wizSitzungen", "wizRaw", "wizAssets", "wizKiDienst", "wizSprache", "wizCreate"):
+        assert f'id="{feld}"' in html
+    assert '<script type="module" src="/static/js/main.js"></script>' in html
 
 
 def test_doctor_argv_ruft_json_modus():

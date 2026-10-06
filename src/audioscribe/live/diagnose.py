@@ -14,7 +14,7 @@ from __future__ import annotations
 import json
 import statistics
 import threading
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 
 from audioscribe.live.bilanz import LiveBilanz
@@ -97,6 +97,24 @@ class Diagnose:
         with self._lock:
             self._write({"art": art, **daten})
 
+    def uebernehme(self, zeilen: list[dict]) -> int:
+        """Wiederaufnahme (PRD §21): Abschnitte und Vorschauen eines früheren Teils in den
+        Speicher holen, ohne sie erneut zu schreiben - sonst zählte das Fazit nur den letzten
+        Teil. Zeilen anderer Art (Nachschärfen) bleiben außen vor. Liefert den höchsten
+        ``chunk_index`` (0 ohne Abschnitte)."""
+        felder_a = {f.name for f in fields(Abschnitt)}
+        felder_v = {f.name for f in fields(Vorschau)}
+        with self._lock:
+            for z in zeilen:
+                try:
+                    if z.get("art") == ART_ABSCHNITT:
+                        self.abschnitte.append(Abschnitt(**{k: v for k, v in z.items() if k in felder_a}))
+                    elif z.get("art") == ART_VORSCHAU:
+                        self.vorschauen.append(Vorschau(**{k: v for k, v in z.items() if k in felder_v}))
+                except TypeError:
+                    continue
+            return max((int(a.chunk_index) for a in self.abschnitte), default=0)
+
     def close(self) -> None:
         with self._lock:
             if self._file is not None:
@@ -113,7 +131,20 @@ class Diagnose:
             return
         if self._file is None:
             self._path.parent.mkdir(parents=True, exist_ok=True)
+            # Nach einem Absturz kann die letzte Zeile abgerissen sein - abschließen, sonst
+            # klebte der erste neue Datensatz an ihr und ginge mit verloren.
+            abgerissen = False
+            try:
+                with self._path.open("rb") as alt:
+                    alt.seek(0, 2)
+                    if alt.tell() > 0:
+                        alt.seek(-1, 2)
+                        abgerissen = alt.read(1) != b"\n"
+            except OSError:
+                pass
             self._file = self._path.open("a", encoding="utf-8")
+            if abgerissen:
+                self._file.write("\n")
         self._file.write(json.dumps(zeile, ensure_ascii=False) + "\n")
         self._file.flush()
 

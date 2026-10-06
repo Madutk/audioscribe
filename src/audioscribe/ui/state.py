@@ -52,13 +52,17 @@ STATE_KEYS: tuple[str, ...] = (
     # Testmodus: zuletzt abgespieltes Transkript und Tempo (FR-64).
     "replay_transcript",
     "replay_speed",
-    # Souffleur (PRD §20): Wiki-Pfad (K1), Uebergabeordner (A4), KI-Dienst, Schalter.
+    # Souffleur (PRD §20): KI-Dienst, Modell, Schalter. "wiki_dir" gilt nur ohne Projekt
+    # (Kommandozeile, Uebernahme alter Installationen) - sonst traegt das Projekt den Pfad.
     "wiki_dir",
-    "uebergabe_dir",
     "souffleur_model",
     "souffleur_backend",
     "souffleur_aktiv",
     "souffleur_sensibel",
+    # Globale Vorgabe fuer die Transkriptionssprache (PRD §21); Projekte koennen sie ueberschreiben.
+    "sprache",
+    # Projekte (PRD §21): zuletzt geoeffnete, juengstes zuerst - je {"pfad", "name", "geoeffnet"}.
+    "zuletzt_projekte",
     # Darstellung der Oberflaeche: "system" folgt der Betriebssystem-Einstellung.
     "theme",
 )
@@ -71,7 +75,9 @@ _BOOL_KEYS = (
     "souffleur_aktiv", "souffleur_sensibel",
 )
 
-_LOESCHBAR = ("wiki_dir", "uebergabe_dir")
+_LOESCHBAR = ("wiki_dir",)
+
+MAX_ZULETZT = 12
 
 _STATE_NAME = "einstellungen.json"
 # Bis 2026-10: Zustand lag als Cache-Datei unter ~/.cache/audioscribe; beim ersten Lesen des
@@ -152,6 +158,13 @@ def _clean(values: Mapping[str, object]) -> dict:
         elif key == "live_source":
             if value in LIVE_SOURCES:
                 out[key] = value
+        elif key == "zuletzt_projekte":
+            if isinstance(value, (list, tuple)):
+                out[key] = [
+                    {k: str(e[k]).strip() for k in ("pfad", "name", "geoeffnet") if isinstance(e.get(k), str)}
+                    for e in value
+                    if isinstance(e, dict) and isinstance(e.get("pfad"), str) and e["pfad"].strip()
+                ][:MAX_ZULETZT]
         elif key == "agent_skills":
             # Liste von Skill-Namen; eine leere Liste ist eine gueltige, bewusste Wahl.
             if isinstance(value, (list, tuple)):
@@ -159,3 +172,20 @@ def _clean(values: Mapping[str, object]) -> dict:
         elif isinstance(value, str) and value.strip():
             out[key] = value.strip()
     return out
+
+
+def merke_projekt(pfad: Path | str, name: str, config_dir: Path | None = None) -> None:
+    """Projekt an die Spitze der zuletzt geoeffneten setzen."""
+    from datetime import datetime
+
+    pfad = str(pfad)
+    liste = [e for e in load_state(config_dir).get("zuletzt_projekte", []) if e.get("pfad") != pfad]
+    eintrag = {"pfad": pfad, "name": name, "geoeffnet": datetime.now().strftime("%Y-%m-%d %H:%M")}
+    save_state({"zuletzt_projekte": [eintrag, *liste]}, config_dir)
+
+
+def vergiss_projekt(pfad: Path | str, config_dir: Path | None = None) -> None:
+    """Projekt aus der Liste nehmen - die Projektdatei im Wiki bleibt unberuehrt."""
+    pfad = str(pfad)
+    liste = [e for e in load_state(config_dir).get("zuletzt_projekte", []) if e.get("pfad") != pfad]
+    save_state({"zuletzt_projekte": liste}, config_dir)

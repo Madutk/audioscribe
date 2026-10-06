@@ -1295,4 +1295,6 @@ def test_first_tab_is_renamed():
     from audioscribe.ui import server
 
     html = (Path(server.__file__).parent / "static" / "index.html").read_text(encoding="utf-8")
-    assert html.index(">Offline Transcription<") < html.index(">Live Transcription<") < html.index(">KI-Analyse<")
+    # PRD §21: statt gleichrangiger Reiter die Bereiche je Einstieg - im Projekt Live vor Nachbereitung.
+    assert html.index(">Live-Sitzung<") < html.index(">Nachbereitung<") < html.index(">Transkribieren<") < html.index(">KI-Analyse<")
+    assert ">Offline Transcription<" not in html
