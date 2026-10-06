@@ -282,6 +282,7 @@ def create_app():
         sprache: str | None = None
         wiki_speichern: str = modell.WIKI_FRAGEN
         wiki_bilder: bool = True
+        wiki_markierungen: bool = False
 
     class PfadIn(BaseModel):
         pfad: str
@@ -299,6 +300,7 @@ def create_app():
         sitzung: str
         titel: str = ""
         bilder: bool = True
+        markierungen: bool = False  # Markierungen des Souffleurs (KI-erzeugt) nur auf Wunsch
         immer: bool = False
 
     class NachbereitungIn(BaseModel):
@@ -477,7 +479,7 @@ def create_app():
                 name=body.name, wurzel=wurzel, sitzungen_dir=sitzungen, assets_dir=assets,
                 neues_wiki=body.neues_wiki, ki_dienst=body.ki_dienst, souffleur_model=body.souffleur_model,
                 agent_model=body.agent_model, sprache=body.sprache, wiki_speichern=body.wiki_speichern,
-                wiki_bilder=body.wiki_bilder,
+                wiki_bilder=body.wiki_bilder, wiki_markierungen=body.wiki_markierungen,
             )
         except ProjektFehler as exc:
             raise HTTPException(400, str(exc)) from exc
@@ -563,14 +565,17 @@ def create_app():
 
     @app.post("/api/wiki/speichern")
     def api_wiki_speichern(body: WikiSpeichernIn):
-        """Sitzung als neue Quelle nach raw/ legen, Bilder in den Assets-Ordner."""
+        """Sitzung als neue Quelle nach raw/ legen, Bilder in den Assets-Ordner; die Markierungen
+        des Souffleurs nur auf Wunsch (KI-erzeugt)."""
         ordner = _sitzungsordner(body.sitzung)
         p = _projekt()
         laufend = live.session_dir() if live.laeuft() else None
         if laufend is not None and laufend.resolve() == ordner.resolve():
             raise HTTPException(409, "Diese Sitzung läuft noch – ins Wiki geht sie nach dem Stopp.")
         try:
-            ablage = wiki_ablage.speichere_sitzung(ordner, p, titel=body.titel, bilder=body.bilder)
+            ablage = wiki_ablage.speichere_sitzung(
+                ordner, p, titel=body.titel, bilder=body.bilder, markierungen=body.markierungen
+            )
         except (OSError, RuntimeError) as exc:
             raise HTTPException(400, str(exc)) from exc
         antwort = ablage.als_dict()
@@ -579,7 +584,10 @@ def create_app():
             try:
                 kontext.setze(
                     kontext_modul.MODUS_PROJEKT,
-                    modell.aendere(p, {"wiki_speichern": modell.WIKI_IMMER, "wiki_bilder": body.bilder}),
+                    modell.aendere(p, {
+                        "wiki_speichern": modell.WIKI_IMMER, "wiki_bilder": body.bilder,
+                        "wiki_markierungen": body.markierungen,
+                    }),
                 )
             except ProjektFehler as exc:
                 antwort["hinweis"] = f"„Immer speichern“ ließ sich nicht merken: {exc}"
@@ -603,7 +611,9 @@ def create_app():
             raise HTTPException(400, f"Keine Analyse dieses Projekts: {body.workspace}")
         sitzung = _sitzungsordner(manifest.quelle)
         try:
-            ablage = wiki_ablage.speichere_nachbereitung(workspace, p, sitzung, bilder=body.bilder)
+            ablage = wiki_ablage.speichere_nachbereitung(
+                workspace, p, sitzung, bilder=body.bilder, markierungen=p.wiki_markierungen
+            )
         except (OSError, RuntimeError) as exc:
             raise HTTPException(400, str(exc)) from exc
         return JSONResponse(ablage.als_dict())
@@ -1189,7 +1199,9 @@ def create_app():
         if p is None or p.demo or p.wiki_speichern != modell.WIKI_IMMER:
             return None
         try:
-            ablage = wiki_ablage.speichere_sitzung(session_dir, p, bilder=p.wiki_bilder)
+            ablage = wiki_ablage.speichere_sitzung(
+                session_dir, p, bilder=p.wiki_bilder, markierungen=p.wiki_markierungen
+            )
         except (OSError, RuntimeError) as exc:
             live._append(f"Wiki-Ablage fehlgeschlagen: {exc}")
             return {"wiki_fehler": str(exc)}

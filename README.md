@@ -223,7 +223,7 @@ mein-wiki/                          # LLM-Wiki = Projekt
       transcript.json               # dasselbe maschinenlesbar
       transkript.annotiert.md       # mit Bildern an der passenden Stelle (nur mit Bildern)
       marks.json                    # Zeitstempel → Bild (nur mit Bildern)
-      markierungen.json / .md       # Markierungen des Souffleurs
+      markierungen.json / .md       # Markierungen des Souffleurs (nur auf Wunsch)
       README.md
       nachbereitung-ki/<analyse>/   # optional: Dokumente der KI-Analyse, als KI-erzeugt gekennzeichnet
     assets/                         # Assets-Ordner (Vorschlag) für die Bilder
@@ -235,11 +235,15 @@ mein-wiki-sitzungen/                # Ordner für Sitzungen (Vorschlag: neben de
 
 **Ins Wiki speichern** (Karte „Wie geht es weiter?“ nach der Sitzung oder Bereich
 „Nachbereitung“): Du vergibst einen Titel – daraus und aus dem Datum entsteht der
-Ordnername – und entscheidest, ob die Bilder mitgehen. Mit Bildern werden die Standbilder
+Ordnername – und entscheidest, ob die Bilder und die Markierungen des Souffleurs mitgehen.
+Die Markierungen sind KI-erzeugt und zitieren das Wiki; unter `raw/` könnte der Ingest sie
+als Quelle lesen. Deshalb ist der Haken standardmäßig aus, und sie bleiben im Sitzungsordner.
+Mit Bildern werden die Standbilder
 in den Assets-Ordner kopiert, und `transkript.annotiert.md` verweist an derselben Stelle
 auf jedes Bild wie im Sitzungsordner (`![Bild #0001 – 00:01:23](../assets/…/0001_00-01-23.jpg)`).
-„Künftig immer so speichern“ stellt das Projekt auf **immer**: Jede beendete Sitzung geht
-dann nach dem Nachschärfen ohne Nachfrage ins Wiki (änderbar im Bereich „Projekt“).
+„Künftig immer so speichern“ stellt das Projekt auf **immer** und merkt sich beide Haken:
+Jede beendete Sitzung geht dann nach dem Nachschärfen ohne Nachfrage ins Wiki (änderbar im
+Bereich „Projekt“).
 
 **Nachbereitung ins Wiki:** Das Ergebnis einer fertigen KI-Analyse lässt sich unter
 `nachbereitung-ki/` zur Sitzung legen. Die Dokumente sind dort als **KI-erzeugt** und nicht
@@ -736,9 +740,9 @@ Fazit verhalten sich wie im Betrieb. Auf der Kommandozeile:
 KI-Text, Verzögerung „Hinweis nach“ inklusive Anteil des KI-Prozessstarts, reale
 Verzögerung), `souffleur-diagnose.jsonl` (je Fenster: Treffer, Suchzeit, KI-Zeiten,
 verworfene Befunde), `souffleur-essenz.jsonl` (Essenzen, KI-erzeugt). Ins Wiki gelangen
-die Markierungen zusammen mit dem Transkript über **„Ins Wiki speichern“**
-(`markierungen.json`, `markierungen.md` in der Quelle unter `raw/`, siehe
-[Projekte](#projekte-und-ablage-ins-wiki)). Die Essenzen gehen nicht mit – sie sind
+die Markierungen nur auf Wunsch: mit dem Haken „Markierungen des Souffleurs mit übertragen“
+in **„Ins Wiki speichern“** (`markierungen.json`, `markierungen.md` in der Quelle unter
+`raw/`, siehe [Projekte](#projekte-und-ablage-ins-wiki)). Ohne Haken bleiben sie hier. Die Essenzen gehen nicht mit – sie sind
 KI-erzeugt und keine Quelle. Einen eigenen Übergabeordner gibt es nicht mehr.
 
 <details>

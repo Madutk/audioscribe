@@ -221,7 +221,7 @@
 
       <div class="field"><label id="wizRawLabel">Transkripte im Wiki</label>
         <p class="path" id="wizRaw" aria-labelledby="wizRawLabel"></p>
-        <p class="hint">Hierhin kommt beim „Ins Wiki speichern“ je Sitzung ein Ordner mit Transkript und Markierungen –
+        <p class="hint">Hierhin kommt beim „Ins Wiki speichern“ je Sitzung ein Ordner mit dem Transkript –
           eine Kopie aus dem Arbeitsordner oben. <code>raw/</code> ist der feste Quellen-Ordner des Wikis; der Unterordner
           entsteht aus Datum und Sitzungstitel.</p></div>
 
@@ -244,7 +244,9 @@
           <span><b>Nicht anbieten</b><small>Sitzungen bleiben im Sitzungsordner; ins Wiki speicherst du nur über die Nachbereitung.</small></span></label>
       </fieldset>
       <div class="checks"><label><input type="checkbox" id="wizBilder" checked /><span>Bilder mit ins Wiki übertragen
-        <small>Standbilder der Sitzung in den Assets-Ordner kopieren und im Transkript verlinken.</small></span></label></div>
+        <small>Standbilder der Sitzung in den Assets-Ordner kopieren und im Transkript verlinken.</small></span></label>
+        <label><input type="checkbox" id="wizMarkierungen" /><span>Markierungen des Souffleurs mit ins Wiki übertragen
+        <small>Widersprüche, Fragen und offene Punkte als <code>markierungen.json</code>/<code>.md</code> neben das Transkript legen. Sie sind KI-erzeugt und zitieren das Wiki – ohne Haken bleiben sie im Sitzungsordner.</small></span></label></div>
     </div>
 
     <div class="wiz-panel" id="wiz3" hidden>
@@ -668,7 +670,7 @@
         <p class="hint">Live-Sitzungen (<code>live-…/</code>) und KI-Analysen (<code>analysen/</code>) dieses Projekts.</p></div>
       <div class="field"><label id="pRawLabel">Transkripte im Wiki</label>
         <p class="path" id="pRaw" aria-labelledby="pRawLabel"></p>
-        <p class="hint">Hierhin kommt beim „Ins Wiki speichern“ je Sitzung ein Ordner mit Transkript und Markierungen –
+        <p class="hint">Hierhin kommt beim „Ins Wiki speichern“ je Sitzung ein Ordner mit dem Transkript –
           eine Kopie aus dem Arbeitsordner oben. <code>raw/</code> ist der feste Quellen-Ordner des Wikis; der Unterordner
           entsteht aus Datum und Sitzungstitel.</p></div>
 
@@ -692,7 +694,9 @@
           <span><b>Nicht anbieten</b><small>Nur über die Nachbereitung.</small></span></label>
       </fieldset>
       <div class="checks"><label><input type="checkbox" id="pBilder" /><span>Bilder mit ins Wiki übertragen
-        <small>Standbilder in den Assets-Ordner kopieren; das Transkript verweist an der passenden Stelle darauf.</small></span></label></div>
+        <small>Standbilder in den Assets-Ordner kopieren; das Transkript verweist an der passenden Stelle darauf.</small></span></label>
+        <label><input type="checkbox" id="pMarkierungen" /><span>Markierungen des Souffleurs mit ins Wiki übertragen
+        <small>Widersprüche, Fragen und offene Punkte als <code>markierungen.json</code>/<code>.md</code> neben das Transkript legen. Sie sind KI-erzeugt und zitieren das Wiki – ohne Haken bleiben sie im Sitzungsordner.</small></span></label></div>
     </div>
 
     <div class="err" id="pErr" role="alert"></div>
@@ -712,7 +716,7 @@
       <h2 class="card-title"><svg class="ic" aria-hidden="true"><use href="#i-info"/></svg>So fließen die Daten</h2>
       <ol class="flow-list">
         <li><b>Live-Sitzung</b><span>Mitschnitt, Transkript und Standbilder entstehen im Sitzungsordner und werden laufend gesichert.</span></li>
-        <li><b>Ins Wiki speichern</b><span>Transkript und Markierungen gehen als neue Quelle nach <code>raw/</code>, Bilder in den Assets-Ordner.</span></li>
+        <li><b>Ins Wiki speichern</b><span>Das Transkript geht als neue Quelle nach <code>raw/</code>, Bilder in den Assets-Ordner; die Markierungen des Souffleurs nur auf Wunsch.</span></li>
         <li><b>Nachbereitung</b><span>Die KI wertet Transkript und Bilder aus; das Ergebnis kann ebenfalls ins Wiki – als KI-erzeugt gekennzeichnet.</span></li>
       </ol>
     </div>
@@ -753,6 +757,8 @@
   <div class="checks">
     <label><input type="checkbox" id="wikiDlgBilder" /><span><span id="wikiDlgBilderLabel">Bilder mit übertragen</span>
       <small>Standbilder in den Assets-Ordner kopieren; das Transkript im Wiki verweist an der passenden Stelle darauf.</small></span></label>
+    <label><input type="checkbox" id="wikiDlgMarkierungen" /><span>Markierungen des Souffleurs mit übertragen
+      <small>Widersprüche, Fragen und offene Punkte als <code>markierungen.json</code>/<code>.md</code> neben das Transkript legen. Sie sind KI-erzeugt und zitieren das Wiki – ohne Haken bleiben sie im Sitzungsordner.</small></span></label>
     <label id="wikiDlgImmerRow"><input type="checkbox" id="wikiDlgImmer" /><span>Künftig immer so speichern
       <small>Beendete Sitzungen dieses Projekts gehen dann ohne Nachfrage ins Wiki (änderbar in den Projekteinstellungen).</small></span></label>
   </div>

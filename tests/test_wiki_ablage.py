@@ -48,12 +48,24 @@ def test_zuordnung_zeitstempel_zu_bild_bleibt_erhalten(projekt, sitzung):
     assert annotiert.index("zweite Klasse") < annotiert.index(bild1) < annotiert.index("Freigabe?") < annotiert.index(bild2)
     original = (sitzung / "transkript.annotiert.md").read_text(encoding="utf-8")
     assert re.sub(r"\]\([^)]*/", "](", annotiert) == re.sub(r"\]\([^)]*/", "](", original)
-    assert ablage.markierungen == 1
+    assert ablage.markierungen == 0  # ohne Wunsch gehen die Markierungen nicht mit
 
 
-def test_markierungen_des_souffleurs_gehen_mit(projekt, sitzung):
-    wiki_ablage.speichere_sitzung(sitzung, projekt)
+def test_markierungen_bleiben_ohne_wunsch_im_sitzungsordner(projekt, sitzung):
+    """Markierungen sind KI-erzeugt und zitieren das Wiki - unter raw/ nur auf Wunsch."""
+    ablage = wiki_ablage.speichere_sitzung(sitzung, projekt)
     ziel = projekt.raw_dir / "2026-10-06_workshop-reisebuchung"
+    assert ablage.markierungen == 0 and (ziel / "transkript.md").is_file()
+    assert not list(ziel.glob("markierungen.*")) and not list(ziel.glob("souffleur*"))
+    assert "markierungen" not in (ziel / "README.md").read_text(encoding="utf-8").lower()
+    assert (sitzung / "souffleur.json").is_file()  # im Sitzungsordner bleiben sie
+
+
+def test_markierungen_des_souffleurs_gehen_auf_wunsch_mit(projekt, sitzung):
+    ablage = wiki_ablage.speichere_sitzung(sitzung, projekt, markierungen=True)
+    assert ablage.markierungen == 1
+    ziel = projekt.raw_dir / "2026-10-06_workshop-reisebuchung"
+    assert "markierungen.json" in (ziel / "README.md").read_text(encoding="utf-8")
     daten = json.loads((ziel / "markierungen.json").read_text(encoding="utf-8"))
     assert daten["format_version"] == 1 and daten["sitzung"] == sitzung.name
     assert daten["markierungen"][0]["wiki"]["zitat"].startswith("Buchungen ab 250")

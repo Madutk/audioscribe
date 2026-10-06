@@ -208,6 +208,19 @@ def test_offene_punkte_aus_hinweisen_und_wiki_ablage(js):
     assert "h.offener_punkt" in js
     # Statt der automatischen Uebergabe zeigt die Karte die Wiki-Ablage der Sitzung (PRD §21).
     assert "ablage.ordner" in js and "markierungen.md" in js and "sf.uebergabe" not in js
+    # Markierungen gehen nur auf Wunsch ins Wiki - die Karte sagt, wo sie geblieben sind.
+    assert "die Markierungen bleiben im Sitzungsordner" in js
+
+
+def test_wiki_dialog_fragt_nach_den_markierungen(html, js):
+    dialog = html[html.index('id="wikiDlg"'):html.index('id="previewDlg"')]
+    haken = dialog[dialog.index('id="wikiDlgMarkierungen"') - 40:dialog.index('id="wikiDlgImmerRow"')]
+    assert dialog.index('id="wikiDlgBilder"') < dialog.index('id="wikiDlgMarkierungen"') < dialog.index('id="wikiDlgImmer"')
+    assert "checked" not in haken and "KI-erzeugt" in haken  # Vorgabe: aus, und warum
+    assert "markierungen: $('wikiDlgMarkierungen').checked" in js
+    assert "$('wikiDlgMarkierungen').checked = p.wiki_markierungen === true" in js
+    for feld in ("wizMarkierungen", "pMarkierungen"):
+        assert f'id="{feld}" />' in html  # auch im Assistenten und in den Projekteinstellungen: aus
     # keine eigene Route noetig
     assert "/api/souffleur/offene-punkte" not in js
 

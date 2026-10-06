@@ -102,6 +102,7 @@ export async function enterNeu() {
   document.querySelector('input[name="wizWikiArt"][value="vorhanden"]').checked = true;
   document.querySelector('input[name="wizSpeichern"][value="fragen"]').checked = true;
   $('wizBilder').checked = true;
+  $('wizMarkierungen').checked = false;
   for (const id of [...Object.values(FELD), 'wizErr']) $(id).textContent = '';
   $('wizWikiState').hidden = true;
   showStep();
@@ -192,6 +193,7 @@ async function anlegen() {
       sprache: $('wizSprache').value || null,
       wiki_speichern: document.querySelector('input[name="wizSpeichern"]:checked').value,
       wiki_bilder: $('wizBilder').checked,
+      wiki_markierungen: $('wizMarkierungen').checked,
     });
     setKontext(k);
     toast(`Projekt „${k.projekt.name}“ angelegt`);

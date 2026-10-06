@@ -53,6 +53,8 @@ class Projekt:
     sprache: str | None = None
     wiki_speichern: str = WIKI_FRAGEN
     wiki_bilder: bool = True
+    # Markierungen des Souffleurs mit ablegen: KI-erzeugt, deshalb nur auf Wunsch (Vorgabe: nein).
+    wiki_markierungen: bool = False
     # Demo-Projekt: liegt nicht auf der Platte, wird nie gespeichert (ui/kontext.py).
     demo: bool = False
     # Hinweis vom Laden (nicht gespeichert): z. B. ein Ordner aus der Projektdatei war auf
@@ -198,6 +200,7 @@ def lade(pfad: Path | str) -> Projekt:
         sprache=text("sprache"),
         wiki_speichern=speichern if speichern in WIKI_SPEICHERN else WIKI_FRAGEN,
         wiki_bilder=bool(data.get("wiki_bilder", True)),
+        wiki_markierungen=data.get("wiki_markierungen") is True,
     )
 
 
@@ -218,6 +221,7 @@ def speichere(projekt: Projekt) -> Path:
         "sprache": projekt.sprache,
         "wiki_speichern": projekt.wiki_speichern,
         "wiki_bilder": projekt.wiki_bilder,
+        "wiki_markierungen": projekt.wiki_markierungen,
     }
     datei = projekt.datei
     datei.parent.mkdir(parents=True, exist_ok=True)
@@ -336,6 +340,7 @@ def lege_an(
     sprache: str | None = None,
     wiki_speichern: str = WIKI_FRAGEN,
     wiki_bilder: bool = True,
+    wiki_markierungen: bool = False,
 ) -> Projekt:
     """Projekt anlegen: Angaben prüfen, bei Bedarf das Wiki-Gerüst schreiben, Ordner und
     Projektdatei erzeugen. Ein vorhandenes Wiki wird dabei nicht verändert."""
@@ -365,6 +370,7 @@ def lege_an(
         sprache=sprache or None,
         wiki_speichern=wiki_speichern if wiki_speichern in WIKI_SPEICHERN else WIKI_FRAGEN,
         wiki_bilder=bool(wiki_bilder),
+        wiki_markierungen=bool(wiki_markierungen),
     )
     try:
         projekt.sitzungen_dir.mkdir(parents=True, exist_ok=True)
@@ -400,10 +406,11 @@ def aendere(projekt: Projekt, felder: dict) -> Projekt:
         if felder["wiki_speichern"] not in WIKI_SPEICHERN:
             raise ProjektFehler(f"Unbekannte Wiki-Ablage: {felder['wiki_speichern']}")
         neu["wiki_speichern"] = felder["wiki_speichern"]
-    if "wiki_bilder" in felder and felder["wiki_bilder"] is not None:
-        if not isinstance(felder["wiki_bilder"], bool):
-            raise ProjektFehler("Ungültiger Wert für wiki_bilder.")
-        neu["wiki_bilder"] = felder["wiki_bilder"]
+    for key in ("wiki_bilder", "wiki_markierungen"):
+        if key in felder and felder[key] is not None:
+            if not isinstance(felder[key], bool):
+                raise ProjektFehler(f"Ungültiger Wert für {key}.")
+            neu[key] = felder[key]
     geaendert = replace(projekt, **neu, hinweis="")
     fehler = pruefe(
         name=geaendert.name, wurzel=geaendert.wurzel, sitzungen_dir=geaendert.sitzungen_dir,

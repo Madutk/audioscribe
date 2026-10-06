@@ -103,9 +103,21 @@ def test_laden_prueft_ordner_aus_der_projektdatei(projekt, tmp_path):
     assert modell.lade(projekt.wurzel).hinweis == ""
 
 
+def test_markierungen_ins_wiki_sind_vorgabe_aus_und_werden_gemerkt(projekt):
+    assert projekt.wiki_markierungen is False and modell.lade(projekt.wurzel).wiki_markierungen is False
+    # Aeltere Projektdateien kennen das Feld nicht: es bleibt bei "nein".
+    daten = json.loads(projekt.datei.read_text(encoding="utf-8"))
+    assert daten["wiki_markierungen"] is False
+    del daten["wiki_markierungen"]
+    projekt.datei.write_text(json.dumps(daten), encoding="utf-8")
+    assert modell.lade(projekt.wurzel).wiki_markierungen is False
+    modell.aendere(projekt, {"wiki_markierungen": True})
+    assert modell.lade(projekt.wurzel).wiki_markierungen is True
+
+
 def test_aendern_weist_falsche_typen_und_werte_ab(projekt):
     for felder in ({"sitzungen_dir": 123}, {"assets_dir": ["x"]}, {"wiki_bilder": "false"}, {"sprache": "--help x"},
-                   {"agent_model": 5}, {"wiki_speichern": "manchmal"}):
+                   {"agent_model": 5}, {"wiki_speichern": "manchmal"}, {"wiki_markierungen": 1}):
         with pytest.raises(ProjektFehler):
             modell.aendere(projekt, felder)
     assert modell.lade(projekt.wurzel) == projekt  # nichts davon wurde gespeichert

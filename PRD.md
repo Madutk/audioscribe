@@ -6,7 +6,7 @@
 |---|---|
 | **Status** | Entwurf |
 | **Datum** | 2026-06-30 |
-| **Fortschreibung** | 2026-10-06: §21 Projekte, Startseite, Wiki-Ablage und Wiederaufnahme (FR-66 … FR-77, NFR-25 … NFR-29); KI-Verbrauch (FR-78) |
+| **Fortschreibung** | 2026-10-06: §21 Projekte, Startseite, Wiki-Ablage und Wiederaufnahme (FR-66 … FR-77, NFR-25 … NFR-29); KI-Verbrauch (FR-78); Markierungen nur auf Wunsch ins Wiki (FR-71/FR-72) |
 | **Autor** | Marek (madutkow@googlemail.com) |
 
 ---
@@ -751,7 +751,7 @@ pip-/uv-Pakete. Ein Doppelklick startet die Oberfläche.
 > Fortgeschrieben durch §21: „Projekt = Installation“ (§20.2) gilt nicht mehr – das Wiki
 > gehört zum Projekt, die Verknüpfung (FR-56) steht in den Projekteinstellungen statt in
 > einer Karte „Wiki (Souffleur)“. Die automatische Übergabe in einen Übergabeordner (FR-60
-> und das zugehörige Akzeptanzkriterium) ist entfallen; Transkript und Markierungen gehen
+> und das zugehörige Akzeptanzkriterium) ist entfallen; das Transkript und – nur auf Wunsch – die Markierungen gehen
 > über die Wiki-Ablage nach `raw/` (FR-71). Ohne Projekt (Kommandozeile, Tests) gilt weiter
 > der Wiki-Pfad der Installation.
 
@@ -844,7 +844,7 @@ dort führen vier Einstiege weiter: neues Projekt, Projekt öffnen, eine einzeln
 transkribieren, Demo abspielen. Ein **Projekt** gehört zu genau einem LLM-Wiki und trägt
 seine eigenen Einstellungen (Ordner, Wiki-Ablage, KI, Sprache); die Arbeitsansichten zeigen
 nur noch, was zum gewählten Einstieg gehört. Nach einer Sitzung geht das Material auf Wunsch
-als neue Quelle ins Wiki – Transkript und Markierungen nach `raw/`, Bilder in einen
+als neue Quelle ins Wiki – das Transkript (auf Wunsch mit den Markierungen des Souffleurs) nach `raw/`, Bilder in einen
 Assets-Ordner, die Zuordnung Zeitstempel ↔ Bild bleibt erhalten – und/oder in die
 KI-Nachbereitung. Eine Sitzung, die durch einen Absturz unterbrochen wurde, lässt sich nach
 dem Neustart fortsetzen oder sauber abschließen.
@@ -888,8 +888,8 @@ dem Neustart fortsetzen oder sauber abschließen.
   schreibt weiterhin nichts ins Wiki; `souffleur/uebergabe.py` baut nur noch die Inhalte von
   `markierungen.json/.md`.
 - **Die automatische Übergabe entfällt.** Übergabeordner, `AUDIOSCRIBE_UEBERGABE_DIR` und der
-  Abschluss-Schritt des Souffleurs (FR-60) gibt es nicht mehr; die Markierungen gehen mit der
-  Wiki-Ablage in dieselbe Quelle wie das Transkript.
+  Abschluss-Schritt des Souffleurs (FR-60) gibt es nicht mehr; die Markierungen gehen auf
+  Wunsch mit der Wiki-Ablage in dieselbe Quelle wie das Transkript (FR-71).
 - **Absturzsicherung im Aufnahmeprozess** (`live/journal.py`). Drei Grundsätze: erst laden,
   dann schreiben (Transkript, `marks.json`, `souffleur.json` und WAV würden sonst den Bestand
   überschreiben); eine Zeitbasis (Sample-Position der fertigen WAV = Sitzungszeit); ein
@@ -930,8 +930,8 @@ dem Neustart fortsetzen oder sauber abschließen.
 | FR-68 | **Projekt öffnen.** Über die Liste der zuletzt geöffneten oder durch Wahl des Wiki-Ordners. Ordner, Wiki, KI und Sprache des Projekts gelten danach in allen Arbeitsansichten; der Projektname steht im Kopf, „Projekt schließen“ führt zur Startseite. Laufende Arbeit sperrt den Wechsel mit verständlicher Meldung. |
 | FR-69 | **Einstellungen global und je Projekt.** Die globale Seite (Zahnrad) pflegt KI-Dienst, Modell für den Souffleur, Modell für die KI-Analyse und Sprache der Aufnahmen und zeigt die Umgebungs-Prüfung aus FR-47. Die Projektseite pflegt Name, Ordner, Wiki-Ablage (`fragen` \| `immer` \| `nie`, Bilder ja/nein) und kann jeden globalen Wert überschreiben oder wieder auf „globale Einstellung“ stellen. Änderungen gelten sofort. |
 | FR-70 | **Arbeitsbereich des Projekts.** Drei Bereiche: *Live-Sitzung* (Live-Transkription mit Souffleur wie §17/§20, dazu ein optionaler Sitzungstitel), *Nachbereitung* (Sitzungen des Projekts mit Marken „im Wiki“, „nachbereitet“, „unterbrochen“; Wiki-Ablage, Transkript-Vorschau und KI-Analyse je Sitzung) und *Projekt* (Einstellungen). Nach dem Ende einer Sitzung erscheint die Karte „Wie geht es weiter?“ mit „Ins Wiki speichern“ und „Mit KI nachbereiten“ – beides möglich, in beliebiger Reihenfolge. |
-| FR-71 | **Sitzung ins Wiki speichern.** Dialog mit Titel der Quelle, Vorschau des Zielordners und „Bilder mit übertragen“. Abgelegt wird nach `raw/<JJJJ-MM-TT>_<kurzname>/`: `transkript.md` (byte-gleich), `transcript.json` (ohne den lokalen `source_path`), `markierungen.json`/`markierungen.md` des Souffleurs, `README.md`. Mit Bildern zusätzlich: die Standbilder nach `<assets>/<ordnername>/`, `marks.json` mit Zeitstempel → Bild (Pfad relativ zur Ablage) und `transkript.annotiert.md`, in dem jedes Bild am selben Absatz steht wie im Sitzungsordner. Ein Vermerk `wiki-ablage.json` im Sitzungsordner hält fest, was abgelegt wurde. |
-| FR-72 | **„Immer so speichern“.** Im Dialog wählbar und in den Projekteinstellungen änderbar: Steht das Projekt auf `immer`, geht jede sauber beendete Sitzung nach dem Nachschärfen ohne Nachfrage ins Wiki; das Ergebnis (oder der Fehler) steht in der Karte „Wie geht es weiter?“. Bei `nie` bietet die Karte die Ablage nicht an; sie bleibt über die Nachbereitung erreichbar. |
+| FR-71 | **Sitzung ins Wiki speichern.** Dialog mit Titel der Quelle, Vorschau des Zielordners, „Bilder mit übertragen“ und „Markierungen des Souffleurs mit übertragen“ (Vorgabe: aus). Abgelegt wird nach `raw/<JJJJ-MM-TT>_<kurzname>/`: `transkript.md` (byte-gleich), `transcript.json` (ohne den lokalen `source_path`), `README.md`. Mit Markierungen zusätzlich `markierungen.json`/`markierungen.md` des Souffleurs – sie sind KI-erzeugt und zitieren das Wiki, unter `raw/` könnte der Ingest sie als Quelle lesen (Zirkelschluss, verfestigte Fehlalarme); ohne Haken bleiben sie im Sitzungsordner (`souffleur.json`, `souffleur-protokoll.md`). Mit Bildern zusätzlich: die Standbilder nach `<assets>/<ordnername>/`, `marks.json` mit Zeitstempel → Bild (Pfad relativ zur Ablage) und `transkript.annotiert.md`, in dem jedes Bild am selben Absatz steht wie im Sitzungsordner. Ein Vermerk `wiki-ablage.json` im Sitzungsordner hält fest, was abgelegt wurde. |
+| FR-72 | **„Immer so speichern“.** Im Dialog wählbar und in den Projekteinstellungen änderbar: Steht das Projekt auf `immer`, geht jede sauber beendete Sitzung nach dem Nachschärfen ohne Nachfrage ins Wiki – mit Bildern und Markierungen so, wie es im Dialog bzw. in den Projekteinstellungen angehakt ist (`wiki_bilder`, `wiki_markierungen`; Vorgabe für Markierungen: aus); das Ergebnis (oder der Fehler) steht in der Karte „Wie geht es weiter?“. Bei `nie` bietet die Karte die Ablage nicht an; sie bleibt über die Nachbereitung erreichbar. |
 | FR-73 | **Nachbereitung ins Wiki.** Die Dokumente einer fertigen KI-Analyse lassen sich nach `<raw-Sitzung>/nachbereitung-ki/<analyse>/` legen – ohne Materialkopie, Skills und Protokoll, mit einer `README.md`, die sie als KI-erzeugt und nicht als Quelle kennzeichnet. Liegt die Sitzung noch nicht im Wiki, wird sie zuerst gespeichert. Mit Bildern verweisen die Dokumente auf die Bilder im Assets-Ordner der Sitzung (keine zweite Kopie), ohne Bilder werden Bildzeilen zu Textverweisen. |
 | FR-74 | **Aufnahme transkribieren (ohne Projekt).** Die Ansicht zeigt nur diesen Weg: Datei(en) im Dialog wählen (der Ordner-Dialog listet dafür die Mediendateien), Speicherort, Optionen, Fortschritt. Je fertiger Aufnahme – auch einer früher schon transkribierten – eine Ergebniskarte mit Pfad, Transkript-Vorschau und „Ordner öffnen“, dazu die deutliche Folgeaktion „Mit KI weiterverarbeiten“; die KI-Analyse wählt die Aufnahme dann als Quelle vor. |
 | FR-75 | **Demo abspielen.** Die Demo zeigt die Live-Ansicht ohne Steuerspalte mit einem Knopf „Demo starten“ (Stoppen, erneut starten). Sie spielt das Beispiel-Meeting gegen das Demo-Wiki ab; es wird nichts aufgenommen, nichts ins Wiki gespeichert und nichts in der Projektliste gemerkt. |

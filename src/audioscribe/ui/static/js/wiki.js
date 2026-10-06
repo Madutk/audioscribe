@@ -93,13 +93,15 @@ export function openWikiDialog(sitzung) {
   if (!p) return Promise.resolve(null);
   if (wikiSave) closeWikiDialog(null);
   const bilder = sitzung.frames || 0;
-  $('wikiDlgInfo').textContent = 'Transkript und Markierungen des Souffleurs werden als neue Quelle abgelegt. '
+  $('wikiDlgInfo').textContent = 'Das Transkript wird als neue Quelle abgelegt. '
     + 'Bestehendes im Wiki bleibt unverändert; die Wiki-Seiten werden nicht angefasst.';
   $('wikiDlgName').value = sitzung.titel || '';
   $('wikiDlgName').placeholder = sitzung.name || '';
   $('wikiDlgBilder').disabled = bilder === 0;
   $('wikiDlgBilder').checked = bilder > 0 && p.wiki_bilder !== false;
   $('wikiDlgBilderLabel').textContent = bilder ? `Bilder mit übertragen (${bilder})` : 'Bilder mit übertragen – diese Sitzung hat keine';
+  // Markierungen sind KI-erzeugt: nur mit, wenn das Projekt es so festgelegt hat.
+  $('wikiDlgMarkierungen').checked = p.wiki_markierungen === true;
   $('wikiDlgImmer').checked = false;
   $('wikiDlgImmerRow').hidden = p.wiki_speichern === 'immer' || !!sitzung.ohneImmer;
   $('wikiDlgErr').textContent = '';
@@ -130,11 +132,13 @@ $('wikiDlgOk').onclick = async () => {
       sitzung: wikiSave.sitzung.path,
       titel: $('wikiDlgName').value.trim(),
       bilder: $('wikiDlgBilder').checked && !$('wikiDlgBilder').disabled,
+      markierungen: $('wikiDlgMarkierungen').checked,
       immer,
     });
     if (immer) setKontext(await api('/api/kontext'));
     if (ablage.hinweis) toast(ablage.hinweis, 'fehler');
-    toast(`Ins Wiki gespeichert: ${basename(ablage.ordner)}${ablage.bilder ? ` · ${ablage.bilder} Bilder` : ''}`);
+    toast(`Ins Wiki gespeichert: ${basename(ablage.ordner)}${ablage.bilder ? ` · ${ablage.bilder} Bilder` : ''}`
+      + `${ablage.markierungen ? ` · ${ablage.markierungen} Markierungen` : ''}`);
     closeWikiDialog(ablage);
   } catch (err) {
     $('wikiDlgErr').textContent = err.message;

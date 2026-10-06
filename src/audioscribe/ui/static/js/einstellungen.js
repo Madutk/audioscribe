@@ -96,6 +96,7 @@ export function zeigeProjekt() {
   const radio = document.querySelector(`input[name="pSpeichern"][value="${p.wiki_speichern}"]`);
   if (radio) radio.checked = true;
   $('pBilder').checked = p.wiki_bilder !== false;
+  $('pMarkierungen').checked = p.wiki_markierungen === true;
   if (!einst) return;
   for (const [key, id] of Object.entries(P)) {
     const global = einst.werte[key];
@@ -134,6 +135,7 @@ for (const radio of document.querySelectorAll('input[name="pSpeichern"]')) {
   radio.onchange = () => speichere({ wiki_speichern: radio.value });
 }
 $('pBilder').onchange = () => speichere({ wiki_bilder: $('pBilder').checked });
+$('pMarkierungen').onchange = () => speichere({ wiki_markierungen: $('pMarkierungen').checked });
 for (const [key, id] of Object.entries(P)) {
   // Leerer Wert = wieder die globale Einstellung verwenden
   $(id).onchange = () => speichere({ [key]: $(id).value || null });

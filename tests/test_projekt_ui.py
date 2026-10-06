@@ -248,6 +248,16 @@ def test_immer_speichern_wird_projekteinstellung(client, projekt, sitzung):
     client.post("/api/wiki/speichern", json={"sitzung": str(sitzung), "bilder": False, "immer": True})
     p = client.get("/api/kontext").json()["projekt"]
     assert p["wiki_speichern"] == "immer" and p["wiki_bilder"] is False
+    assert p["wiki_markierungen"] is False  # nicht angehakt: bleibt aus
+    assert not list((projekt.raw_dir / "2026-10-06_workshop-reisebuchung").glob("markierungen.*"))
+
+
+def test_markierungen_gehen_nur_mit_haken_mit_und_immer_merkt_es(client, projekt, sitzung):
+    _mit_sitzung(client, projekt, sitzung)
+    r = client.post("/api/wiki/speichern", json={"sitzung": str(sitzung), "bilder": False, "markierungen": True, "immer": True})
+    assert r.status_code == 200 and r.json()["markierungen"] == 1
+    assert (Path(r.json()["ordner"]) / "markierungen.md").is_file()
+    assert client.get("/api/kontext").json()["projekt"]["wiki_markierungen"] is True
 
 
 def test_wiki_speichern_nur_fuer_sitzungen_des_projekts(client, projekt, sitzung, tmp_path):

@@ -160,13 +160,18 @@ function renderOpenPoints() {
 export function renderHandover(ablage) {
   const box = $('souffleurHandover');
   const p = projekt();
-  const key = JSON.stringify([ablage, p && p.wiki_speichern, p && p.raw_dir]);
+  const key = JSON.stringify([ablage, p && p.wiki_speichern, p && p.wiki_markierungen, p && p.raw_dir]);
   if (box.dataset.key === key) return;
   box.dataset.key = key;
   if (ablage && ablage.ordner) {
-    box.innerHTML = `Ins Wiki gespeichert: <code>${esc(ablage.ordner)}</code> (<code>markierungen.md</code>, <code>transkript.md</code>)`;
+    // Die Markierungen gehen nur auf Wunsch mit (KI-erzeugt) - sagen, was tatsaechlich dort liegt.
+    box.innerHTML = `Ins Wiki gespeichert: <code>${esc(ablage.ordner)}</code> (`
+      + (ablage.markierungen ? '<code>markierungen.md</code>, ' : '') + '<code>transkript.md</code>)'
+      + (ablage.markierungen ? '' : ' – die Markierungen bleiben im Sitzungsordner');
   } else if (p && !p.demo && p.wiki_speichern === 'immer') {
-    box.innerHTML = `Beim Stopp gehen Transkript und Markierungen ins Wiki: <code>${esc(trimSep(p.raw_dir))}${esc(sep())}…${esc(sep())}markierungen.md</code>`;
+    box.innerHTML = p.wiki_markierungen
+      ? `Beim Stopp gehen Transkript und Markierungen ins Wiki: <code>${esc(trimSep(p.raw_dir))}${esc(sep())}…${esc(sep())}markierungen.md</code>`
+      : `Beim Stopp geht das Transkript ins Wiki: <code>${esc(trimSep(p.raw_dir))}</code> – die Markierungen bleiben im Sitzungsordner`;
   } else {
     box.innerHTML = '';
   }

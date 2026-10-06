@@ -709,7 +709,7 @@ def test_index_hat_globale_und_projekt_einstellungen(ui_client):
     for feld in ("gKiDienst", "gSouffleurModel", "gAgentModel", "gSprache", "envChecks"):
         assert f'id="{feld}"' in html
     assert 'id="tabProj" data-view="projekt"' in html
-    for feld in ("pName", "pSitzungen", "pRaw", "pAssets", "pBilder", "pKiDienst", "pSprache", "setWikiState"):
+    for feld in ("pName", "pSitzungen", "pRaw", "pAssets", "pBilder", "pMarkierungen", "pKiDienst", "pSprache", "setWikiState"):
         assert f'id="{feld}"' in html
     # Die drei globalen Ordnerfelder des alten Reiters gibt es nicht mehr.
     for alt in ("setIn", "setOut", "setAna", "setHandover"):

@@ -679,12 +679,12 @@ function renderNext(s) {
   let wiki = '';
   if (liveAblage) {
     wiki = `<div class="next-item done"><b>${icon('check')}Im Wiki gespeichert</b>
-      <span><code>${esc(liveAblage.ordner)}</code>${liveAblage.bilder ? ` · ${liveAblage.bilder} Bilder im Assets-Ordner` : ''}</span>
+      <span><code>${esc(liveAblage.ordner)}</code>${liveAblage.bilder ? ` · ${liveAblage.bilder} Bilder im Assets-Ordner` : ''}${liveAblage.markierungen ? ` · ${liveAblage.markierungen} Markierungen` : ''}</span>
       <button class="ghost sm" type="button" data-folder="${esc(liveAblage.ordner)}">${icon('external')}Ordner öffnen</button></div>`;
   } else if (p.wiki_speichern !== 'nie' || fehler) {
     wiki = `<div class="next-item"><b>${icon('book-plus')}Ins Wiki speichern</b>
-      <span>${fehler ? `<span class="err">${esc(fehler)}</span>` : ''}Transkript${bilder ? `, ${bilder} Bilder` : ''} und Markierungen
-        als neue Quelle unter <code>raw/</code> ablegen.</span>
+      <span>${fehler ? `<span class="err">${esc(fehler)}</span>` : ''}Transkript${bilder ? ` und ${bilder} Bilder` : ''}
+        als neue Quelle unter <code>raw/</code> ablegen – die Markierungen des Souffleurs nur auf Wunsch.</span>
       <button type="button" id="liveWikiSave">${icon('book-plus')}Ins Wiki speichern</button></div>`;
   }
   const ki = `<div class="next-item"><b>${icon('sparkles')}Mit KI nachbereiten</b>

@@ -172,8 +172,12 @@ def letzte_ablage(session_dir: Path, projekt: Projekt | None = None) -> dict | N
 # --- Sitzung ---------------------------------------------------------------------------------
 
 
-def speichere_sitzung(session_dir: Path, projekt: Projekt, *, titel: str = "", bilder: bool = True) -> Ablage:
-    """Transkript, Markierungen und (auf Wunsch) Bilder der Sitzung ins Wiki legen."""
+def speichere_sitzung(
+    session_dir: Path, projekt: Projekt, *, titel: str = "", bilder: bool = True, markierungen: bool = False
+) -> Ablage:
+    """Das Transkript der Sitzung ins Wiki legen - auf Wunsch mit Bildern und mit den
+    Markierungen des Souffleurs. Die Markierungen sind KI-erzeugt und zitieren das Wiki; unter
+    ``raw/`` könnte der Ingest sie als Quelle lesen, deshalb gehen sie nur auf Wunsch mit."""
     from audioscribe.review.marks import load_marks, save_marks
     from audioscribe.review.merge import render_markdown_with_marks
     from audioscribe.souffleur import markierung, uebergabe
@@ -231,7 +235,7 @@ def speichere_sitzung(session_dir: Path, projekt: Projekt, *, titel: str = "", b
                     _atomar(ziel / "transkript.annotiert.md", render_markdown_with_marks(data, verlinkt))
 
         anzahl_markierungen = 0
-        stand = markierung.lade(session_dir)
+        stand = markierung.lade(session_dir) if markierungen else None
         if stand is not None:
             fassung = uebergabe.fassung(session_dir)
             sitzung = stand.sitzung or session_dir.name
@@ -285,7 +289,7 @@ def _readme(titel: str, sitzung: str, assets: Path | None, ziel: Path, mit_marki
 
 
 def speichere_nachbereitung(
-    workspace: Path, projekt: Projekt, session_dir: Path, *, bilder: bool = True
+    workspace: Path, projekt: Projekt, session_dir: Path, *, bilder: bool = True, markierungen: bool = False
 ) -> Ablage:
     """Dokumente einer KI-Analyse zur Sitzung ins Wiki legen - getrennt und als KI-erzeugt
     gekennzeichnet. Liegt die Sitzung noch nicht im Wiki, wird sie zuerst gespeichert.
@@ -298,7 +302,9 @@ def speichere_nachbereitung(
         raise FileNotFoundError(f"Analyse-Ordner nicht gefunden: {workspace}")
     _pruefe_ziele(projekt)
 
-    sitzung = letzte_ablage(session_dir, projekt) or speichere_sitzung(session_dir, projekt, bilder=bilder).als_dict()
+    sitzung = letzte_ablage(session_dir, projekt) or speichere_sitzung(
+        session_dir, projekt, bilder=bilder, markierungen=markierungen
+    ).als_dict()
     basis = Path(sitzung["ordner"])
     # Liegt die Sitzung ohne Bilder im Wiki, bekommt die Nachbereitung ihren eigenen Bilder-Ordner
     # unter demselben Namen - die Sitzung wird dafuer nicht ein zweites Mal abgelegt.
