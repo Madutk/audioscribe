@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "live": {
+    "laden_s": 0.0,
+    "aufnahme_s": 318.01599999999996,
+    "abschluss_s": 0.0,
+    "gesamt_s": 318.01599999999996,
+    "abschnitte": 20,
+    "zusammengelegt": 0,
+    "audio_s": 265.0,
+    "rechenzeit_s": 0.0,
+    "tempo": null,
+    "vorschau_n": 0,
+    "vorschau_s": 0.0,
+    "verzoegerung_mittel_s": 0.0,
+    "verzoegerung_median_s": 0.0,
+    "verzoegerung_max_s": 0.0,
+    "rueckstand_max_s": 0.0,
+    "aufholmodus_s": 0.0,
+    "sprecher_s": 0.0,
+    "tempo_inkl_vorschau": null,
+    "aufholmodus_anteil": 0.0,
+    "eco_abschnitte": 0,
+    "backend": "replay",
+    "geraet": "-",
+    "modell": "transkript-replay"
+  }
+}

@@ -1,0 +1,125 @@
+{
+  "version": 1,
+  "source": "live-2026-10-06_11-21-57",
+  "source_path": "C:\\Users\\user\\develop\\llm_wikis\\audioscribe_demo\\raw\\live-2026-10-06_11-21-57\\audio\\system.wav",
+  "duration_s": 268.0,
+  "language": "de",
+  "num_speakers": 2,
+  "model": "transkript-replay",
+  "created": "2026-10-06 11:27",
+  "paragraphs": [
+    {
+      "index": 0,
+      "start": 3.0,
+      "end": 7.0,
+      "speaker": "Moderator",
+      "text": "Guten Morgen. Hast du gut hergefunden?"
+    },
+    {
+      "index": 1,
+      "start": 7.0,
+      "end": 15.0,
+      "speaker": "Assistenz",
+      "text": "Ja, alles gut. Nur der Kaffeeautomat im dritten Stock ist schon wieder kaputt."
+    },
+    {
+      "index": 2,
+      "start": 15.0,
+      "end": 19.0,
+      "speaker": "Moderator",
+      "text": "Der ist doch immer kaputt, oder?"
+    },
+    {
+      "index": 3,
+      "start": 19.0,
+      "end": 24.0,
+      "speaker": "Assistenz",
+      "text": "Stimmt."
+    },
+    {
+      "index": 4,
+      "start": 24.0,
+      "end": 36.0,
+      "speaker": "Moderator",
+      "text": "Dann lass uns anfangen. Ich möchte ein paar Punkte aus den letzten Terminen nachschärfen. Fangen wir mit dem Tarif an."
+    },
+    {
+      "index": 5,
+      "start": 36.0,
+      "end": 62.0,
+      "speaker": "Assistenz",
+      "text": "Standard ist weiterhin der Flexpreis, weil sich die Termine oft verschieben. Und ich reserviere immer einen Sitzplatz."
+    },
+    {
+      "index": 6,
+      "start": 62.0,
+      "end": 67.0,
+      "speaker": "Moderator",
+      "text": "Wie war das mit der ersten Klasse?"
+    },
+    {
+      "index": 7,
+      "start": 67.0,
+      "end": 100.0,
+      "speaker": "Assistenz",
+      "text": "Erste Klasse buche ich, sobald die Fahrt länger als drei Stunden dauert. Wie viele Tage vorher mussten wir beim Spaßpreis eigentlich buchen? Das habe ich gerade nicht im Kopf."
+    },
+    {
+      "index": 8,
+      "start": 100.0,
+      "end": 136.0,
+      "speaker": "Moderator",
+      "text": "Das schaue ich gleich nach. Kommen wir zur Freigabe. Ab wann brauchst du die?"
+    },
+    {
+      "index": 9,
+      "start": 136.0,
+      "end": 150.0,
+      "speaker": "Assistenz",
+      "text": "Ab 300 Euro pro Buchung muss die Teamleitung freigeben."
+    },
+    {
+      "index": 10,
+      "start": 150.0,
+      "end": 154.0,
+      "speaker": "Moderator",
+      "text": "Und bezahlt wird wie?"
+    },
+    {
+      "index": 11,
+      "start": 154.0,
+      "end": 182.0,
+      "speaker": "Assistenz",
+      "text": "Mit der Firmenkreditkarte, die im Geschäftskundenkonto hinterlegt ist. Was machen wir eigentlich, wenn die Firmenkreditkarte abgelehnt wird? Das ist mir letzte Woche zum ersten Mal passiert."
+    },
+    {
+      "index": 12,
+      "start": 182.0,
+      "end": 187.0,
+      "speaker": "Moderator",
+      "text": "Gute Frage. Was hast du in dem Fall gemacht?"
+    },
+    {
+      "index": 13,
+      "start": 187.0,
+      "end": 250.0,
+      "speaker": "Assistenz",
+      "text": "Ich habe es am nächsten Tag noch einmal versucht, dann ging es. Eine Regel dafür gibt es nicht."
+    },
+    {
+      "index": 14,
+      "start": 250.0,
+      "end": 255.0,
+      "speaker": "Moderator",
+      "text": "Was passiert mit den Rechnungen?"
+    },
+    {
+      "index": 15,
+      "start": 255.0,
+      "end": 268.0,
+      "speaker": "Assistenz",
+      "text": "Die lege ich auf dem Teamlaufwerk ab, im Ordner Reisen nach Jahr und Monat."
+    }
+  ],
+  "mode": "replay"
+}
