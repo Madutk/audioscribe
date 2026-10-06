@@ -736,3 +736,81 @@ pip-/uv-Pakete. Ein Doppelklick startet die Oberfläche.
 - [ ] Negativpfade: `--device cuda` → klare Meldung; entzogene Bildschirmaufnahme →
       Berechtigungshinweis statt Stacktrace; `uv run audioscribe doctor` ohne Extras →
       ASR-Backend WARN, `./start.sh` repariert.
+
+## 20. Ausbaustufe: Souffleur – Live-Abgleich mit dem LLM-Wiki
+
+### 20.1 Ziel
+
+Der Souffleur hört beim Meeting über das Live-Transkript mit, gleicht das Gesagte mit dem
+Wiki des Projekts ab und gibt dem Moderator Hinweise: Widerspruch zum Wiki, offener Punkt,
+gestellte Frage mit Antwort aus dem Wiki, dazu die Essenz der letzten Minuten auf Knopfdruck.
+Auftrag und Leitplanken: `doc/Audioscribe-Souffleur-Anforderungen.md` (Abschnitt 4 dort ist
+verbindlich). Stufe 1 umfasst K1, A1–A4, B1, B2, C1; B3 (Lösungsknopf), Wiki-Pflege/Lint und
+mehrere Wikis sind nicht enthalten.
+
+### 20.2 Designentscheidungen (festgelegt)
+
+- **Projekt = Installation.** Es gibt noch keine Projekt-Einheit im Code; der Wiki-Pfad gilt
+  je Installation und wird an genau einer Stelle gelesen (`souffleur/konfig.py`), damit er
+  später je Projekt gespeichert werden kann.
+- **Wiki nur lesen, Form Karpathy-Muster.** Markdown-Ordner mit `index.md`, `wiki/`, `raw/`,
+  `log.md`; gelesen werden nur Seiten. Fundstelle = Datei › Überschrift (Zeile). Lexikalische
+  Suche (BM25 über Abschnitte) ohne neue Abhängigkeit. Das Glossar bestätigter Fehlerkennungen
+  ist Teil des Wikis (`glossar.md`, Tabelle `Fehlerkennung | Korrekt`), keine eigene Einstellung.
+- **Wiki-Stand:** Index beim Sitzungsstart; Änderungen gelten ab dem nächsten Meeting.
+- **Markierungen als Begleitdateien** (`souffleur.json`, `souffleur-protokoll.md`,
+  `souffleur-diagnose.jsonl`, `souffleur-essenz.jsonl`) im Sitzungsordner – nie im Transkript.
+- **Übergabe (A4)** in einen eigenen Übergabeordner, rein anhängend, nie in den Wiki-Pfad;
+  Format `markierungen.json` (format_version 1) ist in `souffleur/uebergabe.py` gekapselt und
+  mit dem Lint-Verantwortlichen abzustimmen. Kein Rückkanal in dieser Stufe.
+- **KI-Dienst austauschbar** (`KiDienst`-Protokoll, Factory, `AUDIOSCRIBE_SOUFFLEUR_BACKEND`).
+  Stufe 1: Claude Agent SDK, werkzeugloser Einzelaufruf je Fenster mit JSON-Schema-Antwort,
+  Sitzungsdateien der CLI abgeschaltet und ersatzweise gelöscht, Arbeitsordner nie der
+  Wiki-Pfad. Oberfläche und Ausgaben sagen nur „KI“.
+- **Ein KI-Aufruf je Fenster** mit lokal vorgesuchten Auszügen; lokale Validierung (Aussage
+  wörtlich im Segment, Zitat wörtlich im Auszug, Widerspruch nur mit Zitat, Dedup).
+- **Souffleur im Server-Prozess** (Worker-Thread je Sitzung, gefüttert vom LiveRunner),
+  Hinweise als `hinweis`-Ereignis über das bestehende Polling.
+- **Transkript-Replay als Kindprozess** (`live --transcript`), Abzweig vor dem Audio-Backend,
+  kein Nachschärfen – derselbe Weg für Test und Betrieb.
+- **Einstellungen im Konfigurationsordner der Plattform** (`%APPDATA%`, `~/Library/Application
+  Support`, `~/.config`), alte `ui-state.json` wird übernommen.
+
+### 20.3 Funktionale Anforderungen
+
+| ID | Anforderung |
+|----|-------------|
+| FR-56 | **K1 Wiki-Verknüpfung.** Einstellungen-Karte „Wiki (Souffleur)“ mit Pfadfeld, Ordner-Browser und sofortiger Prüfung (drei Zustände: kein Wiki, verbunden mit Name/Seiten/Glossar, nicht erreichbar mit Grund). Der Pfad bleibt gespeichert, gilt ab der nächsten Sitzung und wird nirgends im Code festgelegt. Derselbe Zustand ist im Live-Reiter sichtbar. Ohne Wiki läuft alles weiter; Wiki-Funktionen zeigen ihren Zustand. |
+| FR-57 | **A1 Stimmigkeits-Check.** Der Abgleich läuft ohne Zutun je Fenster; Smalltalk, Organisatorisches und passende Aussagen erzeugen keinen Hinweis. |
+| FR-58 | **A2 Widerspruch.** Markierung mit Fundstelle (Datei › Überschrift, Zeile) und wörtlichem Wiki-Zitat; Gegenüberstellung gesagt / im Wiki; KI-Einschätzung getrennt als KI gekennzeichnet; ohne Zitat kein Widerspruch. |
+| FR-59 | **A3 Offene Punkte.** Als ungeklärt Benanntes, offene Zuständigkeiten und Fragen ohne Befund werden markiert und als Liste während und nach dem Meeting angezeigt. |
+| FR-60 | **A4 Übergabe.** Nach der Sitzung Ordner `<Übergabeordner>/<sitzung>/` mit byte-gleicher Transkriptkopie, `markierungen.json`, `markierungen.md`, `README.md`; rein anhängend, nie im Wiki-Pfad; jede Markierung mit Zeitbezug. |
+| FR-61 | **B1 Fragen-Erkennung.** Echte Fragen werden markiert, rhetorische Fragen und Floskeln möglichst nicht. |
+| FR-62 | **B2 Antwortvorschlag.** Zu einer Frage zeigt der Souffleur Wiki-Wissen mit Fundstelle; liegt nichts vor, steht genau das da („Im Wiki liegt dazu nichts vor“) ohne KI-Ersatztext, und die Frage zählt als offener Punkt. |
+| FR-63 | **C1 Essenz.** Knöpfe „Essenz 2 min“ und „Essenz 5 min“; die Zusammenfassung bezieht sich genau auf das Fenster, ist kurz, als KI gekennzeichnet und wird getrennt in `souffleur-essenz.jsonl` abgelegt, nie in die Übergabe. |
+| FR-64 | **Transkript-Replay.** `audioscribe live --transcript DATEI|ORDNER [--speed X] [--replay-delay S]` und die Kachel „Transkript abspielen“ (Datei, Tempo 1–20×) spielen ein gespeichertes Transkript zu seinen Zeitstempeln ab, als käme es live; Sitzungsordner, Fazit und Souffleur verhalten sich wie im Betrieb; kein Audio, kein Modell, kein Nachschärfen. |
+| FR-65 | **Markierungsarten** Widerspruch, offener Punkt, Frage sind in Farbe, Form und Wort unterscheidbar und erweiterbar; der Moderator kann die Souffleur-Spalte samt Transkript-Chips mit einem Griff (Alt+S) ausblenden und die Auswertung abschalten. |
+
+### 20.4 Nicht-funktionale Anforderungen
+
+| ID | Anforderung |
+|----|-------------|
+| NFR-21 | **Leitplanken nachweisbar.** Das Paket `souffleur/` öffnet das Wiki nur lesend und schreibt im Sitzungsordner nur die vier Begleitdateien; `transkript.md`/`transcript.json` bleiben byte-gleich (Test). Wiki-Zitate tragen Fundstellen, KI-Text steht in eigenen Feldern. |
+| NFR-22 | **Verzögerung gemessen.** Je Hinweis: Sprachende → Hinweis (Sitzungsuhr) mit Anteilen Spracherkennung, Warten, Suche, KI-Prozessstart, KI-Antwort; reale Verzögerung ab Empfang; Mittel/Median/Max in `souffleur.json` und Protokoll. Kein fester Grenzwert; Richtwert 15 s. |
+| NFR-23 | **Robust.** Ohne Wiki, ohne KI-Dienst oder bei KI-Fehlern (3 in Folge → 60 s Pause) läuft die Sitzung weiter; der Zustand wird angezeigt. Keine Transkript- oder Wiki-Auszüge bleiben außerhalb des Sitzungsordners liegen. |
+| NFR-24 | **Plattformneutral.** Windows und macOS nativ (uv-Umgebung), Pfade über `pathlib`, Prozesse mit Listen-argv; keine Linux-Annahmen. |
+
+### 20.5 Akzeptanzkriterien
+
+- [ ] Wiki-Pfad auf das Test-Wiki setzen → Zustand „verbunden“ mit Seiten und Glossar;
+      Pfad auf einen nicht vorhandenen Ordner → verständliche Meldung, Live läuft weiter.
+- [ ] Test-Transkript mit „Transkript abspielen“ (Tempo wählbar) abspielen: Widersprüche
+      werden gefunden und der richtigen Wiki-Stelle zugeordnet, passende Aussagen nicht
+      gemeldet; echte Fragen markiert, rhetorische nicht; offene Punkte in der Liste.
+- [ ] `souffleur-protokoll.md` enthält je Markierung Zeitstempel, Art, Aussage, Fundstelle,
+      Verzögerung (mit KI-Startanteil) zum Abgleich mit dem Lösungsschlüssel.
+- [ ] `transkript.md` vor und nach der Sitzung byte-gleich; das Wiki unverändert.
+- [ ] Übergabeordner enthält Transkriptkopie und `markierungen.json`; ein zweiter Lauf hängt
+      `-2` an statt zu überschreiben.
+- [ ] `pytest` grün: `tests/test_souffleur.py`, `tests/test_souffleur_ui.py`,
+      `tests/test_replay_transkript.py`, `tests/test_souffleur_html.py`.

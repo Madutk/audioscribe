@@ -102,7 +102,35 @@ def _prepare_backend() -> tuple[str, str] | None:
     return device, compute_type
 
 
+def _live_transcript(args: argparse.Namespace) -> int:
+    """Transkript-Replay (FR-64): vor jedem Backend-Bootstrap - kein torch, kein Modell."""
+    from audioscribe.config import settings
+    from audioscribe.live.replay_transkript import ReplayOptions, TranskriptReplaySession, finde_transkript
+
+    try:
+        quelle = finde_transkript(Path(args.transcript))
+    except FileNotFoundError as exc:
+        print(str(exc))
+        return 1
+    if args.speed <= 0:
+        print("--speed muss groesser als 0 sein")
+        return 1
+    if args.replay_delay < 0:
+        print("--replay-delay darf nicht negativ sein")
+        return 1
+    opts = ReplayOptions(
+        output_dir=Path(args.output) if args.output else settings.output_dir,
+        quelle=quelle,
+        speed=args.speed,
+        delay_s=args.replay_delay,
+        sentences_per_timestamp=settings.sentences_per_timestamp,
+    )
+    return TranskriptReplaySession(opts).run()
+
+
 def _live(args: argparse.Namespace) -> int:
+    if args.transcript:
+        return _live_transcript(args)
     _set("WHISPER_LANGUAGE", args.language)
     _set("WHISPER_COMPUTE_TYPE", args.compute_type)
     _set("DEVICE", args.device)
@@ -406,6 +434,19 @@ def main(argv: list[str] | None = None) -> int:
         "(keine Standbilder; laeuft auch unter Linux)",
     )
     live.add_argument("--wav-mic", metavar="DATEI", help="WAV als Mikrofon-Spur (mit oder ohne --wav)")
+    live.add_argument(
+        "--transcript",
+        metavar="DATEI",
+        help="Testmodus (Souffleur): gespeichertes Transkript (transcript.json, transkript.md oder "
+        "Sitzungsordner) mit seinen Zeitstempeln abspielen, als kaeme es live - ohne Audio und Modell",
+    )
+    live.add_argument(
+        "--replay-delay",
+        type=float,
+        default=0.0,
+        metavar="S",
+        help="mit --transcript: konstante Verzoegerung je Absatz in Sekunden (simulierte Erkennungslatenz)",
+    )
     live.add_argument(
         "--speed",
         type=float,

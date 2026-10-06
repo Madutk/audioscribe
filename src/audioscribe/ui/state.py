@@ -49,29 +49,66 @@ STATE_KEYS: tuple[str, ...] = (
     "live_speakers",
     "live_refine",
     "live_refine_model",
+    # Testmodus: zuletzt abgespieltes Transkript und Tempo (FR-64).
+    "replay_transcript",
+    "replay_speed",
+    # Souffleur (PRD §20): Wiki-Pfad (K1), Uebergabeordner (A4), KI-Dienst, Schalter.
+    "wiki_dir",
+    "uebergabe_dir",
+    "souffleur_model",
+    "souffleur_backend",
+    "souffleur_aktiv",
+    "souffleur_sensibel",
     # Darstellung der Oberflaeche: "system" folgt der Betriebssystem-Einstellung.
     "theme",
 )
 
 THEMES: tuple[str, ...] = ("system", "light", "dark")
-LIVE_SOURCES: tuple[str, ...] = ("monitor", "window", "none")
+LIVE_SOURCES: tuple[str, ...] = ("monitor", "window", "none", "transcript")
 
-_BOOL_KEYS = ("diarize", "frames", "agent_bash", "live_partials", "live_speakers", "live_refine")
+_BOOL_KEYS = (
+    "diarize", "frames", "agent_bash", "live_partials", "live_speakers", "live_refine",
+    "souffleur_aktiv", "souffleur_sensibel",
+)
 
-_STATE_NAME = "ui-state.json"
+_LOESCHBAR = ("wiki_dir", "uebergabe_dir")
+
+_STATE_NAME = "einstellungen.json"
+# Bis 2026-10: Zustand lag als Cache-Datei unter ~/.cache/audioscribe; beim ersten Lesen des
+# neuen Orts wird sie uebernommen (kopiert, nicht geloescht).
+_LEGACY_NAME = "ui-state.json"
 
 
-def state_path(cache_dir: Path | None = None) -> Path:
-    """Ablageort der Zustandsdatei (Default: WSL-natives Cache-Verzeichnis)."""
-    return Path(cache_dir if cache_dir is not None else settings.cache_dir) / _STATE_NAME
+def state_path(config_dir: Path | None = None) -> Path:
+    """Ablageort der Einstellungsdatei (Default: Konfigurationsordner der Plattform)."""
+    return Path(config_dir if config_dir is not None else settings.config_dir) / _STATE_NAME
 
 
-def load_state(cache_dir: Path | None = None) -> dict:
+def legacy_state_path() -> Path:
+    return Path(settings.cache_dir) / _LEGACY_NAME
+
+
+def _uebernehme_alte_datei(path: Path) -> None:
+    alt = legacy_state_path()
+    if path.exists() or not alt.is_file():
+        return
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(".tmp")
+        tmp.write_bytes(alt.read_bytes())
+        os.replace(tmp, path)
+    except OSError:
+        pass
+
+
+def load_state(config_dir: Path | None = None) -> dict:
     """Gemerkten Zustand lesen; ``{}`` wenn nichts da oder die Datei kaputt ist.
 
     Eine beschaedigte Zustandsdatei darf die Oberflaeche nie lahmlegen.
     """
-    path = state_path(cache_dir)
+    path = state_path(config_dir)
+    if config_dir is None:
+        _uebernehme_alte_datei(path)
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
@@ -79,11 +116,15 @@ def load_state(cache_dir: Path | None = None) -> dict:
     return _clean(data) if isinstance(data, dict) else {}
 
 
-def save_state(values: Mapping[str, object], cache_dir: Path | None = None) -> Path:
+def save_state(values: Mapping[str, object], config_dir: Path | None = None) -> Path:
     """Zustand schreiben (nur bekannte Schluessel, atomar ueber eine temporaere Datei)."""
-    path = state_path(cache_dir)
+    path = state_path(config_dir)
     path.parent.mkdir(parents=True, exist_ok=True)
-    merged = {**load_state(cache_dir), **_clean(values)}
+    merged = {**load_state(config_dir), **_clean(values)}
+    # Ein bewusst geleertes Pfadfeld loest die Verknuepfung (z. B. Wiki abhaengen, K1).
+    for key in _LOESCHBAR:
+        if key in values and isinstance(values[key], str) and not values[key].strip():
+            merged.pop(key, None)
     tmp = path.with_suffix(".tmp")
     tmp.write_text(json.dumps(merged, indent=2, ensure_ascii=False), encoding="utf-8")
     os.replace(tmp, path)

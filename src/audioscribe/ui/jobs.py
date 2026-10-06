@@ -462,11 +462,26 @@ class LiveJobOptions:
     refine: bool = True
     # Unabhaengig vom Live-Modell: live zaehlt Tempo, beim Nachschaerfen Genauigkeit.
     refine_model: str = "large-v3"
+    # Testmodus (FR-64): ein gespeichertes Transkript abspielen statt aufzunehmen. Dann
+    # gibt es weder Audio noch Bild noch Nachschaerfen - nur die Ereignisse der Absaetze.
+    replay_transcript: Path | None = None
+    replay_speed: float = 1.0
+
+
+REPLAY_SPEEDS: tuple[float, ...] = (1.0, 2.0, 5.0, 10.0, 20.0)
 
 
 def build_live_argv(opts: LiveJobOptions, *, prefix: Sequence[str] | None = None) -> list[str]:
     """Baut den vollstaendigen ``audioscribe live``-Aufruf."""
     argv = list(prefix if prefix is not None else cli_prefix())
+    if opts.replay_transcript is not None:
+        return [
+            *argv,
+            "live",
+            f"--output={Path(opts.output_dir)}",
+            f"--transcript={Path(opts.replay_transcript)}",
+            f"--speed={opts.replay_speed:g}",
+        ]
     argv += [
         "live",
         f"--output={Path(opts.output_dir)}",

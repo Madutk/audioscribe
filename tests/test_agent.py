@@ -485,11 +485,11 @@ def test_scan_results_juengste_zuerst(tmp_path):
 def test_state_merkt_analyse_optionen(tmp_path):
     state.save_state(
         {"agent_skills": ["a", " ", 3], "agent_bash": 0, "agent_model": " opus ", "fremd": 1},
-        cache_dir=tmp_path,
+        config_dir=tmp_path,
     )
     saved = state.load_state(tmp_path)
     assert saved == {"agent_skills": ["a"], "agent_bash": False, "agent_model": "opus"}
-    state.save_state({"agent_skills": []}, cache_dir=tmp_path)
+    state.save_state({"agent_skills": []}, config_dir=tmp_path)
     assert state.load_state(tmp_path)["agent_skills"] == []
 
 

@@ -14,6 +14,7 @@ Modellgewichte.
 | Bild-Annotation | Standbilder von Hand markieren und ins Transkript einfügen | [→](#bild-annotation-von-hand) |
 | KI-Analyse | Claude-Agent macht aus Transkript und Bildern Prozessdoku, Prozessbild, BPMN | [→](#ki-analyse-per-claude-agent) |
 | Live-Transkription | Monitor, System-Audio und Mikrofon live mitschneiden (Windows, macOS) | [→](#live-transkription-windows-und-macos) |
+| Souffleur | Live-Abgleich des Gesagten mit einem LLM-Wiki: Widersprüche, offene Punkte, Fragen mit Antwort aus dem Wiki, Essenz der letzten Minuten – nur für den Moderator | [→](#souffleur-live-abgleich-mit-dem-wiki) |
 
 **Technik:** WhisperX mit faster-whisper `large-v3` (Transkription) → wav2vec2
 (Wort-Alignment) → pyannote `speaker-diarization-3.1` (Sprecher). Die Modelle laufen
@@ -514,6 +515,97 @@ davor liegt.
 
 ---
 
+## Souffleur: Live-Abgleich mit dem Wiki
+
+Der Souffleur hört während einer Live-Sitzung über das Transkript mit, gleicht das Gesagte
+mit einem **LLM-Wiki** (Markdown-Ordner, nur lesend) ab und zeigt **nur dem Moderator**
+Hinweise in der rechten Spalte des Live-Reiters:
+
+| Hinweis | Was er bedeutet |
+|---|---|
+| **Widerspruch** (rot, Blitz) | Eine Aussage weicht klar von einer Wiki-Stelle ab. Beide Seiten stehen nebeneinander: *gesagt* und *im Wiki* (Datei › Überschrift, wörtliches Zitat). Wer recht hat, entscheidet der Souffleur nicht. |
+| **Frage** (blau, Fragezeichen) | Eine echte Frage wurde gestellt. Steht im Wiki etwas dazu, kommt der Antwortvorschlag mit Fundstelle; sonst „Im Wiki liegt dazu nichts vor“ und die Frage zählt als offener Punkt. |
+| **Offener Punkt** (gelb, gestrichelt) | Etwas wurde als ungeklärt benannt oder fehlt im Wiki. Die Liste offener Punkte steht unten in der Karte und bleibt nach dem Meeting erhalten. |
+| **Essenz 2 / 5 min** | Auf Knopfdruck fasst die KI genau das gewählte Zeitfenster zusammen. Als **KI** gekennzeichnet, nicht Teil der Quelle fürs Wiki. |
+
+Belegtes und KI-Erzeugtes bleiben sichtbar getrennt: Wiki-Zitate tragen eine Fundstelle,
+alles, was die KI selbst formuliert, ist mit „KI“ markiert (gestrichelter Rahmen). Der
+Wortlaut des Transkripts wird nie verändert; Markierungen liegen als Begleitdateien daneben.
+Das Wiki wird ausschließlich gelesen.
+
+**1. Wiki verknüpfen** (Reiter *Einstellungen*, Karte *Wiki (Souffleur)*): Pfad zum
+Wiki-Ordner eintragen oder wählen. Direkt darunter steht das Prüfergebnis: *kein Wiki
+verknüpft*, *verbunden* (Name, Seiten, Glossar-Einträge, Lesezeitpunkt) oder *nicht
+erreichbar* mit Grund. Der Pfad bleibt gespeichert und gilt ab der nächsten Sitzung. Erwartet
+wird ein Markdown-Ordner im Karpathy-Muster (`index.md`, `wiki/` mit den Seiten, `raw/` mit
+Quellen, `log.md`); ohne `wiki/` werden alle `*.md` unter dem Pfad gelesen. Ein Glossar
+bestätigter Fehlerkennungen (Datei `glossar.md` oder eine Seite mit „Glossar“ in der
+Überschrift, Tabelle `Fehlerkennung | Korrekt | Kontext`) nutzt der Souffleur automatisch,
+damit verstümmelte Fachbegriffe keine falschen Widersprüche auslösen. Dazu das
+**KI-Modell** (neutrale Stufen, Standard „schnell“) und der **Übergabeordner** (siehe 4).
+
+**2. Souffleur starten:** Im Live-Reiter läuft er automatisch mit jeder Sitzung
+(Schalter in der Souffleur-Karte; „Ausblenden“ oder Alt+S klappt die Spalte samt
+Markierungen weg, etwa beim Bildschirmteilen). Die Statuszeile zeigt, mit welchem Wiki
+abgeglichen wird. Ohne Wiki oder ohne KI-Dienst läuft die Transkription normal weiter; der
+Souffleur meldet seinen Zustand („ohne Wiki – nur Fragen und Essenz“, „KI nicht verfügbar“).
+
+**3. Transkript abspielen (Testmodus, ohne Audio):** Im Live-Reiter die Kachel
+*Transkript abspielen* wählen, eine gespeicherte `transcript.json`, ein `transkript.md` oder
+einen ganzen Sitzungsordner angeben, Tempo 1× bis 20× wählen, *Abspielen starten*. Die
+Absätze erscheinen zu ihren Zeitstempeln, als kämen sie live; Souffleur, Sitzungsordner und
+Fazit verhalten sich wie im Betrieb. Auf der Kommandozeile:
+
+```bash
+.venv-win\Scripts\audioscribe.exe live --transcript output\meeting\transcript.json --speed 5
+.venv-win\Scripts\audioscribe.exe live --transcript output\live-2026-10-06_09-00-00 --replay-delay 2
+```
+
+**4. Ergebnis ablesen:** Je Sitzung entstehen Begleitdateien neben dem Transkript:
+`souffleur.json` (Markierungen mit Zeitbezug, Fundstellen, KI-Feldern, Bilanz),
+`souffleur-protokoll.md` (Abnahmetabelle: Zeitstempel, Art, Aussage, Fundstelle, Wiki-Zitat,
+KI-Text, Verzögerung „Hinweis nach“ inklusive Anteil des KI-Prozessstarts, reale
+Verzögerung), `souffleur-diagnose.jsonl` (je Fenster: Treffer, Suchzeit, KI-Zeiten,
+verworfene Befunde), `souffleur-essenz.jsonl` (Essenzen, KI-erzeugt). Nach dem Ende liegt
+die **Übergabe ans Wiki** im Übergabeordner (`<Ausgabeordner>/wiki-uebergabe/<sitzung>/`):
+unveränderte Kopie des Transkripts, `markierungen.json`, `markierungen.md`, `README.md`.
+Die Übergabe ist rein anhängend und liegt nie im Wiki-Pfad; was daraus im Wiki wird,
+entscheidet dessen Lint-Prozess.
+
+<details>
+<summary>Wie der Abgleich arbeitet, KI-Dienst, Verzögerung</summary>
+
+Segmente werden zu Fenstern gebündelt (bis 20 s Sprechzeit, 4 Segmente oder 5 s Pause).
+Je Fenster sucht der Souffleur lokal im Wiki (lexikalisch über Abschnitte, Glossar
+korrigiert den Suchtext) und ruft die KI **einmal** mit Fenster, Kontext der letzten
+Minute, den gefundenen Auszügen und dem Glossar. Die Antwort wird lokal geprüft: Die
+Aussage muss wörtlich im Segment stehen, das Zitat wörtlich im gelieferten Auszug, ein
+Widerspruch ohne Zitat wird verworfen, Dubletten werden unterdrückt, unsichere Befunde
+nur mit Einstellung `souffleur_sensibel`. Erst dann wird markiert.
+
+**KI-Dienst:** austauschbar über `AUDIOSCRIBE_SOUFFLEUR_BACKEND` (`claude-agent` nutzt das
+Agent SDK mit der Anmeldung von Claude Code, `attrappe` ist ein regelbasierter Ersatz für
+Tests). Das Modell steht in den Einstellungen; in der Oberfläche heißt es nur „KI“. Jeder
+Aufruf läuft ohne Werkzeuge in einem leeren Arbeitsordner unter `~/.cache/audioscribe/souffleur`,
+Sitzungsdateien des KI-Prozesses werden abgeschaltet bzw. gelöscht: keine Transkript- oder
+Wiki-Auszüge bleiben außerhalb des Sitzungsordners liegen.
+
+**Verzögerung:** Je Hinweis wird gemessen (Sitzungsuhr): Sprachende → Hinweis, mit den
+Anteilen Spracherkennung, Warten im Fenster, Wiki-Suche, **Prozessstart der KI** und
+KI-Antwort; dazu die reale Verzögerung ab Empfang des Segments. Mittel, Median und Maximum
+stehen in `souffleur.json` und im Protokoll. Beim Abspielen mit Tempo > 1 sind die
+Sitzungswerte gestreckt, die reale Spalte bleibt vergleichbar. Einen festen Grenzwert gibt
+es noch nicht; als Richtwert gilt: unter 15 s ist ein Hinweis noch im Raum.
+
+**Einstellungen** liegen seit dieser Stufe im Konfigurationsordner der Plattform
+(Windows `%APPDATA%\audioscribe\einstellungen.json`, macOS
+`~/Library/Application Support/audioscribe/`); eine ältere `ui-state.json` aus
+`~/.cache/audioscribe` wird beim ersten Start übernommen. `audioscribe doctor` zeigt die
+Zeile „Souffleur“ mit Wiki-Zustand, KI-Backend und Pfad der Einstellungsdatei.
+</details>
+
+---
+
 ## Betrieb: GPU, CPU, Konfiguration
 
 | | GPU (CUDA) | Apple Silicon (MPS + MLX) | CPU |
@@ -588,6 +680,7 @@ claude                                               # einmal mit dem Claude-Abo
 .venv/bin/audioscribe bpmn ~/Analysen/rechnungspruefung [--pruefen|--neu]
 
 # Live (Windows)
+.venv-win\Scripts\audioscribe.exe live --transcript output\meeting\transcript.json --speed 5   # Souffleur-Testmodus ohne Audio
 .venv-win\Scripts\audioscribe.exe live --list-devices
 .venv-win\Scripts\audioscribe.exe live --monitor 1 --mic 23
 .venv-win\Scripts\audioscribe.exe refine output\live-…

@@ -5,8 +5,9 @@ const empty = (name, text) => `<div class="empty">${icon(name)}${esc(text)}</div
 
 
 let defaults = null;      // /api/defaults
-// Die drei Standardordner - eine Quelle fuer alle Reiter, gepflegt im Reiter "Einstellungen".
-const folders = { input_dir: '', output_dir: '', agent_output_dir: '' };
+// Die Standardordner - eine Quelle fuer alle Reiter, gepflegt im Reiter "Einstellungen".
+// wiki_dir und uebergabe_dir gehoeren dem Souffleur (Wiki-Belege, Uebergabe an die Wiki-Pflege).
+const folders = { input_dir: '', output_dir: '', agent_output_dir: '', wiki_dir: '', uebergabe_dir: '' };
 let scanned = [];         // zuletzt gescannte Dateien
 let offset = 0;           // gelesene Log-Zeilen
 let dlgTarget = null;     // 'in' | 'out' | 'ana'
@@ -86,6 +87,7 @@ async function init() {
       : 'Windows-Pfade können direkt eingefügt werden – <code>C:\\Users\\…</code> wird zu <code>/mnt/c/Users/…</code>.';
   for (const key of Object.keys(folders)) folders[key] = defaults[key] || '';
   showFolders();
+  initSouffleurSettings();
   await scan();
   setInterval(poll, 1000);
   poll();
@@ -104,7 +106,9 @@ function markUnavailable(select) {
 
 // --- Einstellungen: Ordner --------------------------------------------------
 
-const FOLDER_FIELDS = { input_dir: 'setIn', output_dir: 'setOut', agent_output_dir: 'setAna' };
+const FOLDER_FIELDS = {
+  input_dir: 'setIn', output_dir: 'setOut', agent_output_dir: 'setAna', wiki_dir: 'setWiki', uebergabe_dir: 'setHandover',
+};
 
 /** Felder im Reiter Einstellungen und die Zielhinweise der anderen Reiter nachziehen. */
 function showFolders() {
@@ -138,6 +142,79 @@ async function applyFolders() {
   await scan();
   showFolders();
   if (anaDefaults) await loadSources();
+  await loadWikiStatus();
+}
+
+// --- Einstellungen: Wiki (Souffleur) -----------------------------------------
+
+/** KI-Modell-Auswahl (nur neutrale Bezeichnungen, der Server liefert id + label) und Schalter vorbelegen. */
+function initSouffleurSettings() {
+  const models = defaults.souffleur_models || [];
+  const sel = $('setSouffleurModel');
+  const chosen = defaults.souffleur_model || (models[0] && models[0].id) || '';
+  const all = models.some((m) => m.id === chosen) || !chosen ? models : [{ id: chosen, label: 'Eigenes Modell (Umgebung)' }, ...models];
+  sel.innerHTML = all.map((m) => `<option value="${esc(m.id)}">${esc(m.label)}</option>`).join('');
+  sel.value = chosen;
+  $('souffleurOn').checked = defaults.souffleur_aktiv !== false;
+  loadWikiStatus();
+}
+
+let wikiStatus = null;   // /api/wiki/status fuer den gemerkten Pfad - gilt, solange keine Sitzung laeuft
+
+/** Wiki-Zustand fuer den eingetragenen Ordner holen und in Einstellungen und Live-Karte zeigen. */
+async function loadWikiStatus() {
+  try {
+    wikiStatus = await api('/api/wiki/status?path=' + encodeURIComponent(folders.wiki_dir || ''));
+    $('setWikiErr').textContent = '';
+  } catch (err) {
+    wikiStatus = { zustand: 'fehler', pfad: folders.wiki_dir, meldung: err.message, warnungen: [] };
+    $('setWikiErr').textContent = err.message;
+  }
+  renderWikiState($('setWikiState'), wikiStatus, false);
+  if (!souffleurInfo) renderWikiState($('souffleurWiki'), wikiStatus, true);
+}
+
+/** "JJJJ-MM-TT HH:MM" -> "HH:MM" (die Uhrzeit reicht; das Datum steht im Tooltip). */
+const uhrzeit = (s) => (/\d\d:\d\d$/.test(s || '') ? s.slice(-5) : (s || ''));
+
+/**
+ * Ein Bauteil fuer beide Orte: div.wiki-state.{none|ok|fail}. Live (compact) zeigt eine Zeile
+ * mit "ändern"-Link, die Einstellungen die lange Fassung mit Pfad und Glossar-Zeile.
+ */
+function renderWikiState(box, w, compact) {
+  if (!box) return;
+  const key = JSON.stringify([w, compact]);
+  if (box.dataset.key === key) return;  // Poll alle 500 ms - nur bei Aenderung neu zeichnen
+  box.dataset.key = key;
+  const z = (w && w.zustand) || 'keins';
+  const glossar = w && w.glossar_eintraege
+    ? `Glossar: ${w.glossar_eintraege} Einträge${!compact && w.glossar_datei ? ` (<code>${esc(w.glossar_datei)}</code>)` : ''}`
+    : 'Glossar: keins im Wiki';
+  const warn = !compact && w && w.warnungen && w.warnungen.length ? `<br>${esc(w.warnungen.join(' · '))}` : '';
+  const link = compact ? changeLink() : '';
+  let cls = 'none', badge = '<span class="badge">kein Wiki</span>', body;
+  if (z === 'ok') {
+    cls = 'ok'; badge = '<span class="badge ok">Wiki</span>';
+    const gelesen = w.gelesen ? `, gelesen <span title="${esc(w.gelesen)}">${esc(uhrzeit(w.gelesen))}</span>` : '';
+    body = compact
+      ? `<b>${esc(w.name || w.pfad)}</b> · ${w.seiten} Seiten${gelesen} · ${glossar}${link}`
+      : `<b>${esc(w.name || w.pfad)}</b> · <code>${esc(w.pfad)}</code><br>${w.seiten} Seiten${gelesen} · ${glossar}${warn}`;
+  } else if (z === 'fehler') {
+    cls = 'fail'; badge = '<span class="badge fail">nicht erreichbar</span>';
+    body = compact
+      ? `<code>${esc(w.pfad || '')}</code> · ${esc(w.meldung || '')}${link}`
+      : `<code>${esc(w.pfad || '')}</code><br>${esc(w.meldung || '')} Bis dahin arbeitet der Souffleur ohne Wiki.<br>${glossar}${warn}`;
+  } else if (z === 'laedt') {
+    cls = 'none'; badge = '<span class="badge laeuft">liest …</span>';
+    body = `${esc((w && w.meldung) || 'Wiki wird gelesen …')}${link}`;
+  } else {
+    const text = (w && w.meldung) || 'Kein Wiki verknüpft. Der Souffleur erkennt nur Fragen und liefert Essenzen.';
+    body = compact
+      ? `${esc(text)}${link}`
+      : `${esc(text.replace(/\.\s*$/, ''))} – ohne Belege und ohne Widersprüche.<br>${glossar}`;
+  }
+  box.className = `wiki-state ${cls}${compact ? ' compact' : ''}`;
+  box.innerHTML = `${badge}<span class="body">${body}</span>`;
 }
 
 // --- Einstellungen: Umgebung ------------------------------------------------
@@ -252,11 +329,16 @@ function pick(mode) {
 async function openDialog(target) {
   dlgTarget = target;
   $('dlgTitle').textContent = { in: 'Eingangsordner wählen', out: 'Ausgabeordner Transkription wählen',
-                                ana: 'Ausgabeordner Analysen wählen' }[target];
+                                ana: 'Ausgabeordner Analysen wählen', wiki: 'Wiki-Ordner wählen',
+                                handover: 'Übergabeordner wählen', test: 'Sitzungsordner zum Abspielen wählen' }[target];
   $('dlgLinks').innerHTML = defaults.quick_links
     .map((l) => `<a data-path="${esc(l.path)}">${esc(l.label)}</a>`).join('');
   $('overlay').classList.add('open');
-  await showDir(dlgInput(target).value);
+  let start = dlgInput(target).value;
+  // Im Testfeld darf eine Datei stehen (transkript.md) - der Dialog zeigt dann ihren Ordner.
+  if (target === 'test' && /\.(md|json)\s*$/i.test(start)) start = start.replace(/[\\/][^\\/]*$/, '');
+  if (target === 'test' && !start.trim()) start = folders.output_dir;
+  await showDir(start);
 }
 
 async function showDir(path) {
@@ -356,17 +438,27 @@ async function poll() {
 $('pickSetIn').onclick = () => openDialog('in');
 $('pickSetOut').onclick = () => openDialog('out');
 $('pickSetAna').onclick = () => openDialog('ana');
+$('pickSetWiki').onclick = () => openDialog('wiki');
+$('pickSetHandover').onclick = () => openDialog('handover');
+$('pickLiveTestFile').onclick = () => ready.then(() => openDialog('test'));
 $('dlgCancel').onclick = () => $('overlay').classList.remove('open');
 $('overlay').onclick = (e) => { if (e.target === $('overlay')) $('overlay').classList.remove('open'); };
-const dlgInput = (target) => $({ in: 'setIn', out: 'setOut', ana: 'setAna' }[target]);
+const dlgInput = (target) => $({ in: 'setIn', out: 'setOut', ana: 'setAna', wiki: 'setWiki', handover: 'setHandover',
+                                 test: 'liveTestFile' }[target]);
 $('dlgOk').onclick = () => {
   dlgInput(dlgTarget).value = dlgPath;
   $('overlay').classList.remove('open');
-  applyFolders();
+  if (dlgTarget === 'test') rememberReplay();
+  else applyFolders();
 };
 for (const id of Object.values(FOLDER_FIELDS)) {
   $(id).onchange = applyFolders;
 }
+$('setSouffleurModel').onchange = () => {
+  $('setWikiErr').textContent = '';
+  post('/api/state', { souffleur_model: $('setSouffleurModel').value })
+    .catch((err) => { $('setWikiErr').textContent = err.message; });
+};
 $('envRefresh').onclick = () => loadEnvironment(true);
 // "ändern"-Links in den Zielhinweisen springen in die Einstellungen.
 document.addEventListener('click', (e) => {
@@ -552,7 +644,7 @@ function renderProgress(s) {
 let liveDefaults = null;
 let liveOffset = 0;        // gelesene Protokollzeilen
 let liveEvOffset = 0;      // gelesene Ereignisse (Segmente, Standbilder)
-let liveSource = { kind: 'monitor', id: 1 };  // kind: monitor | window (id = HWND) | none
+let liveSource = { kind: 'monitor', id: 1 };  // kind: monitor | window (id = HWND) | none | transcript (Testmodus)
 let liveShots = [];        // {id, t, file}
 let liveSession = null;
 let liveRunning = false;
@@ -608,15 +700,29 @@ async function loadLiveDefaults() {
     : '';
   $('liveBackendHint').hidden = !mlx;
   d.windows = d.windows || [];
+  // Testmodus (FR-64): zuletzt abgespieltes Transkript und Tempo
+  $('liveTestFile').value = d.replay_transcript || '';
+  const speeds = (d.replay_speeds && d.replay_speeds.length ? d.replay_speeds : [1, 2, 5, 10, 20]).map(Number);
+  const speed = speeds.includes(Number(d.replay_speed)) ? Number(d.replay_speed) : speeds[0];
+  $('liveTestSpeed').innerHTML = speeds.map((v) =>
+    `<label><input type="radio" name="liveSpeed" value="${v}" ${v === speed ? 'checked' : ''} />${v}×</label>`).join('');
   liveSource = pickLiveSource(d);
   renderSources();
 }
+
+const replaySpeed = () => Number(($('liveTestSpeed').querySelector('input:checked') || {}).value || 1);
+
+/** Testdatei und Tempo serverseitig merken (wie die uebrigen Live-Einstellungen). */
+const rememberReplay = () => post('/api/state', {
+  replay_transcript: $('liveTestFile').value.trim(), replay_speed: String(replaySpeed()),
+}).catch(() => {});
 
 const windowLabel = (w) => `${w.process} – ${w.title}`;
 
 /** Gemerkte Quelle wiederfinden: Fenster ueber "Prozess – Titel" (ersatzweise nur den
  *  Prozess - Titel wechseln mit dem Inhalt), Monitore ueber den Index. */
 function pickLiveSource(d) {
+  if (d.source === 'transcript') return { kind: 'transcript', id: 0 };
   if (d.source === 'window' && d.windows.length) {
     const genau = d.windows.find((w) => windowLabel(w) === d.window);
     const prozess = genau || d.windows.find((w) => d.window.startsWith(`${w.process} – `));
@@ -654,12 +760,18 @@ function windowTileHtml(stamp) {
     + `<span class="sub">${esc(chosen.process)} · ändern</span></div>`;
 }
 
+/** Kachel "Testmodus": spielt ein gespeichertes Transkript ab statt aufzunehmen (FR-64). */
+const testTileHtml = () =>
+  `<div class="monitor test ${isActive('transcript', 0) ? 'active' : ''}" id="liveTestTile" data-kind="transcript" data-id="0"`
+  + ` tabindex="0" role="button" aria-pressed="${isActive('transcript', 0)}" title="Gespeichertes Transkript abspielen – zum Prüfen des Souffleurs">`
+  + `<div class="none">${icon('fast-forward')}Transkript abspielen</div>Testmodus</div>`;
+
 function renderSources() {
   const stamp = Date.now();  // Vorschaubild nie aus dem Browser-Cache
   const monitors = liveDefaults.monitors.map((m) =>
     sourceTile('monitor', m.index, `<img src="/api/live/monitor/${m.index}?t=${stamp}" alt="" />Monitor ${m.index} · ${m.width}×${m.height}`))
     .join('') + sourceTile('none', 0, '<div class="none">ohne Bildschirm</div>nur Ton');
-  $('liveMonitors').innerHTML = `<div class="monitors">${monitors}${windowTileHtml(stamp)}</div>`;
+  $('liveMonitors').innerHTML = `<div class="monitors">${monitors}${windowTileHtml(stamp)}${testTileHtml()}</div>`;
   fallbackOnError($('liveMonitors'), 'kein Bild');
   updateSourceHint();
 }
@@ -683,6 +795,17 @@ function updateSourceHint() {
     : liveSource.kind === 'monitor'
       ? 'Diese Oberfläche gehört nicht auf den überwachten Monitor – neue Thumbnails würden sonst selbst Bildwechsel auslösen.'
       : '';
+  updateTestMode();
+}
+
+/** Testmodus-Unteroptionen und Startknopf folgen der gewaehlten Kachel. */
+function updateTestMode() {
+  const test = liveSource.kind === 'transcript';
+  $('liveTestOpts').hidden = !test;
+  const tile = $('liveTestTile');
+  if (tile) tile.setAttribute('aria-pressed', String(test));
+  $('liveStartLabel').textContent = test ? 'Abspielen starten' : 'Aufnahme starten';
+  $('liveStartIcon').setAttribute('href', test ? '#i-play' : '#i-record');
 }
 
 function updateLiveTarget() {
@@ -698,7 +821,9 @@ function resetLiveView() {
   $('liveResult').innerHTML = '';
   $('liveFazit').innerHTML = ''; $('liveFazit').hidden = true;
   $('liveShotCount').textContent = '';
+  $('liveTestBadge').hidden = true;
   $('lightbox').classList.remove('open');
+  resetSouffleurView();
 }
 
 /** Alles auf Anfang. Laeuft gerade eine Sitzung, wird sie verworfen und sofort neu begonnen. */
@@ -733,15 +858,24 @@ async function resetLive() {
 
 async function startLive() {
   $('liveErr').textContent = '';
+  // Testmodus: Transkript abspielen - der Server ignoriert Geraete und Bildquelle und schaltet das Nachschaerfen ab.
+  const test = liveSource.kind === 'transcript';
+  const replay = test ? $('liveTestFile').value.trim() : '';
+  if (test && !replay) {
+    $('liveErr').textContent = 'Testmodus: bitte einen Sitzungsordner oder eine Transkriptdatei (transkript.md, transcript.json) angeben.';
+    return;
+  }
   try {
     await post('/api/live/start', {
       output_dir: folders.output_dir,
+      replay_transcript: replay,
+      replay_speed: replaySpeed(),
       monitor: liveSource.kind === 'monitor' ? liveSource.id : 0,
       window: liveSource.kind === 'window' ? liveSource.id : 0,
       window_label: liveSource.kind === 'window'
         ? windowLabel(liveDefaults.windows.find((w) => w.hwnd === liveSource.id) || { process: '', title: '' }) : '',
-      mic: $('liveMic').value,
-      loopback: $('liveLoop').value,
+      mic: test ? 'none' : $('liveMic').value,
+      loopback: test ? 'none' : $('liveLoop').value,
       mic_name: deviceName($('liveMic'), liveDefaults.mics),
       loopback_name: deviceName($('liveLoop'), liveDefaults.loopbacks),
       model: $('liveModel').value,
@@ -775,12 +909,17 @@ function insertByTime(el, t) {
 }
 
 function addLiveEvent(ev) {
+  if (ev.type === 'hinweis') { addHint(ev); return; }
   const el = document.createElement('p');
   if (ev.type === 'segment') {
     el.className = 'seg ' + (ev.track === 'mic' ? 'mic' : 'system');
+    el.dataset.id = ev.id;  // Anker fuer die Souffleur-Markierung (hinweis.segment_id)
     el.innerHTML = `<span class="ts">[${tc(ev.start)}]</span><span class="who">${esc(ev.speaker)}:</span> `
       + `${esc(ev.text)}<span class="lag" title="Verzögerung bis zur Anzeige">${secs(ev.delay)}</span>`;
     insertByTime(el, ev.start);
+    // Der Hinweis kann vor seiner Zeile angekommen sein (Sortierung nach Zeit): Markierung nachziehen.
+    const hint = hintBySeg.get(ev.id);
+    if (hint) markSegment(hint);
   } else if (ev.type === 'shot') {
     const index = liveShots.push(ev) - 1;
     const label = `Bild #${String(ev.id).padStart(4, '0')} – ${tc(ev.t)}`;
@@ -799,7 +938,8 @@ const shotUrl = (shot) => `/api/live/frame/${encodeURIComponent(shot.file)}?s=${
 
 const PHASES = {
   startet: 'startet …', laden: 'Modell wird geladen …', laeuft: 'Aufnahme läuft', stoppt: 'wird abgeschlossen …',
-  fertig: 'gespeichert', nachschaerfen: 'Nachschärfen …', beendet: 'beendet', fehler: 'Fehler',
+  abschluss: 'Souffleur schließt ab …', fertig: 'gespeichert', nachschaerfen: 'Nachschärfen …', beendet: 'beendet',
+  fehler: 'Fehler',
 };
 
 function gauge(boxId, valueId, value, warn, bad) {
@@ -840,8 +980,12 @@ async function pollLive() {
   // Erst sichtbar, wenn es etwas zurueckzusetzen gibt; waehrend der Aufnahme heisst es "Neu beginnen".
   $('liveReset').hidden = !running && !s.dir && !s.phase;
   $('liveResetLabel').textContent = running ? 'Verwerfen und neu beginnen' : 'Zurücksetzen';
-  $('livePhase').textContent = PHASES[s.phase] || 'bereit';
-  $('livePhase').className = 'badge ' + ({ laeuft: 'laeuft', fehler: 'fehler', beendet: 'fertig' }[s.phase] || '');
+  $('livePhase').textContent = (s.replay && s.phase === 'laeuft' ? 'Abspielen läuft' : PHASES[s.phase]) || 'bereit';
+  $('livePhase').className = 'badge ' + ({ laeuft: 'laeuft', abschluss: 'laeuft', fehler: 'fehler', beendet: 'fertig' }[s.phase] || '');
+  $('liveTestBadge').hidden = !s.replay;
+  // Das Tempo gilt ab dem Start; ein Wechsel mitten im Abspielen haette keine Wirkung.
+  $('liveTestSpeed').querySelectorAll('input').forEach((i) => { i.disabled = running; });
+  if (s.replay) $('liveTestBadge').textContent = `Testmodus ${s.replay_speed || replaySpeed()}×`;
 
   const st = s.stats;
   $('liveElapsed').textContent = st ? hms(st.elapsed) : '–';
@@ -874,9 +1018,13 @@ async function pollLive() {
   }
 
   renderFazit(s.fazit);
-  $('liveResult').innerHTML = !running && s.dir
-    ? `<div class="result ${s.phase === 'fehler' ? 'fehler' : ''}">Sitzungsordner: <code>${esc(s.dir)}</code><br>
-       Erscheint im Reiter „KI-Analyse“ als Quelle. Die Live-Fassung liegt als <code>transkript.live.md</code> daneben.</div>` : '';
+  renderSouffleur(s);
+  // Im Fehlerfall zuerst der Grund; der Sitzungsordner nur, wenn er angelegt wurde.
+  const fehler = s.phase === 'fehler' && s.error ? `${esc(s.error)}` : '';
+  const ordner = s.dir ? `Sitzungsordner: <code>${esc(s.dir)}</code><br>
+       Erscheint im Reiter „KI-Analyse“ als Quelle. Die Live-Fassung liegt als <code>transkript.live.md</code> daneben.` : '';
+  $('liveResult').innerHTML = !running && (fehler || ordner)
+    ? `<div class="result ${s.phase === 'fehler' ? 'fehler' : ''}">${[fehler, ordner].filter(Boolean).join('<br>')}</div>` : '';
 }
 
 /** Fazit (Rechendauer, Latenz) der Live-Aufnahme und des Nachschaerfens - erscheint,
@@ -926,6 +1074,325 @@ function openLightbox(index) {
   $('lightbox').classList.add('open');
 }
 
+// --- Souffleur (PRD §20): Hinweise aus Wiki und KI neben dem Transkript -----------
+// Ereignisse vom Typ "hinweis" kommen ueber /api/live/status wie Segmente und Standbilder.
+// Die Zeile im Transkript bekommt nur Klassen und einen Chip nach .lag - der Textknoten bleibt.
+
+let souffleurInfo = null;        // s.souffleur des letzten Polls (null = keine Sitzung / kein Souffleur)
+let souffleurHints = [];         // hinweis-Ereignisse in Ankunftsreihenfolge
+const hintBySeg = new Map();     // segment_id -> hinweis (Markierung nachziehen, wenn die Zeile spaeter kommt)
+const hintEls = new Map();       // hinweis.id -> details.hint-item
+let souffleurEssenzen = [];      // Ergebnisse von /api/souffleur/essenz, aelteste zuerst
+let souffleurToggling = false;   // laufender POST /api/souffleur/toggle - solange nicht vom Poll ueberschreiben
+const HINT_DIRECT = 9;           // ab dem 10. Hinweis wandern die aelteren unter "Ältere (n)"
+const HINT_OPEN = 3;             // hoechstens so viele Hinweise gleichzeitig aufgeklappt
+
+const ART = {
+  widerspruch: { cls: 'widerspruch', icon: 'zap', wort: 'Widerspruch', label: 'Widerspruch' },
+  offener_punkt: { cls: 'offen', icon: 'circle-dashed', wort: 'Offen', label: 'Offener Punkt' },
+  frage: { cls: 'frage', icon: 'help-circle', wort: 'Frage', label: 'Frage' },
+};
+const artOf = (h) => ART[h.art] || { cls: 'frage', icon: 'help-circle', wort: h.label || h.art, label: h.label || h.art };
+const hintId = (h) => `h-${h.id}`;
+const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const tagKi = () => `<span class="tag ki">${icon('sparkles')}KI</span>`;
+
+function resetSouffleurView() {
+  souffleurInfo = null; souffleurHints = []; souffleurEssenzen = [];
+  hintBySeg.clear(); hintEls.clear();
+  $('souffleurList').innerHTML = empty('lightbulb', 'Hinweise zu Fragen, Widersprüchen und offenen Punkten erscheinen hier.');
+  $('souffleurEssenz').innerHTML = ''; $('souffleurEssenz').hidden = true;
+  $('souffleurErr').textContent = '';
+  $('souffleurLive').textContent = '';
+  renderOpenPoints();
+  updateHintCount();
+  renderSouffleurState(null, false);
+  renderWikiState($('souffleurWiki'), wikiStatus, true);
+  renderHandover(null);
+}
+
+/** Markierung an die Transkriptzeile haengen: Klassen, Randstreifen, Chip nach .lag - der Text bleibt unberuehrt. */
+function markSegment(h) {
+  const row = $('liveText').querySelector(`.seg[data-id="${CSS.escape(String(h.segment_id))}"]`);
+  if (!row || row.querySelector('.mark')) return;
+  const a = artOf(h);
+  row.classList.add('marked', a.cls);
+  row.dataset.hint = hintId(h);
+  row.insertAdjacentHTML('beforeend',
+    `<button class="mark ${a.cls}" type="button" data-goto-hint="${hintId(h)}" aria-label="${esc(a.label)} – zum Hinweis ${tc(h.t_start)}">`
+    + `${icon(a.icon)}${esc(a.wort)}</button>`);
+}
+
+/** Wiki-Beleg: durchgezogen, hinterlegt, Fundstelle mit Kopierknopf (kopiert "datei › Überschrift"). */
+function wikiQuoteHtml(h) {
+  const f = (h.fundstellen && h.fundstellen[0]) || {};
+  const zitat = h.wiki_zitat || f.auszug || '';
+  const fund = h.fundstelle || f.datei || '';
+  return `<blockquote class="wiki"><div class="src">${icon('book')}Wiki <span class="sep">·</span><code>${esc(f.datei || fund)}</code>`
+    + (f.ueberschrift ? `<span class="sep">›</span>${esc(f.ueberschrift)}` : '')
+    + `<button class="ghost copy" type="button" data-copy="${esc(fund)}" aria-label="Fundstelle kopieren" title="Fundstelle kopieren">${icon('copy')}</button>`
+    + `</div>${esc(zitat)}</blockquote>`;
+}
+
+const kiHtml = (rolle, text) => text
+  ? `<div class="ki"><div class="ki-head">${tagKi()}${esc(rolle)}</div>${esc(text)}</div>` : '';
+
+/** Inhalt je Art: Widerspruch = Gesagt + Beleg + KI-Einschaetzung; Frage = Beleg (+ Antwortvorschlag);
+ *  ohne Befund = nur "Im Wiki liegt dazu nichts vor." - bewusst kein KI-Text (Entscheidung des Auftraggebers). */
+function hintBodyHtml(h) {
+  const said = `<p class="said">Gesagt${h.sprecher ? ` (${esc(h.sprecher)})` : ''}: <q>${esc(h.aussage || '')}</q></p>`;
+  const hasWiki = !h.ohne_befund && (h.wiki_zitat || (h.fundstellen && h.fundstellen.length));
+  if (!hasWiki) return `<p class="wiki none">${icon('book-x')}Im Wiki liegt dazu nichts vor.</p>`;
+  if (h.art === 'frage') return wikiQuoteHtml(h) + kiHtml('Antwortvorschlag', h.ki_text);
+  return said + wikiQuoteHtml(h) + kiHtml('Einschätzung', h.ki_text);
+}
+
+function hintItemEl(h) {
+  const a = artOf(h);
+  const el = document.createElement('details');
+  el.className = `hint-item ${a.cls} new`;
+  el.id = hintId(h);
+  el.open = true;
+  const lag = h.verzoegerung_s === null || h.verzoegerung_s === undefined ? '' : '+' + secs(h.verzoegerung_s);
+  el.innerHTML = `<summary><span class="mark ${a.cls}">${icon(a.icon)}${esc(a.wort)}</span>`
+    + `<button class="ts" type="button" data-goto-seg="${esc(String(h.segment_id))}" title="Zur Transkriptzeile">${tc(h.t_start)}</button>`
+    + `<span class="title">${esc(h.aussage || a.label)}</span>`
+    + `<span class="lag" title="Verzögerung Aussage → Hinweis">${esc(lag)}</span></summary>`
+    + `<div class="hint-body">${hintBodyHtml(h)}</div>`;
+  setTimeout(() => el.classList.remove('new'), 400);
+  return el;
+}
+
+function addHint(h) {
+  if (hintEls.has(h.id)) return;
+  souffleurHints.push(h);
+  hintBySeg.set(h.segment_id, h);
+  markSegment(h);
+  const list = $('souffleurList');
+  const leer = list.querySelector(':scope > .empty');
+  if (leer) leer.remove();
+  const el = hintItemEl(h);
+  hintEls.set(h.id, el);
+  list.prepend(el);  // neueste oben
+  layoutHints();
+  limitOpenHints();
+  updateHintCount();
+  $('souffleurLive').textContent = `${souffleurHints.length} Hinweise, zuletzt: ${artOf(h).label} ${tc(h.t_start)}`;
+  renderOpenPoints();
+}
+
+/** Ab dem 10. Eintrag wandern die aeltesten unter "Ältere (n)" - die Knoten ziehen um, ihr Zustand bleibt. */
+function layoutHints() {
+  const list = $('souffleurList');
+  let older = list.querySelector(':scope > details.older');
+  const direct = [...list.children].filter((n) => n.classList.contains('hint-item'));
+  if (direct.length > HINT_DIRECT) {
+    if (!older) {
+      older = document.createElement('details');
+      older.className = 'older';
+      older.innerHTML = `<summary>${icon('chevron-right')}<span></span></summary>`;
+    }
+    for (const el of direct.slice(HINT_DIRECT)) { el.open = false; older.querySelector('summary').after(el); }
+  }
+  if (older) {
+    older.querySelector('summary span').textContent = `Ältere (${older.querySelectorAll('.hint-item').length})`;
+    list.append(older);
+  }
+}
+
+/** Hoechstens drei aufgeklappt: der vierte klappt den aeltesten zu (DOM-Reihenfolge = neueste zuerst). */
+function limitOpenHints() {
+  const open = [...$('souffleurList').querySelectorAll('details.hint-item[open]')];
+  for (const el of open.slice(HINT_OPEN)) el.open = false;
+}
+
+function updateHintCount() {
+  const n = souffleurHints.length;
+  $('souffleurCount').textContent = `${n} ${n === 1 ? 'Hinweis' : 'Hinweise'}`;
+}
+
+/** Offene Punkte: alle Hinweise mit offener_punkt=true (offener Punkt, Frage ohne Befund), neueste oben. */
+function renderOpenPoints() {
+  const offen = souffleurHints.filter((h) => h.offener_punkt).reverse();
+  $('souffleurOpenCount').textContent = offen.length ? `(${offen.length} offen)` : '(keine)';
+  $('souffleurOpenList').innerHTML = offen.map((h) =>
+    `<li><button class="ts" type="button" data-goto-seg="${esc(String(h.segment_id))}" title="Zur Transkriptzeile">[${tc(h.t_start)}]</button>`
+    + `<span class="text">${esc(h.aussage || '')}</span><span class="mark offen">${icon('circle-dashed')}Offen</span></li>`).join('')
+    || '<li class="hint">Noch keine offenen Punkte.</li>';
+}
+
+/** Hinweiszeile zur Uebergabe: vor dem Ende der Zielordner, danach der geschriebene Sitzungsordner. */
+function renderHandover(sf) {
+  const box = $('souffleurHandover');
+  const key = JSON.stringify([sf && sf.uebergabe, folders.uebergabe_dir]);
+  if (box.dataset.key === key) return;
+  box.dataset.key = key;
+  if (sf && sf.uebergabe) {
+    box.innerHTML = `Übergabe geschrieben: <code>${esc(sf.uebergabe)}</code> (<code>markierungen.md</code>, <code>transkript.md</code>)`;
+  } else {
+    box.innerHTML = folders.uebergabe_dir
+      ? `Beim Stopp wird die Liste in den Übergabeordner geschrieben: <code>${esc(trimSep(folders.uebergabe_dir))}${esc(sep())}live-…${esc(sep())}markierungen.md</code>${changeLink()}`
+      : '';
+  }
+}
+
+/** Zustand im Kopf: läuft · pausiert · ohne Wiki · KI nicht verfügbar - aus Schalter, Wiki und KI-Dienst. */
+function renderSouffleurState(sf, running) {
+  const aktiv = sf ? sf.aktiv : $('souffleurOn').checked;
+  const wiki = sf ? sf.wiki : wikiStatus;
+  const ki = sf ? sf.ki : null;
+  let text = 'bereit', cls = '', title = '';
+  if (!aktiv) { text = 'pausiert'; title = 'Auswertung ausgeschaltet – es entstehen keine neuen Hinweise.'; }
+  else if (ki && (ki.zustand === 'fehlt' || ki.zustand === 'fehler')) { text = 'KI fehlt'; cls = 'fail'; title = ki.meldung || 'KI nicht verfügbar'; }
+  else if (wiki && wiki.zustand === 'laedt') { text = 'Wiki lädt'; cls = 'laeuft'; title = wiki.meldung || 'Wiki wird gelesen …'; }
+  else if (!wiki || wiki.zustand !== 'ok') { text = 'ohne Wiki'; cls = 'warn'; title = 'Ohne Wiki: nur Fragen und Essenz – keine Belege, keine Widersprüche.'; }
+  else if (sf && sf.beendet) { text = 'beendet'; cls = 'fertig'; }
+  else if (sf && running) { text = 'läuft'; cls = 'laeuft'; }
+  else if (ki && ki.zustand === 'pause') { text = 'pausiert'; title = ki.meldung || ''; }
+  const badge = $('souffleurState');
+  badge.textContent = text;
+  badge.className = 'badge ' + cls;
+  badge.title = title;
+}
+
+function renderSouffleur(s) {
+  const sf = s.souffleur || null;
+  souffleurInfo = sf;
+  if (sf && !souffleurToggling) $('souffleurOn').checked = !!sf.aktiv;
+  renderSouffleurState(sf, !!s.running);
+  renderWikiState($('souffleurWiki'), sf ? sf.wiki : wikiStatus, true);
+  renderHandover(sf);
+  const kannEssenz = !!sf;
+  $('souffleurEssenz2').disabled = !kannEssenz;
+  $('souffleurEssenz5').disabled = !kannEssenz;
+}
+
+async function toggleSouffleur() {
+  const aktiv = $('souffleurOn').checked;
+  souffleurToggling = true;
+  $('souffleurErr').textContent = '';
+  try {
+    await post('/api/souffleur/toggle', { aktiv });
+  } catch (err) {
+    $('souffleurErr').textContent = err.message;
+    $('souffleurOn').checked = !aktiv;
+  } finally {
+    souffleurToggling = false;
+  }
+  renderSouffleurState(souffleurInfo && { ...souffleurInfo, aktiv: $('souffleurOn').checked }, liveRunning);
+}
+
+/** Essenz der letzten 2 oder 5 Minuten - Fehler (400/409) erscheinen ruhig im Bereich, kein Toast. */
+async function essenz(minuten) {
+  $('souffleurErr').textContent = '';
+  const btns = [$('souffleurEssenz2'), $('souffleurEssenz5')];
+  for (const b of btns) b.disabled = true;
+  try {
+    const e = await post('/api/souffleur/essenz', { minuten });
+    souffleurEssenzen.push(e);
+    renderEssenz();
+  } catch (err) {
+    $('souffleurErr').textContent = err.message;
+  } finally {
+    for (const b of btns) b.disabled = !souffleurInfo;
+  }
+}
+
+function essenzHtml(e) {
+  const punkte = (e.punkte || []).map((p) => `<li>${esc(p)}</li>`).join('');
+  const offen = (e.offen || []).length
+    ? `<div class="offen-titel">Offen:</div><ul>${e.offen.map((o) => `<li>${esc(o)}</li>`).join('')}</ul>` : '';
+  return `<div class="ki-head">${tagKi()}Essenz ${esc(e.fenster || `${e.minuten} min`)}<span class="spacer"></span>`
+    + `<span class="lag" title="Dauer der Erzeugung">erzeugt in ${secs(e.ki_s)}</span></div>`
+    + (punkte ? `<ul>${punkte}</ul>` : '<p class="hint">Keine Punkte.</p>') + offen;
+}
+
+/** Nur die letzte Essenz offen; aeltere unter "Ältere Essenzen (n)". */
+function renderEssenz() {
+  const box = $('souffleurEssenz');
+  if (!souffleurEssenzen.length) { box.hidden = true; box.innerHTML = ''; return; }
+  const letzte = souffleurEssenzen[souffleurEssenzen.length - 1];
+  const aeltere = souffleurEssenzen.slice(0, -1).reverse();
+  box.innerHTML = essenzHtml(letzte) + (aeltere.length
+    ? `<details class="older"><summary>${icon('chevron-right')}Ältere Essenzen (${aeltere.length})</summary>`
+      + aeltere.map((e) => `<div class="ki">${essenzHtml(e)}</div>`).join('') + '</details>' : '');
+  box.hidden = false;
+}
+
+function flash(el) {
+  if (!el || reducedMotion()) return;
+  el.classList.remove('flash');
+  void el.offsetWidth;  // Animation neu starten
+  el.classList.add('flash');
+  setTimeout(() => el.classList.remove('flash'), 1300);
+}
+
+/** Vom Chip in der Transkriptzeile zum Hinweis: aufklappen, ins Bild scrollen, kurz pulsen. */
+function gotoHint(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  setSouffleurHidden(false);
+  const older = el.closest('details.older');
+  if (older) older.open = true;
+  el.open = true;
+  const open = [...$('souffleurList').querySelectorAll('details.hint-item[open]')].filter((o) => o !== el);
+  for (const o of open.slice(HINT_OPEN - 1)) o.open = false;
+  el.scrollIntoView({ block: 'nearest', behavior: reducedMotion() ? 'auto' : 'smooth' });
+  flash(el);
+  const head = el.querySelector('summary');
+  if (head) head.focus({ preventScroll: true });
+}
+
+/** Vom Hinweis zur Transkriptzeile. */
+function gotoSeg(segId) {
+  const row = $('liveText').querySelector(`.seg[data-id="${CSS.escape(String(segId))}"]`);
+  if (!row) return;
+  row.scrollIntoView({ block: 'center', behavior: reducedMotion() ? 'auto' : 'smooth' });
+  flash(row);
+}
+
+async function copyFundstelle(btn) {
+  const use = btn.querySelector('use');
+  try {
+    await navigator.clipboard.writeText(btn.dataset.copy || '');
+    btn.title = 'Kopiert';
+    if (use) use.setAttribute('href', '#i-check');
+  } catch (e) {
+    btn.title = 'Kopieren nicht möglich';
+  }
+  setTimeout(() => { btn.title = 'Fundstelle kopieren'; if (use) use.setAttribute('href', '#i-copy'); }, 1500);
+}
+
+/** Ausblenden = nur Sicht (Streifen + keine Chips); die Auswertung laeuft weiter. Ein Frame, kein Uebergang. */
+function setSouffleurHidden(hidden) {
+  if ($('liveAside').classList.contains('collapsed') === hidden) return;
+  $('liveAside').classList.toggle('collapsed', hidden);
+  document.body.classList.toggle('souffleur-hidden', hidden);
+  if (!$('tabLive').hidden) (hidden ? $('souffleurShow') : $('souffleurHide')).focus({ preventScroll: true });
+}
+
+$('souffleurHide').onclick = () => setSouffleurHidden(true);
+$('souffleurShow').onclick = () => setSouffleurHidden(false);
+$('souffleurOn').onchange = toggleSouffleur;
+$('souffleurEssenz2').onclick = () => essenz(2);
+$('souffleurEssenz5').onclick = () => essenz(5);
+$('souffleurEssenz2').disabled = true;
+$('souffleurEssenz5').disabled = true;
+$('souffleur').onclick = (e) => {
+  const seg = e.target.closest('[data-goto-seg]');
+  if (seg) { e.preventDefault(); gotoSeg(seg.dataset.gotoSeg); return; }
+  const copy = e.target.closest('[data-copy]');
+  if (copy) { e.preventDefault(); copyFundstelle(copy); }
+};
+// Screenshots-Karte: zu, solange der Souffleur den Platz braucht; der Zustand bleibt im Browser.
+try { $('liveShots').open = localStorage.getItem('liveShotsOpen') === '1'; } catch (e) { /* privat / gesperrt */ }
+$('liveShots').addEventListener('toggle', () => {
+  try { localStorage.setItem('liveShotsOpen', $('liveShots').open ? '1' : '0'); } catch (e) { /* egal */ }
+});
+$('liveTestSpeed').onchange = rememberReplay;
+$('liveTestFile').onchange = rememberReplay;
+renderHandover(null);
+
 $('liveStart').onclick = startLive;
 $('liveStop').onclick = () => api('/api/live/stop', { method: 'POST' }).catch(() => {});
 $('liveReset').onclick = resetLive;
@@ -949,6 +1416,8 @@ const clickOnKey = (e) => {
 $('liveMonitors').onkeydown = clickOnKey;
 for (const id of ['liveThumbs', 'liveText']) {
   $(id).onclick = (e) => {
+    const chip = e.target.closest('[data-goto-hint]');
+    if (chip) { gotoHint(chip.dataset.gotoHint); return; }
     const el = e.target.closest('[data-shot]');
     if (el) openLightbox(Number(el.dataset.shot));
   };
@@ -1084,9 +1553,17 @@ $('confirmCancel').onclick = () => closeConfirm(false);
 $('confirm').onclick = (e) => { if (e.target === $('confirm')) closeConfirm(false); };
 
 document.addEventListener('keydown', (e) => {
+  // Alt+S: Souffleur aus- und einblenden (global, auch bei Fokus im Transkript).
+  if (e.altKey && !e.ctrlKey && !e.metaKey && e.key.toLowerCase() === 's' && !$('tabLive').hidden) {
+    e.preventDefault();
+    setSouffleurHidden(!$('liveAside').classList.contains('collapsed'));
+    return;
+  }
   if (e.key === 'Escape' && $('confirm').classList.contains('open')) { closeConfirm(false); return; }
   if (e.key === 'Escape' && $('winPick').classList.contains('open')) { closeWinPick(); return; }
   if (e.key === 'Escape' && $('overlay').classList.contains('open')) { $('overlay').classList.remove('open'); return; }
+  if (e.key === 'Escape' && !$('lightbox').classList.contains('open') && !$('liveAside').classList.contains('collapsed')
+      && $('liveAside').contains(document.activeElement)) { setSouffleurHidden(true); return; }
   if (!$('lightbox').classList.contains('open')) return;
   if (e.key === 'Escape') $('lightbox').classList.remove('open');
   if (e.key === 'ArrowLeft') openLightbox(lightboxIndex - 1);
@@ -1095,9 +1572,9 @@ document.addEventListener('keydown', (e) => {
 
 const TAB_META = {
   Trans: 'Stapelverarbeitung: Ordner wählen, Dateien ankreuzen, transkribieren',
-  Live: 'Monitor, System-Audio und Mikrofon mitschneiden – Transkript und Screenshots entstehen live',
+  Live: 'Monitor, System-Audio und Mikrofon mitschneiden – Transkript, Screenshots und Souffleur-Hinweise entstehen live',
   Ana: 'Claude-Agent: Transkription + Standbilder auswerten, Dokumente im Ausgabeordner ablegen',
-  Set: 'Standardordner für alle Reiter und Zustand der Umgebung',
+  Set: 'Standardordner für alle Reiter, Wiki für den Souffleur und Zustand der Umgebung',
 };
 
 function showTab(name) {

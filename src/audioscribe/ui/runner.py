@@ -580,6 +580,9 @@ class LiveRunner(_ProcessRunner):
         self._info: dict = {"running": False}
         self._events: list[dict] = []
         self._discard = False  # Reset unterwegs: kein Nachschaerfen mehr anstossen
+        self._last_line: str | None = None  # letzte Protokollzeile - Fehlertext fuer die Oberflaeche
+        # Souffleur (PRD §20): hoert die Segmente mit und haengt "hinweis"-Ereignisse an.
+        self._souffleur = None
 
     def start(
         self,
@@ -587,6 +590,7 @@ class LiveRunner(_ProcessRunner):
         *,
         argv_builder: Callable[[LiveJobOptions], list[str]] = build_live_argv,
         refine_builder: Callable[[Path, LiveJobOptions], list[str]] = build_refine_argv,
+        souffleur_factory: Callable[[LiveJobOptions], object | None] | None = None,
     ) -> None:
         with self._lock:
             if self._info.get("running"):
@@ -606,10 +610,25 @@ class LiveRunner(_ProcessRunner):
                 "refine": None,
                 "fazit": None,  # {"live": {...}, "nachschaerfen": {...}} nach dem jeweiligen Ende
                 "returncode": None,
+                "error": None,  # letzte Protokollzeile, wenn die Sitzung mit Fehler endet
+                "replay": opts.replay_transcript is not None,  # Testmodus: Transkript abspielen (FR-64)
+                "replay_speed": opts.replay_speed if opts.replay_transcript is not None else None,
             }
             self._events = []
             self._discard = False
+            self._last_line = None
             self._reset_log()
+            self._souffleur = None
+        if souffleur_factory is not None:
+            try:
+                souffleur = souffleur_factory(opts)
+            except Exception as exc:  # noqa: BLE001 - der Souffleur darf die Sitzung nie verhindern
+                souffleur = None
+                self._append(f"Souffleur nicht gestartet: {exc}")
+            if souffleur is not None:
+                souffleur.on_hinweis = self._on_hinweis
+                with self._lock:
+                    self._souffleur = souffleur
         self._thread = threading.Thread(
             target=self._run,
             args=(argv_builder(opts), opts, refine_builder),
@@ -654,7 +673,9 @@ class LiveRunner(_ProcessRunner):
             if running:
                 self._discard = True
                 self._info["stopping"] = True
-            proc, thread = self._proc, self._thread
+            proc, thread, souffleur = self._proc, self._thread, self._souffleur
+        if souffleur is not None:
+            souffleur.stop()
         if running:
             if proc is not None and proc.poll() is None:
                 _terminate(proc)
@@ -666,6 +687,7 @@ class LiveRunner(_ProcessRunner):
             self._info = {"running": False}
             self._events = []
             self._discard = False
+            self._souffleur = None
             self._reset_log()
         return Path(old_dir) if old_dir else None
 
@@ -674,6 +696,11 @@ class LiveRunner(_ProcessRunner):
             raw = self._info.get("dir")
         return Path(raw) if raw else None
 
+    def souffleur(self):
+        """Der Souffleur der laufenden bzw. letzten Sitzung (``None`` ohne Sitzung)."""
+        with self._lock:
+            return self._souffleur
+
     def snapshot(self, offset: int = 0, ev_offset: int = 0) -> dict:
         with self._lock:
             lines, new_offset = self._lines_since(offset)
@@ -681,7 +708,14 @@ class LiveRunner(_ProcessRunner):
             info["partials"] = dict(info.get("partials") or {})
             new_events = self._events[max(0, ev_offset) :]
             total = len(self._events)
+            souffleur = self._souffleur
+        info["souffleur"] = souffleur.status() if souffleur is not None else None
         return {**info, "offset": new_offset, "lines": lines, "events": new_events, "ev_offset": total}
+
+    def _on_hinweis(self, hinweis: dict) -> None:
+        """Eine Markierung des Souffleurs - als Ereignis fuer den Browser (wie segment/shot)."""
+        with self._lock:
+            self._events.append({"type": "hinweis", **hinweis})
 
     def _run(
         self,
@@ -703,9 +737,22 @@ class LiveRunner(_ProcessRunner):
         finally:
             with self._lock:
                 self._proc = None
-                self._info.update(
-                    running=False, returncode=code, phase="beendet" if code == 0 else "fehler", partials={}
-                )
+                self._info.update(partials={})
+                souffleur = self._souffleur
+            if souffleur is not None:
+                # Der Souffleur beurteilt noch die letzten Fenster und schreibt die Uebergabe -
+                # solange gilt die Sitzung als laufend (Phase "abschluss"), sonst laese die
+                # Oberflaeche ein unfertiges Protokoll.
+                with self._lock:
+                    self._info["phase"] = "abschluss"
+                try:
+                    souffleur.abschliessen()
+                except Exception as exc:  # noqa: BLE001 - Abschluss des Souffleurs ist Zugabe
+                    self._append(f"Souffleur-Abschluss fehlgeschlagen: {exc}")
+            with self._lock:
+                self._info.update(running=False, returncode=code, phase="beendet" if code == 0 else "fehler")
+                if code != 0:
+                    self._info["error"] = self._last_line
             self._append("\nSitzung beendet." if code == 0 else f"\nBeendet mit Exit-Code {code}.")
 
     def _pump(self, proc: subprocess.Popen[str] | None, on_line: Callable[[str], None]) -> int:
@@ -722,9 +769,13 @@ class LiveRunner(_ProcessRunner):
         event = parse_event(line)
         if event is None:
             self._append(line)
+            with self._lock:
+                self._last_line = line
             return
         typ = event.pop("type")
+        empfangen = time.monotonic()
         with self._lock:
+            souffleur = self._souffleur
             if typ == "state":
                 self._info.update(
                     {k: event.get(k) for k in ("phase", "session", "dir", "model", "device", "step")}
@@ -746,6 +797,18 @@ class LiveRunner(_ProcessRunner):
                 if typ == "segment":
                     self._info["partials"].pop(event.get("track"), None)
                 self._events.append({"type": typ, **event})
+        # Ausserhalb des Locks: der Souffleur ruft ueber _on_hinweis selbst wieder hinein.
+        if souffleur is None:
+            return
+        try:
+            if typ == "stats" and event.get("elapsed") is not None:
+                souffleur.uhr_sync(float(event["elapsed"]))
+            elif typ == "state" and event.get("phase") == "laeuft" and event.get("dir"):
+                souffleur.starte(Path(event["dir"]))
+            elif typ == "segment":
+                souffleur.beobachte(event, empfangen_mono=empfangen)
+        except Exception as exc:  # noqa: BLE001 - der Souffleur darf die Sitzung nie stoeren
+            self._append(f"Souffleur-Fehler: {exc}")
 
     def _note_fazit(self, event: dict) -> None:
         """Fazit eines Teils (live | nachschaerfen) ablegen; Aufruf unter ``_lock``."""
@@ -769,6 +832,8 @@ class LiveRunner(_ProcessRunner):
             elif percent is not None:
                 refine["percent"] = percent
             self._info["refine"] = refine or None
+            if percent is None:
+                self._last_line = line
         if percent is None:
             self._append(line)
 

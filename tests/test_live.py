@@ -1175,7 +1175,7 @@ def test_live_runner_reset_after_end_clears_state(tmp_path):
     runner.stop()
     wait_for(lambda: not runner.snapshot()["running"])
     assert runner.reset() == tmp_path
-    assert runner.snapshot() == {"running": False, "offset": 0, "lines": [], "events": [], "ev_offset": 0, "partials": {}}
+    assert runner.snapshot() == {"running": False, "offset": 0, "lines": [], "events": [], "ev_offset": 0, "partials": {}, "souffleur": None}
     assert runner.reset() is None  # ein zweites Mal ist harmlos
 
 
@@ -1238,7 +1238,7 @@ def test_live_start_with_window_remembers_label(client, tmp_path, monkeypatch):
     from audioscribe.ui.runner import LiveRunner
 
     gestartet = []
-    monkeypatch.setattr(LiveRunner, "start", lambda self, opts: gestartet.append(opts))
+    monkeypatch.setattr(LiveRunner, "start", lambda self, opts, **kw: gestartet.append(opts))
     state.save_state({"live_monitor": "2"})
     body = {"output_dir": str(tmp_path), "monitor": 0, "window": 4711, "window_label": "chrome – Jira",
             "mic": "none", "loopback": "none"}

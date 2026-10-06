@@ -49,6 +49,20 @@ def _opt_int(name: str) -> int | None:
     return int(raw) if raw and raw.strip() else None
 
 
+def _config_dir() -> Path:
+    """Ordner fuer dauerhafte Einstellungen, je Plattform; AUDIOSCRIBE_CONFIG_DIR hat Vorrang."""
+    eigen = os.environ.get("AUDIOSCRIBE_CONFIG_DIR")
+    if eigen and eigen.strip():
+        return Path(eigen.strip()).expanduser()
+    if sys.platform == "win32":
+        basis = os.environ.get("APPDATA")
+        return (Path(basis) if basis else Path.home() / "AppData" / "Roaming") / "audioscribe"
+    if sys.platform == "darwin":
+        return Path.home() / "Library" / "Application Support" / "audioscribe"
+    xdg = os.environ.get("XDG_CONFIG_HOME")
+    return (Path(xdg) if xdg else Path.home() / ".config") / "audioscribe"
+
+
 @dataclass(frozen=True)
 class Settings:
     # --- Verzeichnisse ---
@@ -58,6 +72,9 @@ class Settings:
     work_dir: Path = field(default_factory=lambda: PROJECT_ROOT / "work")
     # WSL-natives Cache-Verzeichnis (chmod/+x zuverlaessig; nicht auf /mnt/c).
     cache_dir: Path = field(default_factory=lambda: Path.home() / ".cache" / "audioscribe")
+    # Dauerhafte Einstellungen der Oberflaeche (nicht Cache): Konfigurationsordner der
+    # Plattform - Windows %APPDATA%, macOS ~/Library/Application Support, sonst XDG.
+    config_dir: Path = field(default_factory=lambda: _config_dir())
 
     # --- Rechen-Backend ---
     # Rohwert: "auto" (CUDA > MPS (Apple Silicon) > CPU) | "cuda[:N]" | "mps" | "cpu".
@@ -159,6 +176,15 @@ class Settings:
     # BPMN-Modell mit Lanes aus bpmn-modell.json (FR-36)
     agent_bpmn: bool = field(default_factory=lambda: _flag("AGENT_BPMN", "1"))
     agent_max_turns: int | None = field(default_factory=lambda: _opt_int("AGENT_MAX_TURNS"))
+
+    # --- Souffleur (PRD §20): Live-Abgleich mit einem LLM-Wiki ---
+    # KI-Dienst austauschbar: "claude-agent" (Agent SDK, Anmeldung von Claude Code) | "attrappe".
+    souffleur_backend: str = field(default_factory=lambda: _env("SOUFFLEUR_BACKEND", "claude-agent"))
+    souffleur_model: str = field(default_factory=lambda: _env("SOUFFLEUR_MODEL", "claude-sonnet-5"))
+    # Wiki-Pfad (K1) und Uebergabeordner (A4) sind Einstellungen der Oberflaeche (ui/state.py);
+    # hier stehen nur die Vorgaben aus der Umgebung fuer Erststart und Kommandozeile.
+    wiki_dir: str = field(default_factory=lambda: _env("WIKI_DIR", ""))
+    uebergabe_dir: str = field(default_factory=lambda: _env("UEBERGABE_DIR", ""))
     agent_output_dir: Path = field(
         default_factory=lambda: Path(_env("AGENT_OUTPUT_DIR", str(PROJECT_ROOT / "analysen")))
     )

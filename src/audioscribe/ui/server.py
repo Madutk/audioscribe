@@ -111,6 +111,14 @@ def _media_seconds(media: Path, out_dir: Path) -> float | None:
     return _duration_cached(str(media), stat.st_mtime_ns, stat.st_size)
 
 
+def _souffleur_models() -> list[dict]:
+    """KI-Modelle fuer den Souffleur mit neutralen Bezeichnungen (kein Produktname in der Oberflaeche)."""
+    from audioscribe.souffleur.ki import SOUFFLEUR_MODELS
+
+    labels = ("Standard (schnell)", "Sparsam (am schnellsten)", "Stark (langsamer)", "Maximal (am langsamsten)")
+    return [{"id": m, "label": labels[i] if i < len(labels) else m} for i, m in enumerate(SOUFFLEUR_MODELS)]
+
+
 def _remembered_dir(raw: object, fallback: Path) -> str:
     """Gemerkten Ordner uebernehmen - aber nur, wenn er auf diesem Rechner existiert.
 
@@ -188,6 +196,9 @@ def create_app():
         speakers: bool = True
         refine: bool = True
         refine_model: str = "large-v3"
+        # Testmodus (FR-64): Transkriptdatei oder Sitzungsordner; leer = echte Aufnahme.
+        replay_transcript: str = ""
+        replay_speed: float = 1.0
 
     class StateIn(BaseModel):
         input_dir: str | None = None
@@ -201,6 +212,21 @@ def create_app():
         frame_sensitivity: str | None = None
         frame_format: str | None = None
         theme: str | None = None
+        # Testmodus (FR-64): Transkript und Tempo schon bei der Auswahl merken, nicht erst beim Start
+        replay_transcript: str | None = None
+        replay_speed: str | None = None
+        # Souffleur (PRD §20)
+        wiki_dir: str | None = None
+        uebergabe_dir: str | None = None
+        souffleur_model: str | None = None
+        souffleur_aktiv: bool | None = None
+        souffleur_sensibel: bool | None = None
+
+    class EssenzIn(BaseModel):
+        minuten: int = 2
+
+    class SouffleurToggleIn(BaseModel):
+        aktiv: bool = True
 
     class StartIn(BaseModel):
         input_dir: str
@@ -283,6 +309,13 @@ def create_app():
         chosen["agent_output_dir"] = _remembered_dir(
             chosen["agent_output_dir"], settings.agent_output_dir
         )
+        chosen["uebergabe_dir"] = _remembered_dir(
+            chosen.get("uebergabe_dir"), Path(chosen["output_dir"]) / "wiki-uebergabe"
+        )
+        chosen.setdefault("wiki_dir", settings.wiki_dir)
+        chosen.setdefault("souffleur_model", settings.souffleur_model)
+        chosen.setdefault("souffleur_aktiv", True)
+        chosen["souffleur_models"] = _souffleur_models()
         acc = _accelerator()  # None = Probe nicht moeglich -> alle Geraete anbieten
         return JSONResponse(
             {
@@ -592,6 +625,10 @@ def create_app():
                 "speakers": saved.get("live_speakers", True),
                 "refine": saved.get("live_refine", True),
                 "refine_model": saved.get("live_refine_model", settings.whisper_model),
+                # Testmodus (FR-64)
+                "replay_transcript": saved.get("replay_transcript", ""),
+                "replay_speed": saved.get("replay_speed", "1"),
+                "replay_speeds": list(jobs.REPLAY_SPEEDS),
             }
         )
 
@@ -630,8 +667,22 @@ def create_app():
         except Exception as exc:  # noqa: BLE001
             raise HTTPException(500, f"Fenster nicht lesbar: {exc}") from exc
 
+    def _souffleur_factory(opts: jobs.LiveJobOptions):
+        """Souffleur je Sitzung (PRD §20). Konfiguration kommt aus dem Einstellungsstand -
+        der Wiki-Pfad wird nur in ``souffleur.konfig`` gelesen (K1)."""
+        from audioscribe.souffleur.kern import Souffleur
+        from audioscribe.souffleur.ki import make_ki
+        from audioscribe.souffleur.konfig import lade_konfig
+
+        speed = opts.replay_speed if opts.replay_transcript is not None else 1.0
+        konfig = lade_konfig(state.load_state(), output_dir=opts.output_dir, speed=speed)
+        ki, ki_status = make_ki(konfig.backend, konfig.modell, cache_dir=settings.cache_dir, log=live._append)
+        return Souffleur(konfig, ki=ki, ki_status=ki_status, log=live._append)
+
     @app.post("/api/live/start")
     def api_live_start(body: LiveStartIn):
+        if body.replay_transcript.strip():
+            return _live_start_replay(body)
         if body.device not in jobs.DEVICES:
             raise HTTPException(400, f"Unbekanntes Geraet: {body.device}")
         if body.sensitivity not in jobs.SENSITIVITIES:
@@ -691,10 +742,83 @@ def create_app():
             }
         )
         try:
-            live.start(opts)
+            live.start(opts, souffleur_factory=_souffleur_factory)
         except RuntimeError as exc:
             raise HTTPException(409, str(exc)) from exc
         return JSONResponse({"ok": True})
+
+    def _live_start_replay(body: LiveStartIn):
+        """Testmodus (FR-64): Transkript abspielen - ohne Geraete, ohne Nachschaerfen."""
+        from audioscribe.live.replay_transkript import finde_transkript
+
+        quelle = browse.normalize_path(body.replay_transcript, default=settings.output_dir)
+        try:
+            finde_transkript(quelle)
+        except FileNotFoundError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        if not 0 < body.replay_speed <= 100:
+            raise HTTPException(400, "Tempo muss zwischen 0 und 100 liegen.")
+        out_dir = browse.normalize_path(body.output_dir, default=settings.output_dir)
+        try:
+            out_dir.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            raise HTTPException(400, f"Ausgangsordner nicht anlegbar: {exc}") from exc
+        opts = jobs.LiveJobOptions(
+            output_dir=out_dir, monitor=0, mic="none", loopback="none", refine=False,
+            replay_transcript=quelle, replay_speed=body.replay_speed,
+        )
+        state.save_state(
+            {"live_source": "transcript", "replay_transcript": str(quelle), "replay_speed": f"{body.replay_speed:g}"}
+        )
+        try:
+            live.start(opts, souffleur_factory=_souffleur_factory)
+        except RuntimeError as exc:
+            raise HTTPException(409, str(exc)) from exc
+        return JSONResponse({"ok": True})
+
+    # --- Souffleur (PRD §20) -----------------------------------------------------
+
+    @app.post("/api/souffleur/essenz")
+    def api_souffleur_essenz(body: EssenzIn):
+        """C1: Essenz der letzten 2 oder 5 Minuten - KI-erzeugt, so gekennzeichnet."""
+        from dataclasses import asdict
+
+        from audioscribe.souffleur.essenz import MINUTEN
+        from audioscribe.souffleur.ki import KiFehler
+
+        if body.minuten not in MINUTEN:
+            raise HTTPException(400, f"Fenster muss {' oder '.join(map(str, MINUTEN))} Minuten sein.")
+        souffleur = live.souffleur()
+        if souffleur is None:
+            raise HTTPException(409, "Keine Sitzung mit Souffleur.")
+        try:
+            essenz = souffleur.essenz(body.minuten)
+        except KiFehler as exc:
+            raise HTTPException(400, str(exc)) from exc
+        return JSONResponse({**asdict(essenz), "fenster": essenz.fenster})
+
+    @app.get("/api/wiki/status")
+    def api_wiki_status(path: str = Query("")):
+        """K1: Wiki-Pfad pruefen - leer = der gemerkte Pfad. Drei Zustaende: keins | ok | fehler."""
+        from audioscribe.souffleur.konfig import wiki_pfad
+        from audioscribe.souffleur.wiki import pruefe_wiki
+
+        pfad = browse.normalize_path(path, default=Path("")) if path.strip() else wiki_pfad(state.load_state())
+        status = pruefe_wiki(pfad if str(pfad) not in ("", ".") else None)
+        return JSONResponse(status.als_dict())
+
+    @app.get("/api/souffleur/offene-punkte")
+    def api_souffleur_offene_punkte():
+        souffleur = live.souffleur()
+        return JSONResponse({"punkte": souffleur.offene_punkte() if souffleur is not None else []})
+
+    @app.post("/api/souffleur/toggle")
+    def api_souffleur_toggle(body: SouffleurToggleIn):
+        state.save_state({"souffleur_aktiv": body.aktiv})
+        souffleur = live.souffleur()
+        if souffleur is not None:
+            souffleur.setze_aktiv(body.aktiv)
+        return JSONResponse({"ok": True, "aktiv": body.aktiv})
 
     @app.get("/api/live/status")
     def api_live_status(offset: int = Query(0, ge=0), ev_offset: int = Query(0, ge=0)):

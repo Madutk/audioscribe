@@ -1,0 +1,83 @@
+{
+  "version": 1,
+  "source": "meeting-testdaten",
+  "source_path": "",
+  "duration_s": 60.0,
+  "language": "de",
+  "num_speakers": 3,
+  "model": "testdaten",
+  "created": "2026-01-06 10:00",
+  "mode": "live",
+  "paragraphs": [
+    {
+      "index": 0,
+      "start": 0.0,
+      "end": 4.0,
+      "speaker": "Sprecher 1",
+      "text": "Guten Morgen zusammen, schön, dass alle da sind."
+    },
+    {
+      "index": 1,
+      "start": 5.0,
+      "end": 12.0,
+      "speaker": "Sprecher 1",
+      "text": "Die Freigabe von Rechnungen ab 10.000 Euro macht bei uns die Teamleitung."
+    },
+    {
+      "index": 2,
+      "start": 13.0,
+      "end": 18.0,
+      "speaker": "Sprecher 2",
+      "text": "Die Freigabe dauert in der Regel drei Werktage."
+    },
+    {
+      "index": 3,
+      "start": 19.0,
+      "end": 24.0,
+      "speaker": "Ich",
+      "text": "Wer pflegt eigentlich die Lieferantenstammdaten?"
+    },
+    {
+      "index": 4,
+      "start": 25.0,
+      "end": 29.0,
+      "speaker": "Sprecher 2",
+      "text": "Das ist doch klar, oder?"
+    },
+    {
+      "index": 5,
+      "start": 30.0,
+      "end": 36.0,
+      "speaker": "Sprecher 2",
+      "text": "Die Stammdaten pflegen wir im Fak Tura."
+    },
+    {
+      "index": 6,
+      "start": 37.0,
+      "end": 43.0,
+      "speaker": "Sprecher 1",
+      "text": "Wer die Schulung für das neue Portal übernimmt, ist noch offen."
+    },
+    {
+      "index": 7,
+      "start": 44.0,
+      "end": 50.0,
+      "speaker": "Sprecher 2",
+      "text": "Belege bewahren wir fünf Jahre auf."
+    },
+    {
+      "index": 8,
+      "start": 51.0,
+      "end": 55.0,
+      "speaker": "Ich",
+      "text": "Gibt es eine Vorgabe für die Reisekostenabrechnung?"
+    },
+    {
+      "index": 9,
+      "start": 56.0,
+      "end": 60.0,
+      "speaker": "Sprecher 1",
+      "text": "Gut, dann machen wir weiter mit dem nächsten Punkt."
+    }
+  ]
+}

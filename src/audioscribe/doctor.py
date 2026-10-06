@@ -419,6 +419,26 @@ def _check_live() -> CheckResult:
     )
 
 
+def _check_souffleur() -> CheckResult:
+    """Souffleur (PRD §20, optional, daher hoechstens WARN): Wiki-Verknuepfung und KI-Dienst."""
+    from audioscribe.souffleur.ki import BACKEND_CLAUDE, sdk_verfuegbar
+    from audioscribe.souffleur.konfig import lade_konfig
+    from audioscribe.souffleur.wiki import ZUSTAND_OK, pruefe_wiki
+    from audioscribe.ui import state
+
+    konfig = lade_konfig(state.load_state())
+    wiki = pruefe_wiki(konfig.wiki_dir)
+    teile = [f"Wiki: {wiki.meldung}" if wiki.zustand == ZUSTAND_OK else f"Wiki: {wiki.meldung}"]
+    status = "OK" if wiki.zustand == ZUSTAND_OK else "WARN"
+    if konfig.backend == BACKEND_CLAUDE and not sdk_verfuegbar():
+        teile.append("KI: Agent SDK fehlt -> 'uv sync --extra agent'")
+        status = "WARN"
+    else:
+        teile.append(f"KI: {konfig.backend}, Modell {konfig.modell}")
+    teile.append(f"Einstellungen: {state.state_path()}")
+    return CheckResult(status, "Souffleur", " | ".join(teile))
+
+
 CHECKS = (
     _check_platform,
     _check_python,
@@ -430,6 +450,7 @@ CHECKS = (
     _check_dirs,
     _check_agent,
     _check_live,
+    _check_souffleur,
 )
 
 _ICON = {"OK": "[ OK ]", "WARN": "[WARN]", "FAIL": "[FAIL]"}
