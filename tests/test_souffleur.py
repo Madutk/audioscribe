@@ -223,12 +223,16 @@ def test_lade_konfig_nimmt_wiki_und_ki_aus_dem_projekt(tmp_path):
     from audioscribe.projekt.modell import Projekt
     from audioscribe.souffleur import konfig
 
-    projekt = Projekt(wurzel=WIKI, name="Test", sitzungen_dir=tmp_path / "s", assets_dir=WIKI / "raw" / "assets",
-                      souffleur_model="claude-haiku-4-5-20251001")
+    projekt = Projekt(wurzel=tmp_path / "p", name="Test", sitzungen_dir=tmp_path / "s", wiki_dir=WIKI,
+                      assets_dir=WIKI / "raw" / "assets", souffleur_model="claude-haiku-4-5-20251001")
     k = konfig.lade_konfig({"wiki_dir": str(tmp_path / "anderes"), "souffleur_model": "claude-opus-5"}, projekt=projekt)
     assert k.wiki_dir == WIKI and k.modell == "claude-haiku-4-5-20251001"
-    ohne = Projekt(wurzel=WIKI, name="Test", sitzungen_dir=tmp_path / "s", assets_dir=WIKI / "raw" / "assets")
+    ohne = Projekt(wurzel=tmp_path / "p", name="Test", sitzungen_dir=tmp_path / "s", wiki_dir=WIKI,
+                   assets_dir=WIKI / "raw" / "assets")
     assert konfig.lade_konfig({"souffleur_model": "claude-opus-5"}, projekt=ohne).modell == "claude-opus-5"
+    # Projekt ohne Wiki: auch das Wiki der Installation gilt dann nicht.
+    ohne_wiki = Projekt(wurzel=tmp_path / "p", name="Test", sitzungen_dir=tmp_path / "s")
+    assert konfig.lade_konfig({"wiki_dir": str(WIKI)}, projekt=ohne_wiki).wiki_dir is None
 
 
 def test_wiki_pfad_wird_nur_in_konfig_gelesen():
@@ -606,8 +610,14 @@ def test_doctor_souffleur_check(monkeypatch, tmp_path):
     wiki = tmp_path / "pw"
     (wiki / "wiki").mkdir(parents=True)
     (wiki / "wiki" / "index.md").write_text("# P\n", encoding="utf-8")
-    projekt = modell.lege_an(name="Bahn", wurzel=wiki, sitzungen_dir=tmp_path / "s", assets_dir=wiki / "raw" / "assets")
+    projekt = modell.lege_an(name="Bahn", wurzel=tmp_path / "p", sitzungen_dir=tmp_path / "s",
+                             wiki_art="vorhanden", wiki_dir=wiki)
     state.save_state({"wiki_dir": ""})
     state.merke_projekt(projekt.wurzel, projekt.name)
     r = doctor._check_souffleur()
     assert r.status == "OK" and "Wiki je Projekt: Bahn (1 Seiten)" in r.detail
+    # Ein Projekt ohne Wiki ist kein Mangel.
+    ohne = modell.lege_an(name="Ohne", wurzel=tmp_path / "o", sitzungen_dir=tmp_path / "o" / "s")
+    state.merke_projekt(ohne.wurzel, ohne.name)
+    r = doctor._check_souffleur()
+    assert r.status == "OK" and "Ohne (ohne Wiki)" in r.detail

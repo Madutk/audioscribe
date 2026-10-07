@@ -215,7 +215,7 @@ def test_nachbereitung_folgt_keinen_pfaden_aus_dokument_oder_vermerk(projekt, si
     ablage = wiki_ablage.speichere_nachbereitung(ws, projekt, sitzung)
     assert Path(ablage.ordner).is_relative_to(projekt.raw_dir) and not any(fremd.iterdir())
     # Nur Dateinamen aus material/frames: ".." fuehrt nirgendwohin.
-    assert not list(projekt.wurzel.rglob("geheim.txt"))
+    assert not list(projekt.wiki_dir.rglob("geheim.txt"))
     assert "material/frames/../geheim.txt" in (Path(ablage.ordner) / "INDEX.md").read_text(encoding="utf-8")
     # Das README des Agenten bleibt; der KI-Hinweis steht daneben.
     assert (Path(ablage.ordner) / "README.md").read_text(encoding="utf-8").startswith("# Bericht des Agenten")
@@ -230,3 +230,12 @@ def test_nachbereitung_ohne_bilder_macht_textverweise(projekt, sitzung):
     text = index.read_text(encoding="utf-8")
     assert "_[Bild #0001 – Maske]_" in text and "material/frames" not in text
     assert ablage.bilder == 0 and not projekt.assets_dir.exists()
+
+
+def test_ohne_wiki_wird_nicht_abgelegt(projekt_ohne_wiki, sitzung_ohne_wiki):
+    """Ein Projekt ohne Wiki hat kein Ziel fuer die Ablage - und der Sitzungsordner bleibt unberuehrt."""
+    vorher = sorted(p.name for p in sitzung_ohne_wiki.iterdir())
+    with pytest.raises(RuntimeError, match="kein Wiki"):
+        wiki_ablage.speichere_sitzung(sitzung_ohne_wiki, projekt_ohne_wiki)
+    assert sorted(p.name for p in sitzung_ohne_wiki.iterdir()) == vorher
+    assert wiki_ablage.letzte_ablage(sitzung_ohne_wiki, projekt_ohne_wiki) is None

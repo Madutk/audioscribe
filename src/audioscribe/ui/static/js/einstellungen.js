@@ -3,8 +3,8 @@
 
 import { $, api, post, put, esc, icon, empty, projekt, fillOptions, toast, sep, trimSep } from './kern.js';
 import { setKontext } from './kontext.js';
-import { pickFolder } from './dialoge.js';
-import { renderWikiState } from './wiki.js';
+import { pickFolder, askConfirm } from './dialoge.js';
+import { renderWikiState, loadWikiStatus } from './wiki.js';
 
 // --- Global -----------------------------------------------------------------------------
 
@@ -89,10 +89,22 @@ export function zeigeProjekt() {
   if (!p || p.demo) return;
   $('pName').value = p.name;
   $('pWurzel').textContent = p.wurzel;
+  // Wiki: Pfad und Zustand mit Wiki, sonst Hinweis mit den Wegen zu einem Wiki.
+  const mit = !!p.hat_wiki;
+  $('pWikiDir').hidden = !mit;
+  $('pWikiDir').textContent = p.wiki_dir || '';
   renderWikiState($('setWikiState'), p.wiki, false);
+  $('pWikiHintMit').hidden = !mit;
+  $('pWikiHintOhne').hidden = mit;
+  $('pWikiNeu').hidden = mit;
+  $('pWikiVerknuepfen').textContent = mit ? 'Anderes Wiki verknüpfen' : 'Vorhandenes Wiki verknüpfen';
+  $('pWikiVerknuepfen').prepend(iconNode('folder'));
+  $('pWikiLoesen').hidden = !mit;
+  $('pWikiOrdner').hidden = !mit;
+  $('pAblageCard').hidden = !mit;
   $('pSitzungen').value = p.sitzungen_dir;
-  $('pAssets').value = p.assets_dir;
-  $('pRaw').textContent = `${trimSep(p.raw_dir)}${sep()}<Datum>_<Sitzungstitel>${sep()}`;
+  $('pAssets').value = p.assets_dir || '';
+  $('pRaw').textContent = mit ? `${trimSep(p.raw_dir)}${sep()}<Datum>_<Sitzungstitel>${sep()}` : '–';
   const radio = document.querySelector(`input[name="pSpeichern"][value="${p.wiki_speichern}"]`);
   if (radio) radio.checked = true;
   $('pBilder').checked = p.wiki_bilder !== false;
@@ -109,11 +121,20 @@ export function zeigeProjekt() {
   }
 }
 
+/** Ein Icon als Knoten (fuer Knoepfe, deren Text wechselt). */
+function iconNode(name) {
+  const tpl = document.createElement('template');
+  tpl.innerHTML = icon(name);
+  return tpl.content.firstElementChild;
+}
+
 async function speichere(felder, meldung = 'Projekteinstellung gespeichert') {
   $('pErr').textContent = '';
   try {
     setKontext(await put('/api/projekt', { felder }));
     toast(meldung);
+    // Das Wiki hat gewechselt: die Live-Ansicht soll den neuen Zustand kennen.
+    if ('wiki_art' in felder || 'wiki_dir' in felder) loadWikiStatus().catch(() => {});
   } catch (err) {
     $('pErr').textContent = err.message;
   }
@@ -130,6 +151,20 @@ $('pickPSitzungen').onclick = async () => {
 $('pickPAssets').onclick = async () => {
   const pfad = await pickFolder({ title: 'Ordner für Bilder im Wiki wählen', start: $('pAssets').value });
   if (pfad) speichere({ assets_dir: pfad });
+};
+$('pWikiNeu').onclick = () => speichere({ wiki_art: 'neu' }, 'Wiki angelegt');
+$('pWikiVerknuepfen').onclick = async () => {
+  const p = projekt();
+  const pfad = await pickFolder({ title: 'Ordner des LLM-Wikis wählen', ok: 'Dieses Wiki verknüpfen', start: (p && (p.wiki_dir || p.wurzel)) || '' });
+  if (pfad) speichere({ wiki_art: 'vorhanden', wiki_dir: pfad }, 'Wiki verknüpft');
+};
+$('pWikiLoesen').onclick = async () => {
+  const ok = await askConfirm({
+    title: 'Verknüpfung zum Wiki lösen?',
+    text: 'Das Projekt arbeitet danach ohne Wiki: keine Belege im Souffleur, keine Ablage ins Wiki. Die Dateien des Wikis bleiben unverändert liegen.',
+    ok: 'Verknüpfung lösen',
+  });
+  if (ok) speichere({ wiki_art: 'keins' }, 'Verknüpfung gelöst');
 };
 for (const radio of document.querySelectorAll('input[name="pSpeichern"]')) {
   radio.onchange = () => speichere({ wiki_speichern: radio.value });

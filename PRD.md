@@ -843,8 +843,9 @@ mehrere Wikis sind nicht enthalten.
 
 Die Oberfläche beginnt mit einer **Startseite** statt mit vier gleichrangigen Reitern. Von
 dort führen vier Einstiege weiter: neues Projekt, Projekt öffnen, eine einzelne Aufnahme
-transkribieren, Demo abspielen. Ein **Projekt** gehört zu genau einem LLM-Wiki und trägt
-seine eigenen Einstellungen (Ordner, Wiki-Ablage, KI, Sprache); die Arbeitsansichten zeigen
+transkribieren, Demo abspielen. Ein **Projekt** ist ein eigener Ordner mit seinen Sitzungen,
+hat auf Wunsch ein LLM-Wiki (neu darin oder verknüpft) und trägt seine eigenen Einstellungen
+(Ordner, Wiki-Ablage, KI, Sprache); die Arbeitsansichten zeigen
 nur noch, was zum gewählten Einstieg gehört. Nach einer Sitzung geht das Material auf Wunsch
 als neue Quelle ins Wiki – das Transkript (auf Wunsch mit den Markierungen des Souffleurs) nach `raw/`, Bilder in einen
 Assets-Ordner, die Zuordnung Zeitstempel ↔ Bild bleibt erhalten – und/oder in die
@@ -853,20 +854,37 @@ dem Neustart fortsetzen oder sauber abschließen.
 
 ### 21.2 Designentscheidungen (festgelegt)
 
-- **Ein Projekt = ein LLM-Wiki.** Der Wiki-Ordner (Wurzel mit `raw/` und `wiki/`) ist die
-  Identität des Projekts. Beim Anlegen wird ein vorhandenes Wiki verknüpft oder ein neues
-  Gerüst angelegt (`projekt/vorlage.py`: `raw/`, `wiki/` mit Unterordnern, `index.md`,
-  `log.md`, `uebersicht.md`, `glossar.md`, `README.md`; nur was fehlt). Ein zweites Projekt
-  im selben Wiki wird abgewiesen.
-- **Projektdatei im Wiki.** `<wiki>/.audioscribe/projekt.json` (atomar geschrieben). Der
-  Punktordner wird vom Wiki-Index übersprungen. Pfade stehen relativ zur Wiki-Wurzel in der
-  Datei, wo das geht – das Projekt zieht mit dem Wiki um (anderer Rechner, Git). Die
-  Installation merkt sich nur die zuletzt geöffneten Projekte (`einstellungen.json`,
-  Schlüssel `zuletzt_projekte`).
-- **Ordner des Projekts.** Sitzungsordner (Pflicht; Vorschlag `<wiki>-sitzungen` neben dem
-  Wiki, weil Mitschnitte groß sind) für Live-Sitzungen und – darunter in `analysen/` – die
-  KI-Analysen. Assets-Ordner für Bilder (Vorschlag `raw/assets`): muss im Wiki liegen, nie
-  unter `wiki/`. Auch der Sitzungsordner darf nicht unter `wiki/` liegen.
+- **Der Projektordner ist die Identität des Projekts** (seit 2026-10-07; davor „ein Projekt
+  = ein LLM-Wiki“). Der Nutzer wählt Speicherort und Ordnernamen, der Assistent legt den
+  Ordner an (ein vorhandener leerer Ordner geht auch; der übergeordnete Ordner muss
+  existieren). Darin: `.audioscribe/projekt.json` (Version 2, atomar geschrieben), als
+  Vorgabe `sitzungen/` und – nur bei „Neues Wiki anlegen“ – `llm-wiki/` mit dem Gerüst aus
+  `projekt/vorlage.py` (`raw/`, `wiki/` mit Unterordnern, `index.md`, `log.md`,
+  `uebersicht.md`, `glossar.md`, `README.md`; nur was fehlt). Pfade stehen relativ zum
+  Projektordner in der Datei, wo das geht – das Projekt zieht mit seinem Ordner um (anderer
+  Rechner, Git). Ein zweites Projekt im selben Ordner wird abgewiesen. Die Installation
+  merkt sich nur die zuletzt geöffneten Projekte (`einstellungen.json`, Schlüssel
+  `zuletzt_projekte`, Pfad = Projektordner).
+- **Das Wiki ist optional** (`wiki_dir`, Wiki-Art `keins | neu | vorhanden`). Ein
+  vorhandenes Wiki wird per Pfad verknüpft und bleibt, wo es ist; es wird beim Verknüpfen
+  geprüft, nie verändert. Ohne Wiki liefert `souffleur/konfig.py: wiki_pfad` im Projekt
+  `None` (der Wiki-Pfad der Installation gilt dann nicht), der Souffleur arbeitet ohne
+  Belege, die Wiki-Routen antworten 409, die Karte „Wie geht es weiter?“ zeigt statt der
+  Ablage-Kachel den Weg zu den Projekteinstellungen. Dort lässt sich ein Wiki anlegen,
+  verknüpfen oder die Verknüpfung lösen – nie während einer Sitzung (409), nie mit Löschen
+  von Dateien. Ein Wiki wird nie geraten: ein systemfremder `wiki_dir` macht das Projekt bis
+  zur Korrektur zu einem ohne Wiki (Hinweis).
+- **Kompatibilität mit Version 1.** Projektdateien von vor dem Projektordner liegen im
+  Wiki-Ordner und kennen kein `wiki_dir`; sie öffnen sich unverändert: Projektordner =
+  Wiki-Wurzel (`wiki_dir = "."`), Sitzungsordner wie gespeichert. Die erste Änderung hebt
+  die Datei in place auf Version 2. Kein Umzug, kein Migrationswerkzeug. „Projekt öffnen“
+  nimmt deshalb weiterhin auch einen Wiki-Ordner mit `.audioscribe/` an.
+- **Ordner des Projekts.** Sitzungsordner (Pflicht; Vorgabe `<projekt>/sitzungen`, änderbar,
+  z. B. andere Platte für große Mitschnitte) für Live-Sitzungen und – darunter in
+  `analysen/` – die KI-Analysen; er darf weder der Projektordner noch der Wiki-Ordner
+  selbst sein und nie unter `wiki/` liegen. Mit Wiki ein Assets-Ordner für Bilder (Vorschlag
+  `raw/assets`): muss im Wiki liegen, nie unter `wiki/`, nicht `raw/` selbst. Der
+  Projektordner darf nicht unter den Wiki-Seiten liegen.
 - **Der Server hält den Kontext** (`ui/kontext.py`): Startseite, Projekt, einzelne Aufnahme
   oder Demo – genau einer, so wie er genau eine Live-Sitzung, einen Stapel und eine Analyse
   hält. Ein Neuladen der Seite ändert nichts; nach einem Neustart des Servers beginnt die
@@ -928,10 +946,10 @@ dem Neustart fortsetzen oder sauber abschließen.
 | ID | Anforderung |
 |----|-------------|
 | FR-66 | **Startseite.** Beim Start zeigt die Oberfläche vier Einstiege als Karten – „Neues Projekt“, „Projekt öffnen“, „Aufnahme transkribieren“, „Demo abspielen“ –, jede mit einem Satz Beschreibung und einer ausklappbaren Kurzhilfe. Darunter die zuletzt geöffneten Projekte (öffnen, aus der Liste entfernen; nicht erreichbare sind gekennzeichnet). Die Demo-Karte ist ohne Demo-Daten deaktiviert. |
-| FR-67 | **Projekt anlegen.** Assistent in drei Schritten: (1) Projektname und LLM-Wiki – vorhandenes verknüpfen oder neues Gerüst anlegen, mit Sofortprüfung des Wikis; (2) Ordner für Sitzungen und Ordner für Bilder (Assets), beide vorgeschlagen, dazu das Verhalten nach einer Sitzung; (3) KI und Sprache mit der Vorgabe „globale Einstellung“. Pflicht sind Name, Wiki-Ordner, Sitzungsordner und Assets-Ordner; jedes Feld trägt eine Kurzbeschreibung, Fehler stehen am Feld. Ergebnis ist `<wiki>/.audioscribe/projekt.json`; ein vorhandenes Wiki bleibt dabei unverändert. |
-| FR-68 | **Projekt öffnen.** Über die Liste der zuletzt geöffneten oder durch Wahl des Wiki-Ordners. Ordner, Wiki, KI und Sprache des Projekts gelten danach in allen Arbeitsansichten; der Projektname steht im Kopf, „Projekt schließen“ führt zur Startseite. Laufende Arbeit sperrt den Wechsel mit verständlicher Meldung. |
-| FR-69 | **Einstellungen global und je Projekt.** Die globale Seite (Zahnrad) pflegt KI-Dienst, Modell für den Souffleur, Modell für die KI-Analyse und Sprache der Aufnahmen und zeigt die Umgebungs-Prüfung aus FR-47. Die Projektseite pflegt Name, Ordner, Wiki-Ablage (`fragen` \| `immer` \| `nie`, Bilder ja/nein) und kann jeden globalen Wert überschreiben oder wieder auf „globale Einstellung“ stellen. Änderungen gelten sofort. |
-| FR-70 | **Arbeitsbereich des Projekts.** Drei Bereiche: *Live-Sitzung* (Live-Transkription mit Souffleur wie §17/§20, dazu ein optionaler Sitzungstitel), *Nachbereitung* (Sitzungen des Projekts mit Marken „im Wiki“, „nachbereitet“, „unterbrochen“; Wiki-Ablage, Transkript-Vorschau und KI-Analyse je Sitzung) und *Projekt* (Einstellungen). Nach dem Ende einer Sitzung erscheint die Karte „Wie geht es weiter?“ mit „Ins Wiki speichern“ und „Mit KI nachbereiten“ – beides möglich, in beliebiger Reihenfolge. |
+| FR-67 | **Projekt anlegen.** Assistent in vier Schritten mit einem roten Faden: (1) *Projekt* – Name, Speicherort (Ordner-Dialog) und Name des Projektordners (vorbelegt aus dem Namen; der Assistent legt den Ordner an); (2) *Wiki (optional)* – ohne Wiki (Vorgabe), neues Wiki im Projektordner (`llm-wiki/`) oder vorhandenes verknüpfen, mit Sofortprüfung des Wikis; ist der gewählte Projektordner selbst ein Wiki, wird „verknüpfen“ damit vorbelegt; (3) *Sitzungen* – Ordner für Sitzungen (Vorgabe `sitzungen/` im Projektordner), mit Wiki dazu der Ordner für Bilder (Assets) und das Verhalten nach einer Sitzung; (4) *KI und Sprache* mit der Vorgabe „globale Einstellung“. Unter den Schritten steht auf jedem Schritt eine **Strukturvorschau** der entstehenden Ordner (Projektordner, `.audioscribe/`, Sitzungen, Wiki – außerhalb liegende Ordner mit Pfeil). Pflicht sind Name, Projektordner und Sitzungsordner, mit Wiki auch Wiki- und Assets-Ordner; jedes Feld trägt eine Kurzbeschreibung, Fehler stehen am Feld. Ergebnis ist `<projekt>/.audioscribe/projekt.json`; ein vorhandenes Wiki bleibt dabei unverändert (auch ohne `.audioscribe/`). |
+| FR-68 | **Projekt öffnen.** Über die Liste der zuletzt geöffneten oder durch Wahl des Projektordners (bei Projekten aus früheren Versionen der Wiki-Ordner). Ordner, Wiki, KI und Sprache des Projekts gelten danach in allen Arbeitsansichten; der Projektname steht im Kopf, „Projekt schließen“ führt zur Startseite. Laufende Arbeit sperrt den Wechsel mit verständlicher Meldung. |
+| FR-69 | **Einstellungen global und je Projekt.** Die globale Seite (Zahnrad) pflegt KI-Dienst, Modell für den Souffleur, Modell für die KI-Analyse und Sprache der Aufnahmen und zeigt die Umgebungs-Prüfung aus FR-47. Die Projektseite zeigt den Projektordner und pflegt Name, Wiki (neues im Projektordner anlegen, vorhandenes verknüpfen, Verknüpfung lösen – mit Rückfrage, ohne Dateien zu löschen; nicht während einer Sitzung), Ordner, Wiki-Ablage (`fragen` \| `immer` \| `nie`, Bilder ja/nein; nur mit Wiki sichtbar) und kann jeden globalen Wert überschreiben oder wieder auf „globale Einstellung“ stellen. Änderungen gelten sofort. |
+| FR-70 | **Arbeitsbereich des Projekts.** Drei Bereiche: *Live-Sitzung* (Live-Transkription mit Souffleur wie §17/§20, dazu ein optionaler Sitzungstitel), *Nachbereitung* (Sitzungen des Projekts mit Marken „im Wiki“, „nachbereitet“, „unterbrochen“; Wiki-Ablage, Transkript-Vorschau und KI-Analyse je Sitzung) und *Projekt* (Einstellungen). Nach dem Ende einer Sitzung erscheint die Karte „Wie geht es weiter?“ mit „Ins Wiki speichern“ und „Mit KI nachbereiten“ – beides möglich, in beliebiger Reihenfolge; ohne Wiki steht statt der Ablage der Weg zu den Projekteinstellungen. |
 | FR-71 | **Sitzung ins Wiki speichern.** Dialog mit Titel der Quelle, Vorschau des Zielordners, „Bilder mit übertragen“ und „Markierungen des Souffleurs mit übertragen“ (Vorgabe: aus). Abgelegt wird nach `raw/<JJJJ-MM-TT>_<kurzname>/`: `transkript.md` (byte-gleich), `transcript.json` (ohne den lokalen `source_path`), `README.md`. Mit Markierungen zusätzlich `markierungen.json`/`markierungen.md` des Souffleurs – sie sind KI-erzeugt und zitieren das Wiki, unter `raw/` könnte der Ingest sie als Quelle lesen (Zirkelschluss, verfestigte Fehlalarme); ohne Haken bleiben sie im Sitzungsordner (`souffleur.json`, `souffleur-protokoll.md`). Mit Bildern zusätzlich: die Standbilder nach `<assets>/<ordnername>/`, `marks.json` mit Zeitstempel → Bild (Pfad relativ zur Ablage) und `transkript.annotiert.md`, in dem jedes Bild am selben Absatz steht wie im Sitzungsordner. Ein Vermerk `wiki-ablage.json` im Sitzungsordner hält fest, was abgelegt wurde. |
 | FR-72 | **„Immer so speichern“.** Im Dialog wählbar und in den Projekteinstellungen änderbar: Steht das Projekt auf `immer`, geht jede sauber beendete Sitzung nach dem Nachschärfen ohne Nachfrage ins Wiki – mit Bildern und Markierungen so, wie es im Dialog bzw. in den Projekteinstellungen angehakt ist (`wiki_bilder`, `wiki_markierungen`; Vorgabe für Markierungen: aus); das Ergebnis (oder der Fehler) steht in der Karte „Wie geht es weiter?“. Bei `nie` bietet die Karte die Ablage nicht an; sie bleibt über die Nachbereitung erreichbar. |
 | FR-73 | **Nachbereitung ins Wiki.** Die Dokumente einer fertigen KI-Analyse lassen sich nach `<raw-Sitzung>/nachbereitung-ki/<analyse>/` legen – ohne Materialkopie, Skills und Protokoll, mit einer `README.md`, die sie als KI-erzeugt und nicht als Quelle kennzeichnet. Liegt die Sitzung noch nicht im Wiki, wird sie zuerst gespeichert. Mit Bildern verweisen die Dokumente auf die Bilder im Assets-Ordner der Sitzung (keine zweite Kopie), ohne Bilder werden Bildzeilen zu Textverweisen. |
@@ -954,9 +972,16 @@ dem Neustart fortsetzen oder sauber abschließen.
 ### 21.5 Akzeptanzkriterien
 
 - [ ] Start zeigt die Startseite mit vier Einstiegen; jeder hat eine Kurzhilfe.
-- [ ] Neues Projekt mit vorhandenem Wiki und mit „Neues Wiki anlegen“: Projektdatei liegt
-      unter `<wiki>/.audioscribe/`, das vorhandene Wiki ist sonst unverändert, das neue Wiki
-      ist sofort lesbar (Zustand „Wiki“ mit Seitenzahl).
+- [ ] Neues Projekt mit verknüpftem Wiki und mit „Neues Wiki anlegen“: Projektordner wird
+      angelegt, Projektdatei liegt unter `<projekt>/.audioscribe/`, das verknüpfte Wiki ist
+      unverändert, das neue Wiki unter `llm-wiki/` ist sofort lesbar (Zustand „Wiki“ mit
+      Seitenzahl); die Strukturvorschau zeigt auf jedem Schritt die entstehenden Ordner.
+- [ ] Neues Projekt ohne Wiki: Live-Sitzung landet in `<projekt>/sitzungen/`, der Souffleur
+      läuft ohne Belege, die Karte „Wie geht es weiter?“ zeigt keine Ablage; in den
+      Projekteinstellungen „Neues Wiki anlegen“ → Zustand „Wiki“, Ablage-Karte erscheint.
+- [ ] Projekt aus einer früheren Version (Projektdatei im Wiki-Ordner) über „Zuletzt
+      geöffnet“ öffnen: Wiki und Sitzungsordner wie vorher; nach einer Änderung steht
+      `"version": 2` und `"wiki_dir": "."` in der Datei.
 - [ ] Projekt schließen und über „Zuletzt geöffnet“ wieder öffnen: Ordner, Wiki-Ablage, KI
       und Sprache stehen wieder da; eine Sprache im Projekt schlägt die globale, „globale
       Einstellung“ stellt sie zurück.

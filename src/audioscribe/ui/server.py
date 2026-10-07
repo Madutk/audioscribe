@@ -262,8 +262,12 @@ def create_app():
             "demo_verfuegbar": kontext_modul.demo_verfuegbar(),
             "unterbrochen": kontext_modul.unterbrochene(saved, p),
             "laeuft": {"live": live.laeuft(), "analyse": analyse.laeuft(), "stapel": runner.laeuft()},
-            # Vorbelegung des Assistenten aus einer Installation von vor den Projekten.
-            "alt": {"wiki_dir": saved.get("wiki_dir", "") or settings.wiki_dir},
+            # Vorbelegung des Assistenten: Speicherort fuer den Projektordner und - aus einer
+            # Installation von vor den Projekten - ein schon bekanntes Wiki.
+            "neu": {
+                "speicherort": kontext_modul.vorschlag_speicherort(saved),
+                "wiki_dir": saved.get("wiki_dir", "") or settings.wiki_dir,
+            },
             "platform": browse.PLATFORM,
         }
 
@@ -272,10 +276,11 @@ def create_app():
 
     class ProjektIn(BaseModel):
         name: str = ""
-        wurzel: str = ""
+        wurzel: str = ""  # Projektordner
         sitzungen_dir: str = ""
+        wiki_art: str = modell.WIKI_KEINS
+        wiki_dir: str = ""  # nur bei wiki_art "vorhanden"
         assets_dir: str = ""
-        neues_wiki: bool = False
         ki_dienst: str | None = None
         souffleur_model: str | None = None
         agent_model: str | None = None
@@ -447,44 +452,56 @@ def create_app():
             _wechsle(body.modus)
         return JSONResponse(_kontext_antwort())
 
-    def _projekt_pfade(body: ProjektIn) -> tuple[Path | None, Path | None, Path | None]:
+    def _projekt_pfade(body: ProjektIn) -> tuple[Path | None, Path | None, Path | None, Path | None]:
         def pfad(raw: str) -> Path | None:
             return browse.normalize_path(raw, default=Path("")) if raw.strip() else None
 
-        return pfad(body.wurzel), pfad(body.sitzungen_dir), pfad(body.assets_dir)
+        return pfad(body.wurzel), pfad(body.wiki_dir), pfad(body.sitzungen_dir), pfad(body.assets_dir)
 
     @app.post("/api/projekt/pruefen")
     def api_projekt_pruefen(body: ProjektIn):
         """Sofortpruefung des Assistenten: Meldung je Feld, Wiki-Zustand, Vorschlaege fuer die Ordner."""
-        from audioscribe.souffleur.wiki import pruefe_wiki
+        from audioscribe.souffleur.wiki import ZUSTAND_OK, pruefe_wiki
 
-        wurzel, sitzungen, assets = _projekt_pfade(body)
-        vorschlag = modell.vorschlag(wurzel) if wurzel is not None else {}
+        wurzel, wiki_dir, sitzungen, assets = _projekt_pfade(body)
+        wiki = modell.wiki_ordner(body.wiki_art, wurzel, wiki_dir)
+        vorschlag = modell.vorschlag(wurzel, wiki) if wurzel is not None else {}
         fehler = modell.pruefe(
-            name=body.name, wurzel=wurzel, sitzungen_dir=sitzungen, assets_dir=assets, neues_wiki=body.neues_wiki
+            name=body.name, wurzel=wurzel, sitzungen_dir=sitzungen, wiki_art=body.wiki_art, wiki_dir=wiki_dir,
+            assets_dir=assets,
         )
+        # Der gewaehlte Projektordner ist selbst ein Wiki (so sahen Projekte frueher aus): der
+        # Assistent kann dann "Vorhandenes Wiki verknuepfen" mit diesem Ordner vorbelegen.
+        wurzel_ist_wiki = False
+        if wurzel is not None:
+            try:
+                wurzel_ist_wiki = (wurzel / modell.SEITEN_ORDNER).is_dir() and pruefe_wiki(wurzel).zustand == ZUSTAND_OK
+            except OSError:
+                wurzel_ist_wiki = False
         return JSONResponse(
             {
                 "fehler": fehler,
-                "wiki": pruefe_wiki(wurzel).als_dict() if wurzel is not None and not body.neues_wiki else None,
+                "wiki": pruefe_wiki(wiki).als_dict() if body.wiki_art == modell.WIKI_VORHANDEN and wiki is not None else None,
                 "vorschlag": vorschlag,
                 "pfade": {
-                    "wurzel": str(wurzel or ""), "sitzungen_dir": str(sitzungen or ""), "assets_dir": str(assets or ""),
+                    "wurzel": str(wurzel or ""), "wiki_dir": str(wiki or ""),
+                    "sitzungen_dir": str(sitzungen or ""), "assets_dir": str(assets or ""),
                 },
+                "wurzel_ist_wiki": wurzel_ist_wiki,
             }
         )
 
     @app.post("/api/projekt/neu")
     def api_projekt_neu(body: ProjektIn):
-        wurzel, sitzungen, assets = _projekt_pfade(body)
+        wurzel, wiki_dir, sitzungen, assets = _projekt_pfade(body)
         if _beschaeftigt():
             raise HTTPException(409, f"{_beschaeftigt()} Bitte erst beenden.")
-        if wurzel is None or sitzungen is None or assets is None:
-            raise HTTPException(400, "Bitte Wiki-Ordner, Sitzungsordner und Bilder-Ordner angeben.")
+        if wurzel is None or sitzungen is None:
+            raise HTTPException(400, "Bitte Projektordner und Sitzungsordner angeben.")
         try:
             projekt = modell.lege_an(
-                name=body.name, wurzel=wurzel, sitzungen_dir=sitzungen, assets_dir=assets,
-                neues_wiki=body.neues_wiki, ki_dienst=body.ki_dienst, souffleur_model=body.souffleur_model,
+                name=body.name, wurzel=wurzel, sitzungen_dir=sitzungen, wiki_art=body.wiki_art, wiki_dir=wiki_dir,
+                assets_dir=assets, ki_dienst=body.ki_dienst, souffleur_model=body.souffleur_model,
                 agent_model=body.agent_model, sprache=body.sprache, wiki_speichern=body.wiki_speichern,
                 wiki_bilder=body.wiki_bilder, wiki_markierungen=body.wiki_markierungen,
             )
@@ -501,7 +518,10 @@ def create_app():
         try:
             projekt = modell.lade(browse.normalize_path(body.pfad, default=Path("")))
         except ProjektFehler as exc:
-            raise HTTPException(400, str(exc)) from exc
+            text = str(exc)
+            if "kein AudioScribe-Projekt" in text:
+                text += " – bitte den Projektordner wählen (er enthält .audioscribe/; bei älteren Projekten ist das der Wiki-Ordner)."
+            raise HTTPException(400, text) from exc
         _wechsle(kontext_modul.MODUS_PROJEKT, projekt)
         state.merke_projekt(projekt.wurzel, projekt.name)
         return JSONResponse(_kontext_antwort())
@@ -513,11 +533,13 @@ def create_app():
         if p is None or p.demo:
             raise HTTPException(409, "Kein Projekt geöffnet.")
         felder = dict(body.felder)
-        for key in ("sitzungen_dir", "assets_dir"):
+        for key in ("sitzungen_dir", "assets_dir", "wiki_dir"):
             if isinstance(felder.get(key), str) and felder[key].strip():
                 felder[key] = str(browse.normalize_path(felder[key], default=Path("")))
         if "sitzungen_dir" in felder and _beschaeftigt():
             raise HTTPException(409, f"{_beschaeftigt()} Der Sitzungsordner lässt sich erst danach ändern.")
+        if ("wiki_art" in felder or "wiki_dir" in felder) and _beschaeftigt():
+            raise HTTPException(409, f"{_beschaeftigt()} Das Wiki lässt sich erst danach ändern.")
         try:
             neu = modell.aendere(p, felder)
         except ProjektFehler as exc:
@@ -576,6 +598,8 @@ def create_app():
         des Souffleurs nur auf Wunsch (KI-erzeugt)."""
         ordner = _sitzungsordner(body.sitzung)
         p = _projekt()
+        if p.wiki_dir is None:
+            raise HTTPException(409, "Dieses Projekt hat kein Wiki – in den Projekteinstellungen anlegen oder verknüpfen.")
         laufend = live.session_dir() if live.laeuft() else None
         if laufend is not None and laufend.resolve() == ordner.resolve():
             raise HTTPException(409, "Diese Sitzung läuft noch – ins Wiki geht sie nach dem Stopp.")
@@ -608,6 +632,8 @@ def create_app():
         p = _projekt()
         if p is None or p.demo:
             raise HTTPException(409, "Kein Projekt geöffnet.")
+        if p.wiki_dir is None:
+            raise HTTPException(409, "Dieses Projekt hat kein Wiki – in den Projekteinstellungen anlegen oder verknüpfen.")
         workspace = browse.normalize_path(body.workspace, default=Path(""))
         try:
             ok = workspace.is_dir() and workspace.resolve().is_relative_to(p.analysen_dir.resolve())
@@ -705,7 +731,11 @@ def create_app():
         eff = _eff()
         chosen["language"] = eff["sprache"]
         chosen["souffleur_model"] = eff["souffleur_model"]
-        chosen["wiki_dir"] = str(p.wurzel) if p is not None else (chosen.get("wiki_dir") or settings.wiki_dir)
+        # Im Projekt gilt nur dessen Wiki - ohne Wiki keins, auch nicht das der Installation.
+        if p is not None:
+            chosen["wiki_dir"] = str(p.wiki_dir) if p.wiki_dir is not None else ""
+        else:
+            chosen["wiki_dir"] = chosen.get("wiki_dir") or settings.wiki_dir
         chosen.setdefault("souffleur_aktiv", True)
         chosen["souffleur_models"] = _souffleur_models()
         chosen["modus"] = kontext.modus
@@ -1203,7 +1233,7 @@ def create_app():
     def _nach_sitzung(session_dir: Path) -> dict | None:
         """Nachlauf einer Sitzung: steht das Projekt auf "immer speichern", geht sie ins Wiki."""
         p = _projekt()
-        if p is None or p.demo or p.wiki_speichern != modell.WIKI_IMMER:
+        if p is None or p.demo or p.wiki_dir is None or p.wiki_speichern != modell.WIKI_IMMER:
             return None
         try:
             ablage = wiki_ablage.speichere_sitzung(
@@ -1321,7 +1351,8 @@ def create_app():
             raise HTTPException(400, f"Demo nicht startbar: {exc}") from exc
         opts = jobs.LiveJobOptions(
             output_dir=p.sitzungen_dir, monitor=0, mic="none", loopback="none", refine=False,
-            replay_transcript=p.wurzel / kontext_modul.DEMO_TRANSKRIPT, replay_speed=kontext_modul.DEMO_TEMPO,
+            replay_transcript=kontext_modul.demo_wurzel() / kontext_modul.DEMO_TRANSKRIPT,
+            replay_speed=kontext_modul.DEMO_TEMPO,
             # Ohne die Gespraechspausen des echten Meetings: nach rund 30 s ist die Demo beim Thema.
             replay_raffen=True,
             titel="Demo",

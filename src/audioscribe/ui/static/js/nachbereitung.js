@@ -15,6 +15,7 @@ let anaRunning = false;
 
 const pollAna = poller(pollAnalyse, 1500);
 const imProjekt = () => modus() === 'projekt';
+const mitWiki = () => imProjekt() && !!(projekt() && projekt().hat_wiki);
 const quelle = () => anaSources.find((s) => s.path === anaSource) || null;
 
 let anaSichtbar = false;   // die Ansicht ist betreten und nicht wieder verlassen
@@ -102,6 +103,12 @@ function renderWiki() {
   const p = projekt();
   if (!imProjekt() || !p) { box.innerHTML = ''; return; }
   if (!q) { box.innerHTML = '<p class="hint">Sitzung wählen …</p>'; return; }
+  if (!p.hat_wiki) {
+    box.innerHTML = `<div class="wikistate"><p class="hint">Dieses Projekt hat kein Wiki – die Sitzung bleibt im Sitzungsordner.
+        <a class="goto" href="#/projekt/einstellungen">Wiki anlegen oder verknüpfen</a></p>
+      <div class="row"><button class="ghost sm" type="button" data-preview="${esc(q.path)}" data-title="${esc(q.titel || q.name)}">${icon('file-text')}Transkript ansehen</button></div></div>`;
+    return;
+  }
   const ablagen = (q.ablagen || []).filter((a) => (a.art || 'sitzung') === 'sitzung');
   const liste = ablagen.map((a) => `<div class="row"><span class="badge ok">gespeichert</span>
       <code title="${esc(a.ordner)}">${esc(basename(dirOf(a.ordner)))}/${esc(basename(a.ordner))}</code>
@@ -129,7 +136,7 @@ function renderHistory() {
       <span class="badge ${a.status === 'fertig' ? 'fertig' : a.status === 'fehler' ? 'fehler' : ''}">${esc(a.status)}</span>
       ${imWiki ? '<span class="badge ok">im Wiki</span>' : ''}
       <button class="ghost sm" type="button" data-folder="${esc(a.workspace)}">${icon('external')}Ordner</button>
-      ${a.status === 'fertig' ? `<button class="${imWiki ? 'ghost' : 'secondary'} sm" type="button" data-nach-wiki="${esc(a.workspace)}">${icon('book-plus')}${imWiki ? 'Erneut ins Wiki' : 'Ins Wiki speichern'}</button>` : ''}
+      ${a.status === 'fertig' && mitWiki() ? `<button class="${imWiki ? 'ghost' : 'secondary'} sm" type="button" data-nach-wiki="${esc(a.workspace)}">${icon('book-plus')}${imWiki ? 'Erneut ins Wiki' : 'Ins Wiki speichern'}</button>` : ''}
     </div>`;
   }).join('');
 }
@@ -194,12 +201,12 @@ async function pollAnalyse() {
     // Verbrauch dieses Laufs; der Preis ist der Gegenwert zu API-Preisen (bei Abo keine Rechnung).
     const verbrauch = r && r.verbrauch && r.verbrauch.tokens
       ? `<br>KI-Verbrauch: ${esc(verbrauchText(r.verbrauch))} <span class="hint">(Gegenwert zu API-Preisen)</span>` : '';
-    const key = JSON.stringify([s.workspace, status, imProjekt()]);
+    const key = JSON.stringify([s.workspace, status, imProjekt(), mitWiki()]);
     if ($('anaResult').dataset.key !== key) {
       $('anaResult').dataset.key = key;
       const knoepfe = status === 'fertig'
         ? `<div class="row" style="margin-top:8px"><button class="secondary sm" type="button" data-folder="${esc(s.workspace)}">${icon('external')}Ergebnisordner öffnen</button>`
-          + (imProjekt() ? `<button class="sm" type="button" data-nach-wiki="${esc(s.workspace)}">${icon('book-plus')}Nachbereitung ins Wiki speichern</button>` : '')
+          + (mitWiki() ? `<button class="sm" type="button" data-nach-wiki="${esc(s.workspace)}">${icon('book-plus')}Nachbereitung ins Wiki speichern</button>` : '')
           + '</div>'
         : '';
       $('anaResult').innerHTML = `<div class="result ${status === 'fertig' ? '' : 'fehler'}">

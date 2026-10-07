@@ -138,6 +138,11 @@ a.back:hover { color: var(--accent); }
 .wiz-foot { display: flex; align-items: center; gap: var(--s2); margin-top: var(--s5); padding-top: var(--s4);
             border-top: 1px solid var(--border); }
 .lead-hint { font-size: 13px; margin-bottom: var(--s4); }
+/* Strukturvorschau des Assistenten: der rote Faden durch alle Schritte */
+.tree-field { margin-top: var(--s5); }
+pre.tree { font: 12px/1.6 var(--mono); margin: 0; padding: 10px 12px; background: var(--surface-2); border-radius: var(--radius-sm);
+  color: var(--fg); overflow-x: auto; white-space: pre; }
+pre.tree:empty { display: none; }
 .grid.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .grid.two .field { margin-bottom: 0; }
 

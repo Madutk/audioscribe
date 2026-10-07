@@ -419,17 +419,18 @@ def _check_live() -> CheckResult:
     )
 
 
-def _bekannte_projekte(saved: dict, limit: int = 5) -> list[tuple[str, Path]]:
-    """Zuletzt geoeffnete Projekte, deren Projektdatei noch erreichbar ist (Name, Wiki-Ordner)."""
+def _bekannte_projekte(saved: dict, limit: int = 5) -> list[tuple[str, Path | None]]:
+    """Zuletzt geoeffnete Projekte, deren Projektdatei noch erreichbar ist (Name, Wiki-Ordner
+    oder None ohne Wiki)."""
     from audioscribe.projekt import modell
 
-    out: list[tuple[str, Path]] = []
+    out: list[tuple[str, Path | None]] = []
     for eintrag in saved.get("zuletzt_projekte") or []:
         try:
             projekt = modell.lade(eintrag["pfad"])
         except (modell.ProjektFehler, KeyError, TypeError):
             continue
-        out.append((projekt.name, projekt.wurzel))
+        out.append((projekt.name, projekt.wiki_dir))
     return out[:limit]
 
 
@@ -445,12 +446,13 @@ def _check_souffleur() -> CheckResult:
     projekte = _bekannte_projekte(saved)
     if projekte and konfig.wiki_dir is None:
         # Seit den Projekten (PRD §21) gehoert das Wiki zum Projekt - geprueft werden die bekannten.
-        zustaende = [(name, pruefe_wiki(wurzel)) for name, wurzel in projekte]
+        zustaende = [(name, pruefe_wiki(wiki) if wiki is not None else None) for name, wiki in projekte]
         teile = ["Wiki je Projekt: " + ", ".join(
-            f"{name} ({w.seiten} Seiten)" if w.zustand == ZUSTAND_OK else f"{name} (nicht erreichbar)"
+            f"{name} (ohne Wiki)" if w is None
+            else f"{name} ({w.seiten} Seiten)" if w.zustand == ZUSTAND_OK else f"{name} (nicht erreichbar)"
             for name, w in zustaende
         )]
-        status = "OK" if all(w.zustand == ZUSTAND_OK for _, w in zustaende) else "WARN"
+        status = "OK" if all(w is None or w.zustand == ZUSTAND_OK for _, w in zustaende) else "WARN"
     else:
         wiki = pruefe_wiki(konfig.wiki_dir)
         teile = [f"Wiki: {wiki.meldung}"]

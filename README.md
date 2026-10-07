@@ -139,8 +139,8 @@ Die Oberfläche beginnt auf der **Startseite** mit vier Einstiegen; jede Karte h
 
 | Einstieg | Wofür | Was du danach siehst |
 |---|---|---|
-| **Neues Projekt** | Meetings mit Souffleur begleiten und ins LLM-Wiki überführen | Assistent in drei Schritten, dann der Arbeitsbereich des Projekts |
-| **Projekt öffnen** | Ein vorhandenes Projekt weiterführen | Liste „Zuletzt geöffnet“ oder Wahl des Wiki-Ordners |
+| **Neues Projekt** | Ein eigener Ordner für Meetings mit Souffleur – auf Wunsch mit LLM-Wiki | Assistent in vier Schritten mit Strukturvorschau, dann der Arbeitsbereich des Projekts |
+| **Projekt öffnen** | Ein vorhandenes Projekt weiterführen | Liste „Zuletzt geöffnet“ oder Wahl des Projektordners |
 | **Aufnahme transkribieren** | Eine einzelne Audio- oder Videodatei in Text umwandeln, ohne Projekt | Nur die Transkription, dazu die KI-Analyse als nächster Schritt |
 | **Demo abspielen** | Vorführung mit Beispiel-Meeting und Beispiel-Wiki | Live-Ansicht mit Zeitstrahl der bisherigen Meetings und einem Knopf „Demo starten“ |
 
@@ -150,18 +150,28 @@ bleibt der Wechsel gesperrt, bis sie beendet ist. Der Server merkt sich, was ge�
 Ein Neuladen der Seite ändert nichts, nach einem Neustart von AudioScribe beginnst du wieder
 auf der Startseite.
 
-**Neues Projekt** – der Assistent fragt:
+**Neues Projekt** – der Assistent führt in vier Schritten durch; eine Strukturvorschau
+unter den Schritten zeigt jederzeit, welche Ordner am Ende entstehen:
 
-1. **Wiki:** Projektname und Ordner des LLM-Wikis. Entweder ein vorhandenes Wiki verknüpfen
-   (es wird sofort geprüft: Name, Seiten, Glossar) oder ein neues anlegen lassen – dann
-   entsteht im gewählten Ordner das Gerüst aus `raw/`, `wiki/` mit Startseiten und Glossar.
-2. **Ordner:** der **Ordner für Sitzungen** (Mitschnitte, Transkripte, Standbilder und
-   KI-Analysen; vorgeschlagen wird `<wiki>-sitzungen` neben dem Wiki, weil Mitschnitte groß
-   sind) und der **Ordner für Bilder im Wiki** (Assets; vorgeschlagen `raw/assets`). Dazu,
-   was nach einer Sitzung geschehen soll: nachfragen, immer ins Wiki speichern oder nicht
-   anbieten.
-3. **KI und Sprache:** Vorgabe sind die globalen Einstellungen; hier legst du nur fest, was
+1. **Projekt:** Projektname, Speicherort und Name des Projektordners (vorbelegt aus dem
+   Namen). AudioScribe legt den Projektordner an; darin liegen die Projekteinstellungen
+   (`.audioscribe/`), die Sitzungen und auf Wunsch das Wiki – das Projekt zieht mit seinem
+   Ordner um.
+2. **Wiki (optional):** **Ohne Wiki** (Transkription, Essenz und erkannte Fragen des
+   Souffleurs, aber keine Belege und keine Ablage ins Wiki), **neues Wiki im Projektordner**
+   (`llm-wiki/` mit dem Gerüst aus `raw/`, `wiki/`, Startseiten und Glossar) oder
+   **vorhandenes Wiki verknüpfen** (es bleibt, wo es ist, und wird sofort geprüft: Name,
+   Seiten, Glossar).
+3. **Sitzungen:** der **Ordner für Sitzungen** (Mitschnitte, Transkripte, Standbilder und
+   KI-Analysen; Vorgabe `sitzungen/` im Projektordner – Mitschnitte sind groß, eine andere
+   Platte geht auch). Mit Wiki dazu der **Ordner für Bilder im Wiki** (Assets; vorgeschlagen
+   `raw/assets`) und, was nach einer Sitzung geschehen soll: nachfragen, immer ins Wiki
+   speichern oder nicht anbieten.
+4. **KI und Sprache:** Vorgabe sind die globalen Einstellungen; hier legst du nur fest, was
    für dieses Projekt anders sein soll.
+
+Ein Wiki lässt sich jederzeit im Bereich „Projekt“ nachrüsten, gegen ein anderes tauschen
+oder wieder lösen – Dateien werden dabei nie gelöscht.
 
 **Im Projekt** gibt es drei Bereiche:
 
@@ -173,7 +183,8 @@ auf der Startseite.
   *unterbrochen*). Je Sitzung: ins Wiki speichern, Transkript ansehen, die
   [KI-Analyse](#ki-analyse-per-claude-agent) starten und deren Ergebnis ebenfalls ins Wiki
   legen.
-- **Projekt** – Name, Ordner, Wiki-Ablage sowie KI und Sprache dieses Projekts.
+- **Projekt** – Name, Projektordner, Wiki (anlegen, verknüpfen, lösen), Ordner, Wiki-Ablage
+  sowie KI und Sprache dieses Projekts.
 
 **Aufnahme transkribieren** – „Dateien wählen“ öffnet einen Dialog, der die Audio- und
 Videodateien eines Ordners zeigt; weitere Dateien desselben Ordners lassen sich danach
@@ -205,7 +216,8 @@ aufgenommen und nichts ins Wiki geschrieben (die Demo-Sitzung liegt nur unter
 
 Änderungen gelten sofort. Globale Einstellungen und die Liste der zuletzt geöffneten Projekte
 liegen auf dem Rechner (Windows `%APPDATA%\audioscribe\einstellungen.json`, macOS
-`~/Library/Application Support/audioscribe/`), die Projekteinstellungen im Wiki-Ordner.
+`~/Library/Application Support/audioscribe/`), die Projekteinstellungen im Projektordner
+(`.audioscribe/projekt.json`).
 Pfade aus dem Explorer (`C:\Users\…`) lassen sich überall direkt einfügen; „Wählen“ öffnet
 einen Ordner-Browser mit Schnellzielen (Laufwerke, Home, Desktop, Downloads, Videos).
 
@@ -223,29 +235,38 @@ WSL-Dateisystem werden spürbar schneller gelesen als unter `/mnt/c`.
 
 ## Projekte und Ablage ins Wiki
 
-Ein Projekt gehört zu genau **einem LLM-Wiki** – einem Markdown-Ordner mit `wiki/` (die
-Seiten) und `raw/` (die Rohquellen). Die Projekteinstellungen liegen im Wiki selbst und
-ziehen mit ihm um (anderer Rechner, Git); die Seiten unter `wiki/` verändert AudioScribe nie.
+Ein Projekt ist ein **eigener Ordner**, den du beim Anlegen wählst. Darin liegen die
+Projekteinstellungen und – als Vorgabe – die Sitzungen; das Projekt zieht mit seinem Ordner
+um (anderer Rechner, Git). Dazu kann das Projekt **ein LLM-Wiki** haben – einen
+Markdown-Ordner mit `wiki/` (die Seiten) und `raw/` (die Rohquellen) – entweder neu angelegt
+im Projektordner oder als vorhandenes Wiki verknüpft, wo immer es liegt. Die Seiten unter
+`wiki/` verändert AudioScribe nie. Ohne Wiki arbeitet der Souffleur ohne Belege, und es gibt
+keine Ablage ins Wiki.
 
 ```
-mein-wiki/                          # LLM-Wiki = Projekt
+bahnbuchung/                        # Projektordner (vom Nutzer gewählt)
   .audioscribe/projekt.json         # Projekteinstellungen (Pfade relativ, wo möglich)
-  wiki/                             # Wiki-Seiten – werden nur gelesen (Souffleur)
-  raw/                              # Rohquellen – hier legt AudioScribe Sitzungen ab
-    2026-10-06_workshop-reisebuchung/
-      transkript.md                 # Wortlaut unverändert (byte-gleiche Kopie)
-      transcript.json               # dasselbe maschinenlesbar
-      transkript.annotiert.md       # mit Bildern an der passenden Stelle (nur mit Bildern)
-      marks.json                    # Zeitstempel → Bild (nur mit Bildern)
-      markierungen.json / .md       # Markierungen des Souffleurs (nur auf Wunsch)
-      README.md
-      nachbereitung-ki/<analyse>/   # optional: Dokumente der KI-Analyse, als KI-erzeugt gekennzeichnet
-    assets/                         # Assets-Ordner (Vorschlag) für die Bilder
-      2026-10-06_workshop-reisebuchung/0001_00-01-23.jpg …
-mein-wiki-sitzungen/                # Ordner für Sitzungen (Vorschlag: neben dem Wiki)
-  live-2026-10-06_14-30-05/         # Mitschnitt, Transkript, frames/, Begleitdateien
-  analysen/<prozessname>/           # Ergebnisse der KI-Analyse
+  sitzungen/                        # Ordner für Sitzungen (Vorgabe; änderbar)
+    live-2026-10-06_14-30-05/       # Mitschnitt, Transkript, frames/, Begleitdateien
+    analysen/<prozessname>/         # Ergebnisse der KI-Analyse
+  llm-wiki/                         # nur bei „Neues Wiki anlegen“ – sonst wiki_dir = <vorhandenes Wiki>
+    wiki/                           # Wiki-Seiten – werden nur gelesen (Souffleur)
+    raw/                            # Rohquellen – hier legt AudioScribe Sitzungen ab
+      2026-10-06_workshop-reisebuchung/
+        transkript.md               # Wortlaut unverändert (byte-gleiche Kopie)
+        transcript.json             # dasselbe maschinenlesbar
+        transkript.annotiert.md     # mit Bildern an der passenden Stelle (nur mit Bildern)
+        marks.json                  # Zeitstempel → Bild (nur mit Bildern)
+        markierungen.json / .md     # Markierungen des Souffleurs (nur auf Wunsch)
+        README.md
+        nachbereitung-ki/<analyse>/ # optional: Dokumente der KI-Analyse, als KI-erzeugt gekennzeichnet
+      assets/                       # Assets-Ordner (Vorschlag) für die Bilder
+        2026-10-06_workshop-reisebuchung/0001_00-01-23.jpg …
 ```
+
+**Projekte aus früheren Versionen** (Projektdatei im Wiki-Ordner, `<wiki>/.audioscribe/`)
+öffnen sich unverändert: Dort ist der Wiki-Ordner zugleich der Projektordner. Bei der ersten
+Änderung wird die Projektdatei auf das neue Format gehoben; Dateien werden nicht bewegt.
 
 **Ins Wiki speichern** (Karte „Wie geht es weiter?“ nach der Sitzung oder Bereich
 „Nachbereitung“): Du vergibst einen Titel – daraus und aus dem Datum entsteht der

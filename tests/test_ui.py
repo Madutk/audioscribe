@@ -728,7 +728,12 @@ def test_index_hat_startseite_mit_vier_einstiegen_und_assistent(ui_client):
         assert f"<h3>{titel}" in html
     assert html.count('<details class="more">') == 4  # je Einstieg eine kleine Hilfe
     assert 'id="viewNeu" data-view="neu"' in html
-    for feld in ("wizName", "wizWurzel", "wizSitzungen", "wizRaw", "wizAssets", "wizKiDienst", "wizSprache", "wizCreate"):
+    # Vier Schritte: Projektordner, Wiki (optional), Sitzungen und Ablage, KI und Sprache - mit Strukturvorschau.
+    for feld in ("wizName", "wizSpeicherort", "wizOrdnername", "wizWikiDir", "wizSitzungen", "wizRaw", "wizAssets",
+                 "wizKiDienst", "wizSprache", "wizTree", "wizCreate"):
+        assert f'id="{feld}"' in html
+    assert html.count('name="wizWikiArt"') == 3 and 'value="keins" checked' in html
+    for feld in ("pWurzel", "pWikiDir", "pWikiNeu", "pWikiVerknuepfen", "pWikiLoesen", "pAblageCard"):
         assert f'id="{feld}"' in html
     assert '<script type="module" src="/static/js/main.js"></script>' in html
 

@@ -37,17 +37,37 @@ def wiki(tmp_path):
 
 @pytest.fixture
 def projekt(wiki, tmp_path):
-    """Angelegtes Projekt zum Wiki; Sitzungen liegen neben dem Wiki."""
+    """Angelegtes Projekt mit eigenem Projektordner und verknuepftem Wiki; Sitzungen daneben."""
     from audioscribe.projekt import modell
 
     return modell.lege_an(
-        name="Bahnbuchung", wurzel=wiki, sitzungen_dir=tmp_path / "sitzungen", assets_dir=wiki / "raw" / "assets"
+        name="Bahnbuchung", wurzel=tmp_path / "bahn-projekt", sitzungen_dir=tmp_path / "sitzungen",
+        wiki_art=modell.WIKI_VORHANDEN, wiki_dir=wiki, assets_dir=wiki / "raw" / "assets",
     )
+
+
+@pytest.fixture
+def projekt_ohne_wiki(tmp_path):
+    """Projekt nur aus Ordner und Sitzungen - kein Wiki."""
+    from audioscribe.projekt import modell
+
+    wurzel = tmp_path / "ohne-wiki"
+    return modell.lege_an(name="Ohne Wiki", wurzel=wurzel, sitzungen_dir=wurzel / "sitzungen")
 
 
 @pytest.fixture
 def sitzung(projekt):
     """Beendete Sitzung mit Transkript, zwei Standbildern und einer Souffleur-Markierung."""
+    return _sitzung_in(projekt)
+
+
+@pytest.fixture
+def sitzung_ohne_wiki(projekt_ohne_wiki):
+    """Dieselbe Sitzung im Projekt ohne Wiki."""
+    return _sitzung_in(projekt_ohne_wiki)
+
+
+def _sitzung_in(projekt):
     from audioscribe.live.store import write_transcript
     from audioscribe.models import Segment
     from audioscribe.review.marks import Mark, save_marks

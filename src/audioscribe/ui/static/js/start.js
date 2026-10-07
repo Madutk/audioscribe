@@ -1,10 +1,10 @@
 // Startseite (vier Einstiege, zuletzt geoeffnete Projekte, unterbrochene Sitzungen) und der
 // Assistent "Neues Projekt" (PRD §21).
 
-import { $, S, api, post, esc, icon, hms, toast, fillOptions, sep, trimSep } from './kern.js';
+import { $, S, api, post, esc, icon, hms, toast, fillOptions, sep, trimSep, dirname } from './kern.js';
 import { go, HOME, setKontext, wechsle, oeffneProjekt, ladeKontext } from './kontext.js';
 import { pickFolder } from './dialoge.js';
-import { renderWikiState } from './wiki.js';
+import { renderWikiState, slugify } from './wiki.js';
 
 // --- Startseite ---------------------------------------------------------------------------
 
@@ -47,8 +47,9 @@ async function launch(what, btn) {
     if (what === 'neu') go('#/neu');
     else if (what === 'datei' || what === 'demo') await wechsle(what);
     else if (what === 'oeffnen') {
-      const pfad = await pickFolder({ title: 'Projekt öffnen – Ordner des LLM-Wikis wählen', ok: 'Projekt in diesem Ordner öffnen',
-        start: (S.kontext.zuletzt[0] && S.kontext.zuletzt[0].pfad) || '' });
+      // Projektordner (enthaelt .audioscribe/) - bei aelteren Projekten ist das der Wiki-Ordner.
+      const pfad = await pickFolder({ title: 'Projekt öffnen – Projektordner wählen', ok: 'Projekt in diesem Ordner öffnen',
+        start: (S.kontext.zuletzt[0] && dirname(S.kontext.zuletzt[0].pfad)) || (S.kontext.neu && S.kontext.neu.speicherort) || '' });
       if (pfad) await oeffne(pfad);
     }
   } catch (err) {
@@ -81,31 +82,47 @@ $('viewStart').addEventListener('click', async (e) => {
 });
 
 // --- Assistent "Neues Projekt" ---------------------------------------------------------------
+//
+// Vier Schritte mit einem roten Faden: (1) Projektordner, (2) Wiki - optional, (3) Sitzungen und
+// Ablage, (4) KI und Sprache. Die Strukturvorschau unter den Schritten zeigt auf jedem Schritt,
+// welche Ordner am Ende entstehen.
 
-const W = { step: 1, auto: { sitzungen: true, assets: true }, timer: null, gen: 0, optionen: null };
+const W = { step: 1, auto: { ordnername: true, sitzungen: true, assets: true }, timer: null, gen: 0, optionen: null, pfade: null };
 const wizWikiArt = () => document.querySelector('input[name="wizWikiArt"]:checked').value;
+const wizWurzel = () => {
+  const ort = trimSep($('wizSpeicherort').value.trim());
+  const name = $('wizOrdnername').value.trim();
+  if (!ort && !name) return '';
+  return ort && name ? `${ort}${sep()}${name}` : (ort || name);
+};
 const wizBody = () => ({
   name: $('wizName').value.trim(),
-  wurzel: $('wizWurzel').value.trim(),
+  wurzel: wizWurzel(),
+  wiki_art: wizWikiArt(),
+  wiki_dir: $('wizWikiDir').value.trim(),
   sitzungen_dir: $('wizSitzungen').value.trim(),
   assets_dir: $('wizAssets').value.trim(),
-  neues_wiki: wizWikiArt() === 'neu',
 });
-const FELD = { name: 'wizErrName', wurzel: 'wizErrWurzel', sitzungen_dir: 'wizErrSitzungen', assets_dir: 'wizErrAssets' };
-const SCHRITT = { 1: ['name', 'wurzel'], 2: ['sitzungen_dir', 'assets_dir'], 3: [] };
+const FELD = { name: 'wizErrName', wurzel: 'wizErrWurzel', wiki_dir: 'wizErrWikiDir', sitzungen_dir: 'wizErrSitzungen', assets_dir: 'wizErrAssets' };
+const SCHRITT = { 1: ['name', 'wurzel'], 2: ['wiki_dir'], 3: ['sitzungen_dir', 'assets_dir'], 4: [] };
+const LETZTER = 4;
 
 export async function enterNeu() {
-  W.step = 1; W.auto = { sitzungen: true, assets: true };
-  for (const id of ['wizName', 'wizSitzungen', 'wizAssets']) $(id).value = '';
-  // Uebernahme einer Installation von vor den Projekten: das bisherige Wiki vorschlagen.
-  $('wizWurzel').value = (S.kontext.alt && S.kontext.alt.wiki_dir) || '';
-  document.querySelector('input[name="wizWikiArt"][value="vorhanden"]').checked = true;
+  W.step = 1; W.auto = { ordnername: true, sitzungen: true, assets: true }; W.pfade = null; W.wikiVorgeschlagen = false;
+  for (const id of ['wizName', 'wizOrdnername', 'wizWikiDir', 'wizSitzungen', 'wizAssets']) $(id).value = '';
+  const neu = S.kontext.neu || {};
+  $('wizSpeicherort').value = neu.speicherort || '';
+  // Uebernahme einer Installation von vor den Projekten: das bisherige Wiki anbieten.
+  $('wizWikiDir').value = neu.wiki_dir || '';
+  document.querySelector(`input[name="wizWikiArt"][value="${neu.wiki_dir ? 'vorhanden' : 'keins'}"]`).checked = true;
   document.querySelector('input[name="wizSpeichern"][value="fragen"]').checked = true;
   $('wizBilder').checked = true;
   $('wizMarkierungen').checked = false;
   for (const id of [...Object.values(FELD), 'wizErr']) $(id).textContent = '';
   $('wizWikiState').hidden = true;
+  zeigeWikiArt();
   showStep();
+  renderTree(null);
   $('wizName').focus();
   try {
     const e = await api('/api/einstellungen');
@@ -118,11 +135,10 @@ export async function enterNeu() {
   } catch (err) {
     $('wizErr').textContent = err.message;
   }
-  if ($('wizWurzel').value) pruefe();
 }
 
 function showStep() {
-  for (const n of [1, 2, 3]) $('wiz' + n).hidden = n !== W.step;
+  for (let n = 1; n <= LETZTER; n += 1) $('wiz' + n).hidden = n !== W.step;
   for (const li of $('wizSteps').children) {
     const n = Number(li.dataset.step);
     li.classList.toggle('active', n === W.step);
@@ -130,9 +146,57 @@ function showStep() {
     if (n === W.step) li.setAttribute('aria-current', 'step'); else li.removeAttribute('aria-current');
   }
   $('wizBack').hidden = W.step === 1;
-  $('wizNext').hidden = W.step === 3;
-  $('wizCreate').hidden = W.step !== 3;
+  $('wizNext').hidden = W.step === LETZTER;
+  $('wizCreate').hidden = W.step !== LETZTER;
   $('wizErr').textContent = '';
+}
+
+/** Felder des Wiki-Schritts und der Ablage je nach gewaehlter Wiki-Art ein- und ausblenden. */
+function zeigeWikiArt() {
+  const art = wizWikiArt();
+  $('wizWikiDirField').hidden = art !== 'vorhanden';
+  $('wizWikiAblage').hidden = art === 'keins';
+  $('wizOhneWikiHint').hidden = art !== 'keins';
+}
+
+/** Strukturvorschau: der rote Faden durch alle Schritte. */
+function renderTree(r) {
+  const s = sep();
+  const pf = (r && r.pfade) || {};
+  const ort = trimSep($('wizSpeicherort').value.trim());
+  const name = $('wizOrdnername').value.trim();
+  // Solange der Ordnername fehlt, steht ein Platzhalter - die Zeile bleibt lesbar.
+  const wurzel = name ? (trimSep(pf.wurzel || wizWurzel())) : `${ort || '…'}${s}<Projektordner>`;
+  const art = wizWikiArt();
+  const zeile = (links, rechts) => `${links.padEnd(34)}  ${rechts}`;
+  const rel = (pfad) => {
+    // Pfad relativ zum Projektordner, wenn er darin liegt - sonst absolut mit Pfeil.
+    const p = trimSep(pfad || '');
+    if (!p) return null;
+    const lower = (x) => x.toLowerCase();
+    if (lower(p).startsWith(lower(wurzel) + s) || lower(p).startsWith(lower(wurzel) + (s === '\\' ? '/' : '\\'))) {
+      return { innen: true, text: p.slice(wurzel.length + 1) };
+    }
+    return { innen: false, text: p };
+  };
+  const zeilen = [zeile(`${wurzel}${s}`, 'Projektordner')];
+  zeilen.push(zeile(`  .audioscribe${s}projekt.json`, 'Projekteinstellungen'));
+  const sitz = rel(pf.sitzungen_dir || $('wizSitzungen').value) || { innen: true, text: 'sitzungen' };
+  const sitzText = `Live-Sitzungen (live-…${s}), KI-Analysen (analysen${s})`;
+  const aussen = [];
+  if (sitz.innen) zeilen.push(zeile(`  ${sitz.text}${s}`, sitzText)); else aussen.push(zeile(`↗ ${sitz.text}${s}`, sitzText));
+  if (art === 'neu') {
+    zeilen.push(zeile(`  llm-wiki${s}`, `neues LLM-Wiki: raw${s} (Quellen, assets${s}), wiki${s} (Seiten)`));
+  } else if (art === 'vorhanden') {
+    const wiki = rel(pf.wiki_dir || $('wizWikiDir').value);
+    const text = `verknüpftes LLM-Wiki: raw${s} (Quellen), wiki${s} (Seiten)`;
+    if (!wiki) zeilen.push(zeile('  …', 'verknüpftes LLM-Wiki – Ordner noch wählen'));
+    else if (wiki.innen) zeilen.push(zeile(`  ${wiki.text}${s}`, text));
+    else aussen.push(zeile(`↗ ${wiki.text}${s}`, text));
+  } else {
+    zeilen.push(zeile('  (kein Wiki)', 'Souffleur ohne Belege, keine Ablage ins Wiki'));
+  }
+  $('wizTree').textContent = [...zeilen, ...aussen].join('\n');
 }
 
 /** Angaben beim Server pruefen: Wiki-Zustand, Meldung je Feld, Vorschlaege fuer die Ordner. */
@@ -146,22 +210,31 @@ async function pruefe({ zeigen = [] } = {}) {
     return null;
   }
   if (gen !== W.gen) return null;  // eine neuere Eingabe ist unterwegs
+  W.pfade = r.pfade;
   // Ordner vorschlagen, solange der Nutzer sie nicht selbst gesetzt hat
   if (r.vorschlag && r.vorschlag.sitzungen_dir) {
     if (W.auto.sitzungen) $('wizSitzungen').value = r.vorschlag.sitzungen_dir;
-    if (W.auto.assets) $('wizAssets').value = r.vorschlag.assets_dir;
+    if (W.auto.assets) $('wizAssets').value = r.vorschlag.assets_dir || '';
   }
-  const neu = wizWikiArt() === 'neu';
-  $('wizWikiState').hidden = neu || !$('wizWurzel').value.trim();
+  // Der gewaehlte Projektordner ist selbst ein Wiki (fruehere Projekte): verknuepfen anbieten.
+  if (r.wurzel_ist_wiki && wizWikiArt() === 'keins' && !W.wikiVorgeschlagen) {
+    W.wikiVorgeschlagen = true;
+    document.querySelector('input[name="wizWikiArt"][value="vorhanden"]').checked = true;
+    $('wizWikiDir').value = r.pfade.wurzel;
+    zeigeWikiArt();
+  }
+  const vorhanden = wizWikiArt() === 'vorhanden';
+  $('wizWikiState').hidden = !vorhanden || !$('wizWikiDir').value.trim();
   // Wo das Transkript im Wiki landet - fest unter raw/, damit es der Ingest des Wikis findet.
-  $('wizRaw').textContent = r.pfade.wurzel
-    ? `${trimSep(r.pfade.wurzel)}${sep()}raw${sep()}<Datum>_<Sitzungstitel>${sep()}` : '–';
+  $('wizRaw').textContent = r.pfade.wiki_dir
+    ? `${trimSep(r.pfade.wiki_dir)}${sep()}raw${sep()}<Datum>_<Sitzungstitel>${sep()}` : '–';
   if (r.wiki) renderWikiState($('wizWikiState'), r.wiki, false);
   // Neue Meldungen nur fuer die verlangten Felder; behobene verschwinden ueberall sofort.
   for (const feld of Object.keys(FELD)) {
     if (!r.fehler[feld]) $(FELD[feld]).textContent = '';
     else if (zeigen.includes(feld)) $(FELD[feld]).textContent = r.fehler[feld];
   }
+  renderTree(r);
   return r;
 }
 
@@ -172,18 +245,19 @@ function pruefeSpaeter() {
 
 async function weiter() {
   clearTimeout(W.timer);  // eine noch wartende Pruefung der Eingabe wuerde diese hier ueberholen
-  // Die Vorschlaege haengen vom Wiki-Ordner ab - nach Schritt 1 einmal mit Vorschlag pruefen.
+  // Die Vorschlaege haengen von Projektordner und Wiki ab - nach Schritt 1 und 2 einmal mit Vorschlag pruefen.
   let r = await pruefe({ zeigen: SCHRITT[W.step] });
-  if (r && W.step === 1 && !r.fehler.name && !r.fehler.wurzel) r = await pruefe({ zeigen: SCHRITT[1] });
+  if (r && W.step <= 2 && !SCHRITT[W.step].some((f) => r.fehler[f])) r = await pruefe({ zeigen: SCHRITT[W.step] });
   if (!r || SCHRITT[W.step].some((f) => r.fehler[f])) return;
   W.step += 1;
   showStep();
-  ($('wiz' + W.step).querySelector('input, select') || $('wizNext')).focus();
+  ($('wiz' + W.step).querySelector('input:not([hidden]), select') || $('wizNext')).focus();
 }
 
 async function anlegen() {
   $('wizErr').textContent = '';
   $('wizCreate').disabled = true;
+  const mitWiki = wizWikiArt() !== 'keins';
   try {
     const k = await post('/api/projekt/neu', {
       ...wizBody(),
@@ -191,9 +265,9 @@ async function anlegen() {
       souffleur_model: $('wizSouffleurModel').value || null,
       agent_model: $('wizAgentModel').value || null,
       sprache: $('wizSprache').value || null,
-      wiki_speichern: document.querySelector('input[name="wizSpeichern"]:checked').value,
-      wiki_bilder: $('wizBilder').checked,
-      wiki_markierungen: $('wizMarkierungen').checked,
+      wiki_speichern: mitWiki ? document.querySelector('input[name="wizSpeichern"]:checked').value : 'fragen',
+      wiki_bilder: mitWiki ? $('wizBilder').checked : true,
+      wiki_markierungen: mitWiki ? $('wizMarkierungen').checked : false,
     });
     setKontext(k);
     toast(`Projekt „${k.projekt.name}“ angelegt`);
@@ -205,8 +279,8 @@ async function anlegen() {
   }
 }
 
-async function wizPick(feld, titel) {
-  const pfad = await pickFolder({ title: titel, start: $(feld).value.trim() || $('wizWurzel').value.trim() });
+async function wizPick(feld, titel, start) {
+  const pfad = await pickFolder({ title: titel, start: start || $(feld).value.trim() || wizWurzel() });
   if (!pfad) return;
   $(feld).value = pfad;
   if (feld === 'wizSitzungen') W.auto.sitzungen = false;
@@ -214,18 +288,27 @@ async function wizPick(feld, titel) {
   pruefe({ zeigen: SCHRITT[W.step] });
 }
 
-$('pickWizWurzel').onclick = () => wizPick('wizWurzel', wizWikiArt() === 'neu' ? 'Ordner für das neue LLM-Wiki wählen' : 'Ordner des LLM-Wikis wählen');
+$('pickWizSpeicherort').onclick = () => wizPick('wizSpeicherort', 'Speicherort wählen – hier entsteht der Projektordner', $('wizSpeicherort').value.trim());
+$('pickWizWikiDir').onclick = () => wizPick('wizWikiDir', 'Ordner des LLM-Wikis wählen', $('wizWikiDir').value.trim() || (S.kontext.neu && S.kontext.neu.speicherort) || '');
 $('pickWizSitzungen').onclick = () => wizPick('wizSitzungen', 'Ordner für Sitzungen wählen');
-$('pickWizAssets').onclick = () => wizPick('wizAssets', 'Ordner für Bilder im Wiki wählen');
-$('wizWurzel').oninput = pruefeSpaeter;
-$('wizSitzungen').oninput = () => { W.auto.sitzungen = false; };
+$('pickWizAssets').onclick = () => wizPick('wizAssets', 'Ordner für Bilder im Wiki wählen', $('wizAssets').value.trim() || $('wizWikiDir').value.trim());
+$('wizName').oninput = () => {
+  if (W.auto.ordnername) $('wizOrdnername').value = slugify($('wizName').value);
+  pruefeSpaeter();
+};
+$('wizOrdnername').oninput = () => { W.auto.ordnername = false; pruefeSpaeter(); };
+$('wizSpeicherort').oninput = pruefeSpaeter;
+$('wizWikiDir').oninput = pruefeSpaeter;
+$('wizSitzungen').oninput = () => { W.auto.sitzungen = false; renderTree({ pfade: W.pfade }); };
 $('wizAssets').oninput = () => { W.auto.assets = false; };
-for (const radio of document.querySelectorAll('input[name="wizWikiArt"]')) radio.onchange = () => pruefe({ zeigen: ['wurzel'] });
+for (const radio of document.querySelectorAll('input[name="wizWikiArt"]')) {
+  radio.onchange = () => { W.auto.assets = true; W.wikiVorgeschlagen = true; zeigeWikiArt(); pruefe({ zeigen: ['wiki_dir'] }); };
+}
 $('wizNext').onclick = weiter;
 $('wizBack').onclick = () => { W.step -= 1; showStep(); };
 $('wizCreate').onclick = anlegen;
 $('viewNeu').addEventListener('keydown', (e) => {
   if (e.key !== 'Enter' || e.target.tagName !== 'INPUT' || e.target.type === 'radio' || e.target.type === 'checkbox') return;
   e.preventDefault();
-  if (W.step < 3) weiter(); else anlegen();
+  if (W.step < LETZTER) weiter(); else anlegen();
 });

@@ -53,7 +53,7 @@ export async function loadWikiStatus() {
   try {
     S.wikiStatus = await api('/api/wiki/status?path=');
   } catch (err) {
-    S.wikiStatus = { zustand: 'fehler', pfad: projekt() ? projekt().wurzel : '', meldung: err.message, warnungen: [] };
+    S.wikiStatus = { zustand: 'fehler', pfad: (projekt() && projekt().wiki_dir) || '', meldung: err.message, warnungen: [] };
   }
   document.dispatchEvent(new CustomEvent('audioscribe:wiki'));
   return S.wikiStatus;

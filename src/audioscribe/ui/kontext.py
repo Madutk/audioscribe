@@ -71,9 +71,30 @@ def demo_projekt() -> Projekt:
     """Das Demo-Wiki als Projekt: Sitzungen landen im Cache, ins Wiki wird nie gespeichert."""
     ablage = settings.cache_dir / "demo"
     return Projekt(
-        wurzel=demo_wurzel(), name=DEMO_NAME, sitzungen_dir=ablage, assets_dir=ablage / "assets",
-        wiki_speichern=modell.WIKI_NIE, wiki_bilder=False, demo=True,
+        wurzel=demo_wurzel(), name=DEMO_NAME, sitzungen_dir=ablage, wiki_dir=demo_wurzel(),
+        assets_dir=ablage / "assets", wiki_speichern=modell.WIKI_NIE, wiki_bilder=False, demo=True,
     )
+
+
+def vorschlag_speicherort(state: Mapping[str, object]) -> str:
+    """Wo der Assistent einen neuen Projektordner vorschlägt: neben dem zuletzt geöffneten
+    Projekt, sonst im Dokumente-Ordner, sonst im Home."""
+    for e in zuletzt(state):
+        try:
+            eltern = Path(e["pfad"]).parent
+            if eltern.is_dir():
+                return str(eltern)
+        except (OSError, ValueError):
+            continue
+        break
+    home = Path.home()
+    for name in ("Dokumente", "Documents"):
+        try:
+            if (home / name).is_dir():
+                return str(home / name)
+        except OSError:
+            continue
+    return str(home)
 
 
 def demo_vorgeschichte() -> dict:
@@ -122,9 +143,11 @@ def projekt_dict(projekt: Projekt, state: Mapping[str, object], *, mit_wiki: boo
     out = {
         "name": projekt.name,
         "wurzel": str(projekt.wurzel),
+        "hat_wiki": projekt.hat_wiki,
+        "wiki_dir": str(projekt.wiki_dir) if projekt.wiki_dir is not None else None,
         "sitzungen_dir": str(projekt.sitzungen_dir),
-        "assets_dir": str(projekt.assets_dir),
-        "raw_dir": str(projekt.raw_dir),
+        "assets_dir": str(projekt.assets_dir) if projekt.assets_dir is not None else None,
+        "raw_dir": str(projekt.raw_dir) if projekt.raw_dir is not None else None,
         "analysen_dir": str(projekt.analysen_dir),
         "wiki_speichern": projekt.wiki_speichern,
         "wiki_bilder": projekt.wiki_bilder,
@@ -136,9 +159,16 @@ def projekt_dict(projekt: Projekt, state: Mapping[str, object], *, mit_wiki: boo
         "herkunft": eff.herkunft,
     }
     if mit_wiki:
-        from audioscribe.souffleur.wiki import pruefe_wiki
+        from audioscribe.souffleur.wiki import ZUSTAND_KEINS, WikiStatus, pruefe_wiki
 
-        out["wiki"] = pruefe_wiki(projekt.wurzel).als_dict()
+        if projekt.wiki_dir is not None:
+            out["wiki"] = pruefe_wiki(projekt.wiki_dir).als_dict()
+        else:
+            out["wiki"] = WikiStatus(
+                ZUSTAND_KEINS,
+                meldung="Dieses Projekt hat kein Wiki. Der Souffleur erkennt nur Fragen und liefert Essenzen; "
+                "ein Wiki lässt sich in den Projekteinstellungen anlegen oder verknüpfen.",
+            ).als_dict()
     return out
 
 

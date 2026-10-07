@@ -737,14 +737,18 @@ function renderNext(s) {
   const p = projekt();
   const zeigen = modus() === 'projekt' && !!p && !s.running && !!s.dir && s.phase === 'beendet';
   const fehler = (s.nachlauf && (s.nachlauf.wiki_fehler || s.nachlauf.fehler)) || '';
-  const key = JSON.stringify([zeigen, s.dir, liveAblage, p && p.wiki_speichern, fehler, liveShots.length]);
+  const key = JSON.stringify([zeigen, s.dir, liveAblage, p && p.wiki_speichern, p && p.hat_wiki, fehler, liveShots.length]);
   if (box.dataset.key === key) return;
   box.dataset.key = key;
   box.hidden = !zeigen;
   if (!zeigen) { box.innerHTML = ''; return; }
   const bilder = liveShots.length;
   let wiki = '';
-  if (liveAblage) {
+  if (!p.hat_wiki) {
+    wiki = `<div class="next-item"><b>${icon('book')}Kein Wiki im Projekt</b>
+      <span>Die Sitzung bleibt im Sitzungsordner. Mit einem Wiki ließe sie sich als neue Quelle ablegen –
+        <a class="goto" href="#/projekt/einstellungen">Wiki anlegen oder verknüpfen</a>.</span></div>`;
+  } else if (liveAblage) {
     wiki = `<div class="next-item done"><b>${icon('check')}Im Wiki gespeichert</b>
       <span><code>${esc(liveAblage.ordner)}</code>${liveAblage.bilder ? ` · ${liveAblage.bilder} Bilder im Assets-Ordner` : ''}${liveAblage.markierungen ? ` · ${liveAblage.markierungen} Markierungen` : ''}</span>
       <button class="ghost sm" type="button" data-folder="${esc(liveAblage.ordner)}">${icon('external')}Ordner öffnen</button></div>`;

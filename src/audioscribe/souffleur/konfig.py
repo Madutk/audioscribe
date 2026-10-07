@@ -56,10 +56,11 @@ def _pfad(raw: object) -> Path | None:
 
 
 def wiki_pfad(state: Mapping[str, object], projekt: Projekt | None = None) -> Path | None:
-    """Der Wiki-Pfad: der Wiki-Ordner des Projekts, ohne Projekt der Pfad der Installation
+    """Der Wiki-Pfad: der Wiki-Ordner des Projekts (``None``, wenn das Projekt keins hat - der
+    Pfad der Installation gilt dann nicht), ohne Projekt der Pfad der Installation
     (Einstellungen, sonst Umgebung)."""
     if projekt is not None:
-        return Path(projekt.wurzel)
+        return Path(projekt.wiki_dir) if projekt.wiki_dir is not None else None
     return _pfad(state.get(KEY_WIKI)) or _pfad(settings.wiki_dir)
 
 

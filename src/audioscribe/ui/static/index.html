@@ -123,7 +123,7 @@
 <section class="view start" id="viewStart" data-view="start">
   <div class="start-head">
     <h2>Womit möchtest du beginnen?</h2>
-    <p class="lead">Arbeite in einem Projekt mit eigenem LLM-Wiki – oder transkribiere einfach eine einzelne Aufnahme.</p>
+    <p class="lead">Arbeite in einem Projekt mit eigenem Ordner – auf Wunsch mit LLM-Wiki – oder transkribiere einfach eine einzelne Aufnahme.</p>
   </div>
   <div id="startBanner"></div>
   <div class="err" id="launchErr" role="alert"></div>
@@ -132,11 +132,11 @@
     <article class="launch" id="launchNeu">
       <span class="launch-icon"><svg class="ic" aria-hidden="true"><use href="#i-folder-plus"/></svg></span>
       <h3>Neues Projekt</h3>
-      <p>Ein Projekt für Live-Sitzungen mit Souffleur, verbunden mit einem LLM-Wiki.</p>
+      <p>Ein eigener Ordner für deine Live-Sitzungen – auf Wunsch mit einem LLM-Wiki für den Souffleur.</p>
       <details class="more"><summary><svg class="ic" aria-hidden="true"><use href="#i-info"/></svg>Worum geht es?</summary>
-        <p>Du gibst an, wo das LLM-Wiki liegt (oder lässt ein neues anlegen) und wohin Mitschnitte und Analysen
-          gehören. Während des Meetings gleicht der Souffleur das Gesagte mit dem Wiki ab; danach speicherst du
-          Transkript und Bilder als neue Quelle ins Wiki oder bereitest sie mit der KI nach.</p></details>
+        <p>Du wählst einen Projektordner; darin landen die Sitzungen mit Mitschnitt, Transkript und Standbildern.
+          Dazu kannst du ein LLM-Wiki anlegen oder ein vorhandenes verknüpfen: Während des Meetings gleicht der Souffleur
+          das Gesagte damit ab, danach speicherst du Transkript und Bilder als neue Quelle ins Wiki oder bereitest sie mit der KI nach.</p></details>
       <button class="launch-go" type="button" data-launch="neu">Projekt anlegen<svg class="ic" aria-hidden="true"><use href="#i-arrow-right"/></svg></button>
     </article>
 
@@ -145,8 +145,9 @@
       <h3>Projekt öffnen</h3>
       <p>Ein vorhandenes Projekt mit seinen Ordnern und Einstellungen weiterführen.</p>
       <details class="more"><summary><svg class="ic" aria-hidden="true"><use href="#i-info"/></svg>Worum geht es?</summary>
-        <p>Die Projektdatei liegt im LLM-Wiki-Ordner. Wähle diesen Ordner – oder nimm eines der zuletzt
-          geöffneten Projekte weiter unten. Wiki, Sitzungsordner, KI und Sprache werden geladen.</p></details>
+        <p>Wähle den Projektordner (er enthält <code>.audioscribe/</code>; bei Projekten aus früheren Versionen ist das
+          der Wiki-Ordner) – oder nimm eines der zuletzt geöffneten Projekte weiter unten. Wiki, Sitzungsordner, KI und
+          Sprache werden geladen.</p></details>
       <button class="launch-go" type="button" data-launch="oeffnen">Ordner wählen<svg class="ic" aria-hidden="true"><use href="#i-arrow-right"/></svg></button>
     </article>
 
@@ -184,9 +185,10 @@
     <a class="back" href="#/"><svg class="ic" aria-hidden="true"><use href="#i-arrow-left"/></svg>Startseite</a>
     <h2 class="wiz-title">Neues Projekt</h2>
     <ol class="steps" id="wizSteps">
-      <li data-step="1" class="active"><span class="num">1</span>Wiki</li>
-      <li data-step="2"><span class="num">2</span>Ordner</li>
-      <li data-step="3"><span class="num">3</span>KI und Sprache</li>
+      <li data-step="1" class="active"><span class="num">1</span>Projekt</li>
+      <li data-step="2"><span class="num">2</span>Wiki</li>
+      <li data-step="3"><span class="num">3</span>Sitzungen</li>
+      <li data-step="4"><span class="num">4</span>KI und Sprache</li>
     </ol>
 
     <div class="wiz-panel" id="wiz1">
@@ -195,68 +197,92 @@
         <p class="hint">Unter diesem Namen findest du das Projekt später wieder.</p>
         <div class="err" id="wizErrName"></div></div>
 
-      <fieldset class="field choice">
-        <legend>LLM-Wiki</legend>
-        <label class="option"><input type="radio" name="wizWikiArt" value="vorhanden" checked />
-          <span><b>Vorhandenes Wiki verknüpfen</b><small>Der Ordner enthält schon <code>wiki/</code> mit Seiten (und <code>raw/</code> für Quellen).</small></span></label>
-        <label class="option"><input type="radio" name="wizWikiArt" value="neu" />
-          <span><b>Neues Wiki anlegen</b><small>AudioScribe legt in einem neuen Ordner das Gerüst an: <code>raw/</code>, <code>wiki/</code> mit Startseiten und Glossar.</small></span></label>
-      </fieldset>
-
-      <div class="field"><label for="wizWurzel">Ordner des LLM-Wikis</label>
+      <div class="field"><label for="wizSpeicherort">Speicherort</label>
         <div class="input-group">
-          <input type="text" id="wizWurzel" placeholder="C:\Users\…\mein-wiki" autocomplete="off" />
-          <button class="secondary" type="button" id="pickWizWurzel"><svg class="ic" aria-hidden="true"><use href="#i-folder"/></svg>Wählen</button>
+          <input type="text" id="wizSpeicherort" placeholder="C:\Users\…\Dokumente" autocomplete="off" />
+          <button class="secondary" type="button" id="pickWizSpeicherort"><svg class="ic" aria-hidden="true"><use href="#i-folder"/></svg>Wählen</button>
         </div>
-        <p class="hint">Das Wiki ist das Gedächtnis des Projekts: Der Souffleur liest die Seiten unter <code>wiki/</code>,
-          beendete Sitzungen landen als neue Quelle unter <code>raw/</code>. Die Wiki-Seiten selbst verändert AudioScribe nie.
-          Die Projekteinstellungen liegen im Wiki-Ordner (<code>.audioscribe/</code>) und ziehen mit ihm um.</p>
-        <div class="wiki-state none" id="wizWikiState" hidden></div>
+        <p class="hint">Ein vorhandener Ordner, in dem das Projekt seinen eigenen Ordner bekommt.</p></div>
+
+      <div class="field"><label for="wizOrdnername">Projektordner</label>
+        <input type="text" id="wizOrdnername" maxlength="80" placeholder="z. B. bahnbuchung" autocomplete="off" />
+        <p class="hint">AudioScribe legt diesen Ordner am Speicherort an (ein vorhandener leerer Ordner geht auch). Darin liegen
+          die Projekteinstellungen (<code>.audioscribe/</code>), die Sitzungen und auf Wunsch das Wiki – das Projekt zieht mit
+          seinem Ordner um.</p>
         <div class="err" id="wizErrWurzel"></div></div>
     </div>
 
     <div class="wiz-panel" id="wiz2" hidden>
+      <fieldset class="field choice">
+        <legend>LLM-Wiki (optional)</legend>
+        <label class="option"><input type="radio" name="wizWikiArt" value="keins" checked />
+          <span><b>Ohne Wiki</b><small>Transkription, Essenz und erkannte Fragen des Souffleurs – aber keine Belege aus einem
+            Wiki und keine Ablage ins Wiki. Ein Wiki lässt sich später in den Projekteinstellungen nachrüsten.</small></span></label>
+        <label class="option"><input type="radio" name="wizWikiArt" value="neu" />
+          <span><b>Neues Wiki im Projektordner anlegen</b><small>AudioScribe legt <code>llm-wiki/</code> mit dem Gerüst an:
+            <code>raw/</code> für Quellen, <code>wiki/</code> mit Startseiten und Glossar.</small></span></label>
+        <label class="option"><input type="radio" name="wizWikiArt" value="vorhanden" />
+          <span><b>Vorhandenes Wiki verknüpfen</b><small>Ein Ordner, der schon <code>wiki/</code> mit Seiten enthält
+            (und <code>raw/</code> für Quellen). Er bleibt, wo er ist.</small></span></label>
+      </fieldset>
+
+      <div class="field" id="wizWikiDirField" hidden><label for="wizWikiDir">Ordner des LLM-Wikis</label>
+        <div class="input-group">
+          <input type="text" id="wizWikiDir" placeholder="C:\Users\…\mein-wiki" autocomplete="off" />
+          <button class="secondary" type="button" id="pickWizWikiDir"><svg class="ic" aria-hidden="true"><use href="#i-folder"/></svg>Wählen</button>
+        </div>
+        <div class="wiki-state none" id="wizWikiState" hidden></div>
+        <div class="err" id="wizErrWikiDir"></div></div>
+      <p class="hint">Das Wiki ist das Gedächtnis des Projekts: Der Souffleur liest die Seiten unter <code>wiki/</code> und belegt
+        damit seine Hinweise; beendete Sitzungen landen auf Wunsch als neue Quelle unter <code>raw/</code>. Die Wiki-Seiten
+        selbst verändert AudioScribe nie.</p>
+    </div>
+
+    <div class="wiz-panel" id="wiz3" hidden>
       <div class="field"><label for="wizSitzungen">Ordner für Sitzungen</label>
         <div class="input-group">
           <input type="text" id="wizSitzungen" autocomplete="off" />
           <button class="secondary" type="button" id="pickWizSitzungen"><svg class="ic" aria-hidden="true"><use href="#i-folder"/></svg>Wählen</button>
         </div>
         <p class="hint">Hier landet jede Live-Sitzung mit Mitschnitt, Transkript und Standbildern
-          (<code>live-JJJJ-MM-TT_hh-mm-ss/</code>), dazu die KI-Analysen (<code>analysen/</code>). Mitschnitte sind groß –
-          der Vorschlag liegt deshalb neben dem Wiki, nicht darin.</p>
+          (<code>live-JJJJ-MM-TT_hh-mm-ss/</code>), dazu die KI-Analysen (<code>analysen/</code>). Vorgabe ist
+          <code>sitzungen/</code> im Projektordner – Mitschnitte sind groß, ein anderer Ordner (andere Platte) geht auch.</p>
         <div class="err" id="wizErrSitzungen"></div></div>
 
-      <div class="field"><label id="wizRawLabel">Transkripte im Wiki</label>
-        <p class="path" id="wizRaw" aria-labelledby="wizRawLabel"></p>
-        <p class="hint">Hierhin kommt beim „Ins Wiki speichern“ je Sitzung ein Ordner mit dem Transkript –
-          eine Kopie aus dem Arbeitsordner oben. <code>raw/</code> ist der feste Quellen-Ordner des Wikis; der Unterordner
-          entsteht aus Datum und Sitzungstitel.</p></div>
+      <div id="wizWikiAblage">
+        <div class="field"><label id="wizRawLabel">Transkripte im Wiki</label>
+          <p class="path" id="wizRaw" aria-labelledby="wizRawLabel"></p>
+          <p class="hint">Hierhin kommt beim „Ins Wiki speichern“ je Sitzung ein Ordner mit dem Transkript –
+            eine Kopie aus dem Sitzungsordner oben. <code>raw/</code> ist der feste Quellen-Ordner des Wikis; der Unterordner
+            entsteht aus Datum und Sitzungstitel.</p></div>
 
-      <div class="field"><label for="wizAssets">Ordner für Bilder im Wiki (Assets)</label>
-        <div class="input-group">
-          <input type="text" id="wizAssets" autocomplete="off" />
-          <button class="secondary" type="button" id="pickWizAssets"><svg class="ic" aria-hidden="true"><use href="#i-folder"/></svg>Wählen</button>
-        </div>
-        <p class="hint">Speicherst du eine Sitzung ins Wiki, kommen ihre Standbilder hierher. Das Transkript im Wiki
-          verweist an der passenden Stelle auf jedes Bild. Der Ordner muss im Wiki liegen, aber nicht unter <code>wiki/</code>.</p>
-        <div class="err" id="wizErrAssets"></div></div>
+        <div class="field"><label for="wizAssets">Ordner für Bilder im Wiki (Assets)</label>
+          <div class="input-group">
+            <input type="text" id="wizAssets" autocomplete="off" />
+            <button class="secondary" type="button" id="pickWizAssets"><svg class="ic" aria-hidden="true"><use href="#i-folder"/></svg>Wählen</button>
+          </div>
+          <p class="hint">Speicherst du eine Sitzung ins Wiki, kommen ihre Standbilder hierher. Das Transkript im Wiki
+            verweist an der passenden Stelle auf jedes Bild. Der Ordner muss im Wiki liegen, aber nicht unter <code>wiki/</code>.</p>
+          <div class="err" id="wizErrAssets"></div></div>
 
-      <fieldset class="field choice">
-        <legend>Nach einer Sitzung</legend>
-        <label class="option"><input type="radio" name="wizSpeichern" value="fragen" checked />
-          <span><b>Nachfragen</b><small>Du entscheidest je Sitzung, ob sie ins Wiki gespeichert wird.</small></span></label>
-        <label class="option"><input type="radio" name="wizSpeichern" value="immer" />
-          <span><b>Immer ins Wiki speichern</b><small>Jede beendete Sitzung wird ohne Nachfrage als neue Quelle abgelegt.</small></span></label>
-        <label class="option"><input type="radio" name="wizSpeichern" value="nie" />
-          <span><b>Nicht anbieten</b><small>Sitzungen bleiben im Sitzungsordner; ins Wiki speicherst du nur über die Nachbereitung.</small></span></label>
-      </fieldset>
-      <div class="checks"><label><input type="checkbox" id="wizBilder" checked /><span>Bilder mit ins Wiki übertragen
-        <small>Standbilder der Sitzung in den Assets-Ordner kopieren und im Transkript verlinken.</small></span></label>
-        <label><input type="checkbox" id="wizMarkierungen" /><span>Markierungen des Souffleurs mit ins Wiki übertragen
-        <small>Widersprüche, Fragen und offene Punkte als <code>markierungen.json</code>/<code>.md</code> neben das Transkript legen. Sie sind KI-erzeugt und zitieren das Wiki – ohne Haken bleiben sie im Sitzungsordner.</small></span></label></div>
+        <fieldset class="field choice">
+          <legend>Nach einer Sitzung</legend>
+          <label class="option"><input type="radio" name="wizSpeichern" value="fragen" checked />
+            <span><b>Nachfragen</b><small>Du entscheidest je Sitzung, ob sie ins Wiki gespeichert wird.</small></span></label>
+          <label class="option"><input type="radio" name="wizSpeichern" value="immer" />
+            <span><b>Immer ins Wiki speichern</b><small>Jede beendete Sitzung wird ohne Nachfrage als neue Quelle abgelegt.</small></span></label>
+          <label class="option"><input type="radio" name="wizSpeichern" value="nie" />
+            <span><b>Nicht anbieten</b><small>Sitzungen bleiben im Sitzungsordner; ins Wiki speicherst du nur über die Nachbereitung.</small></span></label>
+        </fieldset>
+        <div class="checks"><label><input type="checkbox" id="wizBilder" checked /><span>Bilder mit ins Wiki übertragen
+          <small>Standbilder der Sitzung in den Assets-Ordner kopieren und im Transkript verlinken.</small></span></label>
+          <label><input type="checkbox" id="wizMarkierungen" /><span>Markierungen des Souffleurs mit ins Wiki übertragen
+          <small>Widersprüche, Fragen und offene Punkte als <code>markierungen.json</code>/<code>.md</code> neben das Transkript legen. Sie sind KI-erzeugt und zitieren das Wiki – ohne Haken bleiben sie im Sitzungsordner.</small></span></label></div>
+      </div>
+      <p class="hint" id="wizOhneWikiHint" hidden>Ohne Wiki gibt es keine Ablage ins Wiki – die Sitzungen bleiben im Sitzungsordner.</p>
     </div>
 
-    <div class="wiz-panel" id="wiz3" hidden>
+    <div class="wiz-panel" id="wiz4" hidden>
       <p class="hint lead-hint">Vorgabe sind die globalen Einstellungen. Lege hier nur fest, was für dieses Projekt anders sein soll –
         alles lässt sich später in den Projekteinstellungen ändern.</p>
       <div class="grid two">
@@ -270,6 +296,9 @@
           <p class="hint">Bereitet nach dem Meeting nach – Gründlichkeit zählt.</p></div>
       </div>
     </div>
+
+    <div class="field tree-field"><label id="wizTreeLabel">So wird das Projekt aufgebaut</label>
+      <pre class="tree" id="wizTree" aria-labelledby="wizTreeLabel" aria-live="polite"></pre></div>
 
     <div class="err" id="wizErr" role="alert"></div>
     <footer class="wiz-foot">
@@ -656,14 +685,24 @@
       <h2 class="card-title"><svg class="ic" aria-hidden="true"><use href="#i-book"/></svg>Projekt und Wiki</h2>
       <div class="field"><label for="pName">Projektname</label>
         <input type="text" id="pName" maxlength="80" autocomplete="off" /></div>
-      <div class="field"><label>LLM-Wiki</label>
+      <div class="field"><label>Projektordner</label>
         <p class="path" id="pWurzel"></p>
+        <p class="hint">Hier liegen die Projekteinstellungen (<code>.audioscribe/</code>); das Projekt zieht mit seinem Ordner um.</p></div>
+      <div class="field"><label>LLM-Wiki</label>
+        <p class="path" id="pWikiDir" hidden></p>
         <div class="wiki-state none" id="setWikiState">
           <span class="badge">kein Wiki</span>
           <span class="body">…</span>
         </div>
-        <p class="hint">Der Souffleur liest die Seiten unter <code>wiki/</code>; Änderungen am Wiki gelten ab der nächsten Sitzung.
-          Projekt und Wiki gehören fest zusammen – für ein anderes Wiki legst du ein neues Projekt an.</p>
+        <p class="hint" id="pWikiHintMit">Der Souffleur liest die Seiten unter <code>wiki/</code> und belegt damit seine Hinweise; Änderungen am
+          Wiki gelten ab der nächsten Sitzung. Ein anderes Wiki lässt sich verknüpfen, die Verknüpfung auch lösen – Dateien werden dabei nie gelöscht.</p>
+        <p class="hint" id="pWikiHintOhne" hidden>Ohne Wiki arbeitet der Souffleur ohne Belege, und Sitzungen lassen sich nicht ins Wiki speichern.
+          Lege ein neues Wiki im Projektordner an (<code>llm-wiki/</code>) oder verknüpfe ein vorhandenes.</p>
+        <div class="row" id="pWikiActions">
+          <button class="secondary sm" type="button" id="pWikiNeu"><svg class="ic" aria-hidden="true"><use href="#i-folder-plus"/></svg>Neues Wiki im Projektordner anlegen</button>
+          <button class="secondary sm" type="button" id="pWikiVerknuepfen"><svg class="ic" aria-hidden="true"><use href="#i-folder"/></svg>Vorhandenes Wiki verknüpfen</button>
+          <button class="ghost sm" type="button" id="pWikiLoesen"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg>Verknüpfung lösen</button>
+        </div>
       </div>
     </div>
 
@@ -674,22 +713,25 @@
           <input type="text" id="pSitzungen" autocomplete="off" />
           <button class="secondary" type="button" id="pickPSitzungen"><svg class="ic" aria-hidden="true"><use href="#i-folder"/></svg>Wählen</button>
         </div>
-        <p class="hint">Live-Sitzungen (<code>live-…/</code>) und KI-Analysen (<code>analysen/</code>) dieses Projekts.</p></div>
-      <div class="field"><label id="pRawLabel">Transkripte im Wiki</label>
-        <p class="path" id="pRaw" aria-labelledby="pRawLabel"></p>
-        <p class="hint">Hierhin kommt beim „Ins Wiki speichern“ je Sitzung ein Ordner mit dem Transkript –
-          eine Kopie aus dem Arbeitsordner oben. <code>raw/</code> ist der feste Quellen-Ordner des Wikis; der Unterordner
-          entsteht aus Datum und Sitzungstitel.</p></div>
+        <p class="hint">Live-Sitzungen (<code>live-…/</code>) und KI-Analysen (<code>analysen/</code>) dieses Projekts. Vorgabe ist
+          <code>sitzungen/</code> im Projektordner; nach einem Wechsel bleiben ältere Sitzungen im alten Ordner.</p></div>
+      <div id="pWikiOrdner">
+        <div class="field"><label id="pRawLabel">Transkripte im Wiki</label>
+          <p class="path" id="pRaw" aria-labelledby="pRawLabel"></p>
+          <p class="hint">Hierhin kommt beim „Ins Wiki speichern“ je Sitzung ein Ordner mit dem Transkript –
+            eine Kopie aus dem Sitzungsordner oben. <code>raw/</code> ist der feste Quellen-Ordner des Wikis; der Unterordner
+            entsteht aus Datum und Sitzungstitel.</p></div>
 
-      <div class="field"><label for="pAssets">Ordner für Bilder im Wiki (Assets)</label>
-        <div class="input-group">
-          <input type="text" id="pAssets" autocomplete="off" />
-          <button class="secondary" type="button" id="pickPAssets"><svg class="ic" aria-hidden="true"><use href="#i-folder"/></svg>Wählen</button>
-        </div>
-        <p class="hint">Hierher kommen die Standbilder einer ins Wiki gespeicherten Sitzung. Muss im Wiki liegen, nicht unter <code>wiki/</code>.</p></div>
+        <div class="field"><label for="pAssets">Ordner für Bilder im Wiki (Assets)</label>
+          <div class="input-group">
+            <input type="text" id="pAssets" autocomplete="off" />
+            <button class="secondary" type="button" id="pickPAssets"><svg class="ic" aria-hidden="true"><use href="#i-folder"/></svg>Wählen</button>
+          </div>
+          <p class="hint">Hierher kommen die Standbilder einer ins Wiki gespeicherten Sitzung. Muss im Wiki liegen, nicht unter <code>wiki/</code>.</p></div>
+      </div>
     </div>
 
-    <div class="card">
+    <div class="card" id="pAblageCard">
       <h2 class="card-title"><svg class="ic" aria-hidden="true"><use href="#i-book-plus"/></svg>Ablage ins Wiki</h2>
       <fieldset class="field choice">
         <legend>Nach einer Sitzung</legend>
@@ -722,8 +764,8 @@
     <div class="card flow">
       <h2 class="card-title"><svg class="ic" aria-hidden="true"><use href="#i-info"/></svg>So fließen die Daten</h2>
       <ol class="flow-list">
-        <li><b>Live-Sitzung</b><span>Mitschnitt, Transkript und Standbilder entstehen im Sitzungsordner und werden laufend gesichert.</span></li>
-        <li><b>Ins Wiki speichern</b><span>Das Transkript geht als neue Quelle nach <code>raw/</code>, Bilder in den Assets-Ordner; die Markierungen des Souffleurs nur auf Wunsch.</span></li>
+        <li><b>Live-Sitzung</b><span>Mitschnitt, Transkript und Standbilder entstehen im Sitzungsordner des Projekts und werden laufend gesichert.</span></li>
+        <li><b>Ins Wiki speichern</b><span>Mit Wiki: Das Transkript geht als neue Quelle nach <code>raw/</code>, Bilder in den Assets-Ordner; die Markierungen des Souffleurs nur auf Wunsch.</span></li>
         <li><b>Nachbereitung</b><span>Die KI wertet Transkript und Bilder aus; das Ergebnis kann ebenfalls ins Wiki – als KI-erzeugt gekennzeichnet.</span></li>
       </ol>
     </div>

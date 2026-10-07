@@ -1,9 +1,16 @@
-"""Das Projekt und seine Datei im LLM-Wiki-Ordner.
+"""Das Projekt und seine Datei im Projektordner.
 
-Die Projektdatei liegt im Wiki selbst (``<wiki>/.audioscribe/projekt.json``): das Projekt
-wandert mit dem Wiki mit (anderer Rechner, Git), und der Punktordner wird vom Wiki-Index
-übersprungen (``souffleur/wiki.py``). Pfade stehen relativ zur Wiki-Wurzel in der Datei, wo
-das geht - ein Wiki unter ``C:\\Users\\…`` öffnet sich so auch unter ``/Users/…``.
+Der **Projektordner** ist die Identität des Projekts: ``<projekt>/.audioscribe/projekt.json``
+(Version 2), darin als Vorgabe ``sitzungen/`` für die Live-Sitzungen und - nur wenn ein neues
+Wiki angelegt wurde - ``llm-wiki/``. Ein vorhandenes LLM-Wiki wird per Pfad verknüpft
+(``wiki_dir``); ein Projekt kann auch ganz ohne Wiki arbeiten.
+
+Pfade stehen relativ zum Projektordner in der Datei, wo das geht - ein Projekt unter
+``C:\\Users\\…`` öffnet sich so auch unter ``/Users/…``.
+
+Kompatibilität: Projektdateien der Version 1 lagen im Wiki-Ordner selbst und kannten kein
+``wiki_dir``. Sie öffnen sich unverändert - der Projektordner ist dort die Wiki-Wurzel
+(``wiki_dir = "."``). Der Punktordner wird vom Wiki-Index übersprungen (``souffleur/wiki.py``).
 """
 
 from __future__ import annotations
@@ -18,12 +25,21 @@ from pathlib import Path
 
 PROJEKT_ORDNER = ".audioscribe"
 PROJEKT_DATEI = "projekt.json"
-VERSION = 1
+VERSION = 2
 
 RAW_ORDNER = "raw"
 SEITEN_ORDNER = "wiki"
 ASSETS_VORSCHLAG = "raw/assets"
 ANALYSEN_ORDNER = "analysen"
+# Vorgaben im Projektordner: Sitzungen und - bei "Neues Wiki anlegen" - das Wiki.
+SITZUNGEN_ORDNER = "sitzungen"
+WIKI_ORDNER = "llm-wiki"
+
+# Wie das Projekt zu seinem Wiki kommt: gar nicht, neu im Projektordner, vorhandenes verknüpfen.
+WIKI_KEINS = "keins"
+WIKI_NEU = "neu"
+WIKI_VORHANDEN = "vorhanden"
+WIKI_ARTEN: tuple[str, ...] = (WIKI_KEINS, WIKI_NEU, WIKI_VORHANDEN)
 
 # Wiki-Ablage nach Sitzungsende: nachfragen, ohne Nachfrage speichern, nie anbieten.
 WIKI_FRAGEN = "fragen"
@@ -41,10 +57,11 @@ class ProjektFehler(ValueError):
 
 @dataclass(frozen=True)
 class Projekt:
-    wurzel: Path  # LLM-Wiki-Ordner (mit raw/ und wiki/)
+    wurzel: Path  # Projektordner (.audioscribe/, Vorgabe sitzungen/)
     name: str
     sitzungen_dir: Path  # Live-Mitschnitte und Analysen
-    assets_dir: Path  # Bilder der ins Wiki gespeicherten Sitzungen
+    wiki_dir: Path | None = None  # LLM-Wiki-Wurzel (mit raw/ und wiki/) - oder kein Wiki
+    assets_dir: Path | None = None  # Bilder der ins Wiki gespeicherten Sitzungen (nur mit Wiki)
     id: str = ""
     erstellt: str = ""
     ki_dienst: str | None = None
@@ -62,12 +79,16 @@ class Projekt:
     hinweis: str = ""
 
     @property
-    def raw_dir(self) -> Path:
-        return self.wurzel / RAW_ORDNER
+    def hat_wiki(self) -> bool:
+        return self.wiki_dir is not None
 
     @property
-    def seiten_dir(self) -> Path:
-        return self.wurzel / SEITEN_ORDNER
+    def raw_dir(self) -> Path | None:
+        return self.wiki_dir / RAW_ORDNER if self.wiki_dir is not None else None
+
+    @property
+    def seiten_dir(self) -> Path | None:
+        return self.wiki_dir / SEITEN_ORDNER if self.wiki_dir is not None else None
 
     @property
     def analysen_dir(self) -> Path:
@@ -105,6 +126,12 @@ def ist_unter(pfad: Path, basis: Path) -> bool:
 
 _ist_unter = ist_unter
 
+
+def _gleich(a: Path, b: Path) -> bool:
+    """Derselbe Ordner (ohne Rücksicht auf Groß- und Kleinschreibung)."""
+    return _ist_unter(a, b) and _ist_unter(b, a)
+
+
 _WINDOWS_PFAD = re.compile(r"^(?:[A-Za-z]:[\\/]|\\\\)")
 
 
@@ -116,7 +143,8 @@ def _systemfremd(text: str) -> bool:
 
 
 def _als_text(pfad: Path, wurzel: Path) -> str:
-    """Relativ zur Wurzel (POSIX), wenn der Pfad im Wiki oder daneben liegt - sonst absolut."""
+    """Relativ zum Projektordner (POSIX), wenn der Pfad darin oder daneben liegt - sonst absolut.
+    Der Projektordner selbst wird zu ``"."``."""
     pfad, wurzel = Path(pfad), Path(wurzel)
     if _ist_unter(pfad, wurzel.parent):
         try:
@@ -140,7 +168,9 @@ def _aus_text(text: str, wurzel: Path) -> Path | None:
 
 
 def lade(pfad: Path | str) -> Projekt:
-    """Projekt aus dem Wiki-Ordner lesen; ``pfad`` darf auch die Projektdatei selbst sein."""
+    """Projekt aus dem Projektordner lesen; ``pfad`` darf auch die Projektdatei selbst sein.
+    Projektdateien der Version 1 (im Wiki-Ordner, ohne ``wiki_dir``) gelten weiter: dort ist
+    der Wiki-Ordner der Projektordner."""
     wurzel = Path(pfad)
     if wurzel.name == PROJEKT_DATEI:
         wurzel = wurzel.parent.parent
@@ -160,36 +190,62 @@ def lade(pfad: Path | str) -> Projekt:
         wert = data.get(key)
         return wert.strip() if isinstance(wert, str) and wert.strip() else None
 
+    version = data.get("version")
+    if not isinstance(version, int):
+        version = 1
+    hinweise: list[str] = []
+
+    # Wiki: Version 1 kennt kein wiki_dir - dort ist der Projektordner die Wiki-Wurzel. Ab
+    # Version 2 heißt null "kein Wiki". Ein Wiki wird nie geraten: ein systemfremder Pfad
+    # macht das Projekt bis zur Korrektur zu einem ohne Wiki.
+    wiki_dir: Path | None
+    if version < 2 or "wiki_dir" not in data:
+        wiki_dir = wurzel
+    elif text("wiki_dir") is None:
+        wiki_dir = None
+    else:
+        wiki_dir = _aus_text(text("wiki_dir") or "", wurzel)
+        if wiki_dir is None:
+            hinweise.append(
+                f"Der Wiki-Ordner aus der Projektdatei ({text('wiki_dir')}) ist auf diesem Rechner nicht "
+                "erreichbar – das Projekt arbeitet bis zur Korrektur in den Projekteinstellungen ohne Wiki."
+            )
+    seiten = wiki_dir / SEITEN_ORDNER if wiki_dir is not None else None
+
     # Dieselben Regeln wie beim Anlegen - die Datei kann von Hand geändert oder von einem
     # anderen Rechner gekommen sein. Unbrauchbare Ordner ersetzt der Vorschlag; der Hinweis
     # sagt es dem Nutzer, statt dass Mitschnitte stillschweigend unter wiki/ landen.
-    ersatz = vorschlag(wurzel)
-    hinweise: list[str] = []
-    seiten = wurzel / SEITEN_ORDNER
+    ersatz = vorschlag(wurzel, wiki_dir)
     sitzungen = _aus_text(text("sitzungen_dir") or "", wurzel) if text("sitzungen_dir") else None
-    if sitzungen is None or ist_unter(sitzungen, seiten) or sitzungen.resolve() == wurzel.resolve():
+    if sitzungen is None or _gleich(sitzungen, wurzel) or (
+        wiki_dir is not None and (_gleich(sitzungen, wiki_dir) or _ist_unter(sitzungen, seiten))
+    ):
         hinweise.append(
             f"Der Sitzungsordner aus der Projektdatei ({text('sitzungen_dir') or 'fehlt'}) ist auf diesem "
             f"Rechner nicht verwendbar – verwendet wird {ersatz['sitzungen_dir']}. Bitte in den "
             "Projekteinstellungen prüfen."
         )
         sitzungen = Path(ersatz["sitzungen_dir"])
-    assets = _aus_text(text("assets_dir") or ASSETS_VORSCHLAG, wurzel)
-    if (
-        assets is None or not ist_unter(assets, wurzel) or ist_unter(assets, seiten)
-        or assets.resolve() in (wurzel.resolve(), (wurzel / RAW_ORDNER).resolve())
-    ):
-        hinweise.append(
-            f"Der Bilder-Ordner aus der Projektdatei ({text('assets_dir')}) ist nicht verwendbar – "
-            f"verwendet wird {ersatz['assets_dir']}."
-        )
-        assets = Path(ersatz["assets_dir"])
+
+    assets: Path | None = None
+    if wiki_dir is not None:
+        assets = _aus_text(text("assets_dir") or "", wurzel) if text("assets_dir") else wiki_dir / ASSETS_VORSCHLAG
+        if (
+            assets is None or not _ist_unter(assets, wiki_dir) or _ist_unter(assets, seiten)
+            or _gleich(assets, wiki_dir) or _gleich(assets, wiki_dir / RAW_ORDNER)
+        ):
+            hinweise.append(
+                f"Der Bilder-Ordner aus der Projektdatei ({text('assets_dir')}) ist nicht verwendbar – "
+                f"verwendet wird {ersatz['assets_dir']}."
+            )
+            assets = Path(ersatz["assets_dir"])
 
     speichern = data.get("wiki_speichern")
     return Projekt(
         wurzel=wurzel,
         name=text("name") or wurzel.name,
         sitzungen_dir=sitzungen,
+        wiki_dir=wiki_dir,
         assets_dir=assets,
         hinweis=" ".join(hinweise),
         id=text("id") or "",
@@ -205,7 +261,8 @@ def lade(pfad: Path | str) -> Projekt:
 
 
 def speichere(projekt: Projekt) -> Path:
-    """Projektdatei schreiben (atomar). Das Demo-Projekt wird nie gespeichert."""
+    """Projektdatei schreiben (atomar, immer in der aktuellen Version). Das Demo-Projekt wird
+    nie gespeichert."""
     if projekt.demo:
         return projekt.datei
     data = {
@@ -213,8 +270,9 @@ def speichere(projekt: Projekt) -> Path:
         "id": projekt.id,
         "name": projekt.name,
         "erstellt": projekt.erstellt,
+        "wiki_dir": _als_text(projekt.wiki_dir, projekt.wurzel) if projekt.wiki_dir is not None else None,
         "sitzungen_dir": _als_text(projekt.sitzungen_dir, projekt.wurzel),
-        "assets_dir": _als_text(projekt.assets_dir, projekt.wurzel),
+        "assets_dir": _als_text(projekt.assets_dir, projekt.wurzel) if projekt.assets_dir is not None else None,
         "ki_dienst": projekt.ki_dienst,
         "souffleur_model": projekt.souffleur_model,
         "agent_model": projekt.agent_model,
@@ -234,14 +292,25 @@ def speichere(projekt: Projekt) -> Path:
 # --- Prüfen und Anlegen ----------------------------------------------------------------------
 
 
-def vorschlag(wurzel: Path) -> dict[str, str]:
-    """Vorbelegung des Assistenten: Sitzungen neben dem Wiki (Mitschnitte sind groß und gehören
-    selten in ein Wiki-Repository), Bilder im Wiki unter ``raw/assets``."""
+def vorschlag(wurzel: Path, wiki_dir: Path | None = None) -> dict[str, str]:
+    """Vorbelegung des Assistenten: Sitzungen im Projektordner, ein neues Wiki ebenfalls,
+    Bilder im Wiki unter ``raw/assets`` (nur mit Wiki)."""
     wurzel = Path(wurzel)
     return {
-        "sitzungen_dir": str(wurzel.parent / f"{wurzel.name}-sitzungen"),
-        "assets_dir": str(wurzel / ASSETS_VORSCHLAG),
+        "sitzungen_dir": str(wurzel / SITZUNGEN_ORDNER),
+        "wiki_dir_neu": str(wurzel / WIKI_ORDNER),
+        "assets_dir": str(Path(wiki_dir) / ASSETS_VORSCHLAG) if wiki_dir is not None else "",
     }
+
+
+def wiki_ordner(wiki_art: str, wurzel: Path | None, wiki_dir: Path | None) -> Path | None:
+    """Der Wiki-Ordner, der sich aus der Wiki-Art ergibt: keiner, der feste Unterordner für ein
+    neues Wiki oder der angegebene vorhandene."""
+    if wiki_art == WIKI_NEU:
+        return Path(wurzel) / WIKI_ORDNER if wurzel is not None else None
+    if wiki_art == WIKI_VORHANDEN:
+        return Path(wiki_dir) if wiki_dir is not None else None
+    return None
 
 
 def pruefe(
@@ -249,8 +318,9 @@ def pruefe(
     name: str,
     wurzel: Path | None,
     sitzungen_dir: Path | None,
-    assets_dir: Path | None,
-    neues_wiki: bool = False,
+    wiki_art: str = WIKI_KEINS,
+    wiki_dir: Path | None = None,
+    assets_dir: Path | None = None,
     neu: bool = True,
 ) -> dict[str, str]:
     """Angaben prüfen; liefert ``{feld: Meldung}`` - leer heißt: alles in Ordnung.
@@ -264,51 +334,72 @@ def pruefe(
     if not name.strip():
         fehler["name"] = "Bitte einen Projektnamen angeben."
 
+    if wiki_art not in WIKI_ARTEN:
+        fehler["wiki_dir"] = f"Unbekannte Wiki-Art: {wiki_art}"
+        wiki_art = WIKI_KEINS
+    wiki = wiki_ordner(wiki_art, wurzel, wiki_dir)
+    seiten = wiki / SEITEN_ORDNER if wiki is not None else None
+
     if wurzel is None:
-        fehler["wurzel"] = "Bitte den Ordner des LLM-Wikis angeben."
+        fehler["wurzel"] = "Bitte den Projektordner angeben."
     else:
         wurzel = Path(wurzel)
-        if neu and ist_projekt(wurzel):
-            fehler["wurzel"] = "In diesem Ordner liegt schon ein Projekt – über „Projekt öffnen“ laden."
-        elif neues_wiki:
-            try:
-                if wurzel.is_file():
-                    fehler["wurzel"] = "Das ist eine Datei, kein Ordner."
-                elif (wurzel / SEITEN_ORDNER).exists():
-                    # Das Gerüst legt Dateien unter wiki/ an - in ein bestehendes Wiki nie.
-                    fehler["wurzel"] = "Hier liegt schon ein Wiki – bitte „Vorhandenes Wiki verknüpfen“ wählen."
-                elif not wurzel.exists() and not wurzel.parent.is_dir():
-                    fehler["wurzel"] = f"Der übergeordnete Ordner fehlt: {wurzel.parent}"
-            except OSError as exc:
-                fehler["wurzel"] = f"Ordner nicht erreichbar: {exc.strerror or exc}"
-        else:
-            status = pruefe_wiki(wurzel)
-            if status.zustand != ZUSTAND_OK:
-                fehler["wurzel"] = status.meldung
+        try:
+            if neu and ist_projekt(wurzel):
+                fehler["wurzel"] = "In diesem Ordner liegt schon ein Projekt – über „Projekt öffnen“ laden."
+            elif wurzel.is_file():
+                fehler["wurzel"] = "Das ist eine Datei, kein Ordner."
+            elif not wurzel.exists() and not wurzel.parent.is_dir():
+                # Nur eine Ebene wird angelegt - ein Tippfehler soll keine Ordnerkette erzeugen.
+                fehler["wurzel"] = f"Der übergeordnete Ordner fehlt: {wurzel.parent}"
+            elif wiki_art == WIKI_VORHANDEN and seiten is not None and _ist_unter(wurzel, seiten):
+                fehler["wurzel"] = "Der Projektordner darf nicht unter den Wiki-Seiten (wiki/) liegen."
+        except OSError as exc:
+            fehler["wurzel"] = f"Ordner nicht erreichbar: {exc.strerror or exc}"
 
-    seiten = Path(wurzel) / SEITEN_ORDNER if wurzel is not None else None
+    if wiki_art == WIKI_NEU and wiki is not None:
+        try:
+            if wiki.is_file():
+                fehler["wiki_dir"] = f"Im Projektordner liegt eine Datei namens {WIKI_ORDNER}."
+            elif (wiki / SEITEN_ORDNER).exists():
+                # Das Gerüst legt Dateien unter wiki/ an - in ein bestehendes Wiki nie.
+                fehler["wiki_dir"] = (
+                    f"Im Projektordner liegt schon ein Wiki ({WIKI_ORDNER}/) – bitte „Vorhandenes Wiki verknüpfen“ wählen."
+                )
+        except OSError as exc:
+            fehler["wiki_dir"] = f"Ordner nicht erreichbar: {exc.strerror or exc}"
+    elif wiki_art == WIKI_VORHANDEN:
+        if wiki is None:
+            fehler["wiki_dir"] = "Bitte den Ordner des LLM-Wikis angeben."
+        else:
+            status = pruefe_wiki(wiki)
+            if status.zustand != ZUSTAND_OK:
+                fehler["wiki_dir"] = status.meldung
 
     if sitzungen_dir is None:
         fehler["sitzungen_dir"] = "Bitte den Ordner für Sitzungen angeben."
-    elif wurzel is not None:
+    else:
         sitzungen_dir = Path(sitzungen_dir)
-        if _ist_unter(sitzungen_dir, seiten):
+        if wurzel is not None and _gleich(sitzungen_dir, wurzel):
+            fehler["sitzungen_dir"] = "Bitte einen eigenen Ordner wählen, nicht den Projektordner selbst."
+        elif wiki is not None and _ist_unter(sitzungen_dir, seiten):
             fehler["sitzungen_dir"] = "Sitzungen dürfen nicht unter wiki/ liegen – dort stehen nur die Wiki-Seiten."
-        elif sitzungen_dir.resolve() == Path(wurzel).resolve():
+        elif wiki is not None and _gleich(sitzungen_dir, wiki):
             fehler["sitzungen_dir"] = "Bitte einen eigenen Ordner wählen, nicht den Wiki-Ordner selbst."
         elif not _anlegbar(sitzungen_dir):
             fehler["sitzungen_dir"] = f"Ordner nicht anlegbar: {sitzungen_dir}"
 
-    if assets_dir is None:
-        fehler["assets_dir"] = "Bitte den Ordner für Bilder angeben."
-    elif wurzel is not None:
-        assets_dir = Path(assets_dir)
-        if not _ist_unter(assets_dir, wurzel) or assets_dir.resolve() == Path(wurzel).resolve():
-            fehler["assets_dir"] = "Der Bilder-Ordner muss im LLM-Wiki liegen, damit die Verweise beim Umzug gültig bleiben."
-        elif _ist_unter(assets_dir, seiten):
-            fehler["assets_dir"] = "Bilder dürfen nicht unter wiki/ liegen – dort stehen nur die Wiki-Seiten."
-        elif assets_dir.resolve() == (Path(wurzel) / RAW_ORDNER).resolve():
-            fehler["assets_dir"] = "Bitte einen eigenen Ordner wählen (z. B. raw/assets), nicht raw/ selbst."
+    if wiki is not None:
+        if assets_dir is None:
+            fehler["assets_dir"] = "Bitte den Ordner für Bilder angeben."
+        else:
+            assets_dir = Path(assets_dir)
+            if not _ist_unter(assets_dir, wiki) or _gleich(assets_dir, wiki):
+                fehler["assets_dir"] = "Der Bilder-Ordner muss im LLM-Wiki liegen, damit die Verweise beim Umzug gültig bleiben."
+            elif _ist_unter(assets_dir, seiten):
+                fehler["assets_dir"] = "Bilder dürfen nicht unter wiki/ liegen – dort stehen nur die Wiki-Seiten."
+            elif _gleich(assets_dir, wiki / RAW_ORDNER):
+                fehler["assets_dir"] = "Bitte einen eigenen Ordner wählen (z. B. raw/assets), nicht raw/ selbst."
     return fehler
 
 
@@ -332,8 +423,9 @@ def lege_an(
     name: str,
     wurzel: Path,
     sitzungen_dir: Path,
-    assets_dir: Path,
-    neues_wiki: bool = False,
+    wiki_art: str = WIKI_KEINS,
+    wiki_dir: Path | None = None,
+    assets_dir: Path | None = None,
     ki_dienst: str | None = None,
     souffleur_model: str | None = None,
     agent_model: str | None = None,
@@ -342,26 +434,35 @@ def lege_an(
     wiki_bilder: bool = True,
     wiki_markierungen: bool = False,
 ) -> Projekt:
-    """Projekt anlegen: Angaben prüfen, bei Bedarf das Wiki-Gerüst schreiben, Ordner und
-    Projektdatei erzeugen. Ein vorhandenes Wiki wird dabei nicht verändert."""
+    """Projekt anlegen: Angaben prüfen, den Projektordner anlegen, bei Bedarf das Wiki-Gerüst
+    schreiben, Ordner und Projektdatei erzeugen. Ein vorhandenes Wiki wird dabei nicht verändert."""
+    wiki = wiki_ordner(wiki_art, wurzel, wiki_dir)
+    if wiki is not None and assets_dir is None:
+        assets_dir = wiki / ASSETS_VORSCHLAG
     fehler = pruefe(
-        name=name, wurzel=wurzel, sitzungen_dir=sitzungen_dir, assets_dir=assets_dir, neues_wiki=neues_wiki
+        name=name, wurzel=wurzel, sitzungen_dir=sitzungen_dir, wiki_art=wiki_art, wiki_dir=wiki_dir,
+        assets_dir=assets_dir,
     )
     if fehler:
         raise ProjektFehler(" ".join(fehler.values()))
     wurzel = Path(wurzel)
-    if neues_wiki:
+    try:
+        wurzel.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise ProjektFehler(f"Projektordner nicht anlegbar: {exc.strerror or exc}") from exc
+    if wiki_art == WIKI_NEU and wiki is not None:
         from audioscribe.projekt.vorlage import lege_wiki_an
 
         try:
-            lege_wiki_an(wurzel, name.strip())
+            lege_wiki_an(wiki, name.strip())
         except OSError as exc:
             raise ProjektFehler(f"Wiki nicht anlegbar: {exc.strerror or exc}") from exc
     projekt = Projekt(
         wurzel=wurzel,
         name=name.strip(),
         sitzungen_dir=Path(sitzungen_dir),
-        assets_dir=Path(assets_dir),
+        wiki_dir=wiki,
+        assets_dir=Path(assets_dir) if wiki is not None and assets_dir is not None else None,
         id=uuid.uuid4().hex[:12],
         erstellt=datetime.now().strftime("%Y-%m-%d %H:%M"),
         ki_dienst=ki_dienst or None,
@@ -374,7 +475,8 @@ def lege_an(
     )
     try:
         projekt.sitzungen_dir.mkdir(parents=True, exist_ok=True)
-        projekt.raw_dir.mkdir(parents=True, exist_ok=True)
+        if projekt.raw_dir is not None:
+            projekt.raw_dir.mkdir(parents=True, exist_ok=True)
         speichere(projekt)
     except OSError as exc:
         raise ProjektFehler(f"Projekt nicht anlegbar: {exc.strerror or exc}") from exc
@@ -383,7 +485,9 @@ def lege_an(
 
 def aendere(projekt: Projekt, felder: dict) -> Projekt:
     """Projekteinstellungen ändern und speichern. Bei den überschreibbaren Feldern heißt
-    ``None`` bzw. leer: wieder die globale Einstellung verwenden."""
+    ``None`` bzw. leer: wieder die globale Einstellung verwenden. Über ``wiki_art`` (mit
+    ``wiki_dir`` bei „vorhanden“) wird ein Wiki nachträglich angelegt, verknüpft oder gelöst -
+    die Dateien bleiben in jedem Fall liegen."""
     neu: dict = {}
     for key in UEBERSCHREIBBAR:
         if key in felder:
@@ -397,7 +501,7 @@ def aendere(projekt: Projekt, felder: dict) -> Projekt:
             neu[key] = wert or None
     if isinstance(felder.get("name"), str) and felder["name"].strip():
         neu["name"] = felder["name"].strip()
-    for key in ("sitzungen_dir", "assets_dir"):
+    for key in ("sitzungen_dir", "assets_dir", "wiki_dir"):
         if key in felder and felder[key] not in (None, ""):
             if not isinstance(felder[key], (str, Path)):
                 raise ProjektFehler(f"Ungültiger Ordner für {key}.")
@@ -411,17 +515,52 @@ def aendere(projekt: Projekt, felder: dict) -> Projekt:
             if not isinstance(felder[key], bool):
                 raise ProjektFehler(f"Ungültiger Wert für {key}.")
             neu[key] = felder[key]
+
+    # Wiki anlegen, verknüpfen oder lösen
+    wiki_art = felder.get("wiki_art")
+    if wiki_art is None and "wiki_dir" in neu:
+        wiki_art = WIKI_VORHANDEN
+    geruest = False
+    if wiki_art is not None:
+        if wiki_art not in WIKI_ARTEN:
+            raise ProjektFehler(f"Unbekannte Wiki-Art: {wiki_art}")
+        if wiki_art == WIKI_KEINS:
+            neu["wiki_dir"] = None
+            neu["assets_dir"] = None
+        elif wiki_art == WIKI_NEU:
+            neu["wiki_dir"] = projekt.wurzel / WIKI_ORDNER
+            geruest = True
+        elif "wiki_dir" not in neu:
+            raise ProjektFehler("Bitte den Ordner des LLM-Wikis angeben.")
+        wiki = neu.get("wiki_dir")
+        if wiki is not None and "assets_dir" not in neu:
+            # Der bisherige Bilder-Ordner gilt weiter, wenn er im neuen Wiki liegt - sonst der Vorschlag.
+            bisher = projekt.assets_dir
+            neu["assets_dir"] = bisher if bisher is not None and _ist_unter(bisher, wiki) else wiki / ASSETS_VORSCHLAG
+    wiki_geaendert = wiki_art is not None
+
     geaendert = replace(projekt, **neu, hinweis="")
+    if geaendert.wiki_dir is None and geaendert.assets_dir is not None:
+        raise ProjektFehler("Dieses Projekt hat kein Wiki – ein Bilder-Ordner braucht ein Wiki.")
+    art = WIKI_KEINS if geaendert.wiki_dir is None else (WIKI_NEU if geruest else WIKI_VORHANDEN)
     fehler = pruefe(
         name=geaendert.name, wurzel=geaendert.wurzel, sitzungen_dir=geaendert.sitzungen_dir,
-        assets_dir=geaendert.assets_dir, neu=False,
+        wiki_art=art, wiki_dir=geaendert.wiki_dir, assets_dir=geaendert.assets_dir, neu=False,
     )
     # Ein Wiki, das gerade nicht lesbar ist, darf das Ändern der übrigen Einstellungen nicht sperren.
     fehler.pop("wurzel", None)
+    if not wiki_geaendert:
+        fehler.pop("wiki_dir", None)
     if fehler:
         raise ProjektFehler(" ".join(fehler.values()))
     try:
+        if geruest and geaendert.wiki_dir is not None:
+            from audioscribe.projekt.vorlage import lege_wiki_an
+
+            lege_wiki_an(geaendert.wiki_dir, geaendert.name)
         geaendert.sitzungen_dir.mkdir(parents=True, exist_ok=True)
+        if geaendert.raw_dir is not None:
+            geaendert.raw_dir.mkdir(parents=True, exist_ok=True)
         speichere(geaendert)
     except OSError as exc:
         raise ProjektFehler(f"Einstellungen nicht speicherbar: {exc.strerror or exc}") from exc

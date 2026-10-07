@@ -62,12 +62,14 @@ _ist_unter = ist_unter
 
 def _pruefe_ziele(projekt: Projekt) -> None:
     """Geschrieben wird nur nach raw/ und in den Assets-Ordner - nie unter die Wiki-Seiten."""
-    if not projekt.wurzel.is_dir():
-        raise RuntimeError(f"LLM-Wiki nicht erreichbar: {projekt.wurzel}")
+    if projekt.wiki_dir is None or projekt.raw_dir is None or projekt.assets_dir is None:
+        raise RuntimeError("Dieses Projekt hat kein Wiki – in den Projekteinstellungen anlegen oder verknüpfen.")
+    if not projekt.wiki_dir.is_dir():
+        raise RuntimeError(f"LLM-Wiki nicht erreichbar: {projekt.wiki_dir}")
     for ziel in (projekt.raw_dir, projekt.assets_dir):
         if _ist_unter(ziel, projekt.seiten_dir):
             raise RuntimeError(f"Ablage darf nicht unter den Wiki-Seiten liegen: {ziel}")
-    if not _ist_unter(projekt.assets_dir, projekt.wurzel):
+    if not _ist_unter(projekt.assets_dir, projekt.wiki_dir):
         raise RuntimeError(f"Der Bilder-Ordner muss im LLM-Wiki liegen: {projekt.assets_dir}")
     if projekt.assets_dir.resolve() == projekt.raw_dir.resolve():
         raise RuntimeError("Der Bilder-Ordner darf nicht raw/ selbst sein - bitte z. B. raw/assets wählen.")
@@ -161,9 +163,11 @@ def letzte_ablage(session_dir: Path, projekt: Projekt | None = None) -> dict | N
         if a.get("art", "sitzung") != "sitzung" or not ordner or not Path(ordner).is_dir():
             continue
         if projekt is not None:
-            if not _ist_unter(Path(ordner), projekt.raw_dir):
+            if projekt.raw_dir is None or not _ist_unter(Path(ordner), projekt.raw_dir):
                 continue
-            if a.get("assets") and not _ist_unter(Path(str(a["assets"])), projekt.assets_dir):
+            if a.get("assets") and (
+                projekt.assets_dir is None or not _ist_unter(Path(str(a["assets"])), projekt.assets_dir)
+            ):
                 a = {**a, "assets": None}
         return a
     return None

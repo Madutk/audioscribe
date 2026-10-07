@@ -25,11 +25,12 @@ def client(tmp_path, monkeypatch):
 
 
 def _neu(client, wiki, tmp_path, **mehr):
+    """Neues Projekt im eigenen Projektordner, das Wiki der Fixture verknuepft."""
     return client.post(
         "/api/projekt/neu",
         json={
-            "name": "Bahnbuchung", "wurzel": str(wiki), "sitzungen_dir": str(tmp_path / "sitzungen"),
-            "assets_dir": str(wiki / "raw" / "assets"), **mehr,
+            "name": "Bahnbuchung", "wurzel": str(tmp_path / "bahn-projekt"), "sitzungen_dir": str(tmp_path / "sitzungen"),
+            "wiki_art": "vorhanden", "wiki_dir": str(wiki), "assets_dir": str(wiki / "raw" / "assets"), **mehr,
         },
     )
 
@@ -55,13 +56,24 @@ def test_modus_datei_und_unbekannter_modus(client):
 
 
 def test_pruefen_meldet_je_feld_und_schlaegt_ordner_vor(client, wiki, tmp_path):
-    r = client.post("/api/projekt/pruefen", json={"name": "", "wurzel": str(wiki)}).json()
+    wurzel = tmp_path / "p"
+    r = client.post("/api/projekt/pruefen", json={"name": "", "wurzel": str(wurzel), "wiki_art": "vorhanden",
+                                                  "wiki_dir": str(wiki)}).json()
     assert set(r["fehler"]) == {"name", "sitzungen_dir", "assets_dir"}
-    assert r["wiki"]["zustand"] == "ok" and r["wiki"]["seiten"] == 2
+    assert r["wiki"]["zustand"] == "ok" and r["wiki"]["seiten"] == 2 and r["wurzel_ist_wiki"] is False
     assert Path(r["vorschlag"]["assets_dir"]) == wiki / "raw" / "assets"
-    assert Path(r["vorschlag"]["sitzungen_dir"]) == wiki.parent / "bahn-wiki-sitzungen"
-    r = client.post("/api/projekt/pruefen", json={"name": "x", "wurzel": str(tmp_path / "nix")}).json()
-    assert r["wiki"]["zustand"] == "fehler" and "wurzel" in r["fehler"]
+    assert Path(r["vorschlag"]["sitzungen_dir"]) == wurzel / "sitzungen"
+    assert Path(r["vorschlag"]["wiki_dir_neu"]) == wurzel / "llm-wiki" and Path(r["pfade"]["wiki_dir"]) == wiki
+    # Ohne Wiki: kein Wiki-Zustand, kein Bilder-Ordner noetig, der Projektordner darf noch fehlen.
+    r = client.post("/api/projekt/pruefen", json={"name": "x", "wurzel": str(wurzel), "sitzungen_dir": str(wurzel / "s")}).json()
+    assert r["fehler"] == {} and r["wiki"] is None and r["vorschlag"]["assets_dir"] == ""
+    # Vorhandenes Wiki, das es nicht gibt: Meldung am Wiki-Feld, nicht am Projektordner.
+    r = client.post("/api/projekt/pruefen", json={"name": "x", "wurzel": str(wurzel), "wiki_art": "vorhanden",
+                                                  "wiki_dir": str(tmp_path / "nix")}).json()
+    assert r["wiki"]["zustand"] == "fehler" and "wiki_dir" in r["fehler"] and "wurzel" not in r["fehler"]
+    # Der Projektordner ist selbst ein Wiki (fruehere Projekte): der Assistent erfaehrt es.
+    r = client.post("/api/projekt/pruefen", json={"name": "x", "wurzel": str(wiki)}).json()
+    assert r["wurzel_ist_wiki"] is True
 
 
 def test_neues_projekt_wird_geoeffnet_und_gemerkt(client, wiki, tmp_path):
@@ -69,11 +81,14 @@ def test_neues_projekt_wird_geoeffnet_und_gemerkt(client, wiki, tmp_path):
     assert r.status_code == 200, r.text
     k = r.json()
     assert k["modus"] == "projekt" and k["projekt"]["name"] == "Bahnbuchung"
-    assert k["projekt"]["wiki"]["zustand"] == "ok"
+    assert k["projekt"]["wiki"]["zustand"] == "ok" and k["projekt"]["hat_wiki"] is True
+    assert Path(k["projekt"]["wurzel"]) == tmp_path / "bahn-projekt" and Path(k["projekt"]["wiki_dir"]) == wiki
     assert k["projekt"]["eigen"]["sprache"] == "en" and k["projekt"]["herkunft"]["sprache"] == "projekt"
     assert k["projekt"]["herkunft"]["agent_model"] == "global"
     assert [z["name"] for z in k["zuletzt"]] == ["Bahnbuchung"] and k["zuletzt"][0]["vorhanden"] is True
-    assert (wiki / ".audioscribe" / "projekt.json").is_file()
+    assert Path(k["zuletzt"][0]["pfad"]) == tmp_path / "bahn-projekt"
+    assert (tmp_path / "bahn-projekt" / ".audioscribe" / "projekt.json").is_file()
+    assert not (wiki / ".audioscribe").exists()
     # Ordner, Sprache und Wiki der Arbeitsansichten kommen jetzt aus dem Projekt.
     d = client.get("/api/defaults").json()
     assert Path(d["output_dir"]) == tmp_path / "sitzungen" and d["language"] == "en" and d["modus"] == "projekt"
@@ -87,30 +102,98 @@ def test_neues_projekt_mit_neuem_wiki(client, tmp_path):
     wurzel = tmp_path / "frisch"
     r = client.post(
         "/api/projekt/neu",
-        json={"name": "Frisch", "wurzel": str(wurzel), "sitzungen_dir": str(tmp_path / "fs"),
-              "assets_dir": str(wurzel / "raw" / "assets"), "neues_wiki": True},
+        json={"name": "Frisch", "wurzel": str(wurzel), "sitzungen_dir": str(wurzel / "sitzungen"), "wiki_art": "neu"},
     )
     assert r.status_code == 200, r.text
-    assert r.json()["projekt"]["wiki"]["zustand"] == "ok" and (wurzel / "wiki" / "glossar.md").is_file()
+    p = r.json()["projekt"]
+    assert p["wiki"]["zustand"] == "ok" and (wurzel / "llm-wiki" / "wiki" / "glossar.md").is_file()
+    assert Path(p["wiki_dir"]) == wurzel / "llm-wiki" and Path(p["assets_dir"]) == wurzel / "llm-wiki" / "raw" / "assets"
+    assert Path(p["raw_dir"]) == wurzel / "llm-wiki" / "raw" and (wurzel / "sitzungen").is_dir()
+
+
+def test_assistent_legt_projektordner_an(client, tmp_path):
+    """Der Projektordner darf noch fehlen - der Assistent legt ihn an. Fehlt auch der
+    Elternordner, ist es ein Fehler am Projektordner."""
+    wurzel = tmp_path / "kunde-x"
+    body = {"name": "Kunde X", "wurzel": str(wurzel), "sitzungen_dir": str(wurzel / "sitzungen")}
+    assert client.post("/api/projekt/pruefen", json=body).json()["fehler"] == {}
+    tief = {**body, "wurzel": str(tmp_path / "fehlt" / "kunde-x")}
+    assert "wurzel" in client.post("/api/projekt/pruefen", json=tief).json()["fehler"]
+    assert client.post("/api/projekt/neu", json=tief).status_code == 400
+    r = client.post("/api/projekt/neu", json=body)
+    assert r.status_code == 200, r.text
+    assert (wurzel / ".audioscribe" / "projekt.json").is_file() and (wurzel / "sitzungen").is_dir()
+    r = client.post("/api/projekt/neu", json=body)  # dort liegt jetzt ein Projekt
+    assert r.status_code == 400 and "Projekt öffnen" in r.json()["detail"]
+
+
+def test_projekt_ohne_wiki_bietet_keine_ablage(client, projekt_ohne_wiki, sitzung_ohne_wiki, monkeypatch):
+    p = projekt_ohne_wiki
+    # Die Installation hat ein Wiki - im Projekt ohne Wiki darf es nicht durchschlagen.
+    state.save_state({"wiki_dir": str(p.wurzel)})
+    k = client.post("/api/projekt/oeffnen", json={"pfad": str(p.wurzel)}).json()
+    assert k["projekt"]["hat_wiki"] is False and k["projekt"]["wiki_dir"] is None
+    assert k["projekt"]["wiki"]["zustand"] == "keins" and "kein Wiki" in k["projekt"]["wiki"]["meldung"]
+    assert k["projekt"]["raw_dir"] is None and k["projekt"]["assets_dir"] is None
+    assert client.get("/api/defaults").json()["wiki_dir"] == ""
+    assert client.get("/api/wiki/status").json()["zustand"] == "keins"
+    assert client.post("/api/wiki/speichern", json={"sitzung": str(sitzung_ohne_wiki)}).status_code == 409
+    assert client.post("/api/wiki/speichern-nachbereitung", json={"workspace": "x"}).status_code == 409
+    # Quellen des Projekts werden trotzdem gelistet.
+    assert [q["name"] for q in client.get("/api/agent/sources").json()["sources"]] == [sitzung_ohne_wiki.name]
+
+
+def test_altes_projekt_im_wiki_ordner_laesst_sich_oeffnen(client, wiki, tmp_path):
+    (wiki / ".audioscribe").mkdir()
+    (wiki / ".audioscribe" / "projekt.json").write_text(
+        json.dumps({"version": 1, "name": "Alt", "sitzungen_dir": "../alt-sitzungen", "assets_dir": "raw/assets"}),
+        encoding="utf-8",
+    )
+    k = client.post("/api/projekt/oeffnen", json={"pfad": str(wiki)}).json()
+    p = k["projekt"]
+    assert Path(p["wurzel"]) == wiki and Path(p["wiki_dir"]) == wiki and p["wiki"]["zustand"] == "ok"
+    assert Path(p["sitzungen_dir"]) == tmp_path / "alt-sitzungen" and p["hinweis"] == ""
+    assert Path(client.get("/api/defaults").json()["wiki_dir"]) == wiki
+
+
+def test_wiki_in_den_projekteinstellungen_nachruesten(client, projekt_ohne_wiki, wiki, monkeypatch):
+    from audioscribe.ui import runner as runner_modul
+
+    p = projekt_ohne_wiki
+    client.post("/api/projekt/oeffnen", json={"pfad": str(p.wurzel)})
+    k = client.put("/api/projekt", json={"felder": {"wiki_art": "neu"}}).json()
+    assert k["projekt"]["hat_wiki"] is True and k["projekt"]["wiki"]["zustand"] == "ok"
+    assert Path(k["projekt"]["wiki_dir"]) == p.wurzel / "llm-wiki" and (p.wurzel / "llm-wiki" / "wiki" / "index.md").is_file()
+    assert client.get("/api/wiki/status").json()["zustand"] == "ok"
+    k = client.put("/api/projekt", json={"felder": {"wiki_art": "vorhanden", "wiki_dir": str(wiki)}}).json()
+    assert Path(k["projekt"]["wiki_dir"]) == wiki and Path(k["projekt"]["assets_dir"]) == wiki / "raw" / "assets"
+    assert client.put("/api/projekt", json={"felder": {"wiki_art": "vorhanden", "wiki_dir": str(p.wurzel / "nix")}}).status_code == 400
+    k = client.put("/api/projekt", json={"felder": {"wiki_art": "keins"}}).json()
+    assert k["projekt"]["hat_wiki"] is False and client.get("/api/wiki/status").json()["zustand"] == "keins"
+    # Waehrend einer Sitzung liest der Souffleur das Wiki - dann wird nicht umgehaengt.
+    monkeypatch.setattr(runner_modul.LiveRunner, "laeuft", lambda self: True)
+    assert client.put("/api/projekt", json={"felder": {"wiki_art": "neu"}}).status_code == 409
+    assert client.put("/api/projekt", json={"felder": {"sprache": "de"}}).status_code == 200
 
 
 def test_fehlerhafte_angaben_und_unbekannter_ordner(client, wiki, tmp_path):
-    r = client.post("/api/projekt/neu", json={"name": "X", "wurzel": str(wiki), "sitzungen_dir": str(wiki / "wiki" / "s"),
-                                              "assets_dir": str(wiki / "raw" / "assets")})
+    r = client.post("/api/projekt/neu", json={"name": "X", "wurzel": str(tmp_path / "p"), "sitzungen_dir": str(wiki / "wiki" / "s"),
+                                              "wiki_art": "vorhanden", "wiki_dir": str(wiki)})
     assert r.status_code == 400 and "wiki/" in r.json()["detail"]
     r = client.post("/api/projekt/oeffnen", json={"pfad": str(tmp_path)})
-    assert r.status_code == 400 and "kein AudioScribe-Projekt" in r.json()["detail"]
+    assert r.status_code == 400 and "kein AudioScribe-Projekt" in r.json()["detail"] and "Projektordner" in r.json()["detail"]
     assert client.get("/api/kontext").json()["modus"] == "start"
 
 
 def test_oeffnen_schliessen_vergessen(client, wiki, tmp_path):
     _neu(client, wiki, tmp_path)
+    wurzel = tmp_path / "bahn-projekt"
     assert client.post("/api/kontext", json={"modus": "start"}).json()["projekt"] is None
-    k = client.post("/api/projekt/oeffnen", json={"pfad": str(wiki)}).json()
-    assert k["modus"] == "projekt" and Path(k["projekt"]["wurzel"]) == wiki
+    k = client.post("/api/projekt/oeffnen", json={"pfad": str(wurzel)}).json()
+    assert k["modus"] == "projekt" and Path(k["projekt"]["wurzel"]) == wurzel
     client.post("/api/kontext", json={"modus": "start"})
-    assert client.post("/api/projekte/vergessen", json={"pfad": str(wiki)}).json()["zuletzt"] == []
-    assert (wiki / ".audioscribe" / "projekt.json").is_file()  # nur aus der Liste, nicht von der Platte
+    assert client.post("/api/projekte/vergessen", json={"pfad": str(wurzel)}).json()["zuletzt"] == []
+    assert (wurzel / ".audioscribe" / "projekt.json").is_file()  # nur aus der Liste, nicht von der Platte
 
 
 # --- Einstellungen ---------------------------------------------------------------------------
@@ -142,18 +225,20 @@ def test_unerwartete_eingaben_geben_400_statt_500(client, wiki, tmp_path):
     assert client.post("/api/projekt/pruefen", json={"name": "x", "wurzel": nul}).status_code == 200
     assert client.post("/api/oeffnen", json={"pfad": nul}).status_code == 400
     assert client.get("/api/transkript", params={"pfad": nul}).status_code == 404
-    # "Neues Wiki" auf ein bestehendes Wiki: abgewiesen, nichts unter wiki/ angelegt.
-    anderes = tmp_path / "anderes-wiki"
-    (anderes / "wiki").mkdir(parents=True)
-    (anderes / "wiki" / "index.md").write_text("# Anderes\n", encoding="utf-8")
-    r = client.post("/api/projekt/pruefen", json={"name": "x", "wurzel": str(anderes), "neues_wiki": True})
-    assert "Vorhandenes Wiki" in r.json()["fehler"]["wurzel"]
+    assert client.put("/api/projekt", json={"felder": {"wiki_art": "quatsch"}}).status_code == 409  # kein Projekt offen
+    # "Neues Wiki" in einen Projektordner, in dem unter llm-wiki/ schon eines liegt: abgewiesen,
+    # nichts unter wiki/ angelegt.
+    anderes = tmp_path / "anderes"
+    (anderes / "llm-wiki" / "wiki").mkdir(parents=True)
+    (anderes / "llm-wiki" / "wiki" / "index.md").write_text("# Anderes\n", encoding="utf-8")
+    r = client.post("/api/projekt/pruefen", json={"name": "x", "wurzel": str(anderes), "wiki_art": "neu"})
+    assert "Vorhandenes Wiki" in r.json()["fehler"]["wiki_dir"]
     r = client.post(
         "/api/projekt/neu",
-        json={"name": "x", "wurzel": str(anderes), "sitzungen_dir": str(tmp_path / "as"),
-              "assets_dir": str(anderes / "raw" / "assets"), "neues_wiki": True},
+        json={"name": "x", "wurzel": str(anderes), "sitzungen_dir": str(tmp_path / "as"), "wiki_art": "neu"},
     )
-    assert r.status_code == 400 and [p.name for p in (anderes / "wiki").iterdir()] == ["index.md"]
+    assert r.status_code == 400 and [p.name for p in (anderes / "llm-wiki" / "wiki").iterdir()] == ["index.md"]
+    assert client.post("/api/projekt/pruefen", json={"name": "x", "wurzel": str(anderes), "wiki_art": "egal"}).status_code == 200
 
 
 def test_abschliessen_und_verwerfen_nur_fuer_unterbrochene_sitzungen(client, projekt, sitzung, monkeypatch):

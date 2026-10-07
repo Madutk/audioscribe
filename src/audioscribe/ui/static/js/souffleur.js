@@ -197,7 +197,7 @@ export function renderHandover(ablage) {
     box.innerHTML = `Ins Wiki gespeichert: <code>${esc(ablage.ordner)}</code> (`
       + (ablage.markierungen ? '<code>markierungen.md</code>, ' : '') + '<code>transkript.md</code>)'
       + (ablage.markierungen ? '' : ' – die Markierungen bleiben im Sitzungsordner');
-  } else if (p && !p.demo && p.wiki_speichern === 'immer') {
+  } else if (p && !p.demo && p.hat_wiki && p.wiki_speichern === 'immer') {
     box.innerHTML = p.wiki_markierungen
       ? `Beim Stopp gehen Transkript und Markierungen ins Wiki: <code>${esc(trimSep(p.raw_dir))}${esc(sep())}…${esc(sep())}markierungen.md</code>`
       : `Beim Stopp geht das Transkript ins Wiki: <code>${esc(trimSep(p.raw_dir))}</code> – die Markierungen bleiben im Sitzungsordner`;
