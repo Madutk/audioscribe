@@ -82,13 +82,19 @@ a.back:hover { color: var(--accent); }
 .launch h3 { margin: 0; font-size: 17px; font-weight: 650; letter-spacing: -.01em; }
 .launch h3 .badge { position: absolute; top: var(--s5); right: var(--s5); }
 .launch > p { color: var(--fg-muted); font-size: 14px; line-height: 1.45; }
-.launch .more { font-size: 13px; }
-.launch .more summary { list-style: none; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; color: var(--fg-muted);
+.launch .more, .wiz .more { font-size: 13px; }
+.launch .more summary, .wiz .more summary { list-style: none; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; color: var(--fg-muted);
                         font-weight: 500; padding: 4px 6px 4px 2px; margin-left: -2px; border-radius: var(--radius-sm); user-select: none; }
-.launch .more summary::-webkit-details-marker { display: none; }
-.launch .more summary:hover { color: var(--accent); }
-.launch .more[open] summary { color: var(--accent); }
-.launch .more p { color: var(--fg-muted); line-height: 1.5; padding: var(--s2) 0 0; }
+.launch .more summary::-webkit-details-marker, .wiz .more summary::-webkit-details-marker { display: none; }
+.launch .more summary:hover, .wiz .more summary:hover { color: var(--accent); }
+.launch .more[open] summary, .wiz .more[open] summary { color: var(--accent); }
+.launch .more p, .wiz .more > p { color: var(--fg-muted); line-height: 1.5; padding: var(--s2) 0 0; }
+/* Aufgeklappte Zusatzoptionen im Assistenten: eingerueckt, dezent abgesetzt */
+.wiz .more { margin: var(--s2) 0 var(--s3); }
+.wiz .more[open] { padding-bottom: var(--s2); }
+.wiz .more .checks, .wiz .more .field { margin-left: var(--s2); padding-left: var(--s3); border-left: 2px solid var(--border); }
+.wiz .more .checks { margin-top: var(--s2); }
+.wiz .more .field { margin-top: var(--s3); }
 /* Der Knopf traegt die Aktion; seine Flaeche reicht ueber die ganze Karte (die Hilfe bleibt klickbar). */
 .launch-go { margin-top: auto; align-self: flex-start; position: static; }
 .launch-go::after { content: ""; position: absolute; inset: 0; border-radius: var(--radius-lg); }
@@ -140,9 +146,24 @@ a.back:hover { color: var(--accent); }
 .lead-hint { font-size: 13px; margin-bottom: var(--s4); }
 /* Strukturvorschau des Assistenten: der rote Faden durch alle Schritte */
 .tree-field { margin-top: var(--s5); }
-pre.tree { font: 12px/1.6 var(--mono); margin: 0; padding: 10px 12px; background: var(--surface-2); border-radius: var(--radius-sm);
-  color: var(--fg); overflow-x: auto; white-space: pre; }
-pre.tree:empty { display: none; }
+.tree-label { display: block; font-size: 12px; font-weight: 500; color: var(--fg-muted); margin-bottom: 6px; }
+.tree { font-size: 12px; line-height: 1.5; padding: 8px 12px; background: var(--surface-2); border-radius: var(--radius-sm); color: var(--fg); }
+.tree:empty { display: none; }
+.tree .row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: var(--s3); padding: 2px 0; }
+.tree .row.root { display: block; margin-bottom: 2px; }
+.tree .row.aussen { margin-top: 4px; }
+.tree code { font: 12px/1.5 var(--mono); overflow-wrap: anywhere; }
+.tree .row:not(.root) code::before { content: ""; display: inline-block; width: 14px; }
+.tree .row.aussen code::before { content: "↗"; color: var(--fg-muted); }
+.tree .was { color: var(--fg-muted); }
+.tree .row.root .was { margin-left: var(--s2); white-space: nowrap; }
+/* Kompakte Auswahl: eine Zeile je Option */
+fieldset.choice.compact .option { padding: 7px 10px; margin-bottom: 4px; align-items: center; }
+fieldset.choice.compact .option input { margin-top: 0; }
+fieldset.choice.compact .option b { display: inline; }
+fieldset.choice.compact .option small { display: inline; }
+fieldset.choice.compact .option small::before { content: " – "; }
+@media (max-width: 640px) { .tree .row { grid-template-columns: 1fr; gap: 0; } .tree .was { padding-left: 14px; } }
 .grid.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .grid.two .field { margin-bottom: 0; }
 

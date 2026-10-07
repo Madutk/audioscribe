@@ -120,6 +120,7 @@ export async function enterNeu() {
   $('wizMarkierungen').checked = false;
   for (const id of [...Object.values(FELD), 'wizErr']) $(id).textContent = '';
   $('wizWikiState').hidden = true;
+  $('wizMehr').open = false;
   zeigeWikiArt();
   showStep();
   renderTree(null);
@@ -159,44 +160,43 @@ function zeigeWikiArt() {
   $('wizOhneWikiHint').hidden = art !== 'keins';
 }
 
-/** Strukturvorschau: der rote Faden durch alle Schritte. */
+/** Strukturvorschau: der rote Faden durch alle Schritte - Zeilen, die umbrechen duerfen. */
 function renderTree(r) {
   const s = sep();
   const pf = (r && r.pfade) || {};
   const ort = trimSep($('wizSpeicherort').value.trim());
   const name = $('wizOrdnername').value.trim();
   // Solange der Ordnername fehlt, steht ein Platzhalter - die Zeile bleibt lesbar.
-  const wurzel = name ? (trimSep(pf.wurzel || wizWurzel())) : `${ort || '…'}${s}<Projektordner>`;
+  const wurzel = name ? trimSep(pf.wurzel || wizWurzel()) : `${ort || '…'}${s}<Projektordner>`;
   const art = wizWikiArt();
-  const zeile = (links, rechts) => `${links.padEnd(34)}  ${rechts}`;
   const rel = (pfad) => {
-    // Pfad relativ zum Projektordner, wenn er darin liegt - sonst absolut mit Pfeil.
+    // Pfad relativ zum Projektordner, wenn er darin liegt - sonst absolut (mit Pfeil).
     const p = trimSep(pfad || '');
     if (!p) return null;
-    const lower = (x) => x.toLowerCase();
-    if (lower(p).startsWith(lower(wurzel) + s) || lower(p).startsWith(lower(wurzel) + (s === '\\' ? '/' : '\\'))) {
-      return { innen: true, text: p.slice(wurzel.length + 1) };
-    }
-    return { innen: false, text: p };
+    const unten = (x) => x.toLowerCase().replace(/[\\/]/g, '/');
+    return unten(p).startsWith(unten(wurzel) + '/') ? { innen: true, text: p.slice(wurzel.length + 1) } : { innen: false, text: p };
   };
-  const zeilen = [zeile(`${wurzel}${s}`, 'Projektordner')];
-  zeilen.push(zeile(`  .audioscribe${s}projekt.json`, 'Projekteinstellungen'));
-  const sitz = rel(pf.sitzungen_dir || $('wizSitzungen').value) || { innen: true, text: 'sitzungen' };
-  const sitzText = `Live-Sitzungen (live-…${s}), KI-Analysen (analysen${s})`;
+  const rows = [];
+  const row = (pfad, was, cls = '') => rows.push(`<div class="row ${cls}" role="listitem"><code>${esc(pfad)}</code><span class="was">${was}</span></div>`);
+  row(`${wurzel}${s}`, 'Projektordner', 'root');
+  row(`.audioscribe${s}projekt.json`, 'Projekteinstellungen');
   const aussen = [];
-  if (sitz.innen) zeilen.push(zeile(`  ${sitz.text}${s}`, sitzText)); else aussen.push(zeile(`↗ ${sitz.text}${s}`, sitzText));
+  const sitz = rel(pf.sitzungen_dir || $('wizSitzungen').value) || { innen: true, text: 'sitzungen' };
+  const sitzText = `Sitzungen (live-…${s}) und KI-Analysen (analysen${s})`;
+  if (sitz.innen) row(`${sitz.text}${s}`, sitzText); else aussen.push([`${sitz.text}${s}`, sitzText]);
   if (art === 'neu') {
-    zeilen.push(zeile(`  llm-wiki${s}`, `neues LLM-Wiki: raw${s} (Quellen, assets${s}), wiki${s} (Seiten)`));
+    row(`llm-wiki${s}`, `neues LLM-Wiki – raw${s} (Quellen, Bilder) und wiki${s} (Seiten)`);
   } else if (art === 'vorhanden') {
     const wiki = rel(pf.wiki_dir || $('wizWikiDir').value);
-    const text = `verknüpftes LLM-Wiki: raw${s} (Quellen), wiki${s} (Seiten)`;
-    if (!wiki) zeilen.push(zeile('  …', 'verknüpftes LLM-Wiki – Ordner noch wählen'));
-    else if (wiki.innen) zeilen.push(zeile(`  ${wiki.text}${s}`, text));
-    else aussen.push(zeile(`↗ ${wiki.text}${s}`, text));
+    const text = `verknüpftes LLM-Wiki – raw${s} (Quellen) und wiki${s} (Seiten)`;
+    if (!wiki) row('…', 'verknüpftes LLM-Wiki – Ordner noch wählen');
+    else if (wiki.innen) row(`${wiki.text}${s}`, text);
+    else aussen.push([`${wiki.text}${s}`, text]);
   } else {
-    zeilen.push(zeile('  (kein Wiki)', 'Souffleur ohne Belege, keine Ablage ins Wiki'));
+    row('(kein Wiki)', 'Souffleur ohne Belege, keine Ablage ins Wiki');
   }
-  $('wizTree').textContent = [...zeilen, ...aussen].join('\n');
+  for (const [pfad, was] of aussen) row(pfad, was, 'aussen');
+  $('wizTree').innerHTML = rows.join('');
 }
 
 /** Angaben beim Server pruefen: Wiki-Zustand, Meldung je Feld, Vorschlaege fuer die Ordner. */
@@ -225,15 +225,13 @@ async function pruefe({ zeigen = [] } = {}) {
   }
   const vorhanden = wizWikiArt() === 'vorhanden';
   $('wizWikiState').hidden = !vorhanden || !$('wizWikiDir').value.trim();
-  // Wo das Transkript im Wiki landet - fest unter raw/, damit es der Ingest des Wikis findet.
-  $('wizRaw').textContent = r.pfade.wiki_dir
-    ? `${trimSep(r.pfade.wiki_dir)}${sep()}raw${sep()}<Datum>_<Sitzungstitel>${sep()}` : '–';
   if (r.wiki) renderWikiState($('wizWikiState'), r.wiki, false);
   // Neue Meldungen nur fuer die verlangten Felder; behobene verschwinden ueberall sofort.
   for (const feld of Object.keys(FELD)) {
     if (!r.fehler[feld]) $(FELD[feld]).textContent = '';
     else if (zeigen.includes(feld)) $(FELD[feld]).textContent = r.fehler[feld];
   }
+  if (r.fehler.assets_dir && zeigen.includes('assets_dir')) $('wizMehr').open = true;
   renderTree(r);
   return r;
 }

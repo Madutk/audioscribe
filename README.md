@@ -164,9 +164,10 @@ unter den Schritten zeigt jederzeit, welche Ordner am Ende entstehen:
    Seiten, Glossar).
 3. **Sitzungen:** der **Ordner für Sitzungen** (Mitschnitte, Transkripte, Standbilder und
    KI-Analysen; Vorgabe `sitzungen/` im Projektordner – Mitschnitte sind groß, eine andere
-   Platte geht auch). Mit Wiki dazu der **Ordner für Bilder im Wiki** (Assets; vorgeschlagen
-   `raw/assets`) und, was nach einer Sitzung geschehen soll: nachfragen, immer ins Wiki
-   speichern oder nicht anbieten.
+   Platte geht auch). Mit Wiki dazu, was nach einer Sitzung geschehen soll: nachfragen,
+   immer ins Wiki speichern oder nicht anbieten. Unter „Weitere Optionen“ eingeklappt:
+   Bilder und Markierungen mit übertragen und der **Ordner für Bilder im Wiki** (Assets;
+   vorgeschlagen `raw/assets`).
 4. **KI und Sprache:** Vorgabe sind die globalen Einstellungen; hier legst du nur fest, was
    für dieses Projekt anders sein soll.
 
