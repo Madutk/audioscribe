@@ -287,6 +287,7 @@ pre#liveLog { height: 120px; }
            transition: border-color var(--dur), color var(--dur); }
 .monitor:hover { border-color: var(--border-strong); }
 .monitor.active { border-color: var(--accent); color: var(--fg); }
+.monitor.disabled { opacity: .45; cursor: not-allowed; pointer-events: none; }
 .monitor.active::after { content: ""; position: absolute; top: 6px; right: 6px; width: 10px; height: 10px; border-radius: 50%;
                          background: var(--accent); box-shadow: 0 0 0 2px var(--surface); }
 .monitor img { display: block; width: 150px; max-height: 110px; object-fit: cover; object-position: top; border-radius: 3px; }

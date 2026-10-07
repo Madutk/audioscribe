@@ -105,6 +105,7 @@ class LiveSession:
         self._io_lock = threading.Lock()  # Dateien im Sitzungsordner
         self._segments: list[Segment] = []
         self._marks: list[Mark] = []
+        self._screen = None  # ScreenWatcher der laufenden Aufnahme (Bildquelle wechselbar, FR-37)
         self._open: dict[str, int | None] = {}
         self._last_delay: float | None = None
         self._board = JobBoard(coalesce_s=opts.coalesce_s, catchup_s=opts.catchup_s)
@@ -581,13 +582,29 @@ class LiveSession:
         )
 
     def _watch_stdin(self) -> None:
-        """``stop`` über stdin beendet die Sitzung sauber; ein Dateiende bedeutet nichts."""
+        """``stop`` über stdin beendet die Sitzung sauber; ``bild monitor N`` /
+        ``bild fenster HWND`` / ``bild aus`` wechseln die Bildquelle (FR-37). Ein
+        Dateiende bedeutet nichts."""
         if sys.stdin is None:
             return
-        for line in sys.stdin:
-            if line.strip().lower() == "stop":
-                self._stop.set()
-                return
+        try:
+            for line in sys.stdin:
+                if line.strip().lower() == "stop":
+                    self._stop.set()
+                    return
+                quelle = events.parse_bild_befehl(line)
+                if quelle is not None:
+                    self.wechsle_bildquelle(*quelle)
+        except (OSError, ValueError):
+            return
+
+    def wechsle_bildquelle(self, monitor: int = 0, window: int = 0) -> None:
+        """Bildquelle der laufenden Aufnahme tauschen; ohne Standbild-Thread (WAV-Replay,
+        mss fehlt) nur ein Hinweis im Protokoll."""
+        if self._screen is None:
+            events.log("Keine Bildquelle in dieser Sitzung - Wechsel nicht möglich")
+            return
+        self._screen.wechsle(monitor=monitor, window=window)
 
     # --- Hilfen -------------------------------------------------------------
 
@@ -676,27 +693,37 @@ class LiveSession:
         return BackgroundEmbedder(load, log=events.log)
 
     def _start_screen(self):
-        if not (self.opts.monitor or self.opts.window):
+        """Standbild-Thread - auch bei "nur Ton" (im Leerlauf), damit die Bildquelle während
+        der Aufnahme eingeschaltet werden kann (FR-37). Nicht beim WAV-Replay (FR-49)."""
+        o = self.opts
+        if o.replay_system is not None or o.replay_mic is not None:
             return None
         try:
             from audioscribe.live.screen import ScreenWatcher
 
             watcher = ScreenWatcher(
-                self.opts.monitor,
+                o.monitor,
                 self.dir,
                 self.clock,
                 self._on_shot,
-                window=self.opts.window,
-                sensitivity=self.opts.sensitivity,
-                bildformat=self.opts.bildformat,
+                window=o.window,
+                sensitivity=o.sensitivity,
+                bildformat=o.bildformat,
                 log=events.log,
                 start_id=max((m.id or 0 for m in self._marks), default=0),
+                on_quelle=self._on_quelle,
             )
             watcher.start()
+            self._screen = watcher
             return watcher
         except ImportError:
             events.log("Standbilder-Modul nicht ladbar - keine Standbilder (uv sync ... --extra live)")
             return None
+
+    def _on_quelle(self, quelle: dict) -> None:
+        """Die wirksame Bildquelle an die Oberfläche melden (nicht ins Journal: eine
+        Wiederaufnahme übernimmt Bildquellen bewusst nicht, HWNDs und Indizes wandern)."""
+        events.emit(events.QUELLE, **quelle)
 
     def _on_shot(self, mark: Mark) -> None:
         with self._io_lock:

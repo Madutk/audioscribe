@@ -336,9 +336,14 @@ def test_screen_watcher_zaehlt_ab_start_id_weiter(tmp_path):
 
     takt = count()
     marks = []
+    log = []
     watcher = ScreenWatcher(1, tmp_path, lambda: 900.0 + next(takt) * 5.0, marks.append, fps=500.0,
-                            log=lambda m: None, source_factory=Quelle, start_id=7)
+                            log=log.append, source_factory=lambda m, w: Quelle(), start_id=7)
     watcher.start()
+    ende = time.monotonic() + 5
+    while "Fenster geschlossen - keine weiteren Standbilder" not in log and time.monotonic() < ende:
+        time.sleep(0.02)
+    watcher.stop()  # der Thread wartet sonst auf einen Quellwechsel (FR-37)
     watcher.join(timeout=5)
     assert [m.id for m in marks] == [8]  # Startbild des neuen Teils, nicht wieder #0001
     assert marks[0].png.startswith("frames/0008_00-15-")

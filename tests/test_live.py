@@ -1020,7 +1020,7 @@ class FakeSource:
         return item
 
 
-def run_watcher(tmp_path, source, **kw):
+def make_watcher(tmp_path, source_factory, **kw):
     from itertools import count
 
     from audioscribe.live.screen import ScreenWatcher
@@ -1029,12 +1029,158 @@ def run_watcher(tmp_path, source, **kw):
     marks, log = [], []
     watcher = ScreenWatcher(
         1, tmp_path, lambda: next(takt) * 5.0, marks.append, fps=500.0, log=log.append,
-        source_factory=lambda: source, **kw,
+        source_factory=source_factory, **kw,
     )
+    return watcher, marks, log
+
+
+def run_watcher(tmp_path, source, **kw):
+    """Laesst den Watcher laufen, bis die Quelle zu Ende ist; der Thread selbst wartet danach
+    auf einen Quellwechsel (FR-37) und wird darum hier gestoppt."""
+    from audioscribe.live.screen import MSS_FEHLT
+
+    watcher, marks, log = make_watcher(tmp_path, lambda m, w: source, **kw)
     watcher.start()
+    wait_for(lambda: any(("keine" in z and z.endswith("Standbilder")) or z == MSS_FEHLT for z in log))
+    assert watcher.is_alive() or log[-1] == MSS_FEHLT  # ohne mss gibt der Thread auf
+    watcher.stop()
     watcher.join(timeout=5)
     assert not watcher.is_alive()
     return marks, log
+
+
+class DauerQuelle:
+    """Bildquelle, die immer dasselbe Bild liefert und ihr Oeffnen/Schliessen protokolliert."""
+
+    def __init__(self, label, img, protokoll):
+        self.label = label
+        self._img = img
+        self._protokoll = protokoll
+
+    def __enter__(self):
+        self._protokoll.append(f"auf {self.label}")
+        return self
+
+    def __exit__(self, *exc):
+        self._protokoll.append(f"zu {self.label}")
+        return None
+
+    def grab(self):
+        return self._img
+
+
+def test_screen_watcher_wechselt_quelle_und_zaehlt_weiter(tmp_path):
+    from audioscribe.live.screen import SourceUnavailable
+
+    Image = pytest.importorskip("PIL.Image")
+    weiss = Image.new("RGB", (64, 36), (255, 255, 255))
+    schwarz = Image.new("RGB", (64, 36), (0, 0, 0))
+    protokoll, quellen = [], []
+
+    def factory(monitor, window):
+        if window == 4711:
+            return DauerQuelle("Fenster 'Jira'", schwarz, protokoll)
+        if monitor == 1:
+            return DauerQuelle("Monitor 1", weiss, protokoll)
+        raise SourceUnavailable(f"Monitor {monitor} gibt es nicht")
+
+    watcher, marks, log = make_watcher(tmp_path, factory, on_quelle=quellen.append)
+    watcher.start()
+    wait_for(lambda: len(marks) == 1)  # Startbild von Monitor 1
+
+    watcher.wechsle(window=4711)
+    wait_for(lambda: len(marks) == 2)  # Startbild des Fensters, Nummer laeuft weiter
+    assert [m.id for m in marks] == [1, 2]
+    assert protokoll[:3] == ["auf Monitor 1", "zu Monitor 1", "auf Fenster 'Jira'"]
+
+    watcher.wechsle(monitor=7)  # gibt es nicht: Protokollzeile, Thread lebt, wartet auf die naechste Quelle
+    wait_for(lambda: any(z.startswith("Monitor 7") for z in log))
+    assert watcher.is_alive() and "zu Fenster 'Jira'" in protokoll
+
+    watcher.wechsle()  # aus
+    wait_for(lambda: quellen and quellen[-1] == {"monitor": 0, "window": 0, "label": "", "aktiv": False})
+    anzahl = len(marks)
+
+    watcher.wechsle(monitor=1)  # und wieder an: frisches Startbild
+    wait_for(lambda: len(marks) == anzahl + 1)
+    watcher.stop()
+    watcher.join(timeout=5)
+    assert not watcher.is_alive()
+    assert [z for z in log if z.startswith("Standbilder: ")] == [
+        "Standbilder: Monitor 1", "Standbilder: Fenster 'Jira'", "Standbilder: Monitor 1",
+    ]
+    aktive = [(q["monitor"], q["window"], q["aktiv"]) for q in quellen]
+    assert aktive == [(1, 0, True), (0, 4711, True), (7, 0, False), (0, 0, False), (1, 0, True)]
+    assert protokoll.count("auf Monitor 1") == 2 and protokoll[-1] == "zu Monitor 1"
+
+
+def test_screen_watcher_wartet_nach_fenster_weg_auf_neue_quelle(tmp_path):
+    Image = pytest.importorskip("PIL.Image")
+    weiss = Image.new("RGB", (64, 36), (255, 255, 255))
+    protokoll, quellen = [], []
+    fenster = FakeSource([weiss, WindowGone("weg")])
+    factory = lambda m, w: fenster if w else DauerQuelle("Monitor 1", weiss, protokoll)  # noqa: E731
+
+    watcher, marks, log = make_watcher(tmp_path, factory, window=4711, on_quelle=quellen.append)
+    watcher.start()
+    wait_for(lambda: "Fenster geschlossen - keine weiteren Standbilder" in log)
+    assert watcher.is_alive() and quellen[-1]["aktiv"] is False
+    watcher.wechsle(monitor=1)
+    wait_for(lambda: len(marks) == 2)
+    watcher.stop()
+    watcher.join(timeout=5)
+    assert [m.id for m in marks] == [1, 2] and quellen[-1] == {"monitor": 1, "window": 0, "label": "Monitor 1", "aktiv": True}
+
+
+def test_screen_watcher_startet_im_leerlauf_ohne_quelle(tmp_path):
+    Image = pytest.importorskip("PIL.Image")
+    weiss = Image.new("RGB", (64, 36), (255, 255, 255))
+    protokoll, quellen = [], []
+    watcher, marks, log = make_watcher(
+        tmp_path, lambda m, w: DauerQuelle("Monitor 2", weiss, protokoll), on_quelle=quellen.append,
+    )
+    watcher._wunsch = (0, 0)  # wie "nur Ton" beim Start
+    watcher.start()
+    wait_for(lambda: quellen)
+    assert quellen == [{"monitor": 0, "window": 0, "label": "", "aktiv": False}] and marks == [] and protokoll == []
+    watcher.wechsle(monitor=2)
+    wait_for(lambda: marks)
+    watcher.stop()
+    watcher.join(timeout=5)
+    assert log == ["Standbilder: Monitor 2"] and marks[0].id == 1
+
+
+def test_bild_befehl_rundreise():
+    from audioscribe.live.events import bild_befehl, parse_bild_befehl
+
+    assert bild_befehl(2, 0) == "bild monitor 2" and parse_bild_befehl("bild monitor 2") == (2, 0)
+    assert bild_befehl(0, 4711) == "bild fenster 4711" and parse_bild_befehl("BILD Fenster 4711\n") == (0, 4711)
+    assert bild_befehl(2, 4711) == "bild fenster 4711"  # Fenster vor Monitor
+    assert bild_befehl() == "bild aus" and parse_bild_befehl("  bild aus ") == (0, 0)
+    for kaputt in ("stop", "bild", "bild monitor", "bild monitor x", "bild monitor 0", "bild monitor -1",
+                   "bild fenster 99999999999", "bild kamera 1", "bild aus jetzt", ""):
+        assert parse_bild_befehl(kaputt) is None, kaputt
+
+
+def test_session_stdin_wechselt_bildquelle(tmp_path, monkeypatch):
+    import io
+
+    from audioscribe.live.session import LiveOptions, LiveSession
+
+    monkeypatch.setattr(events, "emit", lambda typ, **d: None)
+    logged = []
+    monkeypatch.setattr(events, "log", logged.append)
+    session = LiveSession(LiveOptions(output_dir=tmp_path, model="m", device="cpu", compute_type="int8"))
+    gesehen = []
+    session._screen = SimpleNamespace(wechsle=lambda monitor=0, window=0: gesehen.append((monitor, window)))
+    monkeypatch.setattr("sys.stdin", io.StringIO("bild monitor 2\nquatsch\nbild fenster 4711\nbild aus\nstop\nbild monitor 3\n"))
+    session._watch_stdin()
+    assert gesehen == [(2, 0), (0, 4711), (0, 0)] and session._stop.is_set()  # nach "stop" wird nichts mehr gelesen
+
+    # Ohne Standbild-Thread (WAV-Replay, mss fehlt) nur ein Hinweis statt eines Fehlers.
+    session._screen = None
+    session.wechsle_bildquelle(2, 0)
+    assert logged[-1].startswith("Keine Bildquelle in dieser Sitzung")
 
 
 def test_screen_watcher_pauses_and_ends_with_window(tmp_path):
@@ -1269,6 +1415,57 @@ def test_live_runner_reset_after_end_clears_state(tmp_path):
     assert runner.reset() is None  # ein zweites Mal ist harmlos
 
 
+QUELLEN_KIND = r"""
+import sys, json
+def ev(**d): print("[Live] " + json.dumps(d), flush=True)
+ev(type="state", phase="laeuft", session="live-x", dir=sys.argv[1])
+ev(type="quelle", monitor=1, window=0, label="Monitor 1", aktiv=True)
+for line in sys.stdin:
+    teile = line.split()
+    if teile == ["stop"]:
+        break
+    if teile[:1] == ["bild"]:
+        if teile[1] == "aus": ev(type="quelle", monitor=0, window=0, label="", aktiv=False)
+        elif teile[1] == "monitor": ev(type="quelle", monitor=int(teile[2]), window=0, label="Monitor " + teile[2], aktiv=True)
+        else: ev(type="quelle", monitor=0, window=int(teile[2]), label="Fenster 'x'", aktiv=True)
+ev(type="state", phase="fertig")
+"""
+
+
+def test_live_runner_wechselt_bildquelle_nur_in_laufender_aufnahme(tmp_path):
+    from audioscribe.ui.jobs import LiveJobOptions
+    from audioscribe.ui.runner import LiveRunner
+
+    runner = LiveRunner()
+    with pytest.raises(RuntimeError):
+        runner.bildquelle(2, 0)  # nichts laeuft
+    runner.start(LiveJobOptions(output_dir=tmp_path, refine=False),
+                 argv_builder=lambda o: [sys.executable, "-c", QUELLEN_KIND, str(tmp_path)])
+    quelle = lambda: runner.snapshot().get("bildquelle")  # noqa: E731
+    assert wait_for(lambda: (q := quelle()) and q["monitor"] == 1 and q)["aktiv"] is True
+    runner.bildquelle(2, 0)
+    wait_for(lambda: quelle()["monitor"] == 2)
+    runner.bildquelle(2, 4711)  # Fenster vor Monitor
+    wait_for(lambda: quelle()["window"] == 4711)
+    assert quelle()["monitor"] == 0
+    runner.bildquelle()
+    wait_for(lambda: quelle()["aktiv"] is False)
+    runner.stop()
+    wait_for(lambda: not runner.snapshot()["running"])
+    with pytest.raises(RuntimeError):
+        runner.bildquelle(1, 0)
+
+    # Im Testmodus (Transkript abspielen) gibt es keine Bildquelle.
+    replay = LiveRunner()
+    replay.start(LiveJobOptions(output_dir=tmp_path, replay_transcript=tmp_path / "t.md"),
+                 argv_builder=lambda o: [sys.executable, "-c", QUELLEN_KIND, str(tmp_path)])
+    wait_for(lambda: replay.snapshot()["phase"] == "laeuft")
+    with pytest.raises(RuntimeError, match="Testmodus"):
+        replay.bildquelle(2, 0)
+    replay.stop()
+    wait_for(lambda: not replay.snapshot()["running"])
+
+
 def test_build_live_argv_and_refine_argv(tmp_path):
     from audioscribe.ui.jobs import LiveJobOptions, build_live_argv, build_refine_argv
 
@@ -1339,6 +1536,28 @@ def test_live_start_with_window_remembers_label(client, tmp_path, monkeypatch):
     assert saved["live_monitor"] == "2"  # Fensterwahl ueberschreibt den gemerkten Monitor nicht
     data = client.get("/api/live/defaults").json()
     assert data["source"] == "window" and data["window"] == "chrome – Jira"
+
+
+def test_live_bildquelle_route(client, monkeypatch):
+    from audioscribe.ui import state
+    from audioscribe.ui.runner import LiveRunner
+
+    assert client.post("/api/live/bildquelle", json={"window": -1}).status_code == 400
+    assert client.post("/api/live/bildquelle", json={"window": 2**40}).status_code == 400
+    assert client.post("/api/live/bildquelle", json={"monitor": -1}).status_code == 400
+    assert client.post("/api/live/bildquelle", json={"monitor": 2}).status_code == 409  # nichts laeuft
+
+    gesehen = []
+    monkeypatch.setattr(LiveRunner, "bildquelle", lambda self, monitor=0, window=0: gesehen.append((monitor, window)))
+    state.save_state({"live_monitor": "1"})
+    body = {"monitor": 1, "window": 4711, "window_label": "chrome – Jira"}
+    assert client.post("/api/live/bildquelle", json=body).json() == {"ok": True, "monitor": 0, "window": 4711}
+    assert client.post("/api/live/bildquelle", json={"monitor": 2}).status_code == 200
+    assert client.post("/api/live/bildquelle", json={}).status_code == 200
+    assert gesehen == [(0, 4711), (2, 0), (0, 0)]
+    saved = state.load_state()
+    # Wie beim Start: der zuletzt gewaehlte Monitor und das zuletzt gewaehlte Fenster bleiben gemerkt.
+    assert saved["live_source"] == "none" and saved["live_monitor"] == "2" and saved["live_window"] == "chrome – Jira"
 
 
 def test_live_window_preview_rejects_bad_handles(client):

@@ -530,6 +530,7 @@ nur das WAV-Replay. Designentscheidungen: PRD §17 und §19.
 .venv-win\Scripts\audioscribe.exe live --monitor 1 --mic 23  # Ende mit Strg+C oder "stop" + Enter
 .venv-win\Scripts\audioscribe.exe live --window 592902       # nur dieses Fenster
 .venv-win\Scripts\audioscribe.exe live --monitor 1 --loopback none   # ohne System-Audio (sonst Standardgerät oder Geräteindex)
+#   während der Aufnahme eintippen: "bild monitor 2", "bild fenster 592902" oder "bild aus" + Enter
 .venv-win\Scripts\audioscribe.exe refine output\live-2026-09-19_14-30-05 --model large-v3-turbo
 ```
 
@@ -543,7 +544,9 @@ nur das WAV-Replay. Designentscheidungen: PRD §17 und §19.
 **In der Oberfläche** (Projekt › „Live-Sitzung“): optional einen **Sitzungstitel** vergeben
 (er benennt später den Ordner im Wiki), Bildquelle wählen (Monitor mit Vorschaubild,
 Anwendungsfenster oder „nur Ton“), Mikrofon und System-Audio wählen, „Aufnahme starten“.
-Oben laufen Laufzeit, **Verzögerung** (Ende des Gesprochenen bis zur Anzeige) und
+Die Bildquelle lässt sich **während der Aufnahme wechseln**: einfach eine andere Kachel
+anklicken – das erste Bild der neuen Quelle wird gesichert, die Bildnummern laufen weiter,
+der Ton läuft ungestört durch. Oben laufen Laufzeit, **Verzögerung** (Ende des Gesprochenen bis zur Anzeige) und
 **Rückstand** mit. Rückstand ist fertig gesprochenes Audio, das auf die Transkription
 *wartet*; der Abschnitt, der gerade gerechnet wird, zählt nicht mit. Screenshots erscheinen
 rechts als Thumbnails. Gespeichert wird im Ordner für Sitzungen des Projekts (auf der

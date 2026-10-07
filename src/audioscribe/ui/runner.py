@@ -667,6 +667,7 @@ class LiveRunner(_ProcessRunner):
                 "fortgesetzt": getattr(opts, "resume_dir", None) is not None,  # Wiederaufnahme (PRD §21)
                 "pausiert": False,  # Abspielen angehalten (nur Transkript-Replay, z. B. die Demo)
                 "nachlauf": None,  # Ergebnis von on_ende, z. B. {"wiki_ablage": {...}}
+                "bildquelle": None,  # {monitor, window, label, aktiv} - wirksame Bildquelle (FR-37)
             }
             self._events = []
             self._discard = False
@@ -756,6 +757,26 @@ class LiveRunner(_ProcessRunner):
             proc.stdin.flush()
         except (OSError, ValueError) as exc:
             raise RuntimeError(f"Pause nicht möglich: {exc}") from exc
+
+    def bildquelle(self, monitor: int = 0, window: int = 0) -> None:
+        """Bildquelle der laufenden Aufnahme wechseln (``bild ...`` ueber stdin, FR-37).
+        ``window`` vor ``monitor``, beides 0 = nur Ton. Im Testmodus gibt es keine Bildquelle."""
+        from audioscribe.live.events import bild_befehl
+
+        with self._lock:
+            laeuft = self._info.get("running") and self._info.get("phase") == "laeuft"
+            replay = self._info.get("replay")
+            proc = self._proc
+        if not laeuft or proc is None or proc.poll() is not None:
+            raise RuntimeError("Es läuft gerade keine Aufnahme, deren Bildquelle sich wechseln ließe.")
+        if replay:
+            raise RuntimeError("Im Testmodus gibt es keine Bildquelle.")
+        try:
+            assert proc.stdin is not None
+            proc.stdin.write(bild_befehl(monitor, window) + "\n")
+            proc.stdin.flush()
+        except (OSError, ValueError) as exc:
+            raise RuntimeError(f"Wechsel der Bildquelle nicht möglich: {exc}") from exc
 
     def reset(self, *, timeout: float = 15.0) -> Path | None:
         """Alles auf Anfang: eine laufende Sitzung wird hart beendet (ohne Nachschaerfen),
@@ -911,6 +932,8 @@ class LiveRunner(_ProcessRunner):
                 self._info["download"] = event
             elif typ == "stats":
                 self._info["stats"] = event
+            elif typ == "quelle":
+                self._info["bildquelle"] = event
             elif typ == "fazit":
                 self._note_fazit(event)
             elif typ == "partial":

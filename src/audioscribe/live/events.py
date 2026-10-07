@@ -19,10 +19,43 @@ SHOT = "shot"  # id, t, file; restored=True nach Wiederaufnahme
 DOWNLOAD = "download"  # model, done, total (Bytes; nur wenn das Modell noch nicht im Cache liegt)
 STATS = "stats"  # elapsed, backlog, delay, level_mic, level_sys, partials_paused, rtf, catchup
 FAZIT = "fazit"  # teil ("live" | "nachschaerfen") + Felder der jeweiligen Bilanz (live/bilanz.py)
+QUELLE = "quelle"  # monitor, window, label, aktiv - die gerade abgetastete Bildquelle (auch nach einem Wechsel)
 
 
 def event_line(typ: str, **data: object) -> str:
     return PREFIX + json.dumps({"type": typ, **data}, ensure_ascii=False)
+
+
+# --- Befehle über stdin (Oberfläche -> Live-Prozess) ---------------------------------
+# ``stop`` beendet; ``bild monitor N`` / ``bild fenster HWND`` / ``bild aus`` wechseln die
+# Bildquelle während der Aufnahme (FR-37). Runner und Sitzung teilen sich die Syntax.
+
+BILD = "bild"
+
+
+def bild_befehl(monitor: int = 0, window: int = 0) -> str:
+    """Zeile für stdin; ``window`` hat Vorrang vor ``monitor``, beides 0 heißt "aus"."""
+    if window:
+        return f"{BILD} fenster {int(window)}"
+    if monitor:
+        return f"{BILD} monitor {int(monitor)}"
+    return f"{BILD} aus"
+
+
+def parse_bild_befehl(zeile: str) -> tuple[int, int] | None:
+    """``(monitor, window)`` einer ``bild``-Zeile oder ``None``, wenn es keine ist."""
+    teile = zeile.strip().lower().split()
+    if not teile or teile[0] != BILD:
+        return None
+    if teile[1:] == ["aus"]:
+        return (0, 0)
+    if len(teile) == 3 and teile[2].isdigit():
+        wert = int(teile[2])
+        if teile[1] == "monitor" and wert > 0:
+            return (wert, 0)
+        if teile[1] == "fenster" and 0 < wert < 2**32:
+            return (0, wert)
+    return None
 
 
 # print() schreibt Text und Zeilenende getrennt; aus mehreren Threads gerieten sonst zwei

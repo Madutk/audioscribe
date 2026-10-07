@@ -232,8 +232,11 @@ class WindowSource:
 class ScreenWatcher(threading.Thread):
     """Tastet die Bildquelle ab und meldet jedes gesicherte Standbild über ``on_shot``.
 
-    ``window`` (HWND) hat Vorrang vor ``monitor``; ``source_factory`` ersetzt beides
-    (für Tests ohne mss und WinAPI).
+    ``window`` (HWND) hat Vorrang vor ``monitor``; ``source_factory(monitor, window)``
+    ersetzt beides (für Tests ohne mss und WinAPI). Die Quelle lässt sich während der
+    Sitzung mit ``wechsle`` tauschen (FR-37): die alte wird geschlossen, die neue geöffnet,
+    ihr erstes Bild gesichert; ``monitor == window == 0`` heißt "aus" - der Thread wartet
+    dann auf die nächste Quelle. ``on_quelle`` meldet jede wirksame Quelle.
     """
 
     def __init__(
@@ -250,83 +253,130 @@ class ScreenWatcher(threading.Thread):
         min_gap: float = 4.0,
         max_bilder: int = DEFAULT_MAX_BILDER,
         log: Callable[[str], None] = print,
-        source_factory: Callable[[], object] | None = None,
+        source_factory: Callable[[int, int], object] | None = None,
         start_id: int = 0,
+        on_quelle: Callable[[dict], None] | None = None,
     ) -> None:
         super().__init__(name="audioscribe-screen", daemon=True)
         # Wiederaufnahme (PRD §21): Bild-IDs zählen ab der höchsten vorhandenen weiter, sonst
         # stünde "Bild #0001" zweimal im annotierten Transkript.
-        self._start_id = max(0, int(start_id))
-        self._monitor = monitor
-        self._window = window
+        self._anzahl = max(0, int(start_id))
+        self._wunsch = (int(monitor), int(window))
         self._out_dir = out_dir
         self._clock = clock
         self._on_shot = on_shot
+        self._on_quelle = on_quelle
         self._bildformat = bildformat if bildformat in FORMATS else DEFAULT_FORMAT
         self._fps = fps
         self._max_bilder = max_bilder
         self._log = log
         self._source_factory = source_factory
+        self._sensitivity = sensitivity
+        self._min_gap = min_gap
         self._detector = ChangeDetector(sensitivity, min_gap=min_gap)
+        self._pausiert = False
         self._halt = threading.Event()
+        self._wechsel = threading.Event()
+        self._wunsch_lock = threading.Lock()
 
     def stop(self) -> None:
         self._halt.set()
 
-    def _source(self):
+    def wechsle(self, monitor: int = 0, window: int = 0) -> None:
+        """Ab sofort diese Quelle abtasten (``window`` vor ``monitor``; beides 0 = aus).
+        Wirkt binnen einer Abtastung; die alte Quelle wird im Watcher-Thread geschlossen."""
+        with self._wunsch_lock:
+            self._wunsch = (int(monitor), int(window))
+        self._wechsel.set()
+
+    def _naechster_wunsch(self) -> tuple[int, int]:
+        with self._wunsch_lock:
+            self._wechsel.clear()
+            return self._wunsch
+
+    def _melde(self, monitor: int, window: int, label: str, aktiv: bool) -> None:
+        if self._on_quelle is None:
+            return
+        try:
+            self._on_quelle({"monitor": monitor, "window": window, "label": label, "aktiv": aktiv})
+        except Exception as exc:  # noqa: BLE001 - die Meldung darf die Bildaufnahme nie stören
+            self._log(f"Bildquelle nicht gemeldet: {exc}")
+
+    def _source(self, monitor: int, window: int):
         if self._source_factory is not None:
-            return self._source_factory()
-        return WindowSource(self._window) if self._window else MonitorSource(self._monitor)
+            return self._source_factory(monitor, window)
+        return WindowSource(window) if window else MonitorSource(monitor)
+
+    def _warte_auf_wechsel(self) -> None:
+        """Ohne Quelle (aus, nicht erreichbar, Fenster weg): bis zum nächsten Wunsch schlafen."""
+        while not self._halt.is_set() and not self._wechsel.is_set():
+            self._wechsel.wait(0.5)
 
     def run(self) -> None:
-        try:
-            with self._source() as source:
-                self._log(f"Standbilder: {source.label}")
-                self._loop(source)
-        except SourceUnavailable as exc:
-            self._log(f"{exc} - keine Standbilder")
-        except ImportError:  # mss wird erst hier, im Thread, geladen
-            self._log(MSS_FEHLT)
+        while not self._halt.is_set():
+            monitor, window = self._naechster_wunsch()
+            if not (monitor or window):
+                self._melde(0, 0, "", aktiv=False)
+                self._warte_auf_wechsel()
+                continue
+            try:
+                with self._source(monitor, window) as source:
+                    self._log(f"Standbilder: {source.label}")
+                    self._melde(monitor, window, source.label, aktiv=True)
+                    # Frischer Vergleichsstand: das erste Bild der neuen Quelle ist ein Startbild.
+                    self._detector = ChangeDetector(self._sensitivity, min_gap=self._min_gap)
+                    self._pausiert = False
+                    self._loop(source)
+            except SourceUnavailable as exc:
+                self._log(f"{exc} - keine Standbilder")
+                self._melde(monitor, window, "", aktiv=False)
+            except ImportError:  # mss wird erst hier, im Thread, geladen
+                self._log(MSS_FEHLT)
+                return
+            if not self._wechsel.is_set():
+                # Quelle weg oder nicht erreichbar: nur noch auf eine neue warten.
+                self._warte_auf_wechsel()
 
     def _loop(self, source) -> None:
         frames = self._out_dir / "frames"
         frames.mkdir(parents=True, exist_ok=True)
         suffix = FORMATS[self._bildformat][0]
-        anzahl = self._start_id
-        pausiert = False
         while not self._halt.wait(1.0 / self._fps):
+            if self._wechsel.is_set():
+                return
             try:
                 img = source.grab()
                 if img is None:
-                    if not pausiert:
+                    if not self._pausiert:
                         self._log("Fenster minimiert oder ausgeblendet - Standbilder pausieren")
-                        pausiert = True
+                        self._pausiert = True
                     continue
-                if pausiert:
+                if self._pausiert:
                     self._log("Fenster wieder sichtbar")
-                    pausiert = False
+                    self._pausiert = False
                 t = self._detector.feed(self._clock(), raster(img))
                 if t is None:
                     continue
-                if anzahl >= self._max_bilder:
-                    if anzahl == self._max_bilder:
+                if self._anzahl >= self._max_bilder:
+                    if self._anzahl == self._max_bilder:
                         self._log(f"Obergrenze von {self._max_bilder} Standbildern erreicht")
-                        anzahl += 1
+                        self._anzahl += 1
                     continue
-                anzahl += 1
-                name = shot_filename(anzahl, t, suffix)
+                self._anzahl += 1
+                name = shot_filename(self._anzahl, t, suffix)
                 save_shot(img, frames / name, self._bildformat)
                 self._on_shot(
                     Mark(
                         t=round(t, 3),
                         png=f"frames/{name}",
                         created=datetime.now().strftime("%Y-%m-%d %H:%M"),
-                        id=anzahl,
+                        id=self._anzahl,
                         kind=KIND_AUTO,
                     )
                 )
             except WindowGone:
                 self._log("Fenster geschlossen - keine weiteren Standbilder")
+                self._melde(0, 0, "", aktiv=False)
                 return
             except Exception as exc:  # noqa: BLE001 - ein Bild darf die Sitzung nie kippen
                 self._log(f"Standbild fehlgeschlagen: {exc}")

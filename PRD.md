@@ -513,8 +513,10 @@ Compliance-Anforderungen.
   App wäre erst für Tray-Icon, globale Hotkeys oder ein Overlay nötig.
 - **Subprozess wie `run` und `analyze`.** Die Oberfläche startet `audioscribe live` als
   Kindprozess. Ereignisse kommen als `[Live] {json}`-Zeilen über stdout, gestoppt wird über
-  stdin (`stop`), damit die Dateien sauber abgeschlossen werden. Das Prozessende gibt den
-  VRAM frei.
+  stdin (`stop`), damit die Dateien sauber abgeschlossen werden. Derselbe Kanal trägt die
+  wenigen Befehle, die eine laufende Sitzung versteht (`bild …` für den Wechsel der
+  Bildquelle, `pause`/`weiter` beim Transkript-Replay); der Prozess meldet die wirksame
+  Bildquelle als Ereignis `quelle` zurück. Das Prozessende gibt den VRAM frei.
 - **Zwei getrennte Audiospuren statt Mix.** Mikrofon und System-Audio werden getrennt
   aufgenommen – unter Windows WASAPI-Loopback (PyAudioWPatch), unter macOS ScreenCaptureKit
   plus CoreAudio (§19). Damit ist „Ich“ gegen „Gegenseite“ ohne Modell und ohne Fehler
@@ -568,7 +570,7 @@ Compliance-Anforderungen.
 
 | ID | Anforderung |
 |----|-------------|
-| FR-37 | `audioscribe live` schneidet einen wählbaren Monitor **oder ein einzelnes Anwendungsfenster**, das System-Audio und das Mikrofon mit, bis `stop` über stdin oder Strg+C eintrifft. Geräte und Bildquelle sind wählbar (`--mic`, `--loopback`, `--monitor`, `--window HWND`), jede Quelle ist abschaltbar. Ein Fenster wird per `PrintWindow` auch verdeckt aufgenommen; minimiert pausieren die Standbilder, geschlossen endet nur die Bildaufnahme. |
+| FR-37 | `audioscribe live` schneidet einen wählbaren Monitor **oder ein einzelnes Anwendungsfenster**, das System-Audio und das Mikrofon mit, bis `stop` über stdin oder Strg+C eintrifft. Geräte und Bildquelle sind wählbar (`--mic`, `--loopback`, `--monitor`, `--window HWND`), jede Quelle ist abschaltbar. Ein Fenster wird per `PrintWindow` auch verdeckt aufgenommen; minimiert pausieren die Standbilder, geschlossen endet nur die Bildaufnahme. **Die Bildquelle lässt sich während der Aufnahme wechseln** – in der Oberfläche durch Anklicken einer anderen Kachel (Monitor, Fenster, „nur Ton“), auf der Kommandozeile mit `bild monitor N`, `bild fenster HWND` oder `bild aus` über stdin. Das erste Bild der neuen Quelle wird gesichert, die Bildnummern laufen weiter, Audio läuft ungestört; auch nach einem geschlossenen Fenster oder einem Start mit „nur Ton“ lässt sich eine Quelle einschalten. Der Wechsel gilt nur für die laufende Sitzung – eine Wiederaufnahme übernimmt Bildquellen nicht. Im Testmodus (FR-64) gibt es keine Bildquelle. |
 | FR-38 | Abgeschlossene Sprechabschnitte erscheinen als Text mit Zeitstempel und Sprecher. Der laufende Abschnitt erscheint als vorläufiger Text (abschaltbar mit `--no-partials`). |
 | FR-39 | Die **Verzögerung** (Ende des Gesprochenen bis zur Anzeige) und der **Rückstand** (fertig gesprochenes Audio, das auf die Transkription wartet – ohne den Abschnitt in Arbeit) werden laufend gemeldet und angezeigt. |
 | FR-40 | Sprecher: Mikrofon = „Ich“. Die System-Spur wird per Online-Clustering in „Sprecher N“ getrennt; ohne HF-Token oder mit `--no-speakers` heißt sie „Gegenseite“. |

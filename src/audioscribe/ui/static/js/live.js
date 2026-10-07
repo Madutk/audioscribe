@@ -18,6 +18,9 @@ let liveSource = { kind: 'monitor', id: 1 };  // kind: monitor | window (id = HW
 let liveShots = [];        // {id, t, file}
 let liveSession = null;
 let liveRunning = false;
+let liveReplay = false;     // Testmodus laeuft (dort gibt es keine Bildquelle)
+let liveQuelle = null;      // vom Aufnahmeprozess gemeldete Bildquelle {monitor, window, label, aktiv}
+let switchPending = false;  // Wechsel der Bildquelle unterwegs - der Status soll ihn nicht ueberholen
 let lightboxIndex = 0;
 let liveDir = null;         // Sitzungsordner der laufenden bzw. letzten Sitzung
 let liveAblage = null;      // Wiki-Ablage dieser Sitzung (automatisch oder per Dialog)
@@ -110,7 +113,12 @@ const sourceTile = (kind, id, inner) =>
 /** Die eine Kachel "Anwendungsfenster" in der Karte: gewaehltes Fenster mit Vorschau oder Platzhalter.
  *  Sie oeffnet den Auswahldialog und traegt darum KEIN data-kind. */
 function windowTileHtml(stamp) {
-  const chosen = liveSource.kind === 'window' && liveDefaults.windows.find((w) => w.hwnd === liveSource.id);
+  let chosen = liveSource.kind === 'window' && liveDefaults.windows.find((w) => w.hwnd === liveSource.id);
+  // Nach einem Neuladen der Seite kennt die Fensterliste das Fenster der laufenden Aufnahme
+  // vielleicht nicht mehr - der Aufnahmeprozess hat seinen Titel gemeldet.
+  if (!chosen && liveSource.kind === 'window' && liveQuelle && liveQuelle.window === liveSource.id) {
+    chosen = { hwnd: liveSource.id, title: liveQuelle.label.replace(/^Fenster '(.*)'$/, '$1'), process: 'laufende Aufnahme' };
+  }
   if (!chosen && !liveDefaults.windows.length && liveSource.kind !== 'window') return '';  // z. B. ausserhalb von Windows/macOS
   const attrs = 'data-winpick="window" tabindex="0" role="button" aria-haspopup="dialog" title="Anwendungsfenster wählen"';
   if (!chosen) {
@@ -134,7 +142,19 @@ function renderSources() {
     .join('') + sourceTile('none', 0, '<div class="none">ohne Bildschirm</div>nur Ton');
   $('liveMonitors').innerHTML = `<div class="monitors">${monitors}${windowTileHtml(stamp)}${testTileHtml()}</div>`;
   fallbackOnError($('liveMonitors'), 'kein Bild');
+  updateSourceTiles();
   updateSourceHint();
+}
+
+/** Waehrend einer Aufnahme ist der Testmodus tabu, im Testmodus jede Bildquelle (FR-37). */
+function updateSourceTiles() {
+  for (const t of $('liveMonitors').querySelectorAll('.monitor')) {
+    const test = t.dataset.kind === 'transcript';
+    const aus = liveRunning && (liveReplay || test);
+    t.classList.toggle('disabled', aus);
+    t.setAttribute('aria-disabled', String(aus));
+    t.tabIndex = aus ? -1 : 0;
+  }
 }
 
 /** Nur die Fenster-Kachel neu zeichnen und die Markierung setzen - Monitorbilder bleiben stehen. */
@@ -147,16 +167,58 @@ function renderWindowTile() {
     t.classList.toggle('active', isActive(t.dataset.kind, Number(t.dataset.id)));
   }
   fallbackOnError($('liveMonitors'), 'kein Bild');
+  updateSourceTiles();
   updateSourceHint();
 }
 
 function updateSourceHint() {
-  $('liveSourceHint').textContent = liveSource.kind === 'window'
+  const quelle = liveSource.kind === 'window'
     ? 'Nur das gewählte Fenster wird abgetastet – diese Oberfläche darf auf demselben Monitor liegen.'
     : liveSource.kind === 'monitor'
       ? 'Diese Oberfläche gehört nicht auf den überwachten Monitor – neue Thumbnails würden sonst selbst Bildwechsel auslösen.'
       : '';
+  const wechsel = liveRunning && !liveReplay
+    ? 'Ein Wechsel gilt sofort – das erste Bild der neuen Quelle wird gesichert.' : '';
+  $('liveSourceHint').textContent = [quelle, wechsel].filter(Boolean).join(' ');
   updateTestMode();
+}
+
+/** Quelle uebernehmen - und waehrend einer Aufnahme sofort an den Aufnahmeprozess geben (FR-37).
+ *  Schlaegt das fehl, bleibt die bisherige Quelle markiert. */
+async function switchSource(next) {
+  const vorher = liveSource;
+  liveSource = next;
+  renderWindowTile();
+  if (!liveRunning || liveReplay) return;
+  switchPending = true;
+  $('liveErr').textContent = '';
+  try {
+    await post('/api/live/bildquelle', {
+      monitor: next.kind === 'monitor' ? next.id : 0,
+      window: next.kind === 'window' ? next.id : 0,
+      window_label: next.kind === 'window'
+        ? windowLabel(liveDefaults.windows.find((w) => w.hwnd === next.id) || { process: '', title: '' }) : '',
+    });
+  } catch (err) {
+    liveSource = vorher;
+    renderWindowTile();
+    $('liveErr').textContent = err.message;
+    toast(err.message, 'fehler');
+  } finally {
+    switchPending = false;
+  }
+}
+
+/** Die vom Aufnahmeprozess gemeldete Quelle als Kachel markieren - nach einem Neuladen der
+ *  Seite oder einem Wechsel von der Konsole (``bild monitor 2`` auf stdin). */
+function syncSourceFromStatus(q) {
+  liveQuelle = q || null;
+  if (!q || switchPending || liveSource.kind === 'transcript') return;
+  const next = q.window ? { kind: 'window', id: q.window }
+    : q.monitor ? { kind: 'monitor', id: q.monitor } : { kind: 'none', id: 0 };
+  if (isActive(next.kind, next.id)) return;
+  liveSource = next;
+  renderWindowTile();
 }
 
 /** Testmodus-Unteroptionen und Startknopf folgen der gewaehlten Kachel. */
@@ -346,6 +408,9 @@ async function pollLive() {
 
   const warLaufend = liveRunning;
   const running = liveRunning = !!s.running;
+  liveReplay = !!s.replay;
+  if (running && !s.replay) syncSourceFromStatus(s.bildquelle);
+  if (warLaufend !== running) { updateSourceTiles(); updateSourceHint(); }
   if (running && $('liveResume').firstChild) $('liveResume').innerHTML = '';
   $('liveStart').hidden = running;
   $('liveStop').hidden = !running;
@@ -477,10 +542,9 @@ $('liveRefresh').onclick = () => ladeDefaults().then(loadLiveDefaults)
   .catch((err) => { $('liveErr').textContent = err.message; });
 $('liveMonitors').onclick = (e) => {
   const tile = e.target.closest('.monitor');
-  if (!tile) return;
+  if (!tile || tile.classList.contains('disabled')) return;
   if (tile.dataset.winpick) { openWinPick(tile); return; }
-  liveSource = { kind: tile.dataset.kind, id: Number(tile.dataset.id) };
-  renderWindowTile();
+  switchSource({ kind: tile.dataset.kind, id: Number(tile.dataset.id) });
 };
 // Kacheln sind fokussierbar: Enter/Leertaste wirken wie ein Klick.
 const clickOnKey = (e) => {
@@ -562,9 +626,8 @@ function closeWinPick() {
 }
 
 function chooseWindow(hwnd) {
-  liveSource = { kind: 'window', id: hwnd };
   closeWinPick();
-  renderWindowTile();  // ersetzt die Kachel, die eben noch den Fokus hatte
+  switchSource({ kind: 'window', id: hwnd });  // ersetzt die Kachel, die eben noch den Fokus hatte
   const tile = $('liveMonitors').querySelector('[data-winpick]');
   if (tile) tile.focus();
 }

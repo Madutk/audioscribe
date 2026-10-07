@@ -367,6 +367,13 @@ def create_app():
     class PauseIn(BaseModel):
         pausiert: bool = True
 
+    class BildquelleIn(BaseModel):
+        """Bildquelle waehrend der Aufnahme wechseln (FR-37): wie beim Start, ohne alles andere."""
+
+        monitor: int = 0
+        window: int = 0  # HWND; hat Vorrang vor monitor
+        window_label: str = ""  # "Prozess – Titel", nur zum Merken
+
     class StartIn(BaseModel):
         input_dir: str
         output_dir: str
@@ -1387,6 +1394,27 @@ def create_app():
         except RuntimeError as exc:
             raise HTTPException(409, str(exc)) from exc
         return JSONResponse({"ok": True, "pausiert": body.pausiert})
+
+    @app.post("/api/live/bildquelle")
+    def api_live_bildquelle(body: BildquelleIn):
+        """Bildquelle der laufenden Aufnahme wechseln: Monitor, Fenster oder nur Ton (FR-37).
+        Die Wahl wird wie beim Start gemerkt, damit der naechste Start sie vorschlaegt."""
+        if body.monitor < 0 or not 0 <= body.window < 2**32:
+            raise HTTPException(400, "Ungueltige Bildquelle.")
+        monitor = 0 if body.window else body.monitor
+        try:
+            live.bildquelle(monitor, body.window)
+        except RuntimeError as exc:
+            raise HTTPException(409, str(exc)) from exc
+        gemerkt = {"live_monitor": str(monitor)} if monitor else {}
+        state.save_state(
+            {
+                **gemerkt,
+                "live_source": "window" if body.window else ("monitor" if monitor else "none"),
+                "live_window": body.window_label.strip()[:200],
+            }
+        )
+        return JSONResponse({"ok": True, "monitor": monitor, "window": body.window})
 
     @app.post("/api/live/stop")
     def api_live_stop():
