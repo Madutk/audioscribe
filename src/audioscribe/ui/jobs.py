@@ -368,6 +368,7 @@ class AnalyseOptions:
     skills_dir: Path | None = None
     model: str = "claude-opus-5"
     bash: bool = True
+    dienst: str = "claude-agent"  # "ollama" = lokales Modell (experimentell)
 
 
 def build_analyze_argv(opts: AnalyseOptions, *, prefix: Sequence[str] | None = None) -> list[str]:
@@ -395,6 +396,9 @@ def build_analyze_argv(opts: AnalyseOptions, *, prefix: Sequence[str] | None = N
         argv.append("--no-skills")
     if not opts.bash:
         argv.append("--no-bash")
+    # Nur abweichend vom Default anhaengen: die Kommandozeile bleibt fuer Claude unveraendert.
+    if opts.dienst and opts.dienst != "claude-agent":
+        argv.append(f"--ki-dienst={opts.dienst}")
     return argv
 
 

@@ -8,6 +8,8 @@ entscheidet ``make_ki`` anhand des Backends; Oberfläche und Ausgaben kennen nur
   CLI-Prozess; die Startzeit wird getrennt gemessen (``KiAntwort.start_s``). Sitzungsdateien
   der CLI werden abgeschaltet (``--no-session-persistence``) und ersatzweise gelöscht, damit
   keine Transkript- oder Wiki-Auszüge auf der Platte bleiben.
+- ``OllamaKi`` (``ki_ollama.py``): lokales Modell über Ollama auf diesem Rechner; ein
+  Chat-Aufruf je Fenster mit Schema-Zwang, nichts verlässt den Rechner, Verbrauch zählt nicht.
 - ``AttrappeKi``: deterministische Regeln ohne Netz - für Tests und als Notnagel, wenn kein
   Dienst erreichbar ist (dann sagt der Status das).
 """
@@ -24,8 +26,9 @@ from typing import Any, Callable, Protocol
 from audioscribe.verbrauch import Verbrauch, aus_ergebnis
 
 BACKEND_CLAUDE = "claude-agent"
+BACKEND_OLLAMA = "ollama"  # lokales Modell ueber Ollama, siehe souffleur/ki_ollama.py
 BACKEND_ATTRAPPE = "attrappe"
-BACKENDS: tuple[str, ...] = (BACKEND_CLAUDE, BACKEND_ATTRAPPE)
+BACKENDS: tuple[str, ...] = (BACKEND_CLAUDE, BACKEND_OLLAMA, BACKEND_ATTRAPPE)
 
 # Reihenfolge = Vorschlagsliste in den Einstellungen; das erste ist der Default (Tempo).
 SOUFFLEUR_MODELS: tuple[str, ...] = (
@@ -313,6 +316,19 @@ def sdk_verfuegbar() -> bool:
     return True
 
 
+def modell_fuer(backend: str, modell: str | None) -> str:
+    """Das Modell, das zum Dienst passt. Nach einem Dienstwechsel steht in den Einstellungen
+    oft noch das Modell des anderen Dienstes - dann gilt der Default des neuen Dienstes."""
+    backend = (backend or BACKEND_CLAUDE).strip().lower()
+    m = (modell or "").strip()
+    if backend == BACKEND_OLLAMA:
+        from audioscribe.souffleur.ki_ollama import lokales_modell
+
+        return lokales_modell(m)
+    # Ollama-Tags tragen einen Doppelpunkt (qwen3.6:35b-a3b); Claude-IDs und Aliase nie.
+    return m if m and ":" not in m else DEFAULT_MODEL
+
+
 def make_ki(
     backend: str,
     modell: str,
@@ -325,12 +341,34 @@ def make_ki(
     """Den konfigurierten Dienst bauen. Fehlt er, kommt ``None`` und ein Status, der das sagt -
     der Souffleur läuft dann ohne KI weiter (Fragen-Erkennung und Essenz entfallen)."""
     backend = (backend or BACKEND_CLAUDE).strip().lower()
-    modell = (modell or DEFAULT_MODEL).strip()
+    modell = modell_fuer(backend, modell)
     if backend == BACKEND_ATTRAPPE:
         return AttrappeKi(regeln=regeln), KiStatus("bereit", backend, "attrappe", "KI-Attrappe (regelbasiert, ohne Netz)")
+    if backend == BACKEND_OLLAMA:
+        return _make_ollama(modell, log=log)
     if backend != BACKEND_CLAUDE:
         return None, KiStatus("fehlt", backend, modell, f"Unbekanntes KI-Backend: {backend}")
     if not sdk_verfuegbar():
         return None, KiStatus("fehlt", backend, modell, INSTALL_HINT)
     ki = ClaudeAgentKi(modell, cwd=Path(cache_dir) / "souffleur", log=log, on_verbrauch=on_verbrauch)
     return ki, KiStatus("bereit", backend, modell, f"KI bereit (Modell {modell})")
+
+
+def _make_ollama(modell: str, *, log: Callable[[str], None] | None) -> tuple[Any | None, KiStatus]:
+    """Lokaler Dienst: erst prüfen, ob er läuft und das Modell geladen ist - sonst sagt der
+    Status, was zu tun ist, statt dass jedes Fenster scheitert."""
+    from audioscribe.config import settings
+    from audioscribe.souffleur.ki_ollama import OllamaKi, ollama_status
+
+    status = ollama_status(settings.ollama_url)
+    if not status.erreichbar:
+        return None, KiStatus(
+            "fehlt", BACKEND_OLLAMA, modell,
+            f"Lokale KI nicht erreichbar unter {settings.ollama_url} ('ollama serve' starten)",
+        )
+    if not status.hat_modell(modell):
+        return None, KiStatus(
+            "fehlt", BACKEND_OLLAMA, modell, f"Lokales Modell {modell} nicht geladen - 'ollama pull {modell}'"
+        )
+    ki = OllamaKi(modell, url=settings.ollama_url, keep_alive=settings.ollama_keep_alive, log=log)
+    return ki, KiStatus("bereit", BACKEND_OLLAMA, modell, f"KI bereit (lokal auf diesem Rechner, Modell {modell})")

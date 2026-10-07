@@ -1,7 +1,7 @@
 // Startseite (vier Einstiege, zuletzt geoeffnete Projekte, unterbrochene Sitzungen) und der
 // Assistent "Neues Projekt" (PRD §21).
 
-import { $, S, api, post, esc, icon, hms, toast, fillOptions, sep, trimSep, dirname } from './kern.js';
+import { $, S, api, post, esc, icon, hms, toast, fillOptions, sep, trimSep, dirname, dienstHinweis, modelleFuer, passendesModell } from './kern.js';
 import { go, HOME, setKontext, wechsle, oeffneProjekt, ladeKontext } from './kontext.js';
 import { pickFolder } from './dialoge.js';
 import { renderWikiState, slugify } from './wiki.js';
@@ -130,13 +130,29 @@ export async function enterNeu() {
     W.optionen = e;
     const global = (liste, wert) => `Globale Einstellung (${(liste.find((x) => x.id === wert) || { label: wert }).label})`;
     fillOptions($('wizKiDienst'), e.optionen.ki_dienste, '', global(e.optionen.ki_dienste, e.werte.ki_dienst));
-    fillOptions($('wizSouffleurModel'), e.optionen.souffleur_models, '', global(e.optionen.souffleur_models, e.werte.souffleur_model));
-    fillOptions($('wizAgentModel'), e.optionen.agent_models, '', global(e.optionen.agent_models, e.werte.agent_model));
     fillOptions($('wizSprache'), e.optionen.sprachen, '', global(e.optionen.sprachen, e.werte.sprache));
+    zeigeWizModelle();
   } catch (err) {
     $('wizErr').textContent = err.message;
   }
 }
+
+/** Modell-Listen passend zum im Assistenten gewaehlten (sonst globalen) KI-Dienst. */
+function zeigeWizModelle() {
+  const e = W.optionen;
+  if (!e) return;
+  const dienst = $('wizKiDienst').value || e.werte.ki_dienst;
+  const global = (liste, wert) => `Globale Einstellung (${(liste.find((x) => x.id === wert) || { label: wert }).label})`;
+  for (const [id, key] of [['wizSouffleurModel', 'souffleur_model'], ['wizAgentModel', 'agent_model']]) {
+    const alle = e.optionen[key + 's'];
+    const liste = modelleFuer(alle, dienst);
+    // Weicht der Dienst vom globalen ab, passt das globale Modell nicht - dann das erste der Liste vorwaehlen.
+    const eigen = $('wizKiDienst').value && dienst !== e.werte.ki_dienst ? passendesModell(alle, dienst, e.werte[key]) : '';
+    fillOptions($(id), liste, eigen, global(alle, e.werte[key]));
+  }
+  $('wizKiDienstHint').textContent = dienstHinweis(dienst);
+}
+$('wizKiDienst').onchange = zeigeWizModelle;
 
 function showStep() {
   for (let n = 1; n <= LETZTER; n += 1) $('wiz' + n).hidden = n !== W.step;

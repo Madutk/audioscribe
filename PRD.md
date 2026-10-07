@@ -6,7 +6,7 @@
 |---|---|
 | **Status** | Entwurf |
 | **Datum** | 2026-06-30 |
-| **Fortschreibung** | 2026-10-06: §21 Projekte, Startseite, Wiki-Ablage und Wiederaufnahme (FR-66 … FR-77, NFR-25 … NFR-29); KI-Verbrauch (FR-78); Markierungen nur auf Wunsch ins Wiki (FR-71/FR-72) |
+| **Fortschreibung** | 2026-10-07: lokale KI über Ollama (§20.2 Stufe 2, KI-Analyse lokal experimentell in §16) · 2026-10-06: §21 Projekte, Startseite, Wiki-Ablage und Wiederaufnahme (FR-66 … FR-77, NFR-25 … NFR-29); KI-Verbrauch (FR-78); Markierungen nur auf Wunsch ins Wiki (FR-71/FR-72) |
 | **Autor** | Marek (madutkow@googlemail.com) |
 
 ---
@@ -410,6 +410,12 @@ einer KI zur Auswertung vorlegen kann.
 ## 16. Ausbaustufe: KI-Analyse per Claude-Agent
 
 > Status: umgesetzt (autonomer Lauf) · optionales Extra `agent` · Dialogmodus vorbereitet, nicht umgesetzt.
+> Lokal (experimentell): Mit KI-Dienst `ollama` (§20.2) läuft derselbe Agent über die
+> Anthropic-kompatible Schnittstelle von Ollama (`ANTHROPIC_BASE_URL`/`ANTHROPIC_AUTH_TOKEN`
+> an Claude Code, `audioscribe analyze --ki-dienst ollama`). Werkzeuge, Skills und Leitplanken
+> bleiben gleich; Qualität und Dauer hängen am lokalen Modell, der Dienst braucht
+> `OLLAMA_CONTEXT_LENGTH` ≥ 32k, Standbilder kann das Modell je nach Build nicht lesen.
+> Verbrauch wird nicht gezählt (FR-78).
 
 ### 16.1 Ziel
 
@@ -785,6 +791,12 @@ mehrere Wikis sind nicht enthalten.
   Stufe 1: Claude Agent SDK, werkzeugloser Einzelaufruf je Fenster mit JSON-Schema-Antwort,
   Sitzungsdateien der CLI abgeschaltet und ersatzweise gelöscht, Arbeitsordner nie der
   Wiki-Pfad. Oberfläche und Ausgaben sagen nur „KI“.
+  Stufe 2 (`ollama`, `souffleur/ki_ollama.py`): lokales Modell über Ollama auf demselben
+  Rechner, ein Chat-Aufruf je Fenster mit Schema-Zwang (`format`), ohne Denken, Temperatur 0;
+  nichts verlässt den Rechner, der Verbrauch zählt nicht (FR-78). Die Factory prüft vorab, ob
+  der Dienst läuft und das Modell geladen ist, und sagt sonst, was zu tun ist (`ollama serve`,
+  `ollama pull`). Der Dienst ist global und je Projekt wählbar (FR-69); die Modell-Listen der
+  Oberfläche folgen dem Dienst.
 - **Ein KI-Aufruf je Fenster** mit lokal vorgesuchten Auszügen; lokale Validierung (Aussage
   wörtlich im Segment, Zitat wörtlich im Auszug, Widerspruch nur mit Zitat, Dedup).
 - **Souffleur im Server-Prozess** (Worker-Thread je Sitzung, gefüttert vom LiveRunner),

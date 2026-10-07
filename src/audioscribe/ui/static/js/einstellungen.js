@@ -1,7 +1,7 @@
 // Einstellungen: global (KI, Sprache, Umgebung) und je Projekt (Ordner, Wiki-Ablage, KI und
 // Sprache mit "globale Einstellung verwenden"). Aenderungen gelten sofort (PRD §21).
 
-import { $, api, post, put, esc, icon, empty, projekt, fillOptions, toast, sep, trimSep } from './kern.js';
+import { $, api, post, put, esc, icon, empty, projekt, fillOptions, toast, sep, trimSep, dienstHinweis, modelleFuer, passendesModell } from './kern.js';
 import { setKontext } from './kontext.js';
 import { pickFolder, askConfirm } from './dialoge.js';
 import { renderWikiState, loadWikiStatus } from './wiki.js';
@@ -12,8 +12,23 @@ const G = { ki_dienst: 'gKiDienst', souffleur_model: 'gSouffleurModel', agent_mo
 const OPT = { ki_dienst: 'ki_dienste', souffleur_model: 'souffleur_models', agent_model: 'agent_models', sprache: 'sprachen' };
 let einst = null;   // letzte Antwort von /api/einstellungen
 
+const MODELLE = ['souffleur_model', 'agent_model'];
+
 function zeigeGlobal() {
-  for (const [key, id] of Object.entries(G)) fillOptions($(id), einst.optionen[OPT[key]], einst.werte[key]);
+  const dienst = einst.werte.ki_dienst;
+  for (const [key, id] of Object.entries(G)) {
+    // Modelle nur die des gewaehlten Dienstes (Claude-IDs bzw. lokale Tags).
+    const liste = MODELLE.includes(key) ? modelleFuer(einst.optionen[OPT[key]], dienst) : einst.optionen[OPT[key]];
+    fillOptions($(id), liste, einst.werte[key]);
+  }
+  $('gKiDienstHint').textContent = dienstHinweis(dienst);
+}
+
+/** Beim Dienstwechsel wandern die Modelle mit: ein Claude-Modell passt nicht zur lokalen KI
+ *  und umgekehrt - sonst bliebe ein unpassender Wert gespeichert. */
+function mitModellen(body, dienst, werte) {
+  for (const key of MODELLE) body[key] = passendesModell(einst.optionen[OPT[key]], dienst, werte[key]);
+  return body;
 }
 
 export async function enterEinstellungen() {
@@ -31,7 +46,9 @@ for (const [key, id] of Object.entries(G)) {
   $(id).onchange = async () => {
     $('gErr').textContent = '';
     try {
-      einst = await post('/api/einstellungen', { [key]: $(id).value });
+      let body = { [key]: $(id).value };
+      if (key === 'ki_dienst') body = mitModellen(body, $(id).value, einst.werte);
+      einst = await post('/api/einstellungen', body);
       zeigeGlobal();
       toast('Einstellung gespeichert');
       // Die wirksamen Werte eines geoeffneten Projekts haengen davon ab.
@@ -110,10 +127,12 @@ export function zeigeProjekt() {
   $('pBilder').checked = p.wiki_bilder !== false;
   $('pMarkierungen').checked = p.wiki_markierungen === true;
   if (!einst) return;
+  const dienst = p.eigen.ki_dienst || einst.werte.ki_dienst;  // der im Projekt wirksame Dienst
+  $('pKiDienstHint').textContent = dienstHinweis(dienst);
   for (const [key, id] of Object.entries(P)) {
     const global = einst.werte[key];
     const eigen = p.eigen[key] || '';
-    let liste = einst.optionen[OPT[key]];
+    let liste = MODELLE.includes(key) ? modelleFuer(einst.optionen[OPT[key]], dienst) : einst.optionen[OPT[key]];
     const label = (liste.find((x) => x.id === global) || { label: global }).label;
     // Ein Projektwert ausserhalb der Liste (aelteres Modell) bleibt sichtbar und wirksam.
     if (eigen && !liste.some((x) => x.id === eigen)) liste = [{ id: eigen, label: eigen }, ...liste];
@@ -173,5 +192,14 @@ $('pBilder').onchange = () => speichere({ wiki_bilder: $('pBilder').checked });
 $('pMarkierungen').onchange = () => speichere({ wiki_markierungen: $('pMarkierungen').checked });
 for (const [key, id] of Object.entries(P)) {
   // Leerer Wert = wieder die globale Einstellung verwenden
-  $(id).onchange = () => speichere({ [key]: $(id).value || null });
+  $(id).onchange = () => {
+    const wert = $(id).value || null;
+    if (key !== 'ki_dienst') return speichere({ [key]: wert });
+    // Dienstwechsel im Projekt: Modelle passend dazu festlegen, zurueck zu global = alles global.
+    const p = projekt();
+    const felder = wert
+      ? mitModellen({ ki_dienst: wert }, wert, { ...einst.werte, ...(p ? p.eigen : {}) })
+      : { ki_dienst: null, souffleur_model: null, agent_model: null };
+    return speichere(felder);
+  };
 }

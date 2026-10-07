@@ -178,6 +178,7 @@ textarea.small { min-height: 60px; font: 12px/1.5 var(--mono); }
 
 /* --- Einstellungen: Zielhinweise und Umgebungs-Check -------------------------- */
 .hint.target code { overflow-wrap: anywhere; }
+.hint.warn { color: var(--warn); }
 .hint.target a.goto { color: var(--accent); text-decoration: none; font-weight: 500; margin-left: 2px; }
 .hint.target a.goto:hover { text-decoration: underline; }
 .envlist { display: flex; flex-direction: column; gap: 4px; }

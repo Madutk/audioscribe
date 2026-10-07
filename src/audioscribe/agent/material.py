@@ -43,6 +43,9 @@ class Auftrag:
     kontext_dateien: tuple[Path, ...] = ()
     skills: tuple[str, ...] = ()
     model: str | None = None
+    # KI-Dienst: "claude-agent" (Claude Code mit seiner Anmeldung) oder "ollama" (lokales
+    # Modell auf diesem Rechner, experimentell - Claude Code wird per Umgebung umgeleitet).
+    dienst: str = "claude-agent"
     max_turns: int | None = None
     bash: bool = True
     prozessbild: bool = True  # prozessbild.png/.svg aus dem Mermaid-Diagramm (FR-35)

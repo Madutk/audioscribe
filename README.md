@@ -16,6 +16,7 @@ Modellgewichte.
 | KI-Analyse | Claude-Agent macht aus Transkript und Bildern Prozessdoku, Prozessbild, BPMN | [→](#ki-analyse-per-claude-agent) |
 | Live-Transkription | Monitor, System-Audio und Mikrofon live mitschneiden (Windows, macOS); nach einem Absturz fortsetzbar | [→](#live-transkription-windows-und-macos), [Wiederaufnahme](#absturzsicherung-und-wiederaufnahme) |
 | Souffleur | Live-Abgleich des Gesagten mit einem LLM-Wiki: Widersprüche, offene Punkte, Fragen mit Antwort aus dem Wiki, Essenz der letzten Minuten – nur für den Moderator | [→](#souffleur-live-abgleich-mit-dem-wiki) |
+| Lokale KI | Souffleur (und experimentell die KI-Analyse) mit einem lokalen Modell über Ollama statt Claude – nichts verlässt den Rechner | [→](#lokale-ki-ollama) |
 
 **Technik:** WhisperX mit faster-whisper `large-v3` (Transkription) → wav2vec2
 (Wort-Alignment) → pyannote `speaker-diarization-3.1` (Sprecher). Die Modelle laufen
@@ -447,7 +448,8 @@ Claude Code. Mit Pro-/Max-Abo braucht es keinen API-Key und es fallen keine zus�
 Kosten an. **Achtung:** Ein gesetzter `ANTHROPIC_API_KEY` hat Vorrang und rechnet über
 das API-Guthaben ab; `audioscribe doctor` zeigt, welcher Weg aktiv ist. Jedes angesehene
 Standbild kostet Tokens; bei Hunderten Bildern helfen `--frame-sensitivity grob` oder ein
-größerer `--frame-min-gap`.
+größerer `--frame-min-gap`. Mit dem KI-Dienst „Lokal (Ollama)“ läuft derselbe Agent
+experimentell über ein lokales Modell, siehe [Lokale KI](#lokale-ki-ollama).
 
 **KI-Verbrauch:** Sobald eine KI außer Haus gearbeitet hat (Souffleur, KI-Analyse), steht
 oben rechts neben dem Zahnrad der Verbrauch seit Programmstart: Tokens und ungefährer Preis
@@ -798,13 +800,16 @@ Aussage muss wörtlich im Segment stehen, das Zitat wörtlich im gelieferten Aus
 Widerspruch ohne Zitat wird verworfen, Dubletten werden unterdrückt, unsichere Befunde
 nur mit Einstellung `souffleur_sensibel`. Erst dann wird markiert.
 
-**KI-Dienst:** austauschbar; in den Einstellungen steht „Claude (Agent SDK)“, das die
-Anmeldung von Claude Code nutzt. `AUDIOSCRIBE_SOUFFLEUR_BACKEND=attrappe` schaltet für Tests
-auf einen regelbasierten Ersatz ohne Netz. Dienst und Modell stehen in den Einstellungen;
-in der Souffleur-Karte selbst heißt es nur „KI“. Jeder
-Aufruf läuft ohne Werkzeuge in einem leeren Arbeitsordner unter `~/.cache/audioscribe/souffleur`,
-Sitzungsdateien des KI-Prozesses werden abgeschaltet bzw. gelöscht: keine Transkript- oder
-Wiki-Auszüge bleiben außerhalb des Sitzungsordners liegen.
+**KI-Dienst:** austauschbar; in den Einstellungen stehen „Claude (Agent SDK)“, das die
+Anmeldung von Claude Code nutzt, und „Lokal (Ollama auf diesem Rechner)“, siehe
+[Lokale KI](#lokale-ki-ollama). `AUDIOSCRIBE_SOUFFLEUR_BACKEND=attrappe` schaltet für Tests
+auf einen regelbasierten Ersatz ohne Netz. Dienst und Modell stehen in den Einstellungen
+(global, je Projekt überschreibbar); in der Souffleur-Karte selbst heißt es nur „KI“. Bei
+Claude läuft jeder Aufruf ohne Werkzeuge in einem leeren Arbeitsordner unter
+`~/.cache/audioscribe/souffleur`, Sitzungsdateien des KI-Prozesses werden abgeschaltet bzw.
+gelöscht: keine Transkript- oder Wiki-Auszüge bleiben außerhalb des Sitzungsordners liegen.
+Beim lokalen Dienst geht je Fenster ein Chat-Aufruf mit Schema-Zwang an Ollama; nichts verlässt
+den Rechner, und der Verbrauchszähler bleibt bei null.
 
 **Verzögerung:** Je Hinweis wird gemessen (Sitzungsuhr): Sprachende → Hinweis, mit den
 Anteilen Spracherkennung, Warten im Fenster, Wiki-Suche, **Prozessstart der KI** und
@@ -824,6 +829,53 @@ geöffnet ist (Tests, direkte Aufrufe der Server-Schnittstelle), und belegt den 
 </details>
 
 ---
+
+## Lokale KI (Ollama)
+
+Statt Claude kann ein **lokales Sprachmodell** über [Ollama](https://ollama.com) arbeiten.
+Ollama läuft als eigener Dienst auf dem Rechner (auf Apple Silicon mit Apples MLX),
+audioscribe spricht ihn über `localhost:11434` an. Es ist die einzige Komponente außerhalb
+von `uv`; audioscribe selbst braucht dafür kein weiteres Paket.
+
+```bash
+brew install ollama                                   # oder das Paket von ollama.com
+OLLAMA_CONTEXT_LENGTH=65536 ollama serve              # Dienst starten (Kontext für die KI-Analyse)
+ollama pull qwen3.6:35b-a3b-nvfp4                     # Modell laden (~24 GB, einmalig)
+./start.sh --doctor                                   # Zeile „KI lokal“: Dienst, Version, Modelle
+```
+
+Dann in der Oberfläche **Einstellungen → KI-Dienst → „Lokal (Ollama auf diesem Rechner)“**
+wählen – global oder nur für ein Projekt. Die Modell-Listen wechseln mit dem Dienst; beim
+Umschalten wird jeweils das erste passende Modell eingetragen. Vorschläge für 48 GB RAM:
+
+| Modell | Größe | Hinweis |
+|---|---|---|
+| `qwen3.6:35b-a3b-nvfp4` | ~24 GB | Vorgabe: Mixture-of-Experts, 3 B aktiv, schnell, MLX |
+| `gemma4:26b-mlx` | ~18 GB | ebenfalls schnell, stark in Deutsch, MLX |
+| `qwen3.6:27b-mlx` | ~19 GB | dichtes Modell, beste Qualität, spürbar langsamer |
+| `qwen3.6:35b-a3b` | ~24 GB | GGUF-Rückfall über llama.cpp, falls der MLX-Pfad hakt |
+
+**Souffleur:** produktiv nutzbar. Je Fenster geht ein Chat-Aufruf mit JSON-Schema an Ollama
+(`format`, Denken aus, Temperatur 0); die Antwort wird wie bei Claude lokal geprüft. Läuft
+der Dienst nicht oder fehlt das Modell, sagt die Souffleur-Karte, was zu tun ist, und die
+Sitzung läuft ohne KI weiter. Nach dem letzten Aufruf bleibt das Modell
+`AUDIOSCRIBE_OLLAMA_KEEP_ALIVE` (Vorgabe 30 min) im Speicher; danach dauert der erste
+Aufruf wieder einige Sekunden.
+
+**KI-Analyse (experimentell):** Claude Code wird über die Anthropic-kompatible Schnittstelle
+von Ollama auf das lokale Modell umgeleitet (`ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN`);
+Werkzeuge, Skills und Leitplanken bleiben gleich. Auf der Kommandozeile:
+`audioscribe analyze … --ki-dienst ollama --model qwen3.6:35b-a3b-nvfp4`. Erwartungen
+dämpfen: Werkzeugaufrufe lokaler Modelle sind weniger zuverlässig, ein zweistündiges
+Transkript dauert lange, Standbilder kann je nach Build nicht jedes Modell lesen (der Agent
+wird angewiesen, dann ohne Bilder weiterzuarbeiten), und Claude Code braucht beim Dienst
+mindestens 32k Kontext (`OLLAMA_CONTEXT_LENGTH`). Das Protokoll beginnt mit einer
+`[experimentell]`-Zeile.
+
+**Verbrauch und Datenschutz:** Lokale Aufrufe zählen nicht (die Anzeige oben rechts bleibt
+bei null, im Protokoll steht „lokal, zählt nicht“). Transkript- und Wiki-Auszüge gehen nur
+an den Dienst auf demselben Rechner. Ein gesetzter `ANTHROPIC_API_KEY` spielt lokal keine
+Rolle. Adresse und Verweildauer: `AUDIOSCRIBE_OLLAMA_URL`, `AUDIOSCRIBE_OLLAMA_KEEP_ALIVE`.
 
 ## Betrieb: GPU, CPU, Konfiguration
 
@@ -895,6 +947,8 @@ claude                                               # einmal mit dem Claude-Abo
     --skill prozessrekonstruktion --skill prozessdoku-qs
 .venv/bin/audioscribe analyze output/demo --name "Rechnungsprüfung" --out ~/Analysen \
     --resume --context-text "Ergänze die Ausnahmefälle"      # Sitzung fortsetzen (experimentell)
+.venv/bin/audioscribe analyze output/demo --name "Rechnungsprüfung" --out ~/Analysen \
+    --ki-dienst ollama --model qwen3.6:35b-a3b-nvfp4         # lokales Modell (experimentell)
 .venv/bin/audioscribe prozessbild ~/Analysen/rechnungspruefung          # Prozessbild neu rendern
 .venv/bin/audioscribe bpmn ~/Analysen/rechnungspruefung [--pruefen|--neu]
 

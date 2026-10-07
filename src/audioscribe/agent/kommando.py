@@ -89,6 +89,9 @@ def analyze(args: argparse.Namespace, resolve_out_dir: Callable[[str], Path]) ->
             known = {s.name for s in available}
             skills = select_skills(available, [n for n in settings.agent_skills if n in known])
 
+    from audioscribe.souffleur.ki import BACKEND_OLLAMA, modell_fuer
+
+    dienst = getattr(args, "ki_dienst", None) or "claude-agent"
     auftrag = Auftrag(
         name=name,
         quelle=quelle,
@@ -96,7 +99,8 @@ def analyze(args: argparse.Namespace, resolve_out_dir: Callable[[str], Path]) ->
         kontext_text=kontext_text,
         kontext_dateien=kontext_dateien,
         skills=tuple(s.name for s in skills),
-        model=args.model or settings.agent_model,
+        model=modell_fuer(dienst, args.model or settings.agent_model),
+        dienst=dienst,
         max_turns=args.max_turns if args.max_turns is not None else settings.agent_max_turns,
         bash=not args.no_bash,
         prozessbild=settings.agent_prozessbild and not args.no_prozessbild,
@@ -108,6 +112,8 @@ def analyze(args: argparse.Namespace, resolve_out_dir: Callable[[str], Path]) ->
     print(f"  Quelle:  {quelle}")
     print(f"  Ziel:    {auftrag.workspace}")
     print(f"  Modell:  {auftrag.model}")
+    if dienst == BACKEND_OLLAMA:
+        print("  Dienst:  lokal (Ollama auf diesem Rechner, experimentell)")
     print(f"  Skills:  {', '.join(auftrag.skills) or '(keine)'}")
     if resume:
         print(f"  Fortsetzung der Sitzung {resume}")

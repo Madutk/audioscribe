@@ -163,6 +163,6 @@ Nicht selbst festlegen. Vorschlag machen und bestätigen lassen.
 3. **Übergabeformat und Übergabeort für A4:** Muss mit dem Verantwortlichen für Wiki und Lint abgestimmt werden, damit der Lint die Markierungen verarbeiten kann. Dazu gehört, wohin die neue Quelle gelegt wird.
 4. **Rückkanal:** Erfahren wir, was der Lint aus einer Markierung gemacht hat? Derzeit nicht vorgesehen.
 5. **Zielhardware und Grenzwert für die Verzögerung:** Die Live-Transkription ist je nach Rechner sehr unterschiedlich schnell (von rund 1 Sekunde bis rund 40 Sekunden). Der Zielrechner steht noch nicht fest.
-6. **KI-Dienst:** Welches Modell darf verwendet werden? Abhängig von der Security-Abstimmung.
+6. **KI-Dienst:** Welches Modell darf verwendet werden? Abhängig von der Security-Abstimmung. Seit 2026-10 steht als Kandidat ein lokales Modell über Ollama bereit (KI-Dienst „ollama“, per Konfiguration und je Projekt wählbar): nichts verlässt den Rechner, keine Anmeldung bei einem Anbieter nötig.
 7. **Ablage der Zusammenfassungen:** Werden abgerufene Zusammenfassungen aufbewahrt, und wenn ja, wo, getrennt vom Rohtranskript?
 8. **Wiki-Stand:** Gegen welchen Stand wird abgeglichen, wenn sich das Wiki während eines Meetings ändert?
