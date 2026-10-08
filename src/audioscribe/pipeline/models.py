@@ -26,23 +26,45 @@ def progress_tqdm(on_progress: Callable[[int, int], None]):
     return Progress
 
 
+MLX_WEIGHTS = ("weights.safetensors", "weights.npz")
+
+
+def mlx_weights_present(path: str) -> bool:
+    """Liegt im Modellordner eine Gewichtsdatei, wie ``mlx_whisper.load_model`` sie sucht?"""
+    return any(os.path.isfile(os.path.join(path, name)) for name in MLX_WEIGHTS)
+
+
 def fetch_mlx_model(repo: str, on_progress: Callable[[int, int], None] | None = None) -> str:
     """MLX-Gewichte (Hugging-Face-Repo) als lokalen Snapshot-Pfad; Cache zuerst, Hub nur bei Bedarf.
 
     Immer derselbe Pfad-String zurück: ``mlx_whisper`` cacht sein Modell am Pfad, ein
     wechselnder Bezeichner (Repo vs. Pfad) würde es neu laden. Ein lokaler Ordner geht
     unverändert durch.
+
+    Der Cache zählt nur, wenn die Gewichte wirklich da sind: ``snapshot_download`` gibt mit
+    ``local_files_only`` jeden vorhandenen Snapshot-Ordner zurück, auch wenn der Download
+    der 1,6 GB Gewichte abgebrochen wurde und nur ``config.json`` daliegt. ``mlx_whisper``
+    scheiterte dann bei jedem Start mit "[load_npz] Input must be a zip file" - der Hub
+    wurde ja nie wieder gefragt. Fehlen die Gewichte, wird der Download nachgeholt.
     """
     if os.path.isdir(repo):
         return repo
     from huggingface_hub import snapshot_download
 
     try:
-        return snapshot_download(repo, local_files_only=True)
-    except Exception:  # noqa: BLE001 - nicht (vollständig) im Cache -> herunterladen
-        pass
+        cached = snapshot_download(repo, local_files_only=True)
+    except Exception:  # noqa: BLE001 - nicht im Cache -> herunterladen
+        cached = None
+    if cached is not None and mlx_weights_present(cached):
+        return cached
     kwargs = {"tqdm_class": progress_tqdm(on_progress)} if on_progress is not None else {}
-    return snapshot_download(repo, **kwargs)
+    path = snapshot_download(repo, **kwargs)
+    if not mlx_weights_present(path):
+        raise RuntimeError(
+            f"Modell '{repo}' ist unvollständig: keine Gewichtsdatei "
+            f"({' oder '.join(MLX_WEIGHTS)}) in {path}. Ordner löschen und erneut starten."
+        )
+    return path
 
 
 def fetch_model(model: str, on_progress: Callable[[int, int], None]) -> str:

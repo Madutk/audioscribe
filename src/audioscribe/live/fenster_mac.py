@@ -18,6 +18,42 @@ Rect = tuple[int, int, int, int]  # left, top, right, bottom
 _SHELL_OWNERS = frozenset({"Window Server", "Dock", "Control Center", "Notification Center", "Spotlight", "SystemUIServer"})
 
 
+SCREENCAPTURE = "/usr/sbin/screencapture"
+
+
+def screencapture_image(args: list[str], timeout_s: float = 5.0):
+    """Bildschirmfoto über das Systemwerkzeug ``screencapture`` in einem EIGENEN Prozess.
+
+    Für Vorschaubilder im langlebigen Server-Prozess. Jede In-Prozess-Aufnahme
+    (``mss``, ``CGWindowListCreateImage``) macht den Prozess dauerhaft zum
+    ScreenCaptureKit-Client; solange er lebt, bekommt kein weiterer Prozess mit
+    demselben Programmpfad (der Aufnahme-Subprozess!) einen Audio-Stream gestartet -
+    "ScreenCaptureKit antwortet nicht (Zeitüberschreitung)". ``screencapture`` ist ein
+    anderes Programm und endet sofort. ``None``, wenn nichts aufgenommen wurde
+    (Fenster minimiert, Monitor unbekannt).
+    """
+    import subprocess
+    import tempfile
+
+    from PIL import Image
+
+    with tempfile.TemporaryDirectory() as tmp:
+        out = os.path.join(tmp, "shot.png")
+        try:
+            proc = subprocess.run(  # noqa: S603 - festes Systemwerkzeug, Argumente sind Zahlen
+                [SCREENCAPTURE, "-x", "-t", "png", *args, out],
+                capture_output=True,
+                timeout=timeout_s,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return None
+        if proc.returncode != 0 or not os.path.isfile(out) or os.path.getsize(out) == 0:
+            return None
+        with Image.open(out) as img:
+            return img.convert("RGB")
+
+
 def _quartz():
     try:
         import Quartz

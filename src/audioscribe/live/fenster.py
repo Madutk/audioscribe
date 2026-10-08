@@ -435,10 +435,24 @@ def grab_window(hwnd: int, fallback: Callable[[Rect], object] | None = None):
 
 
 def preview_window_jpeg(hwnd: int, width: int = 480) -> bytes | None:
-    """Verkleinertes Vorschaubild für die Fensterwahl; ``None`` wenn minimiert."""
+    """Verkleinertes Vorschaubild für die Fensterwahl; ``None`` wenn minimiert.
+
+    Läuft im Server-Prozess. Unter macOS darum NICHT per ``CGWindowListCreateImage``
+    aufnehmen, sondern über ``screencapture`` (eigener Prozess) - siehe
+    ``fenster_mac.screencapture_image``.
+    """
     import io
 
-    img = grab_window(hwnd)
+    if _mac():
+        from audioscribe.live import fenster_mac
+
+        if not fenster_mac.is_window(hwnd):
+            raise WindowGone(f"Fenster {hwnd} existiert nicht mehr")
+        if fenster_mac.is_iconic(hwnd):
+            return None
+        img = fenster_mac.screencapture_image(["-l", str(hwnd)])
+    else:
+        img = grab_window(hwnd)
     if img is None:
         return None
     img.thumbnail((width, width))

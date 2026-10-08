@@ -120,15 +120,29 @@ def grab_image(sct, monitor: dict):
 
 
 def preview_jpeg(index: int, width: int = 480) -> bytes:
-    """Verkleinertes Vorschaubild eines Monitors für die Monitorwahl."""
+    """Verkleinertes Vorschaubild eines Monitors für die Monitorwahl.
+
+    Läuft im Server-Prozess. Unter macOS darum NICHT per ``mss`` aufnehmen, sondern über
+    ``screencapture`` (eigener Prozess) - siehe ``fenster_mac.screencapture_image``.
+    """
     import io
+    import sys
 
-    import mss
+    if sys.platform == "darwin":
+        from audioscribe.live import fenster_mac
 
-    with mss.mss() as sct:
-        if not 0 < index < len(sct.monitors):
+        if not any(m["index"] == index for m in list_monitors()):
             raise IndexError(f"Monitor {index} gibt es nicht")
-        img = grab_image(sct, sct.monitors[index])
+        img = fenster_mac.screencapture_image(["-D", str(index)])
+        if img is None:
+            raise IndexError(f"Monitor {index} liefert kein Bild")
+    else:
+        import mss
+
+        with mss.mss() as sct:
+            if not 0 < index < len(sct.monitors):
+                raise IndexError(f"Monitor {index} gibt es nicht")
+            img = grab_image(sct, sct.monitors[index])
     img.thumbnail((width, width))
     out = io.BytesIO()
     img.save(out, "JPEG", quality=80)

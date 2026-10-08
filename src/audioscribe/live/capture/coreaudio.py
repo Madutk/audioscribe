@@ -62,9 +62,25 @@ def list_mics() -> list[dict]:
         hostapis = [dict(a) for a in sd.query_hostapis()]
     except Exception:  # noqa: BLE001
         hostapis = None
-    default = sd.default.device
-    default_in = default[0] if isinstance(default, (tuple, list)) else default
-    return mic_entries(devices, int(default_in) if default_in is not None and default_in >= 0 else None, hostapis)
+    return mic_entries(devices, default_input_index(sd.default.device), hostapis)
+
+
+def default_input_index(default) -> int | None:
+    """Eingabe-Index aus ``sounddevice.default.device`` - oder None, wenn es keinen gibt.
+
+    sounddevice liefert kein Tupel, sondern ein ``_InputOutputPair`` (nur per ``[0]`` /
+    ``["input"]`` lesbar); ein nackter Vergleich ``>= 0`` damit wirft ``TypeError``. Ohne
+    Eingabegerät steht dort -1.
+    """
+    try:
+        value = default[0]
+    except (TypeError, IndexError, KeyError):
+        value = default
+    try:
+        index = int(value)
+    except (TypeError, ValueError):
+        return None
+    return index if index >= 0 else None
 
 
 class MicStream:
