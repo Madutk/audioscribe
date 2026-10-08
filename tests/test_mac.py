@@ -55,6 +55,111 @@ def test_pick_findet_synthetischen_loopback_mit_negativem_index():
         pick(geraete, "7")
 
 
+def test_default_input_index_versteht_sounddevice_paar():
+    class Pair:  # wie sounddevice._InputOutputPair: kein Tupel, nur Index-Zugriff
+        def __getitem__(self, i):
+            return {0: 3, "input": 3, 1: 5}[i]
+
+    assert coreaudio.default_input_index(Pair()) == 3
+    assert coreaudio.default_input_index((2, 4)) == 2
+    assert coreaudio.default_input_index([-1, 4]) is None  # kein Eingabegeraet
+    assert coreaudio.default_input_index(7) == 7
+    assert coreaudio.default_input_index(None) is None
+
+
+def test_list_mics_mit_sounddevice_paar(monkeypatch):
+    class Pair:
+        def __getitem__(self, i):
+            return 1
+
+    devices = [
+        {"name": "Out", "max_input_channels": 0, "default_samplerate": 48000.0, "hostapi": 0},
+        {"name": "Mic", "max_input_channels": 1, "default_samplerate": 48000.0, "hostapi": 0},
+    ]
+    fake = SimpleNamespace(
+        query_devices=lambda: devices,
+        query_hostapis=lambda: [{"name": "Core Audio"}],
+        default=SimpleNamespace(device=Pair()),
+    )
+    monkeypatch.setattr(coreaudio, "_sounddevice", lambda: fake)
+    mics = coreaudio.list_mics()
+    assert [m["name"] for m in mics] == ["Mic"] and mics[0]["default"] is True
+
+
+def test_asbd_format_versteht_objekt_und_tupel():
+    # PyObjC 12.2: nacktes Tupel in Feldreihenfolge; Flags 41 = Float|Packed|NonInterleaved
+    assert sck.asbd_format((48000.0, 1819304813, 41, 4, 1, 4, 2, 32, 0)) == (2, True, 48000)
+    assert sck.asbd_format((44100.0, 1819304813, 9, 8, 1, 8, 2, 32, 0)) == (2, False, 44100)
+    obj = SimpleNamespace(mSampleRate=16000.0, mFormatFlags=41, mChannelsPerFrame=1)
+    assert sck.asbd_format(obj) == (1, True, 16000)
+    assert sck.asbd_format((0.0, 0, 0, 0, 0, 0, 0, 0, 0)) == (sck.CHANNELS_SCK, False, sck.SAMPLE_RATE_SCK)
+
+
+# --- Vorschaubilder im Server-Prozess: nie in-Prozess aufnehmen (sperrt SCK) -----------
+
+
+def _fake_screencapture(monkeypatch, *, rc=0, write=True, seen=None):
+    import subprocess
+
+    from PIL import Image
+
+    def run(argv, **kw):  # noqa: ARG001
+        if seen is not None:
+            seen.append(argv)
+        if write:
+            Image.new("RGB", (64, 32), "red").save(argv[-1], "PNG")
+        return SimpleNamespace(returncode=rc)
+
+    monkeypatch.setattr(subprocess, "run", run)
+
+
+def test_screencapture_image_liefert_bild_oder_none(monkeypatch):
+    from audioscribe.live import fenster_mac
+
+    seen = []
+    _fake_screencapture(monkeypatch, seen=seen)
+    img = fenster_mac.screencapture_image(["-D", "1"])
+    assert img is not None and img.size == (64, 32)
+    assert seen[0][:5] == [fenster_mac.SCREENCAPTURE, "-x", "-t", "png", "-D"]
+    _fake_screencapture(monkeypatch, rc=1)
+    assert fenster_mac.screencapture_image(["-l", "7"]) is None
+    _fake_screencapture(monkeypatch, write=False)
+    assert fenster_mac.screencapture_image(["-l", "7"]) is None
+
+
+def test_preview_jpeg_mac_nutzt_screencapture_statt_mss(monkeypatch):
+    import sys
+
+    from audioscribe.live import screen
+
+    seen = []
+    _fake_screencapture(monkeypatch, seen=seen)
+    monkeypatch.setattr(sys, "platform", "darwin")
+    monkeypatch.setattr(screen, "list_monitors", lambda: [{"index": 1}])
+    monkeypatch.setitem(sys.modules, "mss", None)  # mss darf gar nicht importiert werden
+    data = screen.preview_jpeg(1, width=32)
+    assert data[:2] == b"\xff\xd8" and seen[0][-2] == "1"
+    with pytest.raises(IndexError):
+        screen.preview_jpeg(2)
+
+
+def test_preview_window_jpeg_mac_nutzt_screencapture(monkeypatch):
+    from audioscribe.live import fenster, fenster_mac
+
+    seen = []
+    _fake_screencapture(monkeypatch, seen=seen)
+    monkeypatch.setattr(fenster, "_mac", lambda: True)
+    monkeypatch.setattr(fenster_mac, "is_window", lambda hwnd: hwnd == 42)
+    monkeypatch.setattr(fenster_mac, "is_iconic", lambda hwnd: False)
+    monkeypatch.setattr(fenster, "grab_window", lambda *a, **k: pytest.fail("in-Prozess-Aufnahme"))
+    data = fenster.preview_window_jpeg(42, width=32)
+    assert data[:2] == b"\xff\xd8" and seen[0][-3:-1] == ["-l", "42"]
+    monkeypatch.setattr(fenster_mac, "is_iconic", lambda hwnd: True)
+    assert fenster.preview_window_jpeg(42) is None
+    with pytest.raises(fenster.WindowGone):
+        fenster.preview_window_jpeg(7)
+
+
 def test_mic_entries_filtert_eingabegeraete_und_setzt_standard():
     devices = [
         {"name": "MacBook Pro Speakers", "max_input_channels": 0, "default_samplerate": 48000.0, "hostapi": 0},
@@ -355,6 +460,8 @@ def test_fetch_mlx_model_cache_zuerst_dann_download_mit_fortschritt(monkeypatch,
         return str(tmp_path / "snap")
 
     monkeypatch.setitem(sys.modules, "huggingface_hub", SimpleNamespace(snapshot_download=snapshot_download))
+    (tmp_path / "snap").mkdir()
+    (tmp_path / "snap" / "weights.safetensors").write_bytes(b"x")
     meldungen = []
     assert models.fetch_mlx_model("mlx-community/x", lambda a, b: meldungen.append((a, b))) == str(tmp_path / "snap")
     assert aufrufe[0] == {"local_files_only": True}
@@ -364,6 +471,42 @@ def test_fetch_mlx_model_cache_zuerst_dann_download_mit_fortschritt(monkeypatch,
     bar.display()
     assert meldungen[-1] == (40, 100)
     assert models.fetch_mlx_model(str(tmp_path)) == str(tmp_path)
+
+
+def test_fetch_mlx_model_holt_abgebrochenen_download_nach(monkeypatch, tmp_path):
+    """Snapshot nur mit config.json (Download abgebrochen) zaehlt nicht als Cache-Treffer."""
+    from audioscribe.pipeline import models
+
+    snap = tmp_path / "snap"
+    snap.mkdir()
+    (snap / "config.json").write_text("{}")
+    aufrufe = []
+
+    def snapshot_download(repo, **kw):
+        aufrufe.append(kw)
+        if not kw.get("local_files_only"):
+            (snap / "weights.npz").write_bytes(b"x")  # der Hub laedt die fehlende Datei nach
+        return str(snap)
+
+    monkeypatch.setitem(sys.modules, "huggingface_hub", SimpleNamespace(snapshot_download=snapshot_download))
+    assert models.fetch_mlx_model("mlx-community/x") == str(snap)
+    assert [kw.get("local_files_only", False) for kw in aufrufe] == [True, False]
+    # Vollstaendiger Cache: der Hub wird nicht mehr befragt.
+    aufrufe.clear()
+    assert models.fetch_mlx_model("mlx-community/x") == str(snap)
+    assert aufrufe == [{"local_files_only": True}]
+
+
+def test_fetch_mlx_model_meldet_fehlende_gewichte_klar(monkeypatch, tmp_path):
+    from audioscribe.pipeline import models
+
+    snap = tmp_path / "snap"
+    snap.mkdir()
+    monkeypatch.setitem(
+        sys.modules, "huggingface_hub", SimpleNamespace(snapshot_download=lambda repo, **kw: str(snap))
+    )
+    with pytest.raises(RuntimeError, match="unvollständig"):
+        models.fetch_mlx_model("mlx-community/x")
 
 
 # --- Nachschaerfen ueber MLX: WhisperX-kompatibles Ergebnis -------------------------------

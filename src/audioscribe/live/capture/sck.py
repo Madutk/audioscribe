@@ -89,6 +89,25 @@ def pcm_to_mono(data: bytes, frames: int, channels: int, planar: bool) -> np.nda
 # --- PyObjC-Brücke -----------------------------------------------------------------
 
 
+def asbd_format(asbd) -> tuple[int, bool, int]:
+    """``(Kanäle, planar, Rate)`` aus einer AudioStreamBasicDescription.
+
+    PyObjC liefert die Struktur je nach Version als Objekt mit Feldnamen oder als nacktes
+    Tupel in Feldreihenfolge (mSampleRate, mFormatID, mFormatFlags, mBytesPerPacket,
+    mFramesPerPacket, mBytesPerFrame, mChannelsPerFrame, mBitsPerChannel, mReserved).
+    Mit 12.2 kam das Tupel - und jeder Audiopuffer wurde still übersprungen.
+    """
+    if hasattr(asbd, "mChannelsPerFrame"):
+        rate, flags, channels = asbd.mSampleRate, asbd.mFormatFlags, asbd.mChannelsPerFrame
+    else:
+        rate, _fmt_id, flags, _bpp, _fpp, _bpf, channels, *_rest = asbd
+    return (
+        int(channels) or CHANNELS_SCK,
+        bool(int(flags) & _FLAG_NON_INTERLEAVED),
+        int(rate) or SAMPLE_RATE_SCK,
+    )
+
+
 def _frameworks():
     try:
         import CoreMedia as CM
@@ -152,9 +171,7 @@ def _output_class():
                 if self._fmt is None:
                     desc = CM.CMSampleBufferGetFormatDescription(sbuf)
                     asbd = CM.CMAudioFormatDescriptionGetStreamBasicDescription(desc)
-                    channels = int(asbd.mChannelsPerFrame) or CHANNELS_SCK
-                    planar = bool(int(asbd.mFormatFlags) & _FLAG_NON_INTERLEAVED)
-                    self._fmt = (channels, planar, int(asbd.mSampleRate))
+                    self._fmt = asbd_format(asbd)
                     self._sink.format(*self._fmt)
                 frames = int(CM.CMSampleBufferGetNumSamples(sbuf))
                 bb = CM.CMSampleBufferGetDataBuffer(sbuf)
@@ -218,7 +235,13 @@ def _wait(call, timeout_s: float = STARTUP_TIMEOUT_S):
 
     call(handler)
     if not fertig.wait(timeout_s):
-        raise RuntimeError("ScreenCaptureKit antwortet nicht (Zeitüberschreitung)")
+        raise RuntimeError(
+            "ScreenCaptureKit antwortet nicht (Zeitüberschreitung). Typische Ursache: ein "
+            "anderer, noch laufender Prozess mit demselben Python "
+            f"({sys.executable}) hat Bildschirmfotos gemacht (z. B. ein älterer AudioScribe-"
+            "Server) - diesen beenden bzw. den Server neu starten. Sonst: Systemeinstellungen "
+            "> Datenschutz & Sicherheit > Bildschirm- & Systemaudioaufnahme prüfen"
+        )
     return ergebnis
 
 
@@ -274,7 +297,17 @@ class SckStream:
         )
         if not ok:
             raise RuntimeError(f"ScreenCaptureKit: Audio-Ausgang nicht anmeldbar ({err})")
-        error = (_wait(self._stream.startCaptureWithCompletionHandler_) + [None])[0]
+        try:
+            error = (_wait(self._stream.startCaptureWithCompletionHandler_) + [None])[0]
+        except RuntimeError:
+            # Keine Rückmeldung: den halb gestarteten Stream nicht einfach liegen lassen,
+            # sonst hält replayd die offene Anfrage und blockiert weitere Starts aus
+            # demselben Programm minutenlang.
+            try:
+                _wait(self._stream.stopCaptureWithCompletionHandler_, timeout_s=2.0)
+            except Exception:  # noqa: BLE001 - Aufräumen nach Kräften
+                pass
+            raise
         if error is not None:
             raise RuntimeError(
                 "ScreenCaptureKit: Aufnahme startet nicht - Bildschirmaufnahme erlaubt? "
