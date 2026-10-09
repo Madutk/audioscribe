@@ -186,6 +186,10 @@ class Settings:
     # im Speicher bleibt (Ollama-Schreibweise, z. B. "30m"; "0" = sofort entladen).
     ollama_url: str = field(default_factory=lambda: _env("OLLAMA_URL", "http://localhost:11434"))
     ollama_keep_alive: str = field(default_factory=lambda: _env("OLLAMA_KEEP_ALIVE", "30m"))
+    # KI-Analyse lokal: Denkphase des Modells (Vorgabe aus - Ollama setzt kein Denkbudget durch,
+    # das Modell kann sich sonst minutenlang festdenken) und Obergrenze der Ausgabe je Anfrage.
+    ollama_denken: bool = field(default_factory=lambda: _flag("OLLAMA_DENKEN", "0"))
+    ollama_max_ausgabe: int = field(default_factory=lambda: int(_env("OLLAMA_MAX_AUSGABE", "16000")))
     # Der Wiki-Pfad (K1) gehoert zum Projekt (projekt/modell.py); hier steht nur die Vorgabe
     # aus der Umgebung fuer den Betrieb ohne Projekt (Kommandozeile, Tests).
     wiki_dir: str = field(default_factory=lambda: _env("WIKI_DIR", ""))

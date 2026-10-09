@@ -12,7 +12,7 @@ from types import SimpleNamespace
 import pytest
 
 from audioscribe.agent.material import Auftrag
-from audioscribe.agent.runner import AnalyseSitzung, pruefe_lokal, sdk_env
+from audioscribe.agent.runner import AnalyseSitzung, pruefe_lokal, sdk_denken, sdk_env
 from audioscribe.projekt import einstellungen
 from audioscribe.souffleur import ki_ollama
 from audioscribe.souffleur.ki import BACKEND_CLAUDE, BACKEND_OLLAMA, KiAuftrag, KiFehler, make_ki, modell_fuer
@@ -261,6 +261,17 @@ def test_sdk_env_leitet_nur_lokal_um():
     assert sdk_env(BACKEND_CLAUDE) == {}
     env = sdk_env(BACKEND_OLLAMA)
     assert env["ANTHROPIC_AUTH_TOKEN"] == "ollama" and env["ANTHROPIC_BASE_URL"].startswith("http")
+    assert env["CLAUDE_CODE_MAX_OUTPUT_TOKENS"] == "16000"
+
+
+def test_sdk_denken_lokal_aus(monkeypatch):
+    from audioscribe import config
+
+    # Ollama ignoriert budget_tokens - nur "disabled" verhindert, dass sich das Modell festdenkt.
+    assert sdk_denken(BACKEND_CLAUDE) is None
+    assert sdk_denken(BACKEND_OLLAMA) == {"type": "disabled"}
+    monkeypatch.setattr(config, "settings", replace(config.settings, ollama_denken=True))
+    assert sdk_denken(BACKEND_OLLAMA) is None
 
 
 def test_pruefe_lokal(monkeypatch):

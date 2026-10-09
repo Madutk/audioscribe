@@ -58,12 +58,28 @@ def _now() -> str:
 def sdk_env(dienst: str) -> dict[str, str]:
     """Umgebung fuer Claude Code je KI-Dienst. Bei ``ollama`` wird die Anthropic-kompatible
     Schnittstelle des lokalen Dienstes untergeschoben (``/v1/messages``); der Token ist
-    Pflicht, wird lokal aber nicht geprueft. Bei Claude bleibt die Umgebung unangetastet."""
+    Pflicht, wird lokal aber nicht geprueft. Die Ausgabe je Anfrage wird gedeckelt, damit ein
+    Modell, das sich festdenkt, nach Minuten statt nie abbricht. Bei Claude bleibt die Umgebung
+    unangetastet."""
     if dienst != BACKEND_OLLAMA:
         return {}
     from audioscribe.config import settings
 
-    return {"ANTHROPIC_BASE_URL": settings.ollama_url, "ANTHROPIC_AUTH_TOKEN": "ollama"}
+    return {
+        "ANTHROPIC_BASE_URL": settings.ollama_url,
+        "ANTHROPIC_AUTH_TOKEN": "ollama",
+        "CLAUDE_CODE_MAX_OUTPUT_TOKENS": str(settings.ollama_max_ausgabe),
+    }
+
+
+def sdk_denken(dienst: str) -> dict[str, Any] | None:
+    """Denkphase je KI-Dienst. Lokal standardmaessig aus: Ollama ignoriert ``budget_tokens``,
+    nur ``disabled`` greift. Bei Claude entscheidet Claude Code selbst (``None``)."""
+    if dienst != BACKEND_OLLAMA:
+        return None
+    from audioscribe.config import settings
+
+    return None if settings.ollama_denken else {"type": "disabled"}
 
 
 def pruefe_lokal(modell: str) -> str:
@@ -239,6 +255,7 @@ class AnalyseSitzung:
             max_turns=self.auftrag.max_turns,
             resume=self.auftrag.resume,
             env=sdk_env(self.auftrag.dienst),
+            thinking=sdk_denken(self.auftrag.dienst),
             stderr=lambda line: self.log(f"[claude] {line.rstrip()}"),
         )
         self._client = ClaudeSDKClient(options=options)

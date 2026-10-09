@@ -876,7 +876,11 @@ dämpfen: Werkzeugaufrufe lokaler Modelle sind weniger zuverlässig, ein zweist�
 Transkript dauert lange, Standbilder kann je nach Build nicht jedes Modell lesen (der Agent
 wird angewiesen, dann ohne Bilder weiterzuarbeiten), und Claude Code braucht beim Dienst
 mindestens 32k Kontext (`OLLAMA_CONTEXT_LENGTH`). Das Protokoll beginnt mit einer
-`[experimentell]`-Zeile.
+`[experimentell]`-Zeile. Die Denkphase des Modells ist lokal aus: Ollama setzt kein
+Denkbudget durch, und ein Modell wie `qwen3.6` kann sich sonst über viele Minuten
+festdenken, ohne etwas zu tun. Zusätzlich ist die Ausgabe je Anfrage auf 16 000 Tokens
+gedeckelt (`AUDIOSCRIBE_OLLAMA_DENKEN=1` schaltet das Denken ein,
+`AUDIOSCRIBE_OLLAMA_MAX_AUSGABE` ändert die Obergrenze).
 
 **Verbrauch und Datenschutz:** Lokale Aufrufe zählen nicht (die Anzeige oben rechts bleibt
 bei null, im Protokoll steht „lokal, zählt nicht“). Transkript- und Wiki-Auszüge gehen nur
