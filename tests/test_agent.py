@@ -562,7 +562,7 @@ def client(tmp_path, monkeypatch):
 
     _skill(tmp_path / "skills", "prozessrekonstruktion")
     fake = replace(
-        settings,
+        state.settings,  # abgeschirmt (conftest), nicht die Einstellungen des Rechners
         cache_dir=tmp_path / "cache",
         agent_skills_dir=tmp_path / "skills",
         agent_skills=("prozessrekonstruktion", "fehlt"),

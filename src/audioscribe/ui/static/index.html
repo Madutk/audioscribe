@@ -273,7 +273,8 @@
     <div class="wiz-panel" id="wiz4" hidden>
       <p class="hint lead-hint">Vorgabe sind die globalen Einstellungen – lege nur fest, was für dieses Projekt anders sein soll.</p>
       <div class="grid two">
-        <div class="field"><label for="wizKiDienst">KI-Dienst</label><select id="wizKiDienst"></select></div>
+        <div class="field"><label for="wizKiDienst">KI-Dienst</label><select id="wizKiDienst"></select>
+          <p class="hint" id="wizKiDienstHint"></p></div>
         <div class="field"><label for="wizSprache">Sprache der Aufnahmen</label><select id="wizSprache"></select></div>
         <div class="field"><label for="wizSouffleurModel">Modell für den Souffleur</label><select id="wizSouffleurModel"></select>
           <p class="hint">Antwortet während des Meetings – Tempo zählt.</p></div>
@@ -575,7 +576,8 @@
     <div class="card">
       <h2 class="card-title"><span class="step">4</span>Optionen</h2>
       <div class="grid">
-        <div class="field"><label for="anaModel">KI-Modell</label><select id="anaModel"></select></div>
+        <div class="field"><label for="anaModel">KI-Modell</label><select id="anaModel"></select>
+          <p class="hint warn" id="anaDienstHint" hidden></p></div>
       </div>
       <div class="field" data-nur="datei" style="margin-top:12px"><label for="anaOut">Ausgabeordner Analysen</label>
         <div class="input-group">
@@ -632,7 +634,7 @@
       <p class="hint lead-hint">Gilt für alle Projekte. Ein Projekt kann jeden Wert für sich überschreiben
         (Projekt → Einstellungen).</p>
       <div class="field"><label for="gKiDienst">KI-Dienst</label><select id="gKiDienst"></select>
-        <p class="hint">Der Dienst hinter Souffleur und KI-Analyse. Er nutzt die Anmeldung von Claude Code auf diesem Rechner.</p></div>
+        <p class="hint" id="gKiDienstHint">Der Dienst hinter Souffleur und KI-Analyse.</p></div>
       <div class="grid two">
         <div class="field"><label for="gSouffleurModel">Modell für den Souffleur</label><select id="gSouffleurModel"></select>
           <p class="hint">Antwortet während des Meetings – ein schnelles Modell hält die Verzögerung klein.</p></div>
@@ -741,7 +743,8 @@
       <h2 class="card-title"><svg class="ic" aria-hidden="true"><use href="#i-sparkles"/></svg>KI und Sprache</h2>
       <p class="hint lead-hint">Vorgabe sind die <a class="goto" href="#/einstellungen">globalen Einstellungen</a>.
         Was du hier festlegst, gilt nur für dieses Projekt.</p>
-      <div class="field"><label for="pKiDienst">KI-Dienst</label><select id="pKiDienst"></select></div>
+      <div class="field"><label for="pKiDienst">KI-Dienst</label><select id="pKiDienst"></select>
+        <p class="hint" id="pKiDienstHint"></p></div>
       <div class="field"><label for="pSouffleurModel">Modell für den Souffleur</label><select id="pSouffleurModel"></select></div>
       <div class="field"><label for="pAgentModel">Modell für die KI-Analyse</label><select id="pAgentModel"></select></div>
       <div class="field"><label for="pSprache">Sprache der Aufnahmen</label><select id="pSprache"></select></div>

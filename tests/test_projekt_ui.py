@@ -201,7 +201,8 @@ def test_oeffnen_schliessen_vergessen(client, wiki, tmp_path):
 
 def test_globale_einstellungen_und_ueberschreiben_im_projekt(client, wiki, tmp_path):
     e = client.get("/api/einstellungen").json()
-    assert e["optionen"]["ki_dienste"][-1] == {"id": "claude-agent", "label": "Claude (Agent SDK)"}
+    assert {"id": "claude-agent", "label": "Claude (Agent SDK)"} in e["optionen"]["ki_dienste"]
+    assert {"id": "ollama", "label": "Lokal (Ollama auf diesem Rechner)"} in e["optionen"]["ki_dienste"]
     r = client.post("/api/einstellungen", json={"agent_model": "claude-sonnet-5", "sprache": "auto"})
     assert r.json()["werte"]["agent_model"] == "claude-sonnet-5" and r.json()["werte"]["sprache"] == "auto"
     assert client.post("/api/einstellungen", json={"agent_model": "--boese"}).status_code == 400

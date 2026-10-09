@@ -178,9 +178,14 @@ class Settings:
     agent_max_turns: int | None = field(default_factory=lambda: _opt_int("AGENT_MAX_TURNS"))
 
     # --- Souffleur (PRD §20): Live-Abgleich mit einem LLM-Wiki ---
-    # KI-Dienst austauschbar: "claude-agent" (Agent SDK, Anmeldung von Claude Code) | "attrappe".
+    # KI-Dienst austauschbar: "claude-agent" (Agent SDK, Anmeldung von Claude Code) |
+    # "ollama" (lokales Modell ueber Ollama auf diesem Rechner) | "attrappe".
     souffleur_backend: str = field(default_factory=lambda: _env("SOUFFLEUR_BACKEND", "claude-agent"))
     souffleur_model: str = field(default_factory=lambda: _env("SOUFFLEUR_MODEL", "claude-sonnet-5"))
+    # Lokale KI (Ollama): Adresse des Dienstes und wie lange ein Modell nach dem letzten Aufruf
+    # im Speicher bleibt (Ollama-Schreibweise, z. B. "30m"; "0" = sofort entladen).
+    ollama_url: str = field(default_factory=lambda: _env("OLLAMA_URL", "http://localhost:11434"))
+    ollama_keep_alive: str = field(default_factory=lambda: _env("OLLAMA_KEEP_ALIVE", "30m"))
     # Der Wiki-Pfad (K1) gehoert zum Projekt (projekt/modell.py); hier steht nur die Vorgabe
     # aus der Umgebung fuer den Betrieb ohne Projekt (Kommandozeile, Tests).
     wiki_dir: str = field(default_factory=lambda: _env("WIKI_DIR", ""))

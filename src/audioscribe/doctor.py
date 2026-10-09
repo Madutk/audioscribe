@@ -385,6 +385,37 @@ def _check_agent() -> CheckResult:
     return CheckResult(status, "KI-Analyse", "; ".join(teile))
 
 
+def _check_ollama() -> CheckResult:
+    """Lokale KI ueber Ollama (optional): Dienst erreichbar, Version, konfigurierte Modelle.
+    Nicht eingerichtet ist OK, solange der Dienst nicht als KI-Dienst eingestellt ist."""
+    from audioscribe.souffleur.ki import BACKEND_OLLAMA, modell_fuer
+    from audioscribe.souffleur.ki_ollama import ANALYSE_MIN_CTX, ollama_status
+
+    status = ollama_status(settings.ollama_url)
+    eingestellt = settings.souffleur_backend == BACKEND_OLLAMA
+    if not status.erreichbar:
+        detail = (
+            f"nicht erreichbar unter {settings.ollama_url} ({status.fehler}) -> "
+            "'brew install ollama' bzw. ollama.com, dann 'ollama serve'"
+        )
+        if eingestellt:
+            return CheckResult("WARN", "KI lokal", f"als KI-Dienst eingestellt, aber {detail}")
+        return CheckResult("OK", "KI lokal", f"nicht eingerichtet (optional); {detail}")
+    st: Status = "OK"
+    teile = [f"Ollama {status.version or '?'} unter {settings.ollama_url}", f"{len(status.modelle)} Modell(e)"]
+    for zweck, modell in (
+        ("Souffleur", modell_fuer(BACKEND_OLLAMA, settings.souffleur_model)),
+        ("Analyse", modell_fuer(BACKEND_OLLAMA, settings.agent_model)),
+    ):
+        if status.hat_modell(modell):
+            teile.append(f"{zweck}: {modell}")
+        else:
+            st = "WARN"
+            teile.append(f"{zweck}: {modell} fehlt -> 'ollama pull {modell}'")
+    teile.append(f"KI-Analyse lokal ist experimentell und braucht OLLAMA_CONTEXT_LENGTH>={ANALYSE_MIN_CTX}")
+    return CheckResult(st, "KI lokal", "; ".join(teile))
+
+
 def _live_inventory(prefix: list[str], status: Status = "OK") -> CheckResult:
     from audioscribe.live.kommando import inventory
 
@@ -476,6 +507,7 @@ CHECKS = (
     _check_diarization,
     _check_dirs,
     _check_agent,
+    _check_ollama,
     _check_live,
     _check_souffleur,
 )

@@ -91,6 +91,29 @@ export function fill(sel, values, chosen) {
   sel.value = chosen;
 }
 
+/** Hinweistext je KI-Dienst (Einstellungen, Projekt, Assistent). */
+const DIENST_HINWEIS = {
+  'claude-agent': 'Der Dienst hinter Souffleur und KI-Analyse. Er nutzt die Anmeldung von Claude Code auf diesem Rechner.',
+  ollama: 'Lokales Modell über Ollama auf diesem Rechner: nichts verlässt den Rechner, der Verbrauch zählt nicht. '
+    + 'Das Modell vorher mit „ollama pull“ laden („Umgebung prüfen“ zeigt den Stand). Die KI-Analyse lokal ist experimentell.',
+  attrappe: 'Regelbasierter Ersatz ohne Netz – nur für Tests.',
+};
+export function dienstHinweis(dienst) {
+  return DIENST_HINWEIS[dienst] || 'Dieser Dienst ist über die Umgebung eingestellt.';
+}
+
+/** Modelle, die zu einem Dienst gehoeren (Eintraege ohne `dienst` passen immer). */
+export function modelleFuer(liste, dienst) {
+  const passend = (liste || []).filter((m) => !m.dienst || m.dienst === dienst);
+  return passend.length ? passend : (liste || []);
+}
+
+/** `wert`, wenn er zum Dienst passt, sonst das erste passende Modell. */
+export function passendesModell(liste, dienst, wert) {
+  const passend = modelleFuer(liste, dienst);
+  return passend.some((m) => m.id === wert) ? wert : (passend[0] ? passend[0].id : wert);
+}
+
 /** Auswahlfeld aus [{id, label}]; `leer` setzt einen ersten Eintrag mit leerem Wert davor. */
 export function fillOptions(sel, eintraege, chosen, leer) {
   const liste = leer ? [{ id: '', label: leer }, ...eintraege] : eintraege;

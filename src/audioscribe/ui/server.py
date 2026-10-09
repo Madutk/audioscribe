@@ -900,12 +900,16 @@ def create_app():
     def api_agent_defaults():
         from audioscribe.agent.skills import discover_skills
 
+        from audioscribe.souffleur.ki import modell_fuer
+
         saved = state.load_state()
         skills = discover_skills(settings.agent_skills_dir)
         known = {s.name for s in skills}
         chosen = saved.get("agent_skills")
         if not isinstance(chosen, list):
             chosen = [n for n in settings.agent_skills if n in known]
+        eff = _eff()
+        dienst = eff["ki_dienst"]
         return JSONResponse(
             {
                 "skills_dir": str(settings.agent_skills_dir),
@@ -913,8 +917,10 @@ def create_app():
                     {"name": s.name, "description": s.description, "selected": s.name in chosen}
                     for s in skills
                 ],
-                "model": _eff()["agent_model"],
-                "models": list(jobs.AGENT_MODELS),
+                # Modell und Liste passend zum wirksamen KI-Dienst (lokal: Ollama-Tags).
+                "dienst": dienst,
+                "model": modell_fuer(dienst, eff["agent_model"]),
+                "models": list(einstellungen.modelle(dienst, "agent")),
                 "output_dir": str(_projekt().analysen_dir) if _projekt() is not None else _remembered_dir(
                     saved.get("agent_output_dir"), settings.agent_output_dir
                 ),
@@ -1030,6 +1036,7 @@ def create_app():
             skills_dir=settings.agent_skills_dir,
             model=model,
             bash=body.bash,
+            dienst=_eff()["ki_dienst"],
         )
         # Modell und Ordner gehoeren zu den Einstellungen bzw. zum Projekt - gemerkt werden
         # hier nur die Angaben des Laufs (ohne Projekt auch der zuletzt benutzte Ordner).

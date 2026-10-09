@@ -17,15 +17,25 @@ from audioscribe.agent.skills import Skill
 _PROMPT_DIR = Path(__file__).parent / "prompts"
 
 
-def system_append(python: str | None = None) -> str:
+_LOKAL_HINWEIS = (
+    "Hinweis: Du läufst als lokales Modell auf diesem Rechner (experimentell). Standbilder "
+    "ansehen kann je nach Modell scheitern - schlägt das Read-Werkzeug auf einem Bild fehl, "
+    "arbeite ohne Bilder weiter und vermerke das in den Dokumenten. Halte dich streng an echte "
+    "Werkzeugaufrufe; erfinde keine Dateien und keine Werkzeugergebnisse."
+)
+
+
+def system_append(python: str | None = None, *, lokal: bool = False) -> str:
     """Feste Arbeitsregeln (Anhang an den Claude-Code-Systemprompt).
 
     ``python``: Interpreter fuer Skill-Skripte, Default der laufende (audioscribe-venv).
     Ein nacktes ``python`` gibt es unter WSL/Ubuntu nicht (nur ``python3``), unter
     Windows oft nur den Store-Platzhalter - der Agent verbrannte sonst Runden mit Raten.
+    ``lokal``: Zusatz fuer ein lokales Modell (Ollama), das Bilder evtl. nicht lesen kann.
     """
     text = (_PROMPT_DIR / "system.md").read_text(encoding="utf-8").strip()
-    return text.replace("{python}", python or sys.executable)
+    text = text.replace("{python}", python or sys.executable)
+    return f"{text}\n\n{_LOKAL_HINWEIS}" if lokal else text
 
 
 def build_task_prompt(auftrag: Auftrag, material: Material, skills: Sequence[Skill]) -> str:

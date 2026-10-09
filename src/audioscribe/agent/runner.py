@@ -30,6 +30,7 @@ from audioscribe.agent.manifest import Manifest, load_manifest, save_manifest
 from audioscribe.agent.material import Auftrag, Material, copy_material
 from audioscribe.agent.prompt import build_task_prompt, system_append
 from audioscribe.agent.skills import Skill, install_skills
+from audioscribe.souffleur.ki import BACKEND_OLLAMA
 from audioscribe.verbrauch import Verbrauch, aus_ergebnis, aus_usage
 
 LOG_NAME = "agent-log.txt"
@@ -52,6 +53,38 @@ INSTALL_HINT = (
 
 def _now() -> str:
     return datetime.now().astimezone().isoformat(timespec="seconds")
+
+
+def sdk_env(dienst: str) -> dict[str, str]:
+    """Umgebung fuer Claude Code je KI-Dienst. Bei ``ollama`` wird die Anthropic-kompatible
+    Schnittstelle des lokalen Dienstes untergeschoben (``/v1/messages``); der Token ist
+    Pflicht, wird lokal aber nicht geprueft. Bei Claude bleibt die Umgebung unangetastet."""
+    if dienst != BACKEND_OLLAMA:
+        return {}
+    from audioscribe.config import settings
+
+    return {"ANTHROPIC_BASE_URL": settings.ollama_url, "ANTHROPIC_AUTH_TOKEN": "ollama"}
+
+
+def pruefe_lokal(modell: str) -> str:
+    """Vor einem lokalen Lauf: Dienst erreichbar, Modell geladen? Liefert eine Protokollzeile,
+    sonst ``RuntimeError`` mit dem, was zu tun ist."""
+    from audioscribe.config import settings
+    from audioscribe.souffleur.ki_ollama import ANALYSE_MIN_CTX, ollama_sicherstellen
+
+    # Läuft der Dienst nicht, startet ihn die App selbst (nur auf diesem Rechner).
+    status = ollama_sicherstellen(settings.ollama_url, log_datei=settings.cache_dir / "ollama.log")
+    if not status.erreichbar:
+        raise RuntimeError(
+            f"Lokale KI nicht erreichbar unter {settings.ollama_url} ({status.fehler}; 'ollama serve' starten)"
+        )
+    if not status.hat_modell(modell):
+        raise RuntimeError(f"Lokales Modell {modell} nicht geladen - 'ollama pull {modell}'")
+    return (
+        f"[experimentell] lokales Modell {modell} ueber Ollama {status.version or '?'} "
+        f"({settings.ollama_url}); der Dienst braucht OLLAMA_CONTEXT_LENGTH>={ANALYSE_MIN_CTX}. "
+        "Verbrauch zaehlt nicht (lokal)."
+    )
 
 
 def tool_summary(name: str, tool_input: dict[str, Any]) -> str:
@@ -89,6 +122,7 @@ class AnalyseSitzung:
         self._material: Material | None = None
         self._started = time.monotonic()
         self._status_zeilen = status_zeilen
+        self._lokal = auftrag.dienst == BACKEND_OLLAMA  # Verbrauch zaehlt nicht (FR-78)
         self.fortschritt = Fortschritt(self.workspace)
         self._tool_names: dict[str, str] = {}  # tool_use_id -> Werkzeug
         # KI-Verbrauch: der Dienst meldet je Ergebnis laufende Summen der Verbindung.
@@ -126,6 +160,8 @@ class AnalyseSitzung:
     def _zwischenstand(self, msg: Any) -> bool:
         """Tokens einer Antwort vormerken, bis das Ergebnis die verbindlichen Zahlen bringt;
         ``True``, wenn sich der Stand geaendert hat."""
+        if self._lokal:
+            return False
         message_id = getattr(msg, "message_id", None)
         verbrauch = aus_usage(getattr(msg, "usage", None))
         if not message_id or not verbrauch.tokens or self._vorlaeufig.get(message_id) == verbrauch:
@@ -185,6 +221,8 @@ class AnalyseSitzung:
         save_manifest(self.workspace, self.manifest)
         self._fortschritt_melden()
 
+        if self._lokal:
+            self.log(pruefe_lokal(self.auftrag.model or ""))
         tools = list(_BASE_TOOLS) + (["Bash"] if self.auftrag.bash else [])
         options = ClaudeAgentOptions(
             cwd=str(self.workspace),
@@ -194,10 +232,13 @@ class AnalyseSitzung:
             strict_mcp_config=True,
             permission_mode="default",
             can_use_tool=self._can_use_tool,
-            system_prompt={"type": "preset", "preset": "claude_code", "append": system_append()},
+            system_prompt={
+                "type": "preset", "preset": "claude_code", "append": system_append(lokal=self._lokal),
+            },
             model=self.auftrag.model,
             max_turns=self.auftrag.max_turns,
             resume=self.auftrag.resume,
+            env=sdk_env(self.auftrag.dienst),
             stderr=lambda line: self.log(f"[claude] {line.rstrip()}"),
         )
         self._client = ClaudeSDKClient(options=options)
@@ -313,8 +354,9 @@ class AnalyseSitzung:
             m.sitzungen.append(msg.session_id)
         m.turns = (m.turns or 0) + (msg.num_turns or 0)
         # Der Dienst meldet laufende Summen der Verbindung: nur zaehlen, was dazukam.
+        # Lokal (Ollama) zaehlt nichts - die gemeldeten Tokens sind nur eine Protokollnotiz.
         gesamt = aus_ergebnis(msg)
-        dazu = gesamt.minus(self._stand)
+        dazu = Verbrauch() if self._lokal else gesamt.minus(self._stand)
         self._stand = gesamt
         self._lauf = self._lauf + dazu
         self._vorlaeufig.clear()
@@ -333,7 +375,9 @@ class AnalyseSitzung:
         # Der Preis ist der Gegenwert zu API-Preisen - bei Abo-Anmeldung keine Rechnung, deshalb
         # steht "API-Gegenwert" dabei. Die Summe ueber alle Laeufe steht in analyse.json.
         self.log(f"[Ergebnis] {m.status}: {msg.num_turns} Runde(n), Session {msg.session_id}")
-        if dazu.tokens:
+        if self._lokal:
+            self.log(f"[Verbrauch] lokal, zaehlt nicht ({gesamt.tokens} Tokens gemeldet)")
+        elif dazu.tokens:
             self.log(f"[Verbrauch] {dazu.text()}")
         self._fortschritt_melden()
         return not msg.is_error

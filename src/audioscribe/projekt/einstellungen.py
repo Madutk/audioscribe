@@ -14,7 +14,10 @@ from audioscribe.config import settings
 from audioscribe.projekt.modell import UEBERSCHREIBBAR, Projekt
 
 # KI-Dienste zur Auswahl; weitere Dienste kommen hier dazu (Factory: souffleur/ki.make_ki).
-KI_DIENSTE: tuple[tuple[str, str], ...] = (("claude-agent", "Claude (Agent SDK)"),)
+KI_DIENSTE: tuple[tuple[str, str], ...] = (
+    ("claude-agent", "Claude (Agent SDK)"),
+    ("ollama", "Lokal (Ollama auf diesem Rechner)"),
+)
 
 # Schlüssel im Einstellungsstand je globalem Wert.
 _STATE_KEY = {
@@ -65,21 +68,36 @@ def effektiv(state: Mapping[str, object], projekt: Projekt | None = None) -> Eff
     return Effektiv(werte, herkunft)
 
 
+def modelle(dienst: str, zweck: str) -> tuple[str, ...]:
+    """Vorschlagsliste je Dienst: ``zweck`` ist ``souffleur`` oder ``agent``. Bei der lokalen KI
+    gilt dieselbe Liste für beide - welches Modell passt, entscheidet der Rechner."""
+    from audioscribe.souffleur.ki import SOUFFLEUR_MODELS
+    from audioscribe.souffleur.ki_ollama import OLLAMA_MODELLE
+    from audioscribe.ui import jobs
+
+    if dienst == "ollama":
+        return OLLAMA_MODELLE
+    return SOUFFLEUR_MODELS if zweck == "souffleur" else jobs.AGENT_MODELS
+
+
 def optionen(state: Mapping[str, object]) -> dict:
     """Auswahllisten für die Einstellungsseiten. Ein per Umgebung gesetzter Wert außerhalb der
-    Listen (z. B. der Test-Dienst) bleibt wählbar, statt stillschweigend zu verschwinden."""
-    from audioscribe.souffleur.ki import SOUFFLEUR_MODELS
+    Listen (z. B. der Test-Dienst) bleibt wählbar, statt stillschweigend zu verschwinden.
+    Modelle tragen den Dienst, zu dem sie gehören - die Oberfläche filtert danach."""
     from audioscribe.ui import jobs
 
     g = globale(state)
 
-    def mit(liste: list[dict], wert: str) -> list[dict]:
-        return liste if any(e["id"] == wert for e in liste) else [{"id": wert, "label": wert}, *liste]
+    def mit(liste: list[dict], wert: str, **extra: str) -> list[dict]:
+        return liste if any(e["id"] == wert for e in liste) else [{"id": wert, "label": wert, **extra}, *liste]
+
+    def je_dienst(zweck: str) -> list[dict]:
+        return [{"id": m, "label": m, "dienst": d} for d, _ in KI_DIENSTE for m in modelle(d, zweck)]
 
     return {
         "ki_dienste": mit([{"id": i, "label": l} for i, l in KI_DIENSTE], g["ki_dienst"]),
-        "souffleur_models": mit([{"id": m, "label": m} for m in SOUFFLEUR_MODELS], g["souffleur_model"]),
-        "agent_models": mit([{"id": m, "label": m} for m in jobs.AGENT_MODELS], g["agent_model"]),
+        "souffleur_models": mit(je_dienst("souffleur"), g["souffleur_model"], dienst=g["ki_dienst"]),
+        "agent_models": mit(je_dienst("agent"), g["agent_model"], dienst=g["ki_dienst"]),
         "sprachen": mit([{"id": s, "label": _SPRACHEN.get(s, s)} for s in jobs.LANGUAGES], g["sprache"]),
     }
 

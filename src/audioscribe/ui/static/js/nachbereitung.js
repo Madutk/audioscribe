@@ -28,6 +28,12 @@ export async function enterAna() {
   $('anaSourceHint').textContent = proj ? 'Sitzungen dieses Projekts' : 'fertige Transkriptionen im Speicherort';
   anaDefaults = await api('/api/agent/defaults');
   fill($('anaModel'), anaDefaults.models, anaDefaults.model);
+  const lokal = anaDefaults.dienst === 'ollama';
+  $('anaDienstHint').hidden = !lokal;
+  $('anaDienstHint').textContent = lokal
+    ? 'Lokales Modell über Ollama – experimentell: Qualität und Dauer sind nicht mit Claude vergleichbar; '
+      + 'der Dienst braucht OLLAMA_CONTEXT_LENGTH ≥ 32768. Dienst und Modell stehen in den Einstellungen.'
+    : '';
   $('anaBash').checked = anaDefaults.bash !== false;
   $('anaSkillsDir').textContent = anaDefaults.skills_dir;
   $('anaOut').value = S.folders.agent_output_dir || anaDefaults.output_dir;

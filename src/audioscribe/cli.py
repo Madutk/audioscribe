@@ -371,7 +371,13 @@ def main(argv: list[str] | None = None) -> int:
     )
     ana.add_argument("--skills-dir", metavar="PFAD", help="Ordner mit Skills (Default: ~/.claude/skills)")
     ana.add_argument("--list-skills", action="store_true", help="verfuegbare Skills anzeigen und beenden")
-    ana.add_argument("--model", help="Claude-Modell (Default: claude-opus-5)")
+    ana.add_argument("--model", help="Modell (Default: claude-opus-5; bei --ki-dienst ollama ein Ollama-Tag)")
+    ana.add_argument(
+        "--ki-dienst",
+        choices=("claude-agent", "ollama"),
+        default="claude-agent",
+        help="KI-Dienst: claude-agent (Default) oder ollama (lokales Modell auf diesem Rechner, experimentell)",
+    )
     ana.add_argument("--max-turns", type=int, metavar="N", help="Obergrenze fuer Agenten-Runden")
     ana.add_argument(
         "--no-bash", action="store_true", help="Agent darf keine Befehle/Skill-Skripte ausfuehren"
