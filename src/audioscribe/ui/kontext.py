@@ -1,4 +1,5 @@
-"""Aktiver Kontext der Oberfläche (PRD §21): Startseite, Projekt, einzelne Aufnahme oder Demo.
+"""Aktiver Kontext der Oberfläche (PRD §21): Startseite, Projekt, Aufnahme ohne Projekt,
+einzelne Datei oder Demo.
 
 Der Server hält genau einen Kontext - wie er genau eine Live-Sitzung, einen Stapel und eine
 Analyse zur Zeit hält. Ein Neuladen der Seite ändert daran nichts; nach einem Neustart des
@@ -13,14 +14,16 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from audioscribe.config import settings
-from audioscribe.projekt import einstellungen, modell
+from audioscribe.projekt import eingang, einstellungen, modell
 from audioscribe.projekt.modell import Projekt
 
 MODUS_START = "start"
 MODUS_PROJEKT = "projekt"
 MODUS_DATEI = "datei"
 MODUS_DEMO = "demo"
-MODI: tuple[str, ...] = (MODUS_START, MODUS_PROJEKT, MODUS_DATEI, MODUS_DEMO)
+# "Sofort aufnehmen": Live-Sitzung ohne Projekt, sie landet im Eingangsordner.
+MODUS_AUFNAHME = "aufnahme"
+MODI: tuple[str, ...] = (MODUS_START, MODUS_PROJEKT, MODUS_DATEI, MODUS_DEMO, MODUS_AUFNAHME)
 
 # Demo (zu reinen Vorführzwecken, leicht entfernbar): Wiki und Test-Meeting aus dem Repository.
 DEMO_ORDNER = Path("demo") / "llm-wiki"
@@ -183,7 +186,8 @@ def zuletzt(state: Mapping[str, object]) -> list[dict]:
 
 
 def unterbrochene(state: Mapping[str, object], aktiv: Projekt | None = None) -> list[dict]:
-    """Nicht sauber beendete Live-Sitzungen der bekannten Projekte (für das Banner)."""
+    """Nicht sauber beendete Live-Sitzungen der bekannten Projekte und des Eingangsordners
+    (für das Banner); Sitzungen ohne Projekt tragen ``projekt == ""``."""
     try:
         from audioscribe.live.journal import offene_sitzungen
     except ImportError:
@@ -201,6 +205,7 @@ def unterbrochene(state: Mapping[str, object], aktiv: Projekt | None = None) -> 
         except modell.ProjektFehler:
             continue
         kandidaten.append((str(p.wurzel), p.name, p.sitzungen_dir))
+    kandidaten.append(("", "Ohne Projekt", eingang.eingang_dir(state)))
     for wurzel, name, ordner in kandidaten:
         if wurzel in gesehen:
             continue

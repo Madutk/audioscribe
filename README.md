@@ -135,21 +135,28 @@ wird mit „Abbrechen“ oder Strg+C im Terminal.
 .venv/bin/audioscribe ui --port 9000 --no-browser
 ```
 
-Die Oberfläche beginnt auf der **Startseite** mit vier Einstiegen; jede Karte hat unter
+Die Oberfläche beginnt auf der **Startseite** mit fünf Einstiegen; jede Karte hat unter
 „Worum geht es?“ eine kurze Erklärung.
 
 | Einstieg | Wofür | Was du danach siehst |
 |---|---|---|
+| **Sofort aufnehmen** | Gleich mitschneiden, ohne Projekt | Live-Ansicht; nach dem Stopp „Sitzung ablegen“: einem Projekt zuordnen oder später entscheiden |
 | **Neues Projekt** | Ein eigener Ordner für Meetings mit Souffleur – auf Wunsch mit LLM-Wiki | Assistent in vier Schritten mit Strukturvorschau, dann der Arbeitsbereich des Projekts |
 | **Projekt öffnen** | Ein vorhandenes Projekt weiterführen | Liste „Zuletzt geöffnet“ oder Wahl des Projektordners |
 | **Aufnahme transkribieren** | Eine einzelne Audio- oder Videodatei in Text umwandeln, ohne Projekt | Nur die Transkription, dazu die KI-Analyse als nächster Schritt |
 | **Demo abspielen** | Vorführung mit Beispiel-Meeting und Beispiel-Wiki | Live-Ansicht mit Zeitstrahl der bisherigen Meetings und einem Knopf „Demo starten“ |
 
-Der Kopf zeigt, wo du bist (Projektname, „Aufnahme transkribieren“ oder „Demo“); der Knopf
+Der Kopf zeigt, wo du bist (Projektname, „Aufnahme ohne Projekt“, „Aufnahme transkribieren“ oder „Demo“); der Knopf
 daneben führt zurück zur Startseite. Läuft noch eine Sitzung, Transkription oder Analyse,
 bleibt der Wechsel gesperrt, bis sie beendet ist. Der Server merkt sich, was geöffnet ist:
 Ein Neuladen der Seite ändert nichts, nach einem Neustart von AudioScribe beginnst du wieder
 auf der Startseite.
+
+**Sofort aufnehmen** – die Sitzung landet im Eingangsordner (Vorgabe
+`~/Documents/AudioScribe/Ohne Projekt`, änderbar unter Einstellungen › Aufnahmen ohne Projekt). Nach dem Stopp
+oder später über die Liste „Aufnahmen ohne Projekt“ auf der Startseite verschiebst du sie in den
+Sitzungsordner eines vorhandenen Projekts oder legst dafür ein neues Projekt an. Danach ist das
+Projekt offen, und die Nachbereitung hat die Sitzung vorgewählt (ins Wiki speichern, KI-Analyse).
 
 **Neues Projekt** – der Assistent führt in vier Schritten durch; eine Strukturvorschau
 unter den Schritten zeigt jederzeit, welche Ordner am Ende entstehen:
@@ -936,7 +943,7 @@ uv sync --extra cu124 --extra review --extra agent   # GPU-Rechner; CPU: --extra
 claude                                               # einmal mit dem Claude-Abo anmelden (für analyze)
 .venv/bin/audioscribe doctor                         # Umgebung prüfen (--json für Maschinen)
 
-# Oberfläche (Startseite: Neues Projekt | Projekt öffnen | Aufnahme transkribieren | Demo)
+# Oberfläche (Startseite: Sofort aufnehmen | Neues Projekt | Projekt öffnen | Aufnahme transkribieren | Demo)
 .venv/bin/audioscribe ui                             # http://127.0.0.1:8766
 .venv/bin/audioscribe ui --port 9000 --no-browser
 

@@ -16,6 +16,7 @@ export const S = {
   folders: { input_dir: '', output_dir: '', agent_output_dir: '' },
   wikiStatus: null,     // /api/wiki/status des Projekt-Wikis - gilt, solange keine Sitzung laeuft
   vorwahl: null,        // Ergebnisordner, den die Nachbereitung als Quelle vorwaehlen soll
+  zuordnen: null,       // Aufnahme ohne Projekt, die nach "Neues Projekt" ins neue Projekt wandert
 };
 
 export const modus = () => (S.kontext ? S.kontext.modus : 'start');

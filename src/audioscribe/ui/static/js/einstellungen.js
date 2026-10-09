@@ -1,7 +1,7 @@
 // Einstellungen: global (KI, Sprache, Umgebung) und je Projekt (Ordner, Wiki-Ablage, KI und
 // Sprache mit "globale Einstellung verwenden"). Aenderungen gelten sofort (PRD §21).
 
-import { $, api, post, put, esc, icon, empty, projekt, fillOptions, toast, sep, trimSep, dienstHinweis, modelleFuer, passendesModell } from './kern.js';
+import { $, S, api, post, put, esc, icon, empty, projekt, fillOptions, toast, sep, trimSep, dienstHinweis, modelleFuer, passendesModell } from './kern.js';
 import { setKontext } from './kontext.js';
 import { pickFolder, askConfirm } from './dialoge.js';
 import { renderWikiState, loadWikiStatus } from './wiki.js';
@@ -39,8 +39,34 @@ export async function enterEinstellungen() {
   } catch (err) {
     $('gErr').textContent = err.message;
   }
+  zeigeEingang();
   loadEnvironment();
 }
+
+// --- Eingangsordner ("Sofort aufnehmen") ------------------------------------------------
+
+function zeigeEingang() {
+  $('gEingangDir').textContent = (S.kontext && S.kontext.eingang_dir) || '';
+}
+
+async function speichereEingang(pfad) {
+  $('gEingangErr').textContent = '';
+  try {
+    await post('/api/state', { eingang_dir: pfad });
+    setKontext(await api('/api/kontext'));
+    zeigeEingang();
+    toast('Eingangsordner gespeichert');
+  } catch (err) {
+    $('gEingangErr').textContent = err.message;
+  }
+}
+
+$('gEingangWaehlen').onclick = async () => {
+  const pfad = await pickFolder({ title: 'Eingangsordner für Aufnahmen ohne Projekt', ok: 'Diesen Ordner verwenden',
+    start: (S.kontext && S.kontext.eingang_dir) || '' });
+  if (pfad) speichereEingang(pfad);
+};
+$('gEingangStandard').onclick = () => speichereEingang('');
 
 for (const [key, id] of Object.entries(G)) {
   $(id).onchange = async () => {

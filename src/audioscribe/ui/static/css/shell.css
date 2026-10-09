@@ -15,7 +15,7 @@ header.top { min-height: 60px; }
 .tabs a { text-decoration: none; display: inline-flex; align-items: center; border-radius: var(--radius-pill);
           transition: background var(--dur) var(--ease), color var(--dur); }
 .tabs:not(:has(a:not([hidden]))) { display: none; }
-body[data-modus="start"] .tabs, body[data-modus="demo"] .tabs { display: none; }
+body[data-modus="start"] .tabs, body[data-modus="demo"] .tabs, body[data-modus="aufnahme"] .tabs { display: none; }
 .ctx { display: inline-flex; align-items: center; gap: var(--s2); padding: 3px 4px 3px 12px; border: 1px solid var(--border);
        border-radius: var(--radius-pill); background: var(--surface-2); min-width: 0; max-width: 38vw; }
 .ctx > .ic { color: var(--accent); width: 16px; height: 16px; }
@@ -101,6 +101,11 @@ a.back:hover { color: var(--accent); }
 .launch .more { position: relative; z-index: 1; }
 .launch-go .ic { transition: transform var(--dur) var(--ease); }
 .launch:hover .launch-go .ic { transform: translateX(3px); }
+/* "Sofort aufnehmen": der schnellste Einstieg - quer ueber die ganze Breite */
+#launchAufnahme { grid-column: 1 / -1; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; column-gap: var(--s4); align-items: center; }
+#launchAufnahme .launch-icon { grid-column: 1; grid-row: 1 / span 3; margin: 0; }
+#launchAufnahme h3, #launchAufnahme > p, #launchAufnahme .more { grid-column: 2; }
+#launchAufnahme .launch-go { grid-column: 3; grid-row: 1 / span 3; margin: 0; align-self: center; }
 .launch[aria-disabled="true"] { opacity: .6; }
 .launch[aria-disabled="true"]:hover { transform: none; border-color: var(--border); box-shadow: var(--shadow-sm); }
 
@@ -117,6 +122,10 @@ a.back:hover { color: var(--accent); }
 .recent .open small { font-weight: 400; color: var(--fg-muted); font-size: 12px; max-width: 100%; overflow: hidden;
                       text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; }
 .recent.fehlt .open { color: var(--fg-muted); }
+/* Aufnahme ohne Projekt: Angaben links, Zuordnen rechts */
+.recent .info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; font-weight: 600; }
+.recent .info small { font-weight: 400; color: var(--fg-muted); font-size: 12px; }
+.recent .actions { display: flex; gap: var(--s2); flex-wrap: wrap; }
 .recent > .ic { width: 20px; height: 20px; color: var(--accent); }
 
 /* Banner: unterbrochene Sitzungen, Hinweise */
@@ -291,6 +300,8 @@ dialog.dialog:not([open]) { display: none; }
 dialog.dialog::backdrop { background: var(--backdrop); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
 dialog.dialog.wikisave { width: min(560px, 100%); }
 dialog.dialog > .hint { margin-bottom: var(--s3); }
+dialog.dialog.zuordnen { width: min(560px, 100%); }
+dialog.zuordnen .recent-list { grid-template-columns: 1fr; margin-bottom: var(--s3); }
 dialog.dialog footer .hint { word-break: normal; overflow-wrap: anywhere; }
 dialog.dialog.preview { width: min(900px, 100%); height: min(84vh, 900px); }
 dialog.dialog.preview pre { flex: 1; overflow: auto; margin: var(--s2) 0 0; padding: var(--s3); background: var(--code-bg);
@@ -343,6 +354,8 @@ dialog.dialog .card-title .icon-btn { width: 30px; height: 30px; }
 @media (max-width: 560px) {
   .demo-zeit .thema { display: none; }
   .launch-grid, .grid.two { grid-template-columns: 1fr; }
+  #launchAufnahme { display: flex; }
+  #launchAufnahme .launch-go { margin-top: auto; align-self: flex-start; }
   .steps li { font-size: 12px; }
   .wiz-foot { flex-wrap: wrap; }
   .ctx { order: 4; width: 100%; }

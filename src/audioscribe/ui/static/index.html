@@ -129,6 +129,17 @@
   <div class="err" id="launchErr" role="alert"></div>
 
   <div class="launch-grid">
+    <article class="launch" id="launchAufnahme">
+      <span class="launch-icon"><svg class="ic" aria-hidden="true"><use href="#i-record"/></svg></span>
+      <h3>Sofort aufnehmen</h3>
+      <p>Gleich mitschneiden – ohne Projekt. Zuordnen lässt sich die Sitzung danach.</p>
+      <details class="more"><summary><svg class="ic" aria-hidden="true"><use href="#i-info"/></svg>Worum geht es?</summary>
+        <p>Die Live-Ansicht öffnet sich sofort: Audio, Standbilder und Transkript wie im Projekt. Die Sitzung landet im
+          Eingangsordner (änderbar unter Einstellungen). Nach dem Stopp – oder später hier auf der Startseite – verschiebst
+          du sie in ein vorhandenes Projekt oder legst dafür ein neues an.</p></details>
+      <button class="launch-go" type="button" data-launch="aufnahme">Aufnahme öffnen<svg class="ic" aria-hidden="true"><use href="#i-arrow-right"/></svg></button>
+    </article>
+
     <article class="launch" id="launchNeu">
       <span class="launch-icon"><svg class="ic" aria-hidden="true"><use href="#i-folder-plus"/></svg></span>
       <h3>Neues Projekt</h3>
@@ -173,6 +184,11 @@
     </article>
   </div>
 
+  <section class="recents" id="eingangBox" aria-labelledby="eingangTitle" hidden>
+    <h2 id="eingangTitle"><svg class="ic" aria-hidden="true"><use href="#i-record"/></svg>Aufnahmen ohne Projekt</h2>
+    <div class="recent-list" id="eingangListe"></div>
+  </section>
+
   <section class="recents" id="recentsBox" aria-labelledby="recentsTitle" hidden>
     <h2 id="recentsTitle"><svg class="ic" aria-hidden="true"><use href="#i-history"/></svg>Zuletzt geöffnet</h2>
     <div class="recent-list" id="recents"></div>
@@ -184,6 +200,7 @@
   <div class="card wiz">
     <a class="back" href="#/"><svg class="ic" aria-hidden="true"><use href="#i-arrow-left"/></svg>Startseite</a>
     <h2 class="wiz-title">Neues Projekt</h2>
+    <p class="hint" id="wizZuordnen" hidden></p>
     <ol class="steps" id="wizSteps">
       <li data-step="1" class="active"><span class="num">1</span>Projekt</li>
       <li data-step="2"><span class="num">2</span>Wiki</li>
@@ -649,6 +666,17 @@
       <div class="err" id="gErr" role="alert"></div>
       <p class="hint" style="margin-top:8px">Änderungen gelten sofort und werden auf diesem Rechner gemerkt.</p>
     </div>
+    <div class="card">
+      <h2 class="card-title"><svg class="ic" aria-hidden="true"><use href="#i-record"/></svg>Aufnahmen ohne Projekt</h2>
+      <div class="field"><label>Eingangsordner</label>
+        <p class="path" id="gEingangDir"></p>
+        <div class="row">
+          <button class="secondary sm" type="button" id="gEingangWaehlen"><svg class="ic" aria-hidden="true"><use href="#i-folder"/></svg>Ordner wählen</button>
+          <button class="ghost sm" type="button" id="gEingangStandard"><svg class="ic" aria-hidden="true"><use href="#i-rotate-ccw"/></svg>Vorgabe</button>
+        </div>
+        <p class="hint">Hier landen Sitzungen aus „Sofort aufnehmen“, bis du sie einem Projekt zuordnest.</p></div>
+      <div class="err" id="gEingangErr" role="alert"></div>
+    </div>
   </div>
 
   <div class="right">
@@ -781,6 +809,20 @@
     <span class="spacer"></span>
     <button class="secondary" type="button" id="confirmCancel">Abbrechen</button>
     <button class="danger" type="button" id="confirmOk"></button>
+  </footer>
+</dialog>
+
+<!-- Aufnahme ohne Projekt einem Projekt zuordnen -->
+<dialog class="dialog zuordnen" id="zuordnenDlg" aria-labelledby="zuordnenTitle">
+  <h2 class="card-title" id="zuordnenTitle"><svg class="ic" aria-hidden="true"><use href="#i-folder-open"/></svg>Aufnahme einem Projekt zuordnen</h2>
+  <p class="hint" id="zuordnenInfo"></p>
+  <div class="recent-list" id="zuordnenListe"></div>
+  <div class="err" id="zuordnenErr" role="alert"></div>
+  <footer>
+    <button class="secondary" type="button" id="zuordnenAnderes"><svg class="ic" aria-hidden="true"><use href="#i-folder"/></svg>Anderes Projekt …</button>
+    <button class="secondary" type="button" id="zuordnenNeu"><svg class="ic" aria-hidden="true"><use href="#i-folder-plus"/></svg>Neues Projekt …</button>
+    <span class="spacer"></span>
+    <button class="ghost" type="button" id="zuordnenCancel">Abbrechen</button>
   </footer>
 </dialog>
 

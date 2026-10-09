@@ -29,7 +29,7 @@ from pathlib import Path
 
 from audioscribe.config import settings
 from audioscribe.pipeline.media import probe_duration
-from audioscribe.projekt import einstellungen, modell, wiki_ablage
+from audioscribe.projekt import eingang, einstellungen, modell, wiki_ablage
 from audioscribe.projekt.modell import ProjektFehler
 from audioscribe.ui import browse, jobs, kontext as kontext_modul, state
 from audioscribe.ui.runner import AnalyseRunner, BatchRunner, LiveRunner
@@ -213,11 +213,17 @@ def create_app():
     def _projekt():
         return kontext.projekt
 
+    def _eingang_dir() -> Path:
+        return eingang.eingang_dir(state.load_state())
+
     def _ausgabe_dir(raw: str = "") -> Path:
-        """Wohin Transkripte gehen: im Projekt der Sitzungsordner, sonst die Angabe des Clients."""
+        """Wohin Transkripte gehen: im Projekt der Sitzungsordner, bei "Sofort aufnehmen" der
+        Eingangsordner, sonst die Angabe des Clients."""
         p = _projekt()
         if p is not None:
             return p.sitzungen_dir
+        if kontext.modus == kontext_modul.MODUS_AUFNAHME:
+            return _eingang_dir()
         return browse.normalize_path(raw, default=settings.output_dir)
 
     def _analysen_dir(raw: str = "") -> Path:
@@ -261,6 +267,9 @@ def create_app():
             "zuletzt": kontext_modul.zuletzt(saved),
             "demo_verfuegbar": kontext_modul.demo_verfuegbar(),
             "unterbrochen": kontext_modul.unterbrochene(saved, p),
+            # Aufnahmen ohne Projekt, die noch auf ein Projekt warten
+            "eingang": eingang.liste(eingang.eingang_dir(saved)),
+            "eingang_dir": str(eingang.eingang_dir(saved)),
             "laeuft": {"live": live.laeuft(), "analyse": analyse.laeuft(), "stapel": runner.laeuft()},
             # Vorbelegung des Assistenten: Speicherort fuer den Projektordner und - aus einer
             # Installation von vor den Projekten - ein schon bekanntes Wiki.
@@ -315,6 +324,10 @@ def create_app():
     class SitzungIn(BaseModel):
         sitzung: str
 
+    class ZuordnenIn(BaseModel):
+        sitzung: str
+        projekt: str  # Projektordner
+
     class LiveStartIn(BaseModel):
         output_dir: str = ""
         # Sitzungstitel (PRD §21): benennt die Sitzung und spaeter den Ordner im Wiki.
@@ -362,6 +375,8 @@ def create_app():
         souffleur_model: str | None = None
         souffleur_aktiv: bool | None = None
         souffleur_sensibel: bool | None = None
+        # Aufnahmen ohne Projekt; leer = Vorgabe im Dokumente-Ordner
+        eingang_dir: str | None = None
 
     class EssenzIn(BaseModel):
         minuten: int = 2
@@ -441,8 +456,11 @@ def create_app():
 
     @app.post("/api/kontext")
     def api_kontext_setzen(body: KontextIn):
-        """Startseite, "Aufnahme transkribieren" oder Demo waehlen (Projekte: /api/projekt/...)."""
-        if body.modus not in (kontext_modul.MODUS_START, kontext_modul.MODUS_DATEI, kontext_modul.MODUS_DEMO):
+        """Startseite, "Sofort aufnehmen", "Aufnahme transkribieren" oder Demo waehlen
+        (Projekte: /api/projekt/...)."""
+        if body.modus not in (
+            kontext_modul.MODUS_START, kontext_modul.MODUS_DATEI, kontext_modul.MODUS_DEMO, kontext_modul.MODUS_AUFNAHME,
+        ):
             raise HTTPException(400, f"Unbekannter Modus: {body.modus}")
         if body.modus == kontext_modul.MODUS_DEMO:
             if not kontext_modul.demo_verfuegbar():
@@ -578,19 +596,63 @@ def create_app():
 
     # --- Wiki-Ablage (PRD §21) ----------------------------------------------------------------
 
+    def _in_ordner(raw: str, basis: Path, fehler: str) -> Path:
+        ordner = browse.normalize_path(raw, default=Path(""))
+        try:
+            ok = ordner.is_dir() and ordner.resolve().is_relative_to(basis.resolve())
+        except OSError:
+            ok = False
+        if not ok:
+            raise HTTPException(400, f"{fehler}: {raw}")
+        return ordner
+
     def _sitzungsordner(raw: str) -> Path:
         """Sitzungsordner des geoeffneten Projekts - nichts ausserhalb des Projekts."""
         p = _projekt()
         if p is None or p.demo:
             raise HTTPException(409, "Kein Projekt geöffnet.")
-        ordner = browse.normalize_path(raw, default=Path(""))
+        return _in_ordner(raw, p.sitzungen_dir, "Kein Sitzungsordner dieses Projekts")
+
+    def _live_sitzungsordner(raw: str) -> Path:
+        """Wie ``_sitzungsordner``; bei "Sofort aufnehmen" gilt der Eingangsordner."""
+        if kontext.modus == kontext_modul.MODUS_AUFNAHME:
+            return _in_ordner(raw, _eingang_dir(), "Keine Aufnahme ohne Projekt")
+        return _sitzungsordner(raw)
+
+    @app.post("/api/eingang/zuordnen")
+    def api_eingang_zuordnen(body: ZuordnenIn):
+        """Aufnahme ohne Projekt in den Sitzungsordner eines Projekts verschieben und das
+        Projekt oeffnen."""
+        ordner = _in_ordner(body.sitzung, _eingang_dir(), "Keine Aufnahme ohne Projekt")
+        if not body.projekt.strip():
+            raise HTTPException(400, "Bitte ein Projekt wählen.")
+        laufend = live.session_dir()
+        betrifft_live = laufend is not None and laufend.resolve() == ordner.resolve()
+        if betrifft_live and live.laeuft():
+            raise HTTPException(409, "Diese Sitzung läuft noch – zuordnen lässt sie sich nach dem Stopp.")
         try:
-            ok = ordner.is_dir() and ordner.resolve().is_relative_to(p.sitzungen_dir.resolve())
-        except OSError:
-            ok = False
-        if not ok:
-            raise HTTPException(400, f"Kein Sitzungsordner dieses Projekts: {raw}")
-        return ordner
+            projekt = modell.lade(browse.normalize_path(body.projekt, default=Path("")))
+        except ProjektFehler as exc:
+            raise HTTPException(400, str(exc)) from exc
+        try:
+            eingang.pruefe_sitzung(ordner)
+        except ProjektFehler as exc:
+            raise HTTPException(400, str(exc)) from exc
+        except RuntimeError as exc:
+            raise HTTPException(409, str(exc)) from exc
+        # Erst den Kontext wechseln (prueft, dass nichts laeuft, und laesst die Live-Ansicht los),
+        # dann verschieben - so zeigt nichts mehr auf den alten Ordner.
+        _wechsle(kontext_modul.MODUS_PROJEKT, projekt)
+        state.merke_projekt(projekt.wurzel, projekt.name)
+        try:
+            ziel = eingang.verschiebe(ordner, projekt)
+        except ProjektFehler as exc:
+            raise HTTPException(400, str(exc)) from exc
+        except RuntimeError as exc:
+            raise HTTPException(409, str(exc)) from exc
+        except OSError as exc:
+            raise HTTPException(400, f"Verschieben fehlgeschlagen: {exc}") from exc
+        return JSONResponse({**_kontext_antwort(), "ziel": str(ziel)})
 
     @app.post("/api/wiki/speichern")
     def api_wiki_speichern(body: WikiSpeichernIn):
@@ -728,6 +790,8 @@ def create_app():
         if p is not None:
             chosen["output_dir"] = str(p.sitzungen_dir)
             chosen["agent_output_dir"] = str(p.analysen_dir)
+        elif kontext.modus == kontext_modul.MODUS_AUFNAHME:
+            chosen["output_dir"] = str(_eingang_dir())
         eff = _eff()
         chosen["language"] = eff["sprache"]
         chosen["souffleur_model"] = eff["souffleur_model"]
@@ -809,7 +873,10 @@ def create_app():
     @app.post("/api/state")
     def api_state(body: StateIn):
         """Zuletzt benutzte Ordner/Optionen merken (einzige Speicherstelle)."""
-        state.save_state({k: v for k, v in body.model_dump().items() if v is not None})
+        werte = {k: v for k, v in body.model_dump().items() if v is not None}
+        if werte.get("eingang_dir", "").strip():
+            werte["eingang_dir"] = str(browse.normalize_path(werte["eingang_dir"], default=Path("")))
+        state.save_state(werte)
         return JSONResponse({"ok": True})
 
     @app.get("/api/environment")
@@ -1256,7 +1323,7 @@ def create_app():
         """Ordner einer nicht sauber beendeten Sitzung des geoeffneten Projekts."""
         from audioscribe.live import journal
 
-        ordner = _sitzungsordner(raw)
+        ordner = _live_sitzungsordner(raw)
         status = journal.lies_status(ordner)
         if status is None or status.get("replay") or status.get("status") not in (journal.LAEUFT, journal.UNTERBROCHEN):
             raise HTTPException(400, "Diese Sitzung ist nicht unterbrochen.")

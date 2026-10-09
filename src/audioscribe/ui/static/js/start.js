@@ -1,10 +1,12 @@
-// Startseite (vier Einstiege, zuletzt geoeffnete Projekte, unterbrochene Sitzungen) und der
+// Startseite (fuenf Einstiege, Aufnahmen ohne Projekt, zuletzt geoeffnete Projekte, unterbrochene
+// Sitzungen) und der
 // Assistent "Neues Projekt" (PRD §21).
 
-import { $, S, api, post, esc, icon, hms, toast, fillOptions, sep, trimSep, dirname, dienstHinweis, modelleFuer, passendesModell } from './kern.js';
+import { $, S, api, post, esc, icon, hms, toast, fillOptions, sep, trimSep, dirname, basename, dienstHinweis, modelleFuer, passendesModell } from './kern.js';
 import { go, HOME, setKontext, wechsle, oeffneProjekt, ladeKontext } from './kontext.js';
 import { pickFolder } from './dialoge.js';
 import { renderWikiState, slugify } from './wiki.js';
+import { ordneZu, zuordnenDialog } from './eingang.js';
 
 // --- Startseite ---------------------------------------------------------------------------
 
@@ -28,6 +30,20 @@ export function renderStart() {
       </button>
       <button class="icon-btn" type="button" data-forget="${esc(z.pfad)}" aria-label="Aus der Liste entfernen" title="Aus der Liste entfernen (das Projekt bleibt erhalten)">${icon('x')}</button>
     </div>`).join('');
+  // Aufnahmen ohne Projekt, die auf ein Projekt warten
+  const eingang = k.eingang || [];
+  $('eingangBox').hidden = !eingang.length;
+  $('eingangListe').innerHTML = eingang.map((s) => `
+    <div class="recent">
+      ${icon('record')}
+      <div class="info">
+        <span>${esc(s.titel || s.name)}</span>
+        <small title="${esc(s.dir)}">${esc(s.gestartet ? s.gestartet.replace('T', ' ').slice(0, 16) : s.name)} · ${hms(s.dauer_s || 0)}</small>
+      </div>
+      <div class="actions">
+        <button class="secondary sm" type="button" data-zuordnen="${esc(s.dir)}" data-titel="${esc(s.titel || '')}">${icon('folder-open')}Projekt zuordnen …</button>
+      </div>
+    </div>`).join('');
   // Demo nur, wenn die Demo-Daten da sind
   $('launchDemo').setAttribute('aria-disabled', String(!k.demo_verfuegbar));
   $('launchDemo').querySelector('.launch-go').disabled = !k.demo_verfuegbar;
@@ -35,17 +51,19 @@ export function renderStart() {
   $('startBanner').innerHTML = (k.unterbrochen || []).map((s) => `
     <div class="banner" role="status">
       ${icon('triangle')}
-      <div class="text"><b>Unterbrochene Sitzung${s.titel ? ` „${esc(s.titel)}“` : ''}</b> im Projekt ${esc(s.projekt_name || '')}
+      <div class="text"><b>Unterbrochene Sitzung${s.titel ? ` „${esc(s.titel)}“` : ''}</b> ${s.projekt ? `im Projekt ${esc(s.projekt_name || '')}` : 'ohne Projekt'}
         <small>${esc(s.gestartet ? s.gestartet.replace('T', ' ').slice(0, 16) : s.name)} · ${hms(s.dauer_s || 0)} aufgezeichnet · ${s.segmente || 0} Abschnitte gesichert</small></div>
-      <div class="actions"><button type="button" data-resume="${esc(s.projekt)}">${icon('folder-open')}Projekt öffnen und fortsetzen</button></div>
+      <div class="actions">${s.projekt
+        ? `<button type="button" data-resume="${esc(s.projekt)}">${icon('folder-open')}Projekt öffnen und fortsetzen</button>`
+        : `<button type="button" data-launch="aufnahme">${icon('record')}Aufnahme öffnen und fortsetzen</button>`}</div>
     </div>`).join('');
 }
 
 async function launch(what, btn) {
   $('launchErr').textContent = '';
   try {
-    if (what === 'neu') go('#/neu');
-    else if (what === 'datei' || what === 'demo') await wechsle(what);
+    if (what === 'neu') { S.zuordnen = null; go('#/neu'); }
+    else if (what === 'datei' || what === 'demo' || what === 'aufnahme') await wechsle(what);
     else if (what === 'oeffnen') {
       // Projektordner (enthaelt .audioscribe/) - bei aelteren Projekten ist das der Wiki-Ordner.
       const pfad = await pickFolder({ title: 'Projekt öffnen – Projektordner wählen', ok: 'Projekt in diesem Ordner öffnen',
@@ -75,6 +93,8 @@ $('viewStart').addEventListener('click', async (e) => {
   if (open) { oeffne(open.dataset.open); return; }
   const resume = e.target.closest('[data-resume]');
   if (resume) { oeffne(resume.dataset.resume); return; }
+  const zu = e.target.closest('[data-zuordnen]');
+  if (zu) { zuordnenDialog(zu.dataset.zuordnen, zu.dataset.titel); return; }
   const forget = e.target.closest('[data-forget]');
   if (forget) {
     try { setKontext(await post('/api/projekte/vergessen', { pfad: forget.dataset.forget })); } catch (err) { toast(err.message, 'fehler'); }
@@ -124,6 +144,8 @@ export async function enterNeu() {
   zeigeWikiArt();
   showStep();
   renderTree(null);
+  $('wizZuordnen').hidden = !S.zuordnen;
+  if (S.zuordnen) $('wizZuordnen').textContent = `Die Aufnahme „${basename(S.zuordnen)}“ wird in das neue Projekt verschoben.`;
   $('wizName').focus();
   try {
     const e = await api('/api/einstellungen');
@@ -285,6 +307,16 @@ async function anlegen() {
     });
     setKontext(k);
     toast(`Projekt „${k.projekt.name}“ angelegt`);
+    if (S.zuordnen) {
+      // Aus "Sofort aufnehmen": die Aufnahme gleich ins neue Projekt uebernehmen.
+      try {
+        await ordneZu(S.zuordnen, k.projekt.wurzel);
+        return;
+      } catch (err) {
+        S.zuordnen = null;
+        toast(err.message, 'fehler');
+      }
+    }
     go(HOME.projekt);
   } catch (err) {
     $('wizErr').textContent = err.message;

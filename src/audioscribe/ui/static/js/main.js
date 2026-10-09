@@ -10,6 +10,7 @@ import { enterAna, leaveAna, resetAna } from './nachbereitung.js';
 import { enterLive, leaveLive, leereLive, aktualisiereLiveSprache } from './live.js';
 import { loadWikiStatus } from './wiki.js';
 import { starteVerbrauch } from './verbrauch.js';
+import './eingang.js';
 
 // Adresse -> Ansicht. `modus` sagt, in welchem Kontext die Adresse gilt (null = ueberall).
 const ROUTES = {
@@ -21,6 +22,8 @@ const ROUTES = {
     hint: 'Sitzungen dieses Projekts ins Wiki speichern oder von der KI auswerten lassen' },
   '#/projekt/einstellungen': { view: 'projekt', modus: 'projekt',
     hint: 'Ordner, Wiki-Ablage, KI und Sprache dieses Projekts' },
+  '#/aufnahme': { view: 'live', modus: 'aufnahme',
+    hint: 'Sofort mitschneiden, ohne Projekt – nach dem Stopp einem Projekt zuordnen' },
   '#/datei': { view: 'datei', modus: 'datei', hint: 'Aufnahme wählen, Speicherort festlegen, transkribieren' },
   '#/datei/ki': { view: 'ana', modus: 'datei', hint: 'Die KI wertet Transkript und Standbilder aus und legt Dokumente im Ausgabeordner ab' },
   '#/demo': { view: 'live', modus: 'demo', hint: 'Vorführung – nichts wird aufgenommen oder gespeichert' },
@@ -60,6 +63,7 @@ $('themeToggle').onclick = () => {
 
 const CTX = {
   projekt: () => ({ name: projekt().name, icon: 'book', close: 'Projekt schließen' }),
+  aufnahme: () => ({ name: 'Aufnahme ohne Projekt', icon: 'record', close: 'Zur Startseite' }),
   datei: () => ({ name: 'Aufnahme transkribieren', icon: 'film', close: 'Zur Startseite' }),
   demo: () => ({ name: 'Demo', icon: 'play-circle', close: 'Demo beenden' }),
 };

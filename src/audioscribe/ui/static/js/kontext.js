@@ -1,10 +1,10 @@
-// Kontext der Oberflaeche (PRD §21): Startseite, Projekt, einzelne Aufnahme oder Demo.
+// Kontext der Oberflaeche (PRD §21): Startseite, Projekt, Aufnahme ohne Projekt, einzelne Datei oder Demo.
 // Der Server haelt den Kontext; hier wird er geholt, gewechselt und an die Ansichten gemeldet.
 
 import { $, S, api, post, toast } from './kern.js';
 
 /** Startadresse je Modus - dorthin fuehrt ein Kontextwechsel. */
-export const HOME = { start: '#/', projekt: '#/projekt/live', datei: '#/datei', demo: '#/demo' };
+export const HOME = { start: '#/', projekt: '#/projekt/live', datei: '#/datei', demo: '#/demo', aufnahme: '#/aufnahme' };
 
 export function go(hash) {
   if (location.hash === hash) window.dispatchEvent(new HashChangeEvent('hashchange'));

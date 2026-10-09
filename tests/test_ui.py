@@ -719,15 +719,16 @@ def test_index_hat_globale_und_projekt_einstellungen(ui_client):
         assert f'id="{feld}"' in html
 
 
-def test_index_hat_startseite_mit_vier_einstiegen_und_assistent(ui_client):
+def test_index_hat_startseite_mit_fuenf_einstiegen_und_assistent(ui_client):
     html = ui_client.get("/").text
     assert 'id="viewStart" data-view="start"' in html
-    for einstieg in ("neu", "oeffnen", "datei", "demo"):
+    for einstieg in ("aufnahme", "neu", "oeffnen", "datei", "demo"):
         assert f'data-launch="{einstieg}"' in html
-    for titel in ("Neues Projekt", "Projekt öffnen", "Aufnahme transkribieren", "Demo abspielen"):
+    for titel in ("Sofort aufnehmen", "Neues Projekt", "Projekt öffnen", "Aufnahme transkribieren", "Demo abspielen"):
         assert f"<h3>{titel}" in html
     startseite = html[html.index('id="viewStart"'):html.index('id="viewNeu"')]
-    assert startseite.count('<details class="more">') == 4  # je Einstieg eine kleine Hilfe
+    assert startseite.count('<details class="more">') == 5  # je Einstieg eine kleine Hilfe
+    assert 'id="eingangBox"' in startseite and 'id="zuordnenDlg"' in html
     assert 'id="viewNeu" data-view="neu"' in html
     # Vier Schritte: Projektordner, Wiki (optional), Sitzungen und Ablage, KI und Sprache - mit Strukturvorschau.
     for feld in ("wizName", "wizSpeicherort", "wizOrdnername", "wizWikiDir", "wizSitzungen", "wizMehr", "wizAssets",

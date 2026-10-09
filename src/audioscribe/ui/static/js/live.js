@@ -4,6 +4,7 @@
 
 import { $, S, api, post, esc, icon, empty, hms, fill, markUnavailable, tc, secs, sep, trimSep, poller, modus, projekt, toast, basename } from './kern.js';
 import { go, ladeDefaults } from './kontext.js';
+import { zuordnenDialog } from './eingang.js';
 import { askConfirm, pickFolder } from './dialoge.js';
 import { openWikiDialog } from './wiki.js';
 import { addHint, markSegment, hintBySeg, renderSouffleur, resetSouffleurView, gotoHint, setSouffleurHidden, renderHandover, zeigeWikiStatus, hinweisZahlen } from './souffleur.js';
@@ -233,7 +234,8 @@ function updateTestMode() {
 
 function updateLiveTarget() {
   const ziel = `${trimSep(S.folders.output_dir)}${sep()}live-JJJJ-MM-TT_hh-mm-ss`;
-  const link = projekt() && !projekt().demo ? ' <a class="goto" href="#/projekt/einstellungen">ändern</a>' : '';
+  const link = projekt() && !projekt().demo ? ' <a class="goto" href="#/projekt/einstellungen">ändern</a>'
+    : modus() === 'aufnahme' ? ' <a class="goto" href="#/einstellungen">ändern</a>' : '';
   $('liveTarget').innerHTML = `Gespeichert wird unter: <code>${esc(ziel)}</code>${link}`;
 }
 
@@ -708,7 +710,7 @@ export async function enterLive() {
   if (!liveSichtbar) return;
   updateLiveTarget();
   renderHandover(liveAblage);
-  if (modus() === 'projekt') loadUnterbrochen();
+  if (modus() === 'projekt' || modus() === 'aufnahme') loadUnterbrochen();
   pollStatus.start();
 }
 
@@ -732,7 +734,29 @@ export function aktualisiereLiveSprache(d) {
 
 // --- Nach der Sitzung: ins Wiki, zur KI (PRD §21) ---------------------------------------------
 
+/** "Sofort aufnehmen": nach dem Stopp die Sitzung einem Projekt zuordnen. */
+function renderAblegen(s) {
+  const box = $('liveNext');
+  const zeigen = !s.running && !!s.dir && s.phase === 'beendet';
+  const key = JSON.stringify(['aufnahme', zeigen, s.dir]);
+  if (box.dataset.key === key) return;
+  box.dataset.key = key;
+  box.hidden = !zeigen;
+  if (!zeigen) { box.innerHTML = ''; return; }
+  box.innerHTML = `<h3>Sitzung ablegen</h3>
+    <p>Die Sitzung liegt im Eingangsordner: <code>${esc(s.dir)}</code></p>
+    <div class="next-grid">
+      <div class="next-item"><b>${icon('folder-open')}Einem Projekt zuordnen</b>
+        <span>In ein vorhandenes Projekt verschieben oder dafür ein neues anlegen – danach geht es dort ins Wiki oder zur KI.</span>
+        <button type="button" id="liveZuordnen">${icon('folder-open')}Projekt zuordnen …</button></div>
+      <div class="next-item"><b>${icon('history')}Später entscheiden</b>
+        <span>Die Sitzung wartet auf der Startseite unter „Aufnahmen ohne Projekt“.</span>
+        <button class="secondary" type="button" data-folder="${esc(s.dir)}">${icon('external')}Ordner öffnen</button></div>
+    </div>`;
+}
+
 function renderNext(s) {
+  if (modus() === 'aufnahme') { renderAblegen(s); return; }
   const box = $('liveNext');
   const p = projekt();
   const zeigen = modus() === 'projekt' && !!p && !s.running && !!s.dir && s.phase === 'beendet';
@@ -769,6 +793,10 @@ function renderNext(s) {
 $('liveNext').addEventListener('click', async (e) => {
   const folder = e.target.closest('[data-folder]');
   if (folder) { post('/api/oeffnen', { pfad: folder.dataset.folder }).catch((err) => toast(err.message, 'fehler')); return; }
+  if (e.target.closest('#liveZuordnen') && liveDir) {
+    zuordnenDialog(liveDir, $('liveTitle').value.trim());
+    return;
+  }
   if (e.target.closest('#liveWikiSave') && liveDir) {
     const ablage = await openWikiDialog({
       path: liveDir, name: basename(liveDir), titel: $('liveTitle').value.trim(), frames: liveShots.length,
@@ -787,10 +815,12 @@ $('liveNext').addEventListener('click', async (e) => {
 async function loadUnterbrochen() {
   const box = $('liveResume');
   const p = projekt();
-  if (modus() !== 'projekt' || !p || liveRunning) { box.innerHTML = ''; return; }
+  // Im Projekt dessen Sitzungen, bei "Sofort aufnehmen" die ohne Projekt (projekt == "").
+  const wurzel = modus() === 'projekt' && p ? p.wurzel : modus() === 'aufnahme' ? '' : null;
+  if (wurzel === null || liveRunning) { box.innerHTML = ''; return; }
   let liste = [];
   try {
-    liste = (await api('/api/live/unterbrochen')).sitzungen.filter((s) => s.projekt === p.wurzel);
+    liste = (await api('/api/live/unterbrochen')).sitzungen.filter((s) => s.projekt === wurzel);
   } catch (e) { return; }
   box.innerHTML = liste.map((s) => `
     <div class="banner" role="status">

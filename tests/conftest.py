@@ -20,6 +20,10 @@ def _eigene_einstellungen(tmp_path_factory, monkeypatch):
     monkeypatch.setattr(
         state, "settings", dataclasses.replace(settings, cache_dir=basis / "cache", config_dir=basis / "config")
     )
+    # Aufnahmen ohne Projekt: nie im Dokumente-Ordner des Rechners suchen.
+    from audioscribe.projekt import eingang
+
+    monkeypatch.setattr(eingang, "standard_dir", lambda: basis / "eingang")
 
 
 @pytest.fixture

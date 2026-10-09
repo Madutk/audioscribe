@@ -63,6 +63,8 @@ STATE_KEYS: tuple[str, ...] = (
     "sprache",
     # Projekte (PRD §21): zuletzt geoeffnete, juengstes zuerst - je {"pfad", "name", "geoeffnet"}.
     "zuletzt_projekte",
+    # Aufnahmen ohne Projekt ("Sofort aufnehmen") - leer heisst: Vorgabe im Dokumente-Ordner.
+    "eingang_dir",
     # Darstellung der Oberflaeche: "system" folgt der Betriebssystem-Einstellung.
     "theme",
 )
@@ -75,7 +77,7 @@ _BOOL_KEYS = (
     "souffleur_aktiv", "souffleur_sensibel",
 )
 
-_LOESCHBAR = ("wiki_dir",)
+_LOESCHBAR = ("wiki_dir", "eingang_dir")
 
 MAX_ZULETZT = 12
 
