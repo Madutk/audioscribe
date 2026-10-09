@@ -839,10 +839,16 @@ von `uv`; audioscribe selbst braucht dafür kein weiteres Paket.
 
 ```bash
 brew install ollama                                   # oder das Paket von ollama.com
-OLLAMA_CONTEXT_LENGTH=65536 ollama serve              # Dienst starten (Kontext für die KI-Analyse)
 ollama pull qwen3.6:35b-a3b-nvfp4                     # Modell laden (~24 GB, einmalig)
 ./start.sh --doctor                                   # Zeile „KI lokal“: Dienst, Version, Modelle
 ```
+
+Den Dienst (`ollama serve`) muss niemand von Hand starten: Läuft er nicht, startet ihn
+audioscribe beim ersten Bedarf selbst – mit `OLLAMA_CONTEXT_LENGTH=65536` (Kontext für die
+KI-Analyse), als eigene Sitzung, die auch nach dem Ende von audioscribe weiterläuft; seine
+Ausgabe landet in `~/.cache/audioscribe/ollama.log`. Das gilt nur für Adressen auf diesem
+Rechner (`OLLAMA_URL`, Vorgabe `http://localhost:11434`); einen Dienst auf einem anderen
+Rechner spricht audioscribe nur an.
 
 Dann in der Oberfläche **Einstellungen → KI-Dienst → „Lokal (Ollama auf diesem Rechner)“**
 wählen – global oder nur für ein Projekt. Die Modell-Listen wechseln mit dem Dienst; beim

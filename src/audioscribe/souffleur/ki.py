@@ -358,13 +358,14 @@ def _make_ollama(modell: str, *, log: Callable[[str], None] | None) -> tuple[Any
     """Lokaler Dienst: erst prüfen, ob er läuft und das Modell geladen ist - sonst sagt der
     Status, was zu tun ist, statt dass jedes Fenster scheitert."""
     from audioscribe.config import settings
-    from audioscribe.souffleur.ki_ollama import OllamaKi, ollama_status
+    from audioscribe.souffleur.ki_ollama import OllamaKi, ollama_sicherstellen
 
-    status = ollama_status(settings.ollama_url)
+    # Läuft der Dienst nicht, startet ihn die App selbst (nur auf diesem Rechner).
+    status = ollama_sicherstellen(settings.ollama_url, log=log, log_datei=settings.cache_dir / "ollama.log")
     if not status.erreichbar:
         return None, KiStatus(
             "fehlt", BACKEND_OLLAMA, modell,
-            f"Lokale KI nicht erreichbar unter {settings.ollama_url} ('ollama serve' starten)",
+            f"Lokale KI nicht erreichbar unter {settings.ollama_url} ({status.fehler}; 'ollama serve' starten)",
         )
     if not status.hat_modell(modell):
         return None, KiStatus(

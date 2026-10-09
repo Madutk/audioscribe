@@ -148,11 +148,62 @@ def test_ollama_status_echte_verbindung_verweigert():
 # --- Factory -----------------------------------------------------------------------------------
 
 
+def test_ollama_sicherstellen_startet_dienst_und_wartet(tmp_path):
+    from audioscribe.souffleur.ki_ollama import ollama_sicherstellen
+
+    aufrufe = {"n": 0}
+    antworten = {"/api/version": {"version": "0.40.0"}, "/api/tags": {"models": [{"name": "qwen3.6:35b-a3b-nvfp4"}]}}
+
+    def post(url, body, t):  # erst nach dem dritten Status-Versuch erreichbar
+        aufrufe["n"] += 1
+        if aufrufe["n"] <= 3:
+            raise _HttpFehler(None, "Connection refused")
+        return antworten[url[url.index("/api") :]]
+
+    gestartet = []
+    spawn = lambda argv, **kw: gestartet.append((argv, kw))
+    meldungen = []
+    log_datei = tmp_path / "ollama.log"
+    status = ollama_sicherstellen(
+        "http://localhost:11434", log=meldungen.append, log_datei=log_datei, timeout_s=5.0,
+        post=post, binary="/opt/x/ollama", spawn=spawn, schlaf=lambda s: None,
+    )
+    assert status.erreichbar and status.version == "0.40.0"
+    argv, kw = gestartet[0]
+    assert argv == ["/opt/x/ollama", "serve"] and kw["start_new_session"] is True
+    assert kw["env"]["OLLAMA_CONTEXT_LENGTH"] == "65536" and log_datei.exists()
+    assert "serve" in meldungen[0] and "läuft" in meldungen[-1]
+
+
+def test_ollama_sicherstellen_startet_nicht_ohne_programm_oder_bei_fremder_adresse():
+    from audioscribe.souffleur.ki_ollama import ist_lokal, ollama_sicherstellen
+
+    down = _post(_HttpFehler(None, "Connection refused"))
+    boom = lambda *a, **kw: pytest.fail("darf nicht starten")
+    status = ollama_sicherstellen("http://localhost:11434", post=down, binary="", spawn=boom, schlaf=lambda s: None)
+    assert not status.erreichbar and "nicht gefunden" in status.fehler
+    status = ollama_sicherstellen("http://ki-server:11434", post=down, binary="/x/ollama", spawn=boom)
+    assert not status.erreichbar and status.fehler == "Connection refused"
+    assert ist_lokal("http://127.0.0.1:11434") and not ist_lokal("http://ki-server:11434")
+    # Dienst meldet sich nach dem Start nicht: klarer Fehlertext, kein Hängen
+    status = ollama_sicherstellen(
+        "http://localhost:11434", post=down, binary="/x/ollama", spawn=lambda *a, **kw: None,
+        schlaf=lambda s: None, timeout_s=1.0,
+    )
+    assert not status.erreichbar and "nicht erreichbar" in status.fehler
+    # Läuft schon: nichts starten
+    oben = {"/api/version": {"version": "0.40.0"}, "/api/tags": {"models": []}}
+    status = ollama_sicherstellen(
+        "http://localhost:11434", post=lambda u, b, t: oben[u[u.index("/api") :]], binary="/x/ollama", spawn=boom
+    )
+    assert status.erreichbar
+
+
 def test_make_ki_ollama_prueft_dienst_und_modell(tmp_path, monkeypatch):
-    monkeypatch.setattr(ki_ollama, "ollama_status", lambda url, **kw: OllamaStatus(False, fehler="Connection refused"))
+    monkeypatch.setattr(ki_ollama, "ollama_sicherstellen", lambda url, **kw: OllamaStatus(False, fehler="Connection refused"))
     ki, status = make_ki(BACKEND_OLLAMA, "gemma4:26b-mlx", cache_dir=tmp_path)
     assert ki is None and status.zustand == "fehlt" and "ollama serve" in status.meldung
-    monkeypatch.setattr(ki_ollama, "ollama_status", _status)
+    monkeypatch.setattr(ki_ollama, "ollama_sicherstellen", _status)
     ki, status = make_ki(BACKEND_OLLAMA, "qwen3.6:27b-mlx", cache_dir=tmp_path)
     assert ki is None and status.zustand == "fehlt" and "ollama pull qwen3.6:27b-mlx" in status.meldung
     ki, status = make_ki(BACKEND_OLLAMA, "claude-sonnet-5", cache_dir=tmp_path)  # Claude-ID nach dem Umschalten
@@ -213,10 +264,10 @@ def test_sdk_env_leitet_nur_lokal_um():
 
 
 def test_pruefe_lokal(monkeypatch):
-    monkeypatch.setattr(ki_ollama, "ollama_status", lambda url, **kw: OllamaStatus(False, fehler="refused"))
+    monkeypatch.setattr(ki_ollama, "ollama_sicherstellen", lambda url, **kw: OllamaStatus(False, fehler="refused"))
     with pytest.raises(RuntimeError, match="ollama serve"):
         pruefe_lokal("gemma4:26b-mlx")
-    monkeypatch.setattr(ki_ollama, "ollama_status", _status)
+    monkeypatch.setattr(ki_ollama, "ollama_sicherstellen", _status)
     with pytest.raises(RuntimeError, match="ollama pull qwen3.6:27b-mlx"):
         pruefe_lokal("qwen3.6:27b-mlx")
     zeile = pruefe_lokal("gemma4:26b-mlx")

@@ -1,0 +1,4 @@
+FROM qwen3.6:35b-a3b-nvfp4
+PARAMETER temperature 0.3
+PARAMETER presence_penalty 0
+PARAMETER num_ctx 65536

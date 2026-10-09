@@ -70,11 +70,14 @@ def pruefe_lokal(modell: str) -> str:
     """Vor einem lokalen Lauf: Dienst erreichbar, Modell geladen? Liefert eine Protokollzeile,
     sonst ``RuntimeError`` mit dem, was zu tun ist."""
     from audioscribe.config import settings
-    from audioscribe.souffleur.ki_ollama import ANALYSE_MIN_CTX, ollama_status
+    from audioscribe.souffleur.ki_ollama import ANALYSE_MIN_CTX, ollama_sicherstellen
 
-    status = ollama_status(settings.ollama_url)
+    # Läuft der Dienst nicht, startet ihn die App selbst (nur auf diesem Rechner).
+    status = ollama_sicherstellen(settings.ollama_url, log_datei=settings.cache_dir / "ollama.log")
     if not status.erreichbar:
-        raise RuntimeError(f"Lokale KI nicht erreichbar unter {settings.ollama_url} ('ollama serve' starten)")
+        raise RuntimeError(
+            f"Lokale KI nicht erreichbar unter {settings.ollama_url} ({status.fehler}; 'ollama serve' starten)"
+        )
     if not status.hat_modell(modell):
         raise RuntimeError(f"Lokales Modell {modell} nicht geladen - 'ollama pull {modell}'")
     return (
