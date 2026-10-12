@@ -342,6 +342,11 @@ def _check_dirs() -> CheckResult:
 
 def _check_agent() -> CheckResult:
     """KI-Analyse (optional, daher hoechstens WARN): SDK, Claude Code, Skills, Abrechnung."""
+    from audioscribe import variante
+
+    if variante.aktiv():
+        # Nichts importieren, nichts suchen: die Analyse gibt es in dieser Variante nicht.
+        return CheckResult("OK", "KI-Analyse", "deaktiviert (Variante cloud-compliant)")
     try:
         import claude_agent_sdk
     except ImportError:
@@ -388,11 +393,12 @@ def _check_agent() -> CheckResult:
 def _check_ollama() -> CheckResult:
     """Lokale KI ueber Ollama (optional): Dienst erreichbar, Version, konfigurierte Modelle.
     Nicht eingerichtet ist OK, solange der Dienst nicht als KI-Dienst eingestellt ist."""
+    from audioscribe import variante
     from audioscribe.souffleur.ki import BACKEND_OLLAMA, modell_fuer
     from audioscribe.souffleur.ki_ollama import ANALYSE_MIN_CTX, ollama_status
 
     status = ollama_status(settings.ollama_url)
-    eingestellt = settings.souffleur_backend == BACKEND_OLLAMA
+    eingestellt = settings.souffleur_backend == BACKEND_OLLAMA or variante.aktiv()
     if not status.erreichbar:
         detail = (
             f"nicht erreichbar unter {settings.ollama_url} ({status.fehler}) -> "
@@ -403,16 +409,17 @@ def _check_ollama() -> CheckResult:
         return CheckResult("OK", "KI lokal", f"nicht eingerichtet (optional); {detail}")
     st: Status = "OK"
     teile = [f"Ollama {status.version or '?'} unter {settings.ollama_url}", f"{len(status.modelle)} Modell(e)"]
-    for zweck, modell in (
-        ("Souffleur", modell_fuer(BACKEND_OLLAMA, settings.souffleur_model)),
-        ("Analyse", modell_fuer(BACKEND_OLLAMA, settings.agent_model)),
-    ):
+    zwecke = [("Souffleur", modell_fuer(BACKEND_OLLAMA, settings.souffleur_model))]
+    if not variante.aktiv():
+        zwecke.append(("Analyse", modell_fuer(BACKEND_OLLAMA, settings.agent_model)))
+    for zweck, modell in zwecke:
         if status.hat_modell(modell):
             teile.append(f"{zweck}: {modell}")
         else:
             st = "WARN"
             teile.append(f"{zweck}: {modell} fehlt -> 'ollama pull {modell}'")
-    teile.append(f"KI-Analyse lokal ist experimentell und braucht OLLAMA_CONTEXT_LENGTH>={ANALYSE_MIN_CTX}")
+    if not variante.aktiv():
+        teile.append(f"KI-Analyse lokal ist experimentell und braucht OLLAMA_CONTEXT_LENGTH>={ANALYSE_MIN_CTX}")
     return CheckResult(st, "KI lokal", "; ".join(teile))
 
 
@@ -497,8 +504,18 @@ def _check_souffleur() -> CheckResult:
     return CheckResult(status, "Souffleur", " | ".join(teile))
 
 
+def _check_variante() -> CheckResult:
+    """Welche Programmvariante läuft (src/audioscribe/variante.py)?"""
+    from audioscribe import variante
+
+    if variante.aktiv():
+        return CheckResult("OK", "Variante", "cloud-compliant - nur lokale KI (Ollama), ohne KI-Analyse")
+    return CheckResult("OK", "Variante", "standard")
+
+
 CHECKS = (
     _check_platform,
+    _check_variante,
     _check_python,
     _check_ffmpeg,
     _check_torch_device,

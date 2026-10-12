@@ -445,6 +445,10 @@ def lege_an(
     )
     if fehler:
         raise ProjektFehler(" ".join(fehler.values()))
+    from audioscribe import variante
+
+    if ki_dienst and (hinweis := variante.pruefe_dienst(ki_dienst)):
+        raise ProjektFehler(hinweis)
     wurzel = Path(wurzel)
     try:
         wurzel.mkdir(parents=True, exist_ok=True)
@@ -498,6 +502,11 @@ def aendere(projekt: Projekt, felder: dict) -> Projekt:
             # Die Werte wandern als argv in Kindprozesse - nur harmlose Zeichen (wie global).
             if wert and (wert.startswith("-") or not all(c.isalnum() or c in "-_.:[]" for c in wert)):
                 raise ProjektFehler(f"Ungültiger Wert für {key}: {wert}")
+            if key == "ki_dienst" and wert:
+                from audioscribe import variante
+
+                if hinweis := variante.pruefe_dienst(wert):
+                    raise ProjektFehler(hinweis)
             neu[key] = wert or None
     if isinstance(felder.get("name"), str) and felder["name"].strip():
         neu["name"] = felder["name"].strip()

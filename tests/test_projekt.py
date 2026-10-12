@@ -271,6 +271,7 @@ def test_effektive_einstellungen_projekt_schlaegt_global(projekt):
     }
 
 
+@pytest.mark.nur_standard
 def test_optionen_behalten_unbekannten_wert_waehlbar():
     opt = einstellungen.optionen({"souffleur_backend": "attrappe"})
     assert opt["ki_dienste"][0]["id"] == "attrappe"

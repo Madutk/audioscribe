@@ -10,6 +10,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 
+from audioscribe import variante
 from audioscribe.config import settings
 from audioscribe.projekt.modell import UEBERSCHREIBBAR, Projekt
 
@@ -18,6 +19,18 @@ KI_DIENSTE: tuple[tuple[str, str], ...] = (
     ("claude-agent", "Claude (Agent SDK)"),
     ("ollama", "Lokal (Ollama auf diesem Rechner)"),
 )
+
+
+def ki_dienste() -> tuple[tuple[str, str], ...]:
+    """Die in dieser Programmvariante wählbaren Dienste (``variante.py``)."""
+    if variante.aktiv():
+        return ((variante.DIENST_LOKAL, "Lokale KI (auf diesem Rechner)"),)
+    return KI_DIENSTE
+
+
+def _zulaessig(dienst: str) -> str:
+    """Unzulässiger Dienst (z. B. ``claude-agent`` aus einer alten Datei) -> lokale KI."""
+    return dienst if variante.dienst_zulaessig(dienst) else variante.DIENST_LOKAL
 
 # Schlüssel im Einstellungsstand je globalem Wert.
 _STATE_KEY = {
@@ -44,7 +57,7 @@ def _text(wert: object) -> str | None:
 def globale(state: Mapping[str, object]) -> dict[str, str]:
     """Die globalen Werte: gespeicherter Stand, sonst die Vorgaben aus der Umgebung."""
     return {
-        "ki_dienst": _text(state.get("souffleur_backend")) or settings.souffleur_backend,
+        "ki_dienst": _zulaessig(_text(state.get("souffleur_backend")) or settings.souffleur_backend),
         "souffleur_model": _text(state.get("souffleur_model")) or settings.souffleur_model,
         "agent_model": _text(state.get("agent_model")) or settings.agent_model,
         "sprache": _text(state.get("sprache")) or settings.whisper_language,
@@ -62,10 +75,24 @@ def effektiv(state: Mapping[str, object], projekt: Projekt | None = None) -> Eff
     if projekt is not None:
         for key in UEBERSCHREIBBAR:
             eigen = _text(getattr(projekt, key))
+            if key == "ki_dienst" and eigen is not None:
+                eigen = _zulaessig(eigen)
             if eigen is not None:
                 werte[key] = eigen
                 herkunft[key] = "projekt"
     return Effektiv(werte, herkunft)
+
+
+def hinweis(state: Mapping[str, object], projekt: Projekt | None = None) -> str | None:
+    """Text für die Oberfläche, wenn ein gespeicherter Dienst in dieser Variante abgelehnt
+    und durch die lokale KI ersetzt wurde - sonst ``None``."""
+    kandidaten = [_text(state.get("souffleur_backend")) or settings.souffleur_backend]
+    if projekt is not None:
+        kandidaten.append(_text(projekt.ki_dienst))
+    for dienst in kandidaten:
+        if dienst and (text := variante.pruefe_dienst(dienst)):
+            return text
+    return None
 
 
 def modelle(dienst: str, zweck: str) -> tuple[str, ...]:
@@ -88,14 +115,16 @@ def optionen(state: Mapping[str, object]) -> dict:
 
     g = globale(state)
 
+    dienste = ki_dienste()
+
     def mit(liste: list[dict], wert: str, **extra: str) -> list[dict]:
         return liste if any(e["id"] == wert for e in liste) else [{"id": wert, "label": wert, **extra}, *liste]
 
     def je_dienst(zweck: str) -> list[dict]:
-        return [{"id": m, "label": m, "dienst": d} for d, _ in KI_DIENSTE for m in modelle(d, zweck)]
+        return [{"id": m, "label": m, "dienst": d} for d, _ in dienste for m in modelle(d, zweck)]
 
     return {
-        "ki_dienste": mit([{"id": i, "label": l} for i, l in KI_DIENSTE], g["ki_dienst"]),
+        "ki_dienste": mit([{"id": i, "label": l} for i, l in dienste], g["ki_dienst"]),
         "souffleur_models": mit(je_dienst("souffleur"), g["souffleur_model"], dienst=g["ki_dienst"]),
         "agent_models": mit(je_dienst("agent"), g["agent_model"], dienst=g["ki_dienst"]),
         "sprachen": mit([{"id": s, "label": _SPRACHEN.get(s, s)} for s in jobs.LANGUAGES], g["sprache"]),

@@ -1,7 +1,7 @@
 // Nachbereitung / KI-Analyse: Quelle waehlen, Auftrag an den Agenten, Verlauf. Im Projekt
 // dazu die Ablage ins Wiki - der Sitzung selbst und der fertigen Nachbereitung (PRD §21).
 
-import { $, S, api, post, esc, icon, empty, hms, fill, appendLog, poller, modus, projekt, sep, trimSep, basename, toast } from './kern.js';
+import { $, S, api, post, esc, icon, empty, hms, fill, appendLog, poller, modus, projekt, cloudCompliant, sep, trimSep, basename, toast } from './kern.js';
 import { ladeDefaults } from './kontext.js';
 import { pickFolder, showTranscript } from './dialoge.js';
 import { openWikiDialog, slugify } from './wiki.js';
@@ -26,6 +26,12 @@ export async function enterAna() {
   const proj = imProjekt();
   $('anaSourceTitle').textContent = proj ? 'Sitzung' : 'Quelle';
   $('anaSourceHint').textContent = proj ? 'Sitzungen dieses Projekts' : 'fertige Transkriptionen im Speicherort';
+  if (cloudCompliant()) {
+    // Ohne KI-Analyse: nur Sitzungen wählen und ins Wiki ablegen (die Karten blendet das CSS aus).
+    if (S.vorwahl) { anaSource = S.vorwahl; S.vorwahl = null; }
+    await loadSources();
+    return;
+  }
   anaDefaults = await api('/api/agent/defaults');
   fill($('anaModel'), anaDefaults.models, anaDefaults.model);
   const lokal = anaDefaults.dienst === 'ollama';

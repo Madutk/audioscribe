@@ -388,6 +388,7 @@ def test_manifest_ignoriert_unbekannte_felder(tmp_path):
 # --- CLI ---
 
 
+@pytest.mark.nur_standard
 def test_cli_analyze_list_skills(tmp_path, capsys, monkeypatch):
     from audioscribe.cli import main
 
@@ -396,6 +397,7 @@ def test_cli_analyze_list_skills(tmp_path, capsys, monkeypatch):
     assert "mein-skill" in capsys.readouterr().out
 
 
+@pytest.mark.nur_standard
 def test_cli_analyze_ohne_transkript(tmp_path, capsys, monkeypatch):
     from audioscribe.cli import main
 
@@ -405,6 +407,7 @@ def test_cli_analyze_ohne_transkript(tmp_path, capsys, monkeypatch):
     assert "Kein Transkript" in capsys.readouterr().out
 
 
+@pytest.mark.nur_standard
 def test_cli_analyze_unbekannter_skill(tmp_path, capsys, monkeypatch):
     from audioscribe.cli import main
 
@@ -418,6 +421,7 @@ def test_cli_analyze_unbekannter_skill(tmp_path, capsys, monkeypatch):
     assert "nicht gefunden: nope" in capsys.readouterr().out
 
 
+@pytest.mark.nur_standard
 def test_cli_analyze_resume_ohne_sitzung(tmp_path, capsys, monkeypatch):
     from audioscribe.cli import main
 
@@ -451,6 +455,7 @@ def test_build_analyze_argv_alle_optionen(tmp_path):
     assert "--no-skills" not in argv
 
 
+@pytest.mark.nur_standard
 def test_build_analyze_argv_leere_auswahl_und_parser(tmp_path, monkeypatch):
     from audioscribe import cli
     from audioscribe.agent import kommando
@@ -574,6 +579,7 @@ def client(tmp_path, monkeypatch):
     return TestClient(server.create_app())
 
 
+@pytest.mark.nur_standard
 def test_api_agent_defaults_und_sources(client, tmp_path):
     d = client.get("/api/agent/defaults").json()
     assert [s["name"] for s in d["skills"]] == ["prozessrekonstruktion"]
@@ -583,6 +589,7 @@ def test_api_agent_defaults_und_sources(client, tmp_path):
     assert [s["name"] for s in r["sources"]] == ["aufnahme"]
 
 
+@pytest.mark.nur_standard
 def test_api_agent_start_prueft_eingaben(client, tmp_path):
     q = _quelle(tmp_path)
     base = {"source": str(q), "name": "x", "output_dir": str(tmp_path / "analysen")}
@@ -727,6 +734,7 @@ def test_render_fehler_wird_runtimeerror(tmp_path, monkeypatch):
         pb.render(tmp_path / "leer.mmd", Path("/usr/bin/chromium"))
 
 
+@pytest.mark.nur_standard
 def test_cli_analyze_no_prozessbild_flag(tmp_path, monkeypatch):
     from audioscribe import cli
     from audioscribe.agent import kommando

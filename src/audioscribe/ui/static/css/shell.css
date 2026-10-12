@@ -6,6 +6,9 @@
 body:not([data-modus="projekt"]) [data-nur="projekt"],
 body:not([data-modus="datei"]) [data-nur="datei"],
 body:not([data-modus="demo"]) [data-nur="demo"] { display: none !important; }
+/* Programmvariante (src/audioscribe/variante.py): cloud-compliant blendet die KI-Analyse aus. */
+body[data-variante="cloud-compliant"] [data-ohne~="cloud-compliant"],
+body:not([data-variante="cloud-compliant"]) [data-nur-variante="cloud-compliant"] { display: none !important; }
 
 /* --- Kopf -------------------------------------------------------------------- */
 .skip { position: absolute; left: var(--s4); top: -60px; z-index: 50; padding: 8px 14px; border-radius: var(--radius-sm);

@@ -71,7 +71,8 @@
 <a class="skip" href="#main">Zum Inhalt springen</a>
 
 <header class="top">
-  <div class="brand"><svg class="ic" aria-hidden="true"><use href="#i-wave"/></svg><h1>AudioScribe</h1></div>
+  <div class="brand"><svg class="ic" aria-hidden="true"><use href="#i-wave"/></svg><h1>AudioScribe</h1>
+    <span class="badge" data-nur-variante="cloud-compliant" title="Variante ohne Cloud-KI: nur lokale KI (Ollama), keine KI-Analyse">cloud-compliant</span></div>
   <!-- Kontext: geoeffnetes Projekt, einzelne Aufnahme oder Demo - mit Rueckweg zur Startseite -->
   <div class="ctx" id="ctx" hidden>
     <svg class="ic" aria-hidden="true"><use href="#i-book" id="ctxIcon"/></svg>
@@ -84,11 +85,11 @@
     <a href="#/projekt/nachbereitung" data-nur="projekt">Nachbereitung</a>
     <a href="#/projekt/einstellungen" data-nur="projekt">Projekt</a>
     <a href="#/datei" data-nur="datei">Transkribieren</a>
-    <a href="#/datei/ki" data-nur="datei">KI-Analyse</a>
+    <a href="#/datei/ki" data-nur="datei" data-ohne="cloud-compliant">KI-Analyse</a>
   </nav>
   <span class="spacer"></span>
   <!-- KI-Verbrauch seit Programmstart (nur Aufrufe ausser Haus); erscheint erst mit dem ersten Aufruf -->
-  <button class="usage" id="kiVerbrauch" type="button" popovertarget="kiVerbrauchInfo" title="KI-Verbrauch seit Programmstart" hidden>
+  <button class="usage" id="kiVerbrauch" data-ohne="cloud-compliant" type="button" popovertarget="kiVerbrauchInfo" title="KI-Verbrauch seit Programmstart" hidden>
     <svg class="ic" aria-hidden="true"><use href="#i-coins"/></svg><span class="usage-tok" id="kiVerbrauchTokens"></span><span class="usage-usd" id="kiVerbrauchPreis"></span></button>
   <div class="usage-pop" id="kiVerbrauchInfo" popover>
     <h2>KI-Verbrauch</h2>
@@ -295,7 +296,7 @@
         <div class="field"><label for="wizSprache">Sprache der Aufnahmen</label><select id="wizSprache"></select></div>
         <div class="field"><label for="wizSouffleurModel">Modell für den Souffleur</label><select id="wizSouffleurModel"></select>
           <p class="hint">Antwortet während des Meetings – Tempo zählt.</p></div>
-        <div class="field"><label for="wizAgentModel">Modell für die KI-Analyse</label><select id="wizAgentModel"></select>
+        <div class="field" data-ohne="cloud-compliant"><label for="wizAgentModel">Modell für die KI-Analyse</label><select id="wizAgentModel"></select>
           <p class="hint">Bereitet nach dem Meeting nach – Gründlichkeit zählt.</p></div>
       </div>
     </div>
@@ -574,7 +575,7 @@
       <div id="anaWiki"><p class="hint">Sitzung wählen …</p></div>
     </div>
 
-    <div class="card">
+    <div class="card" data-ohne="cloud-compliant">
       <h2 class="card-title"><span class="step">2</span>Auftrag an die KI</h2>
       <div class="field"><label for="anaName">Prozessname</label>
         <input type="text" id="anaName" placeholder="z. B. Rechnungsprüfung Kreditoren" /></div>
@@ -585,12 +586,12 @@
         <textarea id="anaFiles" class="small" placeholder="C:\Users\…\glossar.md"></textarea></div>
     </div>
 
-    <div class="card">
+    <div class="card" data-ohne="cloud-compliant">
       <h2 class="card-title"><span class="step">3</span>Skills <span class="hint" id="anaSkillsDir"></span></h2>
       <div class="skills" id="anaSkills"></div>
     </div>
 
-    <div class="card">
+    <div class="card" data-ohne="cloud-compliant">
       <h2 class="card-title"><span class="step">4</span>Optionen</h2>
       <div class="grid">
         <div class="field"><label for="anaModel">KI-Modell</label><select id="anaModel"></select>
@@ -609,14 +610,14 @@
         Vorrang und rechnet über die API ab.</p>
     </div>
 
-    <div class="actionbar">
+    <div class="actionbar" data-ohne="cloud-compliant">
       <button class="start" id="anaStart"><svg class="ic" aria-hidden="true"><use href="#i-sparkles"/></svg>Analyse starten</button>
       <div class="err" id="anaErr" role="alert"></div>
     </div>
   </div>
 
   <div class="right">
-    <div class="card">
+    <div class="card" data-ohne="cloud-compliant">
       <h2 class="card-title">Verlauf <span class="hint" id="anaElapsed"></span>
         <span class="spacer"></span>
         <button class="danger sm" id="anaCancel" disabled><svg class="ic" aria-hidden="true"><use href="#i-square"/></svg>Abbrechen</button>
@@ -655,7 +656,7 @@
       <div class="grid two">
         <div class="field"><label for="gSouffleurModel">Modell für den Souffleur</label><select id="gSouffleurModel"></select>
           <p class="hint">Antwortet während des Meetings – ein schnelles Modell hält die Verzögerung klein.</p></div>
-        <div class="field"><label for="gAgentModel">Modell für die KI-Analyse</label><select id="gAgentModel"></select>
+        <div class="field" data-ohne="cloud-compliant"><label for="gAgentModel">Modell für die KI-Analyse</label><select id="gAgentModel"></select>
           <p class="hint">Bereitet Transkript und Bilder nach – ein starkes Modell lohnt sich.</p></div>
       </div>
     </div>
@@ -774,7 +775,7 @@
       <div class="field"><label for="pKiDienst">KI-Dienst</label><select id="pKiDienst"></select>
         <p class="hint" id="pKiDienstHint"></p></div>
       <div class="field"><label for="pSouffleurModel">Modell für den Souffleur</label><select id="pSouffleurModel"></select></div>
-      <div class="field"><label for="pAgentModel">Modell für die KI-Analyse</label><select id="pAgentModel"></select></div>
+      <div class="field" data-ohne="cloud-compliant"><label for="pAgentModel">Modell für die KI-Analyse</label><select id="pAgentModel"></select></div>
       <div class="field"><label for="pSprache">Sprache der Aufnahmen</label><select id="pSprache"></select></div>
     </div>
     <div class="card flow">

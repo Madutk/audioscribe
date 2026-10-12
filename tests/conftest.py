@@ -11,6 +11,23 @@ import json
 import pytest
 
 
+def pytest_configure(config):
+    config.addinivalue_line(
+        "markers", "nur_standard: prüft Claude bzw. die KI-Analyse - entfällt in der Variante cloud-compliant"
+    )
+
+
+def pytest_collection_modifyitems(config, items):
+    from audioscribe import variante
+
+    if not variante.aktiv():
+        return
+    grund = pytest.mark.skip(reason="Variante cloud-compliant: ohne Claude und KI-Analyse")
+    for item in items:
+        if "nur_standard" in item.keywords:
+            item.add_marker(grund)
+
+
 @pytest.fixture(autouse=True)
 def _eigene_einstellungen(tmp_path_factory, monkeypatch):
     from audioscribe.config import settings

@@ -2,7 +2,7 @@
 // Wiederaufnahme nach einem Absturz und dem Schritt danach (ins Wiki, zur KI). Die Demo nutzt
 // dieselbe Ansicht ohne Steuerspalte.
 
-import { $, S, api, post, esc, icon, empty, hms, fill, markUnavailable, tc, secs, sep, trimSep, poller, modus, projekt, toast, basename } from './kern.js';
+import { $, S, api, post, esc, icon, empty, hms, fill, markUnavailable, tc, secs, sep, trimSep, poller, modus, projekt, toast, basename, cloudCompliant } from './kern.js';
 import { go, ladeDefaults } from './kontext.js';
 import { zuordnenDialog } from './eingang.js';
 import { askConfirm, pickFolder } from './dialoge.js';
@@ -782,11 +782,11 @@ function renderNext(s) {
         als neue Quelle unter <code>raw/</code> ablegen – die Markierungen des Souffleurs nur auf Wunsch.</span>
       <button type="button" id="liveWikiSave">${icon('book-plus')}Ins Wiki speichern</button></div>`;
   }
-  const ki = `<div class="next-item"><b>${icon('sparkles')}Mit KI nachbereiten</b>
+  const ki = cloudCompliant() ? '' : `<div class="next-item"><b>${icon('sparkles')}Mit KI nachbereiten</b>
       <span>Die KI wertet Transkript und Bilder aus. Das Ergebnis kann danach ebenfalls ins Wiki.</span>
       <button class="secondary" type="button" id="liveToKi">Zur Nachbereitung${icon('arrow-right')}</button></div>`;
   box.innerHTML = `<h3>Wie geht es weiter?</h3>
-    <p>Die Sitzung ist im Sitzungsordner gesichert. Beides ist möglich – in beliebiger Reihenfolge.</p>
+    <p>Die Sitzung ist im Sitzungsordner gesichert.${ki ? ' Beides ist möglich – in beliebiger Reihenfolge.' : ''}</p>
     <div class="next-grid">${wiki}${ki}</div>`;
 }
 

@@ -1,7 +1,7 @@
 // Souffleur in der Live-Ansicht: Hinweise aus Wiki und KI neben dem Transkript (PRD §20).
 // Der Abgleich laeuft im Server; hier werden Hinweise gezeichnet und mit dem Transkript verknuepft.
 
-import { $, S, post, esc, icon, empty, tc, secs, sep, trimSep, projekt, reducedMotion } from './kern.js';
+import { $, S, post, esc, icon, empty, tc, secs, sep, trimSep, projekt, reducedMotion, cloudCompliant } from './kern.js';
 import { renderWikiState } from './wiki.js';
 import { herkunft, blinke, demoAktiv } from './demo.js';
 
@@ -213,7 +213,7 @@ function renderSouffleurState(sf, running) {
   const ki = sf ? sf.ki : null;
   let text = 'bereit', cls = '', title = '';
   if (!aktiv) { text = 'pausiert'; title = 'Auswertung ausgeschaltet – es entstehen keine neuen Hinweise.'; }
-  else if (ki && (ki.zustand === 'fehlt' || ki.zustand === 'fehler')) { text = 'KI fehlt'; cls = 'fail'; title = ki.meldung || 'KI nicht verfügbar'; }
+  else if (ki && (ki.zustand === 'fehlt' || ki.zustand === 'fehler')) { text = cloudCompliant() ? 'lokale KI fehlt' : 'KI fehlt'; cls = 'fail'; title = ki.meldung || 'KI nicht verfügbar'; }
   else if (wiki && wiki.zustand === 'laedt') { text = 'Wiki lädt'; cls = 'laeuft'; title = wiki.meldung || 'Wiki wird gelesen …'; }
   else if (!wiki || wiki.zustand !== 'ok') { text = 'ohne Wiki'; cls = 'warn'; title = 'Ohne Wiki: nur Fragen und Essenz – keine Belege, keine Widersprüche.'; }
   else if (sf && sf.beendet) { text = 'beendet'; cls = 'fertig'; }

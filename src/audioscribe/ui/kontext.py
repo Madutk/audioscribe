@@ -13,6 +13,7 @@ import threading
 from collections.abc import Mapping
 from pathlib import Path
 
+from audioscribe import variante
 from audioscribe.config import settings
 from audioscribe.projekt import eingang, einstellungen, modell
 from audioscribe.projekt.modell import Projekt
@@ -160,7 +161,11 @@ def projekt_dict(projekt: Projekt, state: Mapping[str, object], *, mit_wiki: boo
         "eigen": {k: getattr(projekt, k) for k in modell.UEBERSCHREIBBAR},
         "effektiv": eff.werte,
         "herkunft": eff.herkunft,
+        # Variante cloud-compliant: ein abgelehnter Dienst aus projekt.json gilt nicht.
+        "ki_hinweis": variante.pruefe_dienst(projekt.ki_dienst) if projekt.ki_dienst else None,
     }
+    if out["ki_hinweis"]:
+        out["eigen"]["ki_dienst"] = None
     if mit_wiki:
         from audioscribe.souffleur.wiki import ZUSTAND_KEINS, WikiStatus, pruefe_wiki
 

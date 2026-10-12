@@ -17,6 +17,7 @@ Modellgewichte.
 | Live-Transkription | Monitor, System-Audio und Mikrofon live mitschneiden (Windows, macOS); nach einem Absturz fortsetzbar | [→](#live-transkription-windows-und-macos), [Wiederaufnahme](#absturzsicherung-und-wiederaufnahme) |
 | Souffleur | Live-Abgleich des Gesagten mit einem LLM-Wiki: Widersprüche, offene Punkte, Fragen mit Antwort aus dem Wiki, Essenz der letzten Minuten – nur für den Moderator | [→](#souffleur-live-abgleich-mit-dem-wiki) |
 | Lokale KI | Souffleur (und experimentell die KI-Analyse) mit einem lokalen Modell über Ollama statt Claude – nichts verlässt den Rechner | [→](#lokale-ki-ollama) |
+| Variante cloud-compliant | Branch ohne Cloud-KI: Souffleur nur lokal über Ollama, keine KI-Analyse, Claude weder installiert noch gestartet | [→](#variante-cloud-compliant-ohne-cloud-ki) |
 
 **Technik:** WhisperX mit faster-whisper `large-v3` (Transkription) → wav2vec2
 (Wort-Alignment) → pyannote `speaker-diarization-3.1` (Sprecher). Die Modelle laufen
@@ -893,6 +894,44 @@ gedeckelt (`AUDIOSCRIBE_OLLAMA_DENKEN=1` schaltet das Denken ein,
 bei null, im Protokoll steht „lokal, zählt nicht“). Transkript- und Wiki-Auszüge gehen nur
 an den Dienst auf demselben Rechner. Ein gesetzter `ANTHROPIC_API_KEY` spielt lokal keine
 Rolle. Adresse und Verweildauer: `AUDIOSCRIBE_OLLAMA_URL`, `AUDIOSCRIBE_OLLAMA_KEEP_ALIVE`.
+
+## Variante cloud-compliant (ohne Cloud-KI)
+
+Der Branch **`cloud-compliant`** ist eine Variante ohne Cloud-KI, z. B. für einen
+Cloud-Compliance-Antrag. Er unterscheidet sich von `main` nur in einer Zeile:
+`VARIANTE = CLOUD_COMPLIANT` in `src/audioscribe/variante.py`. Alles andere steckt als
+Schalter auch in `main` und ist dort aus. Die Variante lässt sich bewusst **nicht** per
+Umgebungsvariable, Kommandozeile oder Einstellungsdatei umstellen.
+
+**Starten** – wie gewohnt, nur aus dem Branch:
+
+```bash
+git switch cloud-compliant
+./start.sh                       # Windows: .\start.ps1
+./start.sh --doctor              # Zeile „Variante: cloud-compliant“, „KI-Analyse: deaktiviert“
+```
+
+**Abweichungen gegenüber `main`**
+
+| Bereich | `main` | `cloud-compliant` |
+|---|---|---|
+| KI-Dienst | Claude (Agent SDK) oder lokal | nur lokale KI (Ollama); `claude-agent` in `einstellungen.json`, `projekt.json` oder `AUDIOSCRIBE_SOUFFLEUR_BACKEND` wird mit Hinweis abgelehnt und durch die lokale KI ersetzt |
+| Ollama-Adresse | beliebig | nur `localhost`, `127.0.0.1`, `::1` – jede andere Adresse wird abgelehnt, ohne Anfrage |
+| KI-Analyse | Reiter, `audioscribe analyze`, `/api/agent/*` | ausgeblendet; `analyze` und `/api/agent/*` melden „nicht verfügbar“ (die Sitzungsliste für die Wiki-Ablage bleibt) |
+| Startskripte | Extra `agent` (claude-agent-sdk samt Claude Code) | ohne Extra `agent`; `uv run --exact` entfernt ein schon installiertes SDK aus der Umgebung |
+| Oberfläche | – | Kennzeichen „cloud-compliant“ im Kopf, Dienst heißt „lokale KI“, kein Verbrauchszähler |
+
+Ist Ollama nicht erreichbar oder das Modell nicht geladen, zeigt der Souffleur „lokale KI
+fehlt“. Aufnahme und Transkription laufen trotzdem weiter. `prozessbild`, `bpmn` und `refine`
+nutzen keinen Agenten und bleiben verfügbar. Der Code der Claude-Anbindung bleibt im
+Repository, wird in der Variante aber weder geladen noch gestartet.
+
+**Entwicklung:** Entwickelt wird auf `main`, danach regelmäßig `git switch cloud-compliant &&
+git merge main`. `cloud-compliant` wird nie nach `main` gemergt. Sonst wandert der Schalter mit.
+Die Tests laufen in beiden Stellungen. Tests, die Claude oder die Analyse prüfen, tragen
+`@pytest.mark.nur_standard` und entfallen in der Variante.
+
+---
 
 ## Betrieb: GPU, CPU, Konfiguration
 

@@ -684,6 +684,7 @@ def test_static_assets(ui_client):
 # --- Reiter "Einstellungen": Standardordner und Umgebungs-Check (FR-47) ---
 
 
+@pytest.mark.nur_standard
 def test_defaults_liefern_analyse_ordner_und_state_merkt_ihn(ui_client, tmp_path):
     ziel = tmp_path / "analysen"
     ziel.mkdir()

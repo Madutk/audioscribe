@@ -21,7 +21,7 @@ function zeigeGlobal() {
     const liste = MODELLE.includes(key) ? modelleFuer(einst.optionen[OPT[key]], dienst) : einst.optionen[OPT[key]];
     fillOptions($(id), liste, einst.werte[key]);
   }
-  $('gKiDienstHint').textContent = dienstHinweis(dienst);
+  $('gKiDienstHint').textContent = einst.hinweis ? `${einst.hinweis} ${dienstHinweis(dienst)}` : dienstHinweis(dienst);
 }
 
 /** Beim Dienstwechsel wandern die Modelle mit: ein Claude-Modell passt nicht zur lokalen KI
@@ -154,7 +154,7 @@ export function zeigeProjekt() {
   $('pMarkierungen').checked = p.wiki_markierungen === true;
   if (!einst) return;
   const dienst = p.eigen.ki_dienst || einst.werte.ki_dienst;  // der im Projekt wirksame Dienst
-  $('pKiDienstHint').textContent = dienstHinweis(dienst);
+  $('pKiDienstHint').textContent = p.ki_hinweis ? `${p.ki_hinweis} ${dienstHinweis(dienst)}` : dienstHinweis(dienst);
   for (const [key, id] of Object.entries(P)) {
     const global = einst.werte[key];
     const eigen = p.eigen[key] || '';

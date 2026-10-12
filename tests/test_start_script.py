@@ -10,8 +10,12 @@ from pathlib import Path
 
 import pytest
 
+from audioscribe import variante
+
 ROOT = Path(__file__).resolve().parents[1]
 SKRIPTE = ("start.sh", "AudioScribe.command")
+# Extras je Variante (src/audioscribe/variante.py) - cloud-compliant ohne 'agent'.
+EXTRAS = "--exact --extra review --extra live" if variante.aktiv() else "--extra review --extra agent --extra live"
 
 
 @pytest.mark.parametrize("name", SKRIPTE)
@@ -58,12 +62,12 @@ def _fake_bin(tmp_path: Path, os_name: str, arch: str, nvidia: bool) -> Path:
     return bin_dir
 
 
-def _run(tmp_path: Path, os_name: str, arch: str, *args: str, nvidia: bool = False) -> str:
+def _run(tmp_path: Path, os_name: str, arch: str, *args: str, nvidia: bool = False, root: Path = ROOT) -> str:
     bin_dir = _fake_bin(tmp_path, os_name, arch, nvidia)
     env = {k: v for k, v in os.environ.items() if k != "UV_PROJECT_ENVIRONMENT"}
     env["PATH"] = f"{bin_dir}:/usr/bin:/bin"
     proc = subprocess.run(
-        ["bash", str(ROOT / "start.sh"), *args], capture_output=True, text=True, env=env, cwd=ROOT, timeout=30
+        ["bash", str(root / "start.sh"), *args], capture_output=True, text=True, env=env, cwd=root, timeout=30
     )
     assert proc.returncode == 0, proc.stderr
     return proc.stdout + proc.stderr
@@ -72,7 +76,7 @@ def _run(tmp_path: Path, os_name: str, arch: str, *args: str, nvidia: bool = Fal
 @pytest.mark.skipif(os.name == "nt", reason="bash")
 def test_start_sh_mac_waehlt_cpu_mac_live_und_venv_mac(tmp_path):
     out = _run(tmp_path, "Darwin", "arm64", "--port", "9000")
-    assert "UV run --extra cpu --extra review --extra agent --extra live --extra mac audioscribe ui --port 9000" in out
+    assert f"UV run --extra cpu {EXTRAS} --extra mac audioscribe ui --port 9000" in out
     assert "VENV " in out and out.split("VENV ")[1].split()[0].endswith(".venv-mac")
     assert "MPSFB 1" in out
     assert "Erster Start auf macOS" in out  # .venv-mac gibt es hier nicht
@@ -88,7 +92,7 @@ def test_start_sh_intel_mac_ohne_mac_extra(tmp_path):
 @pytest.mark.skipif(os.name == "nt", reason="bash")
 def test_start_sh_linux_ohne_karte_cpu_mit_karte_cu124(tmp_path):
     out = _run(tmp_path, "Linux", "x86_64", "--doctor")
-    assert "UV run --extra cpu --extra review --extra agent --extra live audioscribe doctor" in out
+    assert f"UV run --extra cpu {EXTRAS} audioscribe doctor" in out
     assert out.split("VENV ")[1].split()[0].endswith("/.venv")
     out = _run(tmp_path / "n", "Linux", "x86_64", "--devices", nvidia=True) if (tmp_path / "n").mkdir() is None else ""
     assert "--extra cu124" in out and "live --list-devices" in out
@@ -104,3 +108,29 @@ def test_start_sh_mac_cu124_wird_zu_cpu(tmp_path):
 def test_start_sh_unbekannte_option(tmp_path):
     proc = subprocess.run(["bash", str(ROOT / "start.sh"), "--foo"], capture_output=True, text=True, cwd=ROOT)
     assert proc.returncode == 2 and "Unbekannte Option" in proc.stderr
+
+
+def _kopie(tmp_path: Path, zeile: str) -> Path:
+    """start.sh mit einer variante.py, deren Variantenzeile ``zeile`` ist."""
+    root = tmp_path / "repo"
+    (root / "src" / "audioscribe").mkdir(parents=True)
+    shutil.copy(ROOT / "start.sh", root / "start.sh")
+    quelle = (ROOT / "src" / "audioscribe" / "variante.py").read_text(encoding="utf-8")
+    zeilen = [zeile if z.startswith("VARIANTE = ") else z for z in quelle.splitlines()]
+    (root / "src" / "audioscribe" / "variante.py").write_text("\n".join(zeilen) + "\n", encoding="utf-8")
+    return root
+
+
+@pytest.mark.skipif(os.name == "nt", reason="bash")
+def test_start_sh_cloud_compliant_ohne_agent_und_exakt(tmp_path):
+    root = _kopie(tmp_path, "VARIANTE = CLOUD_COMPLIANT")
+    out = _run(tmp_path, "Darwin", "arm64", "--doctor", root=root)
+    assert "UV run --extra cpu --exact --extra review --extra live --extra mac audioscribe doctor" in out
+    assert "--extra agent" not in out and "(cloud-compliant)" in out
+
+
+@pytest.mark.skipif(os.name == "nt", reason="bash")
+def test_start_sh_standard_mit_agent(tmp_path):
+    root = _kopie(tmp_path, "VARIANTE = STANDARD")
+    out = _run(tmp_path, "Linux", "x86_64", "--doctor", root=root)
+    assert "--extra agent" in out and "--exact" not in out and "(standard)" in out

@@ -616,6 +616,11 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "analyze":
+        from audioscribe import variante
+
+        if variante.aktiv():
+            print(variante.HINWEIS_ANALYSE, file=sys.stderr)
+            return 2
         from audioscribe.agent.kommando import analyze
 
         return analyze(args, _resolve_out_dir)

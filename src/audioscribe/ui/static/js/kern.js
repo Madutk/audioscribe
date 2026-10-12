@@ -21,6 +21,8 @@ export const S = {
 
 export const modus = () => (S.kontext ? S.kontext.modus : 'start');
 export const projekt = () => (S.kontext ? S.kontext.projekt : null);
+/** Programmvariante 'cloud-compliant': nur lokale KI, ohne KI-Analyse (src/audioscribe/variante.py). */
+export const cloudCompliant = () => !!(S.kontext && S.kontext.variante === 'cloud-compliant');
 
 // --- Server ---------------------------------------------------------------------------
 
@@ -100,6 +102,10 @@ const DIENST_HINWEIS = {
   attrappe: 'Regelbasierter Ersatz ohne Netz – nur für Tests.',
 };
 export function dienstHinweis(dienst) {
+  if (cloudCompliant() && dienst === 'ollama') {
+    return 'Lokale KI auf diesem Rechner: nichts verlässt den Rechner. In dieser Variante (cloud-compliant) '
+      + 'ist sie der einzige KI-Dienst. Das Modell vorher mit „ollama pull“ laden („Umgebung prüfen“ zeigt den Stand).';
+  }
   return DIENST_HINWEIS[dienst] || 'Dieser Dienst ist über die Umgebung eingestellt.';
 }
 

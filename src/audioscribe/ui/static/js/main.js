@@ -1,7 +1,7 @@
 // Einstieg der Oberflaeche: Kontext holen, Adresse (#/…) auf eine Ansicht abbilden, Kopf zeichnen.
 // Jede Ansicht lebt in ihrem Modul und fragt den Server nur ab, solange sie sichtbar ist.
 
-import { $, S, post, modus, projekt, reducedMotion, wireLogs, toast } from './kern.js';
+import { $, S, post, modus, projekt, cloudCompliant, reducedMotion, wireLogs, toast } from './kern.js';
 import { HOME, ladeKontext, ladeDefaults } from './kontext.js';
 import { enterStart, renderStart, enterNeu } from './start.js';
 import { enterEinstellungen, enterProjekt, zeigeProjekt } from './einstellungen.js';
@@ -19,13 +19,14 @@ const ROUTES = {
   '#/projekt/live': { view: 'live', modus: 'projekt',
     hint: 'Monitor, System-Audio und Mikrofon mitschneiden – Transkript, Screenshots und Souffleur-Hinweise entstehen live' },
   '#/projekt/nachbereitung': { view: 'ana', modus: 'projekt',
-    hint: 'Sitzungen dieses Projekts ins Wiki speichern oder von der KI auswerten lassen' },
+    hint: 'Sitzungen dieses Projekts ins Wiki speichern oder von der KI auswerten lassen',
+    hintCloudCompliant: 'Sitzungen dieses Projekts ins Wiki speichern' },
   '#/projekt/einstellungen': { view: 'projekt', modus: 'projekt',
     hint: 'Ordner, Wiki-Ablage, KI und Sprache dieses Projekts' },
   '#/aufnahme': { view: 'live', modus: 'aufnahme',
     hint: 'Sofort mitschneiden, ohne Projekt – nach dem Stopp einem Projekt zuordnen' },
   '#/datei': { view: 'datei', modus: 'datei', hint: 'Aufnahme wählen, Speicherort festlegen, transkribieren' },
-  '#/datei/ki': { view: 'ana', modus: 'datei', hint: 'Die KI wertet Transkript und Standbilder aus und legt Dokumente im Ausgabeordner ab' },
+  '#/datei/ki': { view: 'ana', modus: 'datei', nichtCloudCompliant: true, hint: 'Die KI wertet Transkript und Standbilder aus und legt Dokumente im Ausgabeordner ab' },
   '#/demo': { view: 'live', modus: 'demo', hint: 'Vorführung – nichts wird aufgenommen oder gespeichert' },
   '#/einstellungen': { view: 'einstellungen', modus: null, hint: 'Globale Einstellungen – gelten für alle Projekte, die nichts Eigenes festlegen' },
 };
@@ -71,6 +72,7 @@ const CTX = {
 function renderShell() {
   const m = modus();
   document.body.dataset.modus = m;
+  document.body.dataset.variante = (S.kontext && S.kontext.variante) || 'standard';
   const ctx = CTX[m] ? CTX[m]() : null;
   $('ctx').hidden = !ctx;
   if (ctx) {
@@ -96,7 +98,7 @@ async function show() {
   const hash = location.hash || '#/';
   const route = ROUTES[hash];
   // Unbekannte Adresse oder eine, die nicht zum Kontext passt: der Server bestimmt, wo wir sind.
-  if (!route || (route.modus && route.modus !== modus())) {
+  if (!route || (route.modus && route.modus !== modus()) || (route.nichtCloudCompliant && cloudCompliant())) {
     history.replaceState(null, '', HOME[modus()]);
     return show();
   }
@@ -104,7 +106,7 @@ async function show() {
     if (aktiv && aktiv !== route.view && VIEWS[aktiv].leave) VIEWS[aktiv].leave();
     for (const [name, v] of Object.entries(VIEWS)) $(v.el).hidden = name !== route.view;
     document.body.dataset.view = route.view;
-    $('tabMeta').textContent = route.hint;
+    $('tabMeta').textContent = (cloudCompliant() && route.hintCloudCompliant) || route.hint;
     markNav(hash);
     aktiv = route.view;
   };

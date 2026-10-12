@@ -54,6 +54,10 @@ class _HttpFehler(Exception):
 
 def _http_json(url: str, body: dict | None, timeout_s: float) -> dict:
     """GET (``body`` None) oder POST mit JSON; Antwort als Dict. Fehler -> ``_HttpFehler``."""
+    from audioscribe import variante
+
+    if hinweis := variante.pruefe_ollama_url(url):
+        raise _HttpFehler(None, hinweis)  # letzte Sperre: keine Anfrage an fremde Rechner
     daten = None if body is None else json.dumps(body).encode("utf-8")
     req = urllib.request.Request(url, data=daten, headers={"Content-Type": "application/json"})
     try:
@@ -94,6 +98,10 @@ class OllamaStatus:
 
 def ollama_status(url: str = DEFAULT_URL, *, timeout_s: float = 2.0, post: PostFn = _http_json) -> OllamaStatus:
     """Läuft der Dienst, welche Version, welche Modelle sind geladen? Wirft nie."""
+    from audioscribe import variante
+
+    if hinweis := variante.pruefe_ollama_url(url):
+        return OllamaStatus(False, fehler=hinweis)  # fremde Adresse: gar nicht erst anfragen
     basis = url.rstrip("/")
     try:
         version = post(f"{basis}/api/version", None, timeout_s).get("version")

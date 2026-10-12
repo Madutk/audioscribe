@@ -21,7 +21,6 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
-from audioscribe.agent.fortschritt import parse_status_line
 from audioscribe.live.events import parse_event
 from audioscribe.ui.jobs import (
     AnalyseOptions,
@@ -552,6 +551,9 @@ class AnalyseRunner(_ProcessRunner):
 
     def _run(self, argv: list[str], workspace: Path) -> None:
         code = -1
+        # Erst hier: in der Variante cloud-compliant wird das Paket agent nie geladen.
+        from audioscribe.agent.fortschritt import parse_status_line
+
         try:
             proc = self._spawn(argv)
             if proc is not None:

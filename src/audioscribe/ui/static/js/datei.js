@@ -1,7 +1,7 @@
 // "Aufnahme transkribieren" (ohne Projekt): Dateien waehlen, Speicherort, Optionen, Fortschritt -
 // und nach dem Lauf das Ergebnis mit dem Weg weiter zur KI-Analyse.
 
-import { $, S, api, post, esc, icon, empty, hms, coarse, fill, markUnavailable, appendLog, poller, dirname, sep, trimSep, toast } from './kern.js';
+import { $, S, api, post, esc, icon, empty, hms, coarse, fill, markUnavailable, appendLog, poller, dirname, sep, trimSep, toast, cloudCompliant } from './kern.js';
 import { go, ladeDefaults } from './kontext.js';
 import { pickFiles, pickFolder, showTranscript } from './dialoge.js';
 
@@ -239,7 +239,8 @@ function renderResults(s) {
         <button class="secondary sm" type="button" data-folder="${esc(ordner(f))}">${icon('external')}Ordner öffnen</button>
       </div>
     </div>`).join('');
-  const weiter = s.running ? '' : `
+  // cloud-compliant: keine KI-Analyse - kein Weg dorthin anbieten.
+  const weiter = s.running || cloudCompliant() ? '' : `
     <div class="next" id="transNext">
       <h3>Wie geht es weiter?</h3>
       <p>Das Transkript ist gespeichert. Du kannst hier aufhören – oder die KI Transkript und Bilder auswerten lassen.</p>

@@ -126,16 +126,16 @@ def test_lokales_modell_und_modell_fuer():
 
 def test_ollama_status_liest_version_und_modelle():
     antworten = {
-        "http://h:1/api/version": {"version": "0.19.0"},
-        "http://h:1/api/tags": {"models": [{"name": "qwen3.6:35b-a3b-nvfp4"}, {"model": "gemma4:latest"}, "murks"]},
+        "http://localhost:1/api/version": {"version": "0.19.0"},
+        "http://localhost:1/api/tags": {"models": [{"name": "qwen3.6:35b-a3b-nvfp4"}, {"model": "gemma4:latest"}, "murks"]},
     }
-    status = ollama_status("http://h:1/", post=lambda url, body, t: antworten[url])
+    status = ollama_status("http://localhost:1/", post=lambda url, body, t: antworten[url])
     assert status.erreichbar and status.version == "0.19.0"
     assert status.modelle == ("qwen3.6:35b-a3b-nvfp4", "gemma4:latest")
     assert status.hat_modell("qwen3.6:35b-a3b-nvfp4") and status.hat_modell("gemma4") and not status.hat_modell("qwen3.6")
-    down = ollama_status("http://h:1", post=_post(_HttpFehler(None, "Connection refused")))
+    down = ollama_status("http://localhost:1", post=_post(_HttpFehler(None, "Connection refused")))
     assert not down.erreichbar and down.fehler == "Connection refused" and down.modelle == ()
-    kaputt = ollama_status("http://h:1", post=_post(RuntimeError("x")))
+    kaputt = ollama_status("http://localhost:1", post=_post(RuntimeError("x")))
     assert not kaputt.erreichbar and "RuntimeError" in (kaputt.fehler or "")
 
 
@@ -175,6 +175,7 @@ def test_ollama_sicherstellen_startet_dienst_und_wartet(tmp_path):
     assert "serve" in meldungen[0] and "läuft" in meldungen[-1]
 
 
+@pytest.mark.nur_standard
 def test_ollama_sicherstellen_startet_nicht_ohne_programm_oder_bei_fremder_adresse():
     from audioscribe.souffleur.ki_ollama import ist_lokal, ollama_sicherstellen
 
@@ -215,6 +216,7 @@ def test_make_ki_ollama_prueft_dienst_und_modell(tmp_path, monkeypatch):
 # --- Einstellungen -----------------------------------------------------------------------------
 
 
+@pytest.mark.nur_standard
 def test_optionen_tragen_dienst_je_modell():
     opt = einstellungen.optionen({})
     assert [d["id"] for d in opt["ki_dienste"]] == ["claude-agent", "ollama"]
@@ -245,6 +247,7 @@ def client(tmp_path, monkeypatch):
     return TestClient(server.create_app())
 
 
+@pytest.mark.nur_standard
 def test_api_agent_defaults_folgen_dem_dienst(client):
     d = client.get("/api/agent/defaults").json()
     assert d["dienst"] == "claude-agent" and d["model"] == "claude-opus-5" and "claude-opus-5" in d["models"]
@@ -285,6 +288,7 @@ def test_pruefe_lokal(monkeypatch):
     assert zeile.startswith("[experimentell]") and "OLLAMA_CONTEXT_LENGTH" in zeile and "0.19.0" in zeile
 
 
+@pytest.mark.nur_standard
 def test_auftrag_und_argv_mit_ki_dienst(tmp_path, monkeypatch):
     assert Auftrag(name="x", quelle=tmp_path, ausgabe=tmp_path).dienst == "claude-agent"
     opts = AnalyseOptions(source=tmp_path, name="x", output_dir=tmp_path)
@@ -332,6 +336,7 @@ def test_system_append_mit_lokalem_hinweis():
 # --- Doctor ------------------------------------------------------------------------------------
 
 
+@pytest.mark.nur_standard
 def test_doctor_ki_lokal(monkeypatch):
     from audioscribe import doctor
     from audioscribe.config import settings

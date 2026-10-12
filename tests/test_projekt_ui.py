@@ -76,6 +76,7 @@ def test_pruefen_meldet_je_feld_und_schlaegt_ordner_vor(client, wiki, tmp_path):
     assert r["wurzel_ist_wiki"] is True
 
 
+@pytest.mark.nur_standard
 def test_neues_projekt_wird_geoeffnet_und_gemerkt(client, wiki, tmp_path):
     r = _neu(client, wiki, tmp_path, sprache="en")
     assert r.status_code == 200, r.text
@@ -199,6 +200,7 @@ def test_oeffnen_schliessen_vergessen(client, wiki, tmp_path):
 # --- Einstellungen ---------------------------------------------------------------------------
 
 
+@pytest.mark.nur_standard
 def test_globale_einstellungen_und_ueberschreiben_im_projekt(client, wiki, tmp_path):
     e = client.get("/api/einstellungen").json()
     assert {"id": "claude-agent", "label": "Claude (Agent SDK)"} in e["optionen"]["ki_dienste"]

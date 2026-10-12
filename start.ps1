@@ -58,6 +58,15 @@ if ($Torch -eq 'auto') {
 $uiArgs = @('ui', '--port', $Port)
 if ($NoBrowser) { $uiArgs += '--no-browser' }
 
-Write-Host "AudioScribe: torch=$Torch, Extras review/agent/live, Port $Port, venv $env:UV_PROJECT_ENVIRONMENT (beenden mit Strg+C)"
-& uv run --extra $Torch --extra review --extra agent --extra live audioscribe @uiArgs
+# Variante cloud-compliant (src/audioscribe/variante.py): ohne Extra 'agent' (Claude Agent SDK
+# samt Claude Code); --exact entfernt ein schon installiertes SDK aus einer alten Umgebung.
+$variante = 'standard'
+$extras = @('--extra', 'review', '--extra', 'agent', '--extra', 'live')
+if (Select-String -Path (Join-Path $PSScriptRoot 'src\audioscribe\variante.py') -Pattern '^VARIANTE = CLOUD_COMPLIANT' -Quiet) {
+    $variante = 'cloud-compliant'
+    $extras = @('--exact', '--extra', 'review', '--extra', 'live')
+}
+
+Write-Host "AudioScribe ($variante): torch=$Torch, Extras $($extras -join ' '), Port $Port, venv $env:UV_PROJECT_ENVIRONMENT (beenden mit Strg+C)"
+& uv run --extra $Torch @extras audioscribe @uiArgs
 exit $LASTEXITCODE

@@ -27,6 +27,7 @@ import time
 import webbrowser
 from pathlib import Path
 
+from audioscribe import variante
 from audioscribe.config import settings
 from audioscribe.pipeline.media import probe_duration
 from audioscribe.projekt import eingang, einstellungen, modell, wiki_ablage
@@ -208,6 +209,15 @@ def create_app():
     live = LiveRunner()
     kontext = kontext_modul.Kontext()
 
+    @app.middleware("http")
+    async def _variante_sperre(request: Request, call_next):
+        """cloud-compliant: die KI-Analyse (Claude Agent SDK) ist nicht erreichbar. Die Liste der
+        Sitzungen (``sources``) bleibt - die Nachbereitung legt damit ohne KI ins Wiki ab."""
+        pfad = request.url.path
+        if variante.aktiv() and pfad.startswith("/api/agent/") and pfad != "/api/agent/sources":
+            return JSONResponse({"detail": variante.HINWEIS_ANALYSE}, status_code=404)
+        return await call_next(request)
+
     # --- Kontext (PRD §21) ----------------------------------------------------------------
 
     def _projekt():
@@ -278,6 +288,7 @@ def create_app():
                 "wiki_dir": saved.get("wiki_dir", "") or settings.wiki_dir,
             },
             "platform": browse.PLATFORM,
+            "variante": variante.VARIANTE,
         }
 
     class KontextIn(BaseModel):
@@ -575,7 +586,14 @@ def create_app():
     @app.get("/api/einstellungen")
     def api_einstellungen():
         saved = state.load_state()
-        return JSONResponse({"werte": einstellungen.globale(saved), "optionen": einstellungen.optionen(saved)})
+        return JSONResponse(_einstellungen_antwort(saved))
+
+    def _einstellungen_antwort(saved: dict) -> dict:
+        return {
+            "werte": einstellungen.globale(saved),
+            "optionen": einstellungen.optionen(saved),
+            "hinweis": einstellungen.hinweis(saved),
+        }
 
     @app.post("/api/einstellungen")
     def api_einstellungen_setzen(body: EinstellungenIn):
@@ -584,9 +602,11 @@ def create_app():
         for wert in werte.values():
             if not wert.strip() or wert.startswith("-") or not all(c.isalnum() or c in "-_.:[]" for c in wert):
                 raise HTTPException(400, f"Ungültiger Wert: {wert}")
+        if "ki_dienst" in werte and (hinweis := variante.pruefe_dienst(werte["ki_dienst"])):
+            raise HTTPException(400, hinweis)
         state.save_state(einstellungen.als_state(werte))
         saved = state.load_state()
-        return JSONResponse({"werte": einstellungen.globale(saved), "optionen": einstellungen.optionen(saved)})
+        return JSONResponse(_einstellungen_antwort(saved))
 
     @app.get("/api/verbrauch")
     def api_verbrauch():

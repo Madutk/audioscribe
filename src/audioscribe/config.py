@@ -36,6 +36,12 @@ def _load_dotenv(path: Path) -> None:
 _load_dotenv(PROJECT_ROOT / ".env")
 
 
+def _variante_aktiv() -> bool:
+    from audioscribe import variante
+
+    return variante.aktiv()
+
+
 def _env(name: str, default: str) -> str:
     return os.environ.get(f"AUDIOSCRIBE_{name}", default)
 
@@ -180,7 +186,10 @@ class Settings:
     # --- Souffleur (PRD §20): Live-Abgleich mit einem LLM-Wiki ---
     # KI-Dienst austauschbar: "claude-agent" (Agent SDK, Anmeldung von Claude Code) |
     # "ollama" (lokales Modell ueber Ollama auf diesem Rechner) | "attrappe".
-    souffleur_backend: str = field(default_factory=lambda: _env("SOUFFLEUR_BACKEND", "claude-agent"))
+    # Variante cloud-compliant (variante.py): Vorgabe lokal; andere Werte lehnt einstellungen.py ab.
+    souffleur_backend: str = field(
+        default_factory=lambda: _env("SOUFFLEUR_BACKEND", "ollama" if _variante_aktiv() else "claude-agent")
+    )
     souffleur_model: str = field(default_factory=lambda: _env("SOUFFLEUR_MODEL", "claude-sonnet-5"))
     # Lokale KI (Ollama): Adresse des Dienstes und wie lange ein Modell nach dem letzten Aufruf
     # im Speicher bleibt (Ollama-Schreibweise, z. B. "30m"; "0" = sofort entladen).

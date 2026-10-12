@@ -31,6 +31,13 @@ done
 OS="$(uname -s)"
 ARCH="$(uname -m)"
 EXTRAS=(--extra review --extra agent --extra live)
+# Variante cloud-compliant (src/audioscribe/variante.py): ohne Extra 'agent' (Claude Agent SDK
+# samt Claude Code); --exact entfernt ein schon installiertes SDK aus einer alten Umgebung.
+VARIANTE=standard
+if grep -q '^VARIANTE = CLOUD_COMPLIANT' src/audioscribe/variante.py 2>/dev/null; then
+  VARIANTE=cloud-compliant
+  EXTRAS=(--exact --extra review --extra live)
+fi
 
 if [ "$OS" = "Darwin" ]; then
   export UV_PROJECT_ENVIRONMENT="${UV_PROJECT_ENVIRONMENT:-$PWD/.venv-mac}"
@@ -76,7 +83,7 @@ Beide gelten fuer Terminal.app/iTerm/VS Code, nicht fuer "Python".
 HINWEIS
 fi
 
-echo "AudioScribe: $OS/$ARCH, torch=$TORCH, Extras ${EXTRAS[*]}, venv $UV_PROJECT_ENVIRONMENT (beenden mit Strg+C)"
+echo "AudioScribe ($VARIANTE): $OS/$ARCH, torch=$TORCH, Extras ${EXTRAS[*]}, venv $UV_PROJECT_ENVIRONMENT (beenden mit Strg+C)"
 case "$MODE" in
   doctor)  exec uv run --extra "$TORCH" "${EXTRAS[@]}" audioscribe doctor ;;
   devices) exec uv run --extra "$TORCH" "${EXTRAS[@]}" audioscribe live --list-devices ;;

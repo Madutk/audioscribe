@@ -80,6 +80,7 @@ def test_attrappe_essenz_nimmt_erste_saetze():
     assert antwort.daten == {"essenz": [{"punkt": "Die Freigabe dauert drei Werktage."}], "offen": []}
 
 
+@pytest.mark.nur_standard
 def test_make_ki_attrappe_und_fehlendes_sdk(tmp_path, monkeypatch):
     ki, status = make_ki(BACKEND_ATTRAPPE, "", cache_dir=tmp_path)
     assert isinstance(ki, AttrappeKi) and status.zustand == "bereit"
@@ -90,6 +91,7 @@ def test_make_ki_attrappe_und_fehlendes_sdk(tmp_path, monkeypatch):
     assert ki is None and status.zustand == "fehlt"
 
 
+@pytest.mark.nur_standard
 def test_make_ki_claude_nutzt_eigenes_arbeitsverzeichnis(tmp_path, monkeypatch):
     monkeypatch.setattr("audioscribe.souffleur.ki.sdk_verfuegbar", lambda: True)
     ki, status = make_ki(BACKEND_CLAUDE, "claude-sonnet-5", cache_dir=tmp_path)

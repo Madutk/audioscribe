@@ -340,7 +340,11 @@ def make_ki(
 ) -> tuple[Any | None, KiStatus]:
     """Den konfigurierten Dienst bauen. Fehlt er, kommt ``None`` und ein Status, der das sagt -
     der Souffleur läuft dann ohne KI weiter (Fragen-Erkennung und Essenz entfallen)."""
-    backend = (backend or BACKEND_CLAUDE).strip().lower()
+    from audioscribe import variante
+
+    backend = (backend or (BACKEND_OLLAMA if variante.aktiv() else BACKEND_CLAUDE)).strip().lower()
+    if hinweis := variante.pruefe_dienst(backend):
+        return None, KiStatus("fehlt", backend, modell, hinweis)
     modell = modell_fuer(backend, modell)
     if backend == BACKEND_ATTRAPPE:
         return AttrappeKi(regeln=regeln), KiStatus("bereit", backend, "attrappe", "KI-Attrappe (regelbasiert, ohne Netz)")
@@ -357,9 +361,12 @@ def make_ki(
 def _make_ollama(modell: str, *, log: Callable[[str], None] | None) -> tuple[Any | None, KiStatus]:
     """Lokaler Dienst: erst prüfen, ob er läuft und das Modell geladen ist - sonst sagt der
     Status, was zu tun ist, statt dass jedes Fenster scheitert."""
+    from audioscribe import variante
     from audioscribe.config import settings
     from audioscribe.souffleur.ki_ollama import OllamaKi, ollama_sicherstellen
 
+    if hinweis := variante.pruefe_ollama_url(settings.ollama_url):
+        return None, KiStatus("fehlt", BACKEND_OLLAMA, modell, hinweis)
     # Läuft der Dienst nicht, startet ihn die App selbst (nur auf diesem Rechner).
     status = ollama_sicherstellen(settings.ollama_url, log=log, log_datei=settings.cache_dir / "ollama.log")
     if not status.erreichbar:
