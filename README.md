@@ -127,6 +127,14 @@ nicht mehr gibt, wird zum Monitor. Läuft AudioScribe schon, startet der Doppelk
 Aufnahme. Die Berechtigungen gehören wie gehabt Terminal.app. Nach dem Stopp wie gewohnt
 „Sitzung ablegen › Projekt zuordnen“.
 
+**Tastenkürzel (App „Kurzbefehle“):** Kurzbefehle öffnen (Spotlight: „Kurzbefehle“), neuer
+Kurzbefehl mit der Aktion „Shell-Skript ausführen“ und dem Inhalt
+`open "<Pfad zum Repo>/Sofort aufnehmen.command"`. In den Details (ⓘ) „Als Schnellaktion
+verwenden“ einschalten, „Dienste-Menü“ anhaken und unter „Tastenkurzbefehl hinzufügen“ eine
+Tastenkombination wählen (z. B. ⌃⌥⌘R); optional „In Menüleiste anheften“. Das Kürzel wirkt
+systemweit – auch mit Teams im Vordergrund – und verhält sich wie der Doppelklick. Beim ersten
+Auslösen fragt macOS einmal, ob der Kurzbefehl Skripte ausführen darf.
+
 **Berechtigungen:** Beim ersten „Aufnahme starten“ fragt macOS nach **Mikrofon** und
 **Bildschirmaufnahme** (letztere liefert über ScreenCaptureKit auch das System-Audio).
 Beide gehören der *startenden App* (Terminal, iTerm, VS Code), nicht „Python“, und die
