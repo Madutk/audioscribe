@@ -383,9 +383,24 @@ function gauge(boxId, valueId, value, warn, bad) {
   $(boxId).className = 'gauge ' + (value === null || value === undefined ? '' : value < warn ? 'ok' : value < bad ? 'warn' : 'err');
 }
 
+/** Verknuepfung "Sofort aufnehmen": Stand des automatischen Starts (laeuft | gestartet | fehler). */
+function renderSofort(q) {
+  const box = $('liveSofort');
+  const key = JSON.stringify(q || null);
+  if (box.dataset.key === key) return;
+  box.dataset.key = key;
+  if (!q || !q.status) { box.hidden = true; box.textContent = ''; box.className = 'hint'; return; }
+  box.hidden = false;
+  box.className = q.status === 'fehler' ? 'err' : 'hint';
+  box.textContent = q.status === 'laeuft' ? 'Automatischer Start über die Verknüpfung – Geräte werden ermittelt …'
+    : q.status === 'gestartet' ? 'Automatisch gestartet (Verknüpfung „Sofort aufnehmen“) – mit den zuletzt benutzten Geräten.'
+      : `Automatischer Start fehlgeschlagen: ${q.fehler} – Geräte prüfen und „Aufnahme starten“ drücken.`;
+}
+
 async function pollLive() {
   let s;
   try { s = await api(`/api/live/status?offset=${liveOffset}&ev_offset=${liveEvOffset}`); } catch (e) { return; }
+  renderSofort(s.sofort);
   if (s.ev_offset < liveEvOffset || s.offset < liveOffset) { resetLiveView(); return; }  // neue Sitzung
   liveSession = s.session || liveSession;
   liveOffset = s.offset;
@@ -721,6 +736,7 @@ export function leereLive() {
   liveBereit = false;
   liveRunning = false;
   resetLiveView();
+  renderSofort(null);
   $('liveTitle').value = '';
   $('liveResume').innerHTML = '';
   $('liveErr').textContent = '';

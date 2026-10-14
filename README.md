@@ -73,8 +73,16 @@ Danach läuft alles offline.
 ```powershell
 .\start.ps1                     # wählt cpu|cu124 selbst, synct .venv-win, startet die Oberfläche
 .\start.ps1 -Torch cpu -Port 8800 -NoBrowser
+.\start.ps1 -Aufnahme           # „Sofort aufnehmen“: Aufnahme ohne Projekt startet sofort
 .venv-win\Scripts\audioscribe.exe doctor
 ```
+
+**Verknüpfung „Sofort aufnehmen“ auf dem Desktop:** Rechtsklick auf `Sofort aufnehmen.cmd` →
+„Senden an › Desktop (Verknüpfung erstellen)“. Ein Doppelklick startet AudioScribe, öffnet den
+Browser in „Aufnahme ohne Projekt“ und beginnt die Aufnahme mit den zuletzt benutzten Geräten
+und Einstellungen (ein gemerktes Fenster, das es nicht mehr gibt, wird zum Monitor). Läuft
+AudioScribe schon, startet der Doppelklick nur die Aufnahme. Nach dem Stopp wie gewohnt
+„Sitzung ablegen › Projekt zuordnen“.
 
 `start.ps1` legt die Windows-Umgebung bewusst in `.venv-win` an: Wird das Repo auch aus WSL
 benutzt, gehört `.venv` dem Linux-Python, und Windows-`uv` würde daran scheitern. Wer
@@ -109,6 +117,15 @@ Python: kein Homebrew, kein virtuelles Audiogerät, nur `uv`-Pakete.
 `AudioScribe.command` ist dasselbe für den **Doppelklick im Finder** (öffnet Terminal.app).
 Kommt das Repo als ZIP statt per `git clone`, blockt Gatekeeper die Datei einmal:
 `xattr -d com.apple.quarantine AudioScribe.command`.
+
+**Verknüpfung „Sofort aufnehmen“ auf dem Schreibtisch:** `Sofort aufnehmen.command` im Finder
+per Rechtsklick → „Alias erzeugen“ und den Alias auf den Schreibtisch ziehen (bei ZIP-Download
+einmal `xattr -d com.apple.quarantine "Sofort aufnehmen.command"`). Ein Doppelklick startet
+AudioScribe (`./start.sh --aufnahme`), öffnet den Browser in „Aufnahme ohne Projekt“ und beginnt
+die Aufnahme mit den zuletzt benutzten Geräten und Einstellungen; ein gemerktes Fenster, das es
+nicht mehr gibt, wird zum Monitor. Läuft AudioScribe schon, startet der Doppelklick nur die
+Aufnahme. Die Berechtigungen gehören wie gehabt Terminal.app. Nach dem Stopp wie gewohnt
+„Sitzung ablegen › Projekt zuordnen“.
 
 **Berechtigungen:** Beim ersten „Aufnahme starten“ fragt macOS nach **Mikrofon** und
 **Bildschirmaufnahme** (letztere liefert über ScreenCaptureKit auch das System-Audio).
@@ -1017,7 +1034,7 @@ claude                                               # einmal mit dem Claude-Abo
 .venv-win\Scripts\audioscribe.exe refine output\live-…
 
 # macOS (Apple Silicon)
-./start.sh                                                   # Oberfläche; --doctor | --devices | --port N | --no-browser
+./start.sh                                                   # Oberfläche; --doctor | --devices | --port N | --no-browser | --aufnahme
 .venv-mac/bin/audioscribe live --monitor 1                   # System-Audio über ScreenCaptureKit, Whisper über MLX
 .venv-mac/bin/audioscribe run input/meeting.m4a --device mps # Whisper über MLX, Alignment/Diarisierung über MPS
 .venv-mac/bin/python -m audioscribe.live.capture.sck --probe 5   # Spike: 5 s System-Audio nach /tmp/sck.wav

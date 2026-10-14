@@ -332,6 +332,11 @@ def main(argv: list[str] | None = None) -> int:
     # Eigener Port, damit UI (8766) und Review-Oberflaeche (8765) parallel laufen koennen.
     ui.add_argument("--port", type=int, default=8766, help="HTTP-Port (Default: 8766)")
     ui.add_argument("--no-browser", action="store_true", help="Browser nicht automatisch oeffnen")
+    ui.add_argument(
+        "--aufnahme", action="store_true",
+        help="Sofort aufnehmen: Aufnahme ohne Projekt mit den zuletzt benutzten Geraeten sofort starten "
+        "(Desktop-Verknuepfung); laeuft die Oberflaeche schon, startet dort nur die Aufnahme",
+    )
 
     exp = sub.add_parser(
         "export", help="Transkript + Markierungen zu annotiertem Markdown/PDF mergen"
@@ -591,10 +596,16 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "ui":
+        if args.aufnahme:
+            from audioscribe.ui.sofort import an_laufenden_server
+
+            # Zweiter Doppelklick: der laufende Server nimmt auf, kein zweiter Start (Port belegt).
+            if an_laufenden_server("127.0.0.1", args.port, open_browser=not args.no_browser):
+                return 0
         from audioscribe.ui.server import serve as serve_ui
 
         try:
-            serve_ui(port=args.port, open_browser=not args.no_browser)
+            serve_ui(port=args.port, open_browser=not args.no_browser, aufnahme=args.aufnahme)
         except ModuleNotFoundError:
             print(
                 "Die Browser-Oberflaeche benoetigt fastapi + uvicorn. Installiere sie mit:\n"

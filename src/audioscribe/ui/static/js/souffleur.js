@@ -1,8 +1,10 @@
 // Souffleur in der Live-Ansicht: Hinweise aus Wiki und KI neben dem Transkript (PRD §20).
 // Der Abgleich laeuft im Server; hier werden Hinweise gezeichnet und mit dem Transkript verknuepft.
 
-import { $, S, post, esc, icon, empty, tc, secs, sep, trimSep, projekt, reducedMotion, cloudCompliant } from './kern.js';
-import { renderWikiState } from './wiki.js';
+import { $, S, post, esc, icon, empty, tc, secs, sep, trimSep, projekt, modus, reducedMotion, cloudCompliant, toast } from './kern.js';
+import { renderWikiState, loadWikiStatus } from './wiki.js';
+import { pickFolder, askConfirm } from './dialoge.js';
+import { setKontext } from './kontext.js';
 import { herkunft, blinke, demoAktiv } from './demo.js';
 
 // --- Souffleur (PRD §20): Hinweise aus Wiki und KI neben dem Transkript -----------
@@ -39,13 +41,54 @@ export function resetSouffleurView() {
   updateHintCount();
   renderSouffleurState(null, false);
   renderWikiState($('souffleurWiki'), S.wikiStatus, true);
+  renderWikiActions(S.wikiStatus);
   renderHandover(null);
 }
 
 /** Wiki-Zustand des Projekts in der Karte zeigen - nur solange keine Sitzung ihren eigenen meldet. */
 export function zeigeWikiStatus() {
-  if (!souffleurInfo) renderWikiState($('souffleurWiki'), S.wikiStatus, true);
+  if (!souffleurInfo) { renderWikiState($('souffleurWiki'), S.wikiStatus, true); renderWikiActions(S.wikiStatus); }
 }
+
+// --- Wiki "on the fly" wechseln (Projekt: dauerhaft in projekt.json; Sofort aufnehmen: global) ----
+
+function renderWikiActions(w) {
+  $('souffleurWikiActions').hidden = modus() === 'demo';
+  $('souffleurWikiLoesen').hidden = !(w && w.zustand && w.zustand !== 'keins');
+}
+
+async function wikiSetzen(pfad) {
+  $('souffleurErr').textContent = '';
+  const btns = [$('souffleurWikiWechseln'), $('souffleurWikiLoesen')];
+  for (const b of btns) b.disabled = true;
+  try {
+    setKontext(await post('/api/wiki/wechseln', { pfad }));
+    await loadWikiStatus();
+    toast(pfad ? 'Wiki gewechselt – der Souffleur liest es ein' : 'Wiki gelöst');
+  } catch (err) {
+    $('souffleurErr').textContent = err.message;
+  } finally {
+    for (const b of btns) b.disabled = false;
+  }
+}
+
+$('souffleurWikiWechseln').onclick = async () => {
+  const w = souffleurInfo ? souffleurInfo.wiki : S.wikiStatus;
+  const p = projekt();
+  const pfad = await pickFolder({
+    title: 'LLM-Wiki wählen', ok: 'Dieses Wiki verwenden',
+    start: (w && w.pfad) || (p && (p.wiki_dir || p.wurzel)) || '',
+  });
+  if (pfad) wikiSetzen(pfad);
+};
+$('souffleurWikiLoesen').onclick = async () => {
+  const ok = await askConfirm({
+    title: 'Wiki lösen?',
+    text: 'Der Souffleur arbeitet danach ohne Belege; im Projekt wird die Verknüpfung gelöst. Die Dateien des Wikis bleiben unverändert.',
+    ok: 'Wiki lösen',
+  });
+  if (ok) wikiSetzen(null);
+};
 
 /** Markierung an die Transkriptzeile haengen: Klassen, Randstreifen, Chip nach .lag - der Text bleibt unberuehrt. */
 export function markSegment(h) {
@@ -232,6 +275,7 @@ export function renderSouffleur(s) {
   if (sf && !souffleurToggling) $('souffleurOn').checked = !!sf.aktiv;
   renderSouffleurState(sf, !!s.running);
   renderWikiState($('souffleurWiki'), sf ? sf.wiki : S.wikiStatus, true);
+  renderWikiActions(sf ? sf.wiki : S.wikiStatus);
   const kannEssenz = !!sf;
   $('souffleurEssenz2').disabled = !kannEssenz;
   $('souffleurEssenz5').disabled = !kannEssenz;

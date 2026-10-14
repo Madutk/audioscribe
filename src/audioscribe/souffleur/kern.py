@@ -17,7 +17,7 @@ import re
 import threading
 import time
 from collections.abc import Callable
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from pathlib import Path
 
 from audioscribe.souffleur import essenz as essenz_modul
@@ -73,7 +73,9 @@ class Souffleur:
         self.session_dir: Path | None = None
         self._wiki: wiki_modul.WikiIndex | None = None
         self._wiki_status = wiki_modul.status_keins()
-        self._wiki_laedt = False
+        self._wiki_laedt = False  # erstes Laden: bis dahin wird nicht beurteilt (sonst ohne Belege)
+        self._wiki_wechselt = False  # Wechsel mitten in der Sitzung: nur Anzeige, der alte Index gilt weiter
+        self._wiki_gen = 0  # Generation des Ladevorgangs - der letzte Wechsel gewinnt
         self._ki_aufrufe = 0
         self._ki_fehler = 0
         self._fehler_folge = 0
@@ -95,9 +97,13 @@ class Souffleur:
             self.session_dir = Path(session_dir)
         self._uebernehme_stand()
         self._log(f"Souffleur: {self.ki_status.meldung}")
-        if self.konfig.wiki_dir is not None:
+        with self._lock:
+            pfad = self.konfig.wiki_dir
+            self._wiki_gen += 1
+            gen = self._wiki_gen
+        if pfad is not None:
             self._wiki_laedt = True
-            threading.Thread(target=self._lade_wiki, name="souffleur-wiki", daemon=True).start()
+            threading.Thread(target=self._lade_wiki, args=(gen, pfad), name="souffleur-wiki", daemon=True).start()
         else:
             self._log(f"Souffleur: {self._wiki_status.meldung}")
         self._worker = threading.Thread(target=self._arbeite, name="souffleur", daemon=True)
@@ -119,23 +125,51 @@ class Souffleur:
         for m in stand.markierungen:
             self.on_hinweis(m.als_dict())
 
-    def _lade_wiki(self) -> None:
+    def _lade_wiki(self, gen: int, pfad: Path) -> None:
+        """Index laden; das Ergebnis zählt nur, wenn inzwischen kein neuerer Wechsel kam."""
         t0 = time.monotonic()
+        was = "gewechselt" if gen > 1 else "geladen"
         try:
-            index = wiki_modul.WikiIndex.laden(self.konfig.wiki_dir)
+            index = wiki_modul.WikiIndex.laden(pfad)
             with self._lock:
+                if gen != self._wiki_gen:
+                    return
                 self._wiki, self._wiki_status = index, index.status
-            self._log(f"Souffleur: Wiki geladen in {time.monotonic() - t0:.1f} s - {index.status.meldung}")
+            self._log(f"Souffleur: Wiki {was} in {time.monotonic() - t0:.1f} s - {index.status.meldung}")
             for w in index.status.warnungen:
                 self._log(f"Souffleur: Wiki-Warnung: {w}")
         except Exception:  # noqa: BLE001 - jeder Fehler wird zum Zustand, nie zum Absturz
-            status = wiki_modul.pruefe_wiki(self.konfig.wiki_dir)
+            status = wiki_modul.pruefe_wiki(pfad)
             with self._lock:
+                if gen != self._wiki_gen:
+                    return
                 self._wiki, self._wiki_status = None, status
             self._log(f"Souffleur: Wiki nicht nutzbar - {status.meldung}")
         finally:
-            self._wiki_laedt = False
+            with self._lock:
+                if gen == self._wiki_gen:
+                    self._wiki_laedt = False
+                    self._wiki_wechselt = False
             self._wecker.set()
+
+    def wechsle_wiki(self, pfad: Path | None) -> None:
+        """Wiki wechseln oder lösen - auch mitten in der Sitzung. Der bisherige Index gilt weiter,
+        bis der neue steht; der Status zeigt derweil „laedt“. Vor dem Start wird nur die
+        Konfiguration gesetzt (``starte`` lädt dann), nach dem Ende passiert nichts mehr."""
+        with self._lock:
+            self.konfig = replace(self.konfig, wiki_dir=Path(pfad) if pfad is not None else None)
+            if not self._gestartet or self._beendet:
+                return
+            self._wiki_gen += 1
+            gen = self._wiki_gen
+            if pfad is None:
+                self._wiki, self._wiki_status = None, wiki_modul.status_keins()
+                self._wiki_laedt = self._wiki_wechselt = False
+                self._log("Souffleur: Wiki gelöst - weiter ohne Belege")
+                self._wecker.set()
+                return
+            self._wiki_wechselt = True
+        threading.Thread(target=self._lade_wiki, args=(gen, Path(pfad)), name="souffleur-wiki", daemon=True).start()
 
     def abschliessen(self) -> None:
         """Rest beurteilen, Begleitdateien schreiben, Thread beenden."""
@@ -489,8 +523,9 @@ class Souffleur:
             return {
                 "aktiv": self._aktiv,
                 "beendet": self._beendet,
-                "wiki": self._wiki_status.als_dict() if not self._wiki_laedt else {
-                    **self._wiki_status.als_dict(), "zustand": "laedt", "meldung": "Wiki wird gelesen …"},
+                "wiki": self._wiki_status.als_dict() if not (self._wiki_laedt or self._wiki_wechselt) else {
+                    **self._wiki_status.als_dict(), "zustand": "laedt",
+                    "meldung": "Wiki wird gewechselt …" if self._wiki_wechselt else "Wiki wird gelesen …"},
                 "ki": {
                     "zustand": zustand,
                     "modell": self.ki_status.modell,

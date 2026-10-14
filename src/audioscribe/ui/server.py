@@ -1,8 +1,10 @@
 """Lokaler Webserver der Oberflaeche: Startseite, Projekte, Live-Sitzung, Aufnahme transkribieren.
 
 Der Server haelt einen aktiven Kontext (``ui/kontext.py``, PRD §21): Startseite, ein geoeffnetes
-Projekt, die projektlose Transkription einer Aufnahme oder die Demo. Ordner, KI-Modell und
-Sprache kommen im Projekt aus dem Projekt bzw. den globalen Einstellungen.
+Projekt, die projektlose Transkription einer Aufnahme, "Sofort aufnehmen" oder die Demo. Ordner,
+KI-Modell und Sprache kommen im Projekt aus dem Projekt bzw. den globalen Einstellungen.
+``serve(aufnahme=True)`` (``audioscribe ui --aufnahme``, Desktop-Verknuepfung) beginnt im Modus
+"Sofort aufnehmen" und startet die Aufnahme mit den gemerkten Geraeten (``ui/sofort.py``).
 
 Optionale Komponente (Extra-Gruppe ``review``): benoetigt ``fastapi`` + ``uvicorn``.
 Bindet ausschliesslich an ``localhost`` (NFR-8); kein Upload. An Dateiinhalten liefert der
@@ -23,6 +25,7 @@ ohne zweiten Kanal aus und uebersteht ein Neuladen der Seite.
 
 import functools
 import json
+import threading
 import time
 import webbrowser
 from pathlib import Path
@@ -32,7 +35,7 @@ from audioscribe.config import settings
 from audioscribe.pipeline.media import probe_duration
 from audioscribe.projekt import eingang, einstellungen, modell, wiki_ablage
 from audioscribe.projekt.modell import ProjektFehler
-from audioscribe.ui import browse, jobs, kontext as kontext_modul, state
+from audioscribe.ui import browse, dialog_nativ, jobs, kontext as kontext_modul, sofort as sofort_modul, state
 from audioscribe.ui.runner import AnalyseRunner, BatchRunner, LiveRunner
 from audioscribe.verbrauch import QUELLE_SOUFFLEUR, Zaehler
 
@@ -208,6 +211,9 @@ def create_app():
     analyse = AnalyseRunner(zaehler=zaehler)
     live = LiveRunner()
     kontext = kontext_modul.Kontext()
+    # Verknuepfung "Sofort aufnehmen" (ui/sofort.py): Stand des automatischen Starts fuer die
+    # Live-Ansicht - laeuft | gestartet | fehler; None, sobald der Nutzer selbst handelt.
+    sofort: dict = {"status": None, "fehler": None}
 
     @app.middleware("http")
     async def _variante_sperre(request: Request, call_next):
@@ -267,6 +273,7 @@ def create_app():
         analyse.leeren()
         runner.leeren()
         kontext.setze(modus, projekt)
+        sofort.update(status=None, fehler=None)
 
     def _kontext_antwort() -> dict:
         saved = state.load_state()
@@ -289,6 +296,8 @@ def create_app():
             },
             "platform": browse.PLATFORM,
             "variante": variante.VARIANTE,
+            # Ordnerdialog des Betriebssystems (ui/dialog_nativ.py) - sonst blaettert der Browser.
+            "dialog_nativ": dialog_nativ.verfuegbar(),
         }
 
     class KontextIn(BaseModel):
@@ -312,8 +321,15 @@ def create_app():
     class PfadIn(BaseModel):
         pfad: str
 
+    class OrdnerDialogIn(BaseModel):
+        start: str = ""
+        titel: str = "Ordner wählen"
+
     class FelderIn(BaseModel):
         felder: dict
+
+    class WikiWechselnIn(BaseModel):
+        pfad: str | None = None  # None/leer = Wiki loesen
 
     class EinstellungenIn(BaseModel):
         ki_dienst: str | None = None
@@ -555,6 +571,18 @@ def create_app():
         state.merke_projekt(projekt.wurzel, projekt.name)
         return JSONResponse(_kontext_antwort())
 
+    @app.get("/api/projekt/vorlage")
+    def api_projekt_vorlage(pfad: str = Query("")):
+        """Einstellungen eines vorhandenen Projekts als Vorlage fuer den Assistenten "Neues
+        Projekt" - nur lesen, kein Kontextwechsel."""
+        if not pfad.strip():
+            raise HTTPException(400, "Bitte ein Projekt angeben.")
+        try:
+            vorlage = modell.lade(browse.normalize_path(pfad, default=Path("")))
+        except ProjektFehler as exc:
+            raise HTTPException(400, str(exc)) from exc
+        return JSONResponse(kontext_modul.projekt_dict(vorlage, state.load_state(), mit_wiki=False))
+
     @app.put("/api/projekt")
     def api_projekt_aendern(body: FelderIn):
         """Projekteinstellungen aendern; ``null`` bei KI/Sprache heisst: globale Einstellung."""
@@ -567,7 +595,10 @@ def create_app():
                 felder[key] = str(browse.normalize_path(felder[key], default=Path("")))
         if "sitzungen_dir" in felder and _beschaeftigt():
             raise HTTPException(409, f"{_beschaeftigt()} Der Sitzungsordner lässt sich erst danach ändern.")
-        if ("wiki_art" in felder or "wiki_dir" in felder) and _beschaeftigt():
+        wiki_geaendert = "wiki_art" in felder or "wiki_dir" in felder
+        # Waehrend einer Live-Sitzung darf das Wiki wechseln - der Souffleur liest es sofort ein.
+        # Analyse und Transkription haengen am Wiki-Ordner, da bleibt die Sperre.
+        if wiki_geaendert and (analyse.laeuft() or runner.laeuft()):
             raise HTTPException(409, f"{_beschaeftigt()} Das Wiki lässt sich erst danach ändern.")
         try:
             neu = modell.aendere(p, felder)
@@ -575,7 +606,15 @@ def create_app():
             raise HTTPException(400, str(exc)) from exc
         kontext.setze(kontext_modul.MODUS_PROJEKT, neu)
         state.merke_projekt(neu.wurzel, neu.name)
+        if wiki_geaendert:
+            _souffleur_wiki(neu.wiki_dir)
         return JSONResponse(_kontext_antwort())
+
+    def _souffleur_wiki(pfad: Path | None) -> None:
+        """Laufende Live-Sitzung: dem Souffleur das neue Wiki mitgeben."""
+        souffleur = live.souffleur()
+        if souffleur is not None and live.laeuft():
+            souffleur.wechsle_wiki(pfad)
 
     @app.post("/api/projekte/vergessen")
     def api_projekt_vergessen(body: PfadIn):
@@ -858,6 +897,24 @@ def create_app():
             raise HTTPException(400, str(exc)) from exc
         except PermissionError as exc:
             raise HTTPException(403, f"Keine Leseberechtigung fuer: {path}") from exc
+
+    @app.post("/api/dialog/ordner")
+    def api_dialog_ordner(body: OrdnerDialogIn):
+        """Ordnerdialog des Betriebssystems oeffnen und auf die Wahl warten (Minuten sind erlaubt;
+        die Route ist synchron und blockiert nur ihren Thread). ``verfuegbar: false`` heisst: die
+        Oberflaeche nimmt ihren eingebauten Dialog."""
+        if not dialog_nativ.verfuegbar():
+            return JSONResponse({"pfad": None, "verfuegbar": False})
+        if not dialog_nativ.sperre.acquire(blocking=False):
+            raise HTTPException(409, "Es ist schon ein Ordner-Dialog offen.")
+        try:
+            start = browse.normalize_path(body.start, default=Path("")) if body.start.strip() else None
+            pfad = dialog_nativ.waehle_ordner(start if start is not None and str(start) not in ("", ".") else None, body.titel)
+        except dialog_nativ.DialogFehler as exc:
+            return JSONResponse({"pfad": None, "verfuegbar": False, "fehler": str(exc)})
+        finally:
+            dialog_nativ.sperre.release()
+        return JSONResponse({"pfad": str(pfad) if pfad is not None else None, "verfuegbar": True})
 
     @app.get("/api/scan")
     def api_scan(input_dir: str = Query(""), output_dir: str = Query("")):
@@ -1254,6 +1311,12 @@ def create_app():
 
     @app.post("/api/live/start")
     def api_live_start(body: LiveStartIn):
+        sofort.update(status=None, fehler=None)  # der Nutzer startet selbst - kein Hinweis mehr
+        return _starte_live(body)
+
+    def _starte_live(body: LiveStartIn):
+        """Live-Sitzung starten - fuer den Knopf in der Oberflaeche und den automatischen Start
+        der Verknuepfung "Sofort aufnehmen"."""
         if body.replay_transcript.strip():
             if body.resume.strip():
                 raise HTTPException(400, "Fortsetzen geht nur mit einer Aufnahme, nicht im Testmodus.")
@@ -1323,6 +1386,45 @@ def create_app():
         except RuntimeError as exc:
             raise HTTPException(409, str(exc)) from exc
         return JSONResponse({"ok": True})
+
+    # --- Verknuepfung "Sofort aufnehmen" (ui/sofort.py) ----------------------------------------
+
+    def _sofort_vorbereiten() -> None:
+        """In den Modus "Aufnahme ohne Projekt" wechseln (409, wenn etwas laeuft) und den
+        automatischen Start ankuendigen - die Oberflaeche zeigt ihn, sobald sie laedt."""
+        _wechsle(kontext_modul.MODUS_AUFNAHME)
+        sofort.update(status="laeuft", fehler=None)
+
+    def _sofort_starten() -> dict:
+        """Aufnahme mit den gemerkten Geraeten starten. Laeuft in einem eigenen Thread (die
+        Geraete-Bestandsaufnahme dauert) - jeder Fehler wird zum Stand, nie zum Absturz."""
+        from audioscribe.live.kommando import inventory
+
+        try:
+            body = LiveStartIn(**sofort_modul.aus_einstellungen(state.load_state(), inventory(), sprache=_eff()["sprache"]))
+            _starte_live(body)
+            sofort.update(status="gestartet", fehler=None)
+            live._append("Automatisch gestartet ueber die Verknuepfung \"Sofort aufnehmen\".")
+        except HTTPException as exc:
+            sofort.update(status="fehler", fehler=str(exc.detail))
+        except Exception as exc:  # noqa: BLE001
+            sofort.update(status="fehler", fehler=f"Automatischer Start fehlgeschlagen: {exc}")
+        return dict(sofort)
+
+    app.state.sofort_vorbereiten = _sofort_vorbereiten
+    app.state.sofort_starten = _sofort_starten
+
+    @app.post("/api/aufnahme/sofort")
+    def api_aufnahme_sofort():
+        """Verknuepfung bei laufendem Server (zweiter Doppelklick): in den Modus wechseln und mit
+        den gemerkten Geraeten starten. Laeuft schon eine Aufnahme ohne Projekt, bleibt sie."""
+        if kontext.modus == kontext_modul.MODUS_AUFNAHME and live.laeuft():
+            return JSONResponse({**_kontext_antwort(), "sofort": {"status": "gestartet", "fehler": None}})
+        _sofort_vorbereiten()
+        ergebnis = _sofort_starten()
+        if ergebnis["status"] == "fehler":
+            raise HTTPException(400, ergebnis["fehler"])
+        return JSONResponse({**_kontext_antwort(), "sofort": ergebnis})
 
     def _nach_sitzung(session_dir: Path) -> dict | None:
         """Nachlauf einer Sitzung: steht das Projekt auf "immer speichern", geht sie ins Wiki."""
@@ -1488,6 +1590,34 @@ def create_app():
         status = pruefe_wiki(pfad if str(pfad) not in ("", ".") else None)
         return JSONResponse(status.als_dict())
 
+    @app.post("/api/wiki/wechseln")
+    def api_wiki_wechseln(body: WikiWechselnIn):
+        """Wiki "on the fly" wechseln oder loesen - im Projekt dauerhaft (projekt.json), bei
+        "Sofort aufnehmen" als globaler Wiki-Pfad. Eine laufende Sitzung liest es sofort ein."""
+        from audioscribe.souffleur.wiki import ZUSTAND_OK, pruefe_wiki
+
+        p = _projekt()
+        if kontext.modus not in (kontext_modul.MODUS_PROJEKT, kontext_modul.MODUS_AUFNAHME) or (p is not None and p.demo):
+            raise HTTPException(409, "Das Wiki lässt sich nur im Projekt oder bei „Sofort aufnehmen“ wechseln.")
+        pfad = browse.normalize_path(body.pfad, default=Path("")) if body.pfad and body.pfad.strip() else None
+        if pfad is not None and str(pfad) in ("", "."):
+            pfad = None
+        status = pruefe_wiki(pfad)
+        if pfad is not None and status.zustand != ZUSTAND_OK:
+            raise HTTPException(400, status.meldung)
+        if p is not None:
+            felder = {"wiki_art": modell.WIKI_VORHANDEN, "wiki_dir": str(pfad)} if pfad is not None else {"wiki_art": modell.WIKI_KEINS}
+            try:
+                neu = modell.aendere(p, felder)
+            except ProjektFehler as exc:
+                raise HTTPException(400, str(exc)) from exc
+            kontext.setze(kontext_modul.MODUS_PROJEKT, neu)
+            state.merke_projekt(neu.wurzel, neu.name)
+        else:
+            state.save_state({"wiki_dir": str(pfad) if pfad is not None else ""})  # leer loescht den Schluessel
+        _souffleur_wiki(pfad)
+        return JSONResponse({**_kontext_antwort(), "wiki": status.als_dict()})
+
     @app.get("/api/souffleur/offene-punkte")
     def api_souffleur_offene_punkte():
         souffleur = live.souffleur()
@@ -1509,6 +1639,8 @@ def create_app():
         p = _projekt()
         if p is not None and not p.demo and snap.get("dir") and not snap.get("running"):
             snap["wiki_ablage"] = wiki_ablage.letzte_ablage(Path(snap["dir"]), p)
+        if sofort["status"]:
+            snap["sofort"] = dict(sofort)
         return JSONResponse(snap)
 
     @app.post("/api/live/pause")
@@ -1579,12 +1711,19 @@ def create_app():
     return app
 
 
-def serve(*, host: str = "127.0.0.1", port: int = 8766, open_browser: bool = True) -> None:
-    """Startet die Stapel-Oberflaeche (blockierend bis Strg+C)."""
+def serve(*, host: str = "127.0.0.1", port: int = 8766, open_browser: bool = True, aufnahme: bool = False) -> None:
+    """Startet die Oberflaeche (blockierend bis Strg+C). ``aufnahme``: Verknuepfung "Sofort
+    aufnehmen" - im Modus "Aufnahme ohne Projekt" beginnen und sofort aufnehmen."""
     import uvicorn
 
     app = create_app()
     url = f"http://{host}:{port}/"
+    url_browser = url
+    if aufnahme:
+        # Der Modus steht, bevor der Browser /api/kontext fragt; der Start selbst laeuft nebenher
+        # (Geraete ermitteln, Kindprozess starten) und braucht den Webserver nicht.
+        app.state.sofort_vorbereiten()
+        url_browser = url + sofort_modul.ROUTE_AUFNAHME
     # Adresse ZUERST ausgeben: unter WSL oeffnet webbrowser.open haeufig nichts,
     # dann muss der Nutzer die URL selbst in den Windows-Browser kopieren.
     print(f"AudioScribe UI laeuft auf {url}  (Strg+C zum Beenden)")
@@ -1592,7 +1731,9 @@ def serve(*, host: str = "127.0.0.1", port: int = 8766, open_browser: bool = Tru
         print("Unter WSL: die Adresse notfalls von Hand im Windows-Browser oeffnen.")
     if open_browser:
         try:
-            webbrowser.open(url)
+            webbrowser.open(url_browser)
         except Exception:  # noqa: BLE001
             pass
+    if aufnahme:
+        threading.Thread(target=app.state.sofort_starten, name="audioscribe-sofort", daemon=True).start()
     uvicorn.run(app, host=host, port=port, log_level="warning")

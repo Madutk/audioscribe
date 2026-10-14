@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # AudioScribe starten - macOS (Apple Silicon) und Linux. Gegenstueck zu start.ps1.
 #
-# Optionen: --torch auto|cpu|cu124   --port N   --no-browser   --doctor   --devices
+# Optionen: --torch auto|cpu|cu124   --port N   --no-browser   --aufnahme   --doctor   --devices
 #
 # 'uv run' gleicht die Umgebung vor dem Start ab und installiert fehlende Pakete nach.
 # uv selbst wird bei Bedarf installiert (astral.sh), Python 3.12 besorgt uv - kein
@@ -15,12 +15,14 @@ cd "$(dirname "$0")"
 TORCH=auto
 PORT=8766
 NOBROWSER=""
+AUFNAHME=""
 MODE=ui
 while [ $# -gt 0 ]; do
   case "$1" in
     --torch) TORCH="$2"; shift 2 ;;
     --port) PORT="$2"; shift 2 ;;
     --no-browser) NOBROWSER=1; shift ;;
+    --aufnahme) AUFNAHME=1; shift ;;   # Sofort aufnehmen (Desktop-Verknuepfung)
     --doctor) MODE=doctor; shift ;;
     --devices) MODE=devices; shift ;;
     -h|--help) sed -n '2,4p' "$0"; exit 0 ;;
@@ -88,10 +90,9 @@ case "$MODE" in
   doctor)  exec uv run --extra "$TORCH" "${EXTRAS[@]}" audioscribe doctor ;;
   devices) exec uv run --extra "$TORCH" "${EXTRAS[@]}" audioscribe live --list-devices ;;
   *)
-    if [ -n "$NOBROWSER" ]; then
-      exec uv run --extra "$TORCH" "${EXTRAS[@]}" audioscribe ui --port "$PORT" --no-browser
-    else
-      exec uv run --extra "$TORCH" "${EXTRAS[@]}" audioscribe ui --port "$PORT"
-    fi
+    UI_ARGS=(ui --port "$PORT")
+    if [ -n "$NOBROWSER" ]; then UI_ARGS+=(--no-browser); fi
+    if [ -n "$AUFNAHME" ]; then UI_ARGS+=(--aufnahme); fi
+    exec uv run --extra "$TORCH" "${EXTRAS[@]}" audioscribe "${UI_ARGS[@]}"
     ;;
 esac

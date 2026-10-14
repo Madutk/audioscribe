@@ -20,15 +20,21 @@
 .PARAMETER NoBrowser
     Browser nicht automatisch oeffnen
 
+.PARAMETER Aufnahme
+    Sofort aufnehmen: Aufnahme ohne Projekt mit den zuletzt benutzten Geraeten sofort starten
+    (Desktop-Verknuepfung "Sofort aufnehmen.cmd")
+
 .EXAMPLE
     .\start.ps1
     .\start.ps1 -Torch cpu -Port 8800 -NoBrowser
+    .\start.ps1 -Aufnahme
 #>
 param(
     [ValidateSet('auto', 'cpu', 'cu124')]
     [string]$Torch = 'auto',
     [int]$Port = 8766,
-    [switch]$NoBrowser
+    [switch]$NoBrowser,
+    [switch]$Aufnahme
 )
 
 $ErrorActionPreference = 'Stop'
@@ -57,6 +63,7 @@ if ($Torch -eq 'auto') {
 
 $uiArgs = @('ui', '--port', $Port)
 if ($NoBrowser) { $uiArgs += '--no-browser' }
+if ($Aufnahme) { $uiArgs += '--aufnahme' }
 
 # Variante cloud-compliant (src/audioscribe/variante.py): ohne Extra 'agent' (Claude Agent SDK
 # samt Claude Code); --exact entfernt ein schon installiertes SDK aus einer alten Umgebung.

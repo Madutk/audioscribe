@@ -537,6 +537,67 @@ def test_wiki_pfad_kaputt_meldet_zustand_und_laeuft_weiter(tmp_path):
     assert s.status_text().startswith("Souffleur ohne Wiki")
 
 
+def _warte_wiki(s, timeout=10.0):
+    import time
+
+    ende = time.monotonic() + timeout
+    while s.status()["wiki"]["zustand"] == "laedt" and time.monotonic() < ende:
+        time.sleep(0.02)
+    return s.status()["wiki"]
+
+
+def test_wiki_wechseln_waehrend_der_sitzung(tmp_path):
+    """Wiki "on the fly": ohne Wiki gestartet, mitten in der Sitzung verknuepft - die naechsten
+    Hinweise haben Belege; loesen setzt sofort auf "keins"."""
+    import time
+
+    s, hinweise = _souffleur(tmp_path, ki=AttrappeKi(regeln=_regeln()))
+    s.starte(tmp_path)
+    assert s.status()["wiki"]["zustand"] == "keins"
+    s.wechsle_wiki(WIKI)
+    assert s.konfig.wiki_dir == WIKI
+    w = _warte_wiki(s)
+    assert w["zustand"] == "ok" and w["pfad"] == str(WIKI)
+    for seg in _segmente():
+        s.beobachte(seg, empfangen_mono=time.monotonic())
+    s.abschliessen()
+    je_segment = {h["segment_id"]: h for h in hinweise}
+    assert je_segment[2]["art"] == "widerspruch" and je_segment[2]["fundstelle"] == "wiki/freigaben.md › Grenzen"
+
+
+def test_wiki_wechseln_meldet_laedt_und_der_letzte_gewinnt(tmp_path):
+    protokoll = []
+    from audioscribe.souffleur.kern import Souffleur
+    from audioscribe.souffleur.ki import KiStatus
+    from audioscribe.souffleur.konfig import SouffleurKonfig
+
+    s = Souffleur(SouffleurKonfig(wiki_dir=None, backend="attrappe"), ki=AttrappeKi(),
+                  ki_status=KiStatus("bereit", "attrappe", "attrappe", "Attrappe"), log=protokoll.append)
+    s.starte(tmp_path)
+    s.wechsle_wiki(tmp_path / "nix")
+    s.wechsle_wiki(WIKI)
+    assert _warte_wiki(s)["zustand"] == "ok"
+    assert any("Wiki gewechselt" in z for z in protokoll)
+    s.wechsle_wiki(tmp_path / "nix")
+    w = _warte_wiki(s)
+    assert w["zustand"] == "fehler" and "nicht gefunden" in w["meldung"]
+    # Loesen: sofort ohne Wiki, kein Thread.
+    s.wechsle_wiki(None)
+    assert s.status()["wiki"]["zustand"] == "keins" and s.konfig.wiki_dir is None
+    s.abschliessen()
+
+
+def test_wiki_wechseln_vor_dem_start_und_nach_dem_ende(tmp_path):
+    s, _ = _souffleur(tmp_path)
+    s.wechsle_wiki(WIKI)  # vor dem Start: nur die Konfiguration - starte() laedt dann
+    assert s.status()["wiki"]["zustand"] == "keins" and s.konfig.wiki_dir == WIKI
+    s.starte(tmp_path)
+    assert _warte_wiki(s)["zustand"] == "ok"
+    s.abschliessen()
+    s.wechsle_wiki(None)  # nach dem Ende: nichts mehr laden, Zustand bleibt
+    assert s.status()["wiki"]["zustand"] == "ok" and s.konfig.wiki_dir is None
+
+
 # --- A4: Markierungen im Uebergabeformat (Ablage: tests/test_wiki_ablage.py) -----------
 
 

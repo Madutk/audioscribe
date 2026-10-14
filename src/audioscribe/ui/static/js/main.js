@@ -138,7 +138,8 @@ document.addEventListener('audioscribe:kontext', (e) => {
   const defaults = ladeDefaults(true);
   if (!e.detail.gewechselt) defaults.then(aktualisiereLiveSprache);
   defaults.catch(() => {});
-  if (projekt()) loadWikiStatus();
+  // Bei "Sofort aufnehmen" gilt das globale Wiki - die Live-Ansicht zeigt es wie das eines Projekts.
+  if (projekt() || modus() === 'aufnahme') loadWikiStatus();
   if (aktiv === 'start') renderStart();
   if (aktiv === 'projekt') zeigeProjekt();
 });

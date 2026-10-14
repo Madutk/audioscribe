@@ -141,6 +141,13 @@ export async function enterNeu() {
   for (const id of [...Object.values(FELD), 'wizErr']) $(id).textContent = '';
   $('wizWikiState').hidden = true;
   $('wizMehr').open = false;
+  // Vorlage: eines der zuletzt geoeffneten Projekte - Wiki und Einstellungen uebernehmen.
+  W.vorlage = null;
+  const vorlagen = ((S.kontext && S.kontext.zuletzt) || []).filter((e) => e.vorhanden);
+  $('wizVorlage').innerHTML = '<option value="">– keine Vorlage –</option>'
+    + vorlagen.map((e) => `<option value="${esc(e.pfad)}" title="${esc(e.pfad)}">${esc(e.name || basename(e.pfad))}</option>`).join('');
+  $('wizVorlageField').hidden = !vorlagen.length;
+  $('wizVorlageHint').textContent = VORLAGE_HINT;
   zeigeWikiArt();
   showStep();
   renderTree(null);
@@ -158,6 +165,46 @@ export async function enterNeu() {
     $('wizErr').textContent = err.message;
   }
 }
+
+const VORLAGE_HINT = 'Übernimmt Wiki, Ablage, KI-Dienst, Modelle und Sprache des gewählten Projekts – alles lässt sich danach anpassen.';
+
+/** Wert setzen; steht er nicht in der Liste (aelteres Modell), wird er vorangestellt - wie in den Einstellungen. */
+function setzeOderErgaenze(sel, wert) {
+  if (wert && ![...sel.options].some((o) => o.value === wert)) {
+    sel.insertBefore(Object.assign(document.createElement('option'), { value: wert, textContent: wert }), sel.options[1] || null);
+  }
+  sel.value = wert || '';
+}
+
+/** Vorlage uebernehmen: dasselbe Wiki verknuepfen (ohne Wiki in der Vorlage: keins), Ablage,
+ *  KI-Dienst, Modelle und Sprache vorbelegen. Alles bleibt im Assistenten aenderbar. */
+async function vorlageUebernehmen(pfad) {
+  $('wizErr').textContent = '';
+  $('wizVorlageHint').textContent = VORLAGE_HINT;
+  if (!pfad) { W.vorlage = null; return; }
+  let v;
+  try { v = await api('/api/projekt/vorlage?pfad=' + encodeURIComponent(pfad)); } catch (err) { $('wizErr').textContent = err.message; return; }
+  W.vorlage = v;
+  document.querySelector(`input[name="wizWikiArt"][value="${v.wiki_dir ? 'vorhanden' : 'keins'}"]`).checked = true;
+  $('wizWikiDir').value = v.wiki_dir || '';
+  W.wikiVorgeschlagen = true;
+  // Der Bilder-Ordner der Vorlage liegt in demselben Wiki - uebernehmen statt neu vorschlagen.
+  if (v.wiki_dir && v.assets_dir) { $('wizAssets').value = v.assets_dir; W.auto.assets = false; } else { $('wizAssets').value = ''; W.auto.assets = true; }
+  const speichern = document.querySelector(`input[name="wizSpeichern"][value="${v.wiki_speichern}"]`);
+  if (speichern) speichern.checked = true;
+  $('wizBilder').checked = v.wiki_bilder !== false;
+  $('wizMarkierungen').checked = v.wiki_markierungen === true;
+  const eigen = v.eigen || {};
+  $('wizKiDienst').value = eigen.ki_dienst || '';
+  $('wizSprache').value = eigen.sprache || '';
+  zeigeWizModelle();
+  setzeOderErgaenze($('wizSouffleurModel'), eigen.souffleur_model || '');
+  setzeOderErgaenze($('wizAgentModel'), eigen.agent_model || '');
+  if (v.hinweis) $('wizVorlageHint').textContent = v.hinweis;
+  zeigeWikiArt();
+  pruefe({ zeigen: ['wiki_dir'] });
+}
+$('wizVorlage').onchange = () => vorlageUebernehmen($('wizVorlage').value);
 
 /** Modell-Listen passend zum im Assistenten gewaehlten (sonst globalen) KI-Dienst. */
 function zeigeWizModelle() {

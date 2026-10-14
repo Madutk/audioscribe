@@ -139,6 +139,98 @@ def test_live_start_ohne_projekt_schreibt_in_den_eingang(client, eingang_dir, mo
     assert client.get("/api/defaults").json()["output_dir"] == str(eingang_dir)
 
 
+# --- Verknuepfung "Sofort aufnehmen" (ui/sofort.py) --------------------------------------------
+
+
+@pytest.fixture
+def geraete(monkeypatch):
+    monkeypatch.setattr(
+        "audioscribe.live.kommando.inventory",
+        lambda: {
+            "mics": [{"index": 3, "name": "Headset", "default": False}], "loopbacks": [],
+            "monitors": [{"index": 1, "width": 1920, "height": 1080}], "windows": [], "problems": [],
+        },
+    )
+
+
+def _live_stub(monkeypatch, fehler=None):
+    from audioscribe.ui import runner as runner_modul
+
+    gestartet = {}
+
+    def start(self, opts, **kw):
+        if fehler:
+            raise RuntimeError(fehler)
+        gestartet.update(opts=opts)
+
+    monkeypatch.setattr(runner_modul.LiveRunner, "start", start)
+    return gestartet
+
+
+def test_sofort_aufnehmen_startet_mit_gemerkten_geraeten(client, eingang_dir, geraete, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from audioscribe.ui import server
+
+    gestartet = _live_stub(monkeypatch)
+    state.save_state({"live_mic": "Headset", "live_monitor": "1", "live_model": "small"})
+    app = server.create_app()
+    c = TestClient(app)
+    app.state.sofort_vorbereiten()
+    assert c.get("/api/kontext").json()["modus"] == "aufnahme"
+    assert c.get("/api/live/status").json()["sofort"] == {"status": "laeuft", "fehler": None}
+    assert app.state.sofort_starten()["status"] == "gestartet"
+    opts = gestartet["opts"]
+    assert (opts.mic, opts.monitor, opts.model, opts.output_dir) == ("3", 1, "small", eingang_dir)
+    assert c.get("/api/live/status").json()["sofort"]["status"] == "gestartet"
+    assert state.load_state()["live_mic"] == "Headset"
+
+
+def test_sofort_aufnehmen_fehler_ist_sichtbar(client, geraete, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from audioscribe.ui import server
+
+    _live_stub(monkeypatch, fehler="kein Mikro")
+    app = server.create_app()
+    c = TestClient(app)
+    app.state.sofort_vorbereiten()
+    ergebnis = app.state.sofort_starten()
+    assert ergebnis["status"] == "fehler" and "kein Mikro" in ergebnis["fehler"]
+    assert c.get("/api/kontext").json()["modus"] == "aufnahme"
+    assert c.get("/api/live/status").json()["sofort"]["status"] == "fehler"
+    # Der Nutzer startet selbst: der Hinweis verschwindet.
+    _live_stub(monkeypatch)
+    assert c.post("/api/live/start", json={"monitor": 1}).status_code == 200
+    assert "sofort" not in c.get("/api/live/status").json()
+
+
+def test_api_aufnahme_sofort(client, eingang_dir, geraete, monkeypatch, projekt):
+    from audioscribe.ui import runner as runner_modul
+
+    gestartet = _live_stub(monkeypatch)
+    r = client.post("/api/aufnahme/sofort")
+    assert r.status_code == 200, r.text
+    assert r.json()["modus"] == "aufnahme" and r.json()["sofort"]["status"] == "gestartet"
+    assert gestartet["opts"].output_dir == eingang_dir
+    # Laeuft die Aufnahme ohne Projekt schon: nichts Neues starten, 200.
+    monkeypatch.setattr(runner_modul.LiveRunner, "laeuft", lambda self: True)
+    gestartet.clear()
+    assert client.post("/api/aufnahme/sofort").status_code == 200 and not gestartet
+    # Im Projekt mit laufender Sitzung: 409, der Kontext bleibt.
+    monkeypatch.setattr(runner_modul.LiveRunner, "laeuft", lambda self: False)
+    assert client.post("/api/projekt/oeffnen", json={"pfad": str(projekt.wurzel)}).status_code == 200
+    monkeypatch.setattr(runner_modul.LiveRunner, "laeuft", lambda self: True)
+    assert client.post("/api/aufnahme/sofort").status_code == 409
+    assert client.get("/api/kontext").json()["modus"] == "projekt"
+
+
+def test_api_aufnahme_sofort_fehler(client, geraete, monkeypatch):
+    _live_stub(monkeypatch, fehler="kein Mikro")
+    r = client.post("/api/aufnahme/sofort")
+    assert r.status_code == 400 and "kein Mikro" in r.json()["detail"]
+
+
 def test_unterbrochene_aufnahme_ohne_projekt(client, aufnahme):
     _status(aufnahme, status="unterbrochen")
     k = client.get("/api/kontext").json()

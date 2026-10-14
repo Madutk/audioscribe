@@ -194,6 +194,45 @@ def test_wiki_status_route(client, tmp_path):
     assert client.get("/api/wiki/status").json()["zustand"] == "ok"
 
 
+def test_wiki_wechseln_ohne_projekt_merkt_globalen_pfad(client, tmp_path):
+    from audioscribe.ui import state
+
+    assert client.post("/api/kontext", json={"modus": "aufnahme"}).json()["modus"] == "aufnahme"
+    r = client.post("/api/wiki/wechseln", json={"pfad": str(WIKI)})
+    assert r.status_code == 200 and r.json()["wiki"]["zustand"] == "ok" and r.json()["projekt"] is None
+    assert state.load_state()["wiki_dir"] == str(WIKI)
+    assert client.get("/api/wiki/status").json()["zustand"] == "ok"
+    assert client.post("/api/wiki/wechseln", json={"pfad": ""}).status_code == 200
+    assert "wiki_dir" not in state.load_state()
+
+
+def test_wiki_wechseln_waehrend_replay_sitzung(client, tmp_path):
+    from audioscribe.ui import state
+
+    state.save_state({"souffleur_backend": "attrappe"})
+    client.post("/api/kontext", json={"modus": "aufnahme"})
+    body = {"replay_transcript": str(MEETING), "replay_speed": 1}
+    assert client.post("/api/live/start", json=body).status_code == 200
+    try:
+        ende = time.monotonic() + 10
+        while time.monotonic() < ende:
+            snap = client.get("/api/live/status").json()
+            if snap["running"] and snap.get("souffleur"):
+                break
+            time.sleep(0.05)
+        assert snap["souffleur"]["wiki"]["zustand"] == "keins"
+        assert client.post("/api/wiki/wechseln", json={"pfad": str(WIKI)}).status_code == 200
+        ende = time.monotonic() + 10
+        while time.monotonic() < ende:
+            w = client.get("/api/live/status").json()["souffleur"]["wiki"]
+            if w["zustand"] == "ok":
+                break
+            time.sleep(0.05)
+        assert w["zustand"] == "ok" and w["pfad"] == str(WIKI)
+    finally:
+        client.post("/api/live/reset")
+
+
 def test_defaults_liefern_souffleur_felder(client):
     data = client.get("/api/defaults").json()
     assert data["souffleur_models"][0]["id"] == "claude-sonnet-5" and "Standard" in data["souffleur_models"][0]["label"]

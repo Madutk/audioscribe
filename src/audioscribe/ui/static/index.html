@@ -228,6 +228,9 @@
     </div>
 
     <div class="wiz-panel" id="wiz2" hidden>
+      <div class="field" id="wizVorlageField" hidden><label for="wizVorlage">Wie in einem vorhandenen Projekt</label>
+        <select id="wizVorlage"></select>
+        <p class="hint" id="wizVorlageHint">Übernimmt Wiki, Ablage, KI-Dienst, Modelle und Sprache des gewählten Projekts – alles lässt sich danach anpassen.</p></div>
       <fieldset class="field choice">
         <legend>LLM-Wiki (optional)</legend>
         <label class="option"><input type="radio" name="wizWikiArt" value="keins" checked />
@@ -449,6 +452,7 @@
       <button class="start danger" id="liveStop" hidden><svg class="ic" aria-hidden="true"><use href="#i-square"/></svg><span id="liveStopLabel">Stoppen</span></button>
       <button class="ghost sm reset" id="liveReset" hidden><svg class="ic" aria-hidden="true"><use href="#i-rotate-ccw"/></svg><span id="liveResetLabel">Zurücksetzen</span></button>
       <div class="err" id="liveErr" role="alert"></div>
+      <p class="hint" id="liveSofort" hidden></p>
     </div>
   </div>
 
@@ -517,6 +521,10 @@
       <div class="wiki-state none compact" id="souffleurWiki">
         <span class="badge">kein Wiki</span>
         <span class="body">Kein Wiki verknüpft. <a class="goto" href="#/projekt/einstellungen">ändern</a></span>
+      </div>
+      <div class="row" id="souffleurWikiActions">
+        <button class="secondary sm" type="button" id="souffleurWikiWechseln" title="Anderes Wiki verknüpfen – auch während der Sitzung; der Souffleur liest es sofort ein"><svg class="ic" aria-hidden="true"><use href="#i-folder"/></svg>Wiki wechseln …</button>
+        <button class="ghost sm" type="button" id="souffleurWikiLoesen" hidden><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg>Wiki lösen</button>
       </div>
 
       <div class="souffleur-tools">
@@ -710,8 +718,9 @@
           <span class="badge">kein Wiki</span>
           <span class="body">…</span>
         </div>
-        <p class="hint" id="pWikiHintMit">Der Souffleur liest die Seiten unter <code>wiki/</code> und belegt damit seine Hinweise; Änderungen am
-          Wiki gelten ab der nächsten Sitzung. Ein anderes Wiki lässt sich verknüpfen, die Verknüpfung auch lösen – Dateien werden dabei nie gelöscht.</p>
+        <p class="hint" id="pWikiHintMit">Der Souffleur liest die Seiten unter <code>wiki/</code> und belegt damit seine Hinweise. Ein anderes Wiki
+          lässt sich jederzeit verknüpfen – auch während einer laufenden Sitzung liest der Souffleur es sofort ein; die Verknüpfung lässt sich
+          auch lösen. Dateien werden dabei nie gelöscht.</p>
         <p class="hint" id="pWikiHintOhne" hidden>Ohne Wiki arbeitet der Souffleur ohne Belege, und Sitzungen lassen sich nicht ins Wiki speichern.
           Lege ein neues Wiki im Projektordner an (<code>llm-wiki/</code>) oder verknüpfe ein vorhandenes.</p>
         <div class="row" id="pWikiActions">

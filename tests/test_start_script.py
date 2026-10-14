@@ -13,7 +13,7 @@ import pytest
 from audioscribe import variante
 
 ROOT = Path(__file__).resolve().parents[1]
-SKRIPTE = ("start.sh", "AudioScribe.command")
+SKRIPTE = ("start.sh", "AudioScribe.command", "Sofort aufnehmen.command")
 # Extras je Variante (src/audioscribe/variante.py) - cloud-compliant ohne 'agent'.
 EXTRAS = "--exact --extra review --extra live" if variante.aktiv() else "--extra review --extra agent --extra live"
 
@@ -23,7 +23,7 @@ def test_skript_syntax(name):
     assert subprocess.run(["bash", "-n", str(ROOT / name)], capture_output=True).returncode == 0
 
 
-@pytest.mark.parametrize("name", (*SKRIPTE, "start.ps1"))
+@pytest.mark.parametrize("name", (*SKRIPTE, "start.ps1", "Sofort aufnehmen.cmd"))
 def test_skript_ist_ascii(name):
     assert (ROOT / name).read_bytes().isascii(), f"{name}: nur ASCII (PowerShell 5.1, fremde Terminals)"
 
@@ -102,6 +102,22 @@ def test_start_sh_linux_ohne_karte_cpu_mit_karte_cu124(tmp_path):
 def test_start_sh_mac_cu124_wird_zu_cpu(tmp_path):
     out = _run(tmp_path, "Darwin", "arm64", "--torch", "cu124", "--doctor")
     assert "--extra cpu" in out and "--extra cu124" not in out and "CUDA gibt es nicht" in out
+
+
+@pytest.mark.skipif(os.name == "nt", reason="bash")
+def test_start_sh_aufnahme(tmp_path):
+    """Verknuepfung "Sofort aufnehmen": --aufnahme wandert an 'audioscribe ui'."""
+    out = _run(tmp_path, "Darwin", "arm64", "--aufnahme")
+    assert "audioscribe ui --port 8766 --aufnahme" in out
+    out = _run(tmp_path / "b", "Linux", "x86_64", "--no-browser", "--aufnahme") if (tmp_path / "b").mkdir() is None else ""
+    assert "audioscribe ui --port 8766 --no-browser --aufnahme" in out
+
+
+def test_doppelklick_dateien_rufen_aufnahme():
+    assert "./start.sh --aufnahme" in (ROOT / "Sofort aufnehmen.command").read_text()
+    cmd = (ROOT / "Sofort aufnehmen.cmd").read_text()
+    assert "start.ps1" in cmd and "-Aufnahme" in cmd and "-ExecutionPolicy Bypass" in cmd
+    assert "[switch]$Aufnahme" in (ROOT / "start.ps1").read_text() and "'--aufnahme'" in (ROOT / "start.ps1").read_text()
 
 
 @pytest.mark.skipif(os.name == "nt", reason="bash")

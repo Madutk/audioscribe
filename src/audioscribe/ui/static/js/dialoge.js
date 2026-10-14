@@ -1,7 +1,7 @@
 // Dialoge: Ordner- und Dateiauswahl (serverseitig geblaettert), Rueckfrage, Transkript-Vorschau.
 // Native <dialog>-Elemente: Fokusfalle, Esc und Hintergrund kommen vom Browser.
 
-import { $, S, api, esc, icon, empty, sep } from './kern.js';
+import { $, S, api, post, esc, icon, empty, sep, toast } from './kern.js';
 
 // --- Ordner / Dateien waehlen ------------------------------------------------------------
 
@@ -9,9 +9,19 @@ let pick = null;   // {files, resolve, path, chosen:Set}
 
 /**
  * Ordner waehlen. Loest mit dem Pfad auf oder mit null (abgebrochen).
- * Ein Browser kennt keinen Ordner-Dialog, der einen Pfad liefert - geblaettert wird im Server.
+ * Zuerst der Dialog des Betriebssystems (Finder/Explorer, vom Server geoeffnet - er laeuft auf
+ * demselben Rechner); gibt es keinen (WSL, ohne Desktop), blaettert der eingebaute Dialog im Server.
  */
-export function pickFolder({ title = 'Ordner wählen', start = '', ok = 'Diesen Ordner wählen' } = {}) {
+export async function pickFolder({ title = 'Ordner wählen', start = '', ok = 'Diesen Ordner wählen' } = {}) {
+  if (S.kontext && S.kontext.dialog_nativ) {
+    try {
+      const r = await post('/api/dialog/ordner', { start, titel: title });
+      if (r.verfuegbar) return r.pfad || null;
+    } catch (err) {
+      if (err.status === 409) { toast(err.message, 'fehler'); return null; }  // schon ein Dialog offen
+      // sonst: Server nicht erreichbar oder Fehler - der eingebaute Dialog uebernimmt
+    }
+  }
   return openPick({ title, start, ok, files: false });
 }
 

@@ -47,7 +47,11 @@ export async function api(path, opts) {
   setVerbunden(true);
   let data = null;
   try { data = await res.json(); } catch (e) { /* leer */ }
-  if (!res.ok) throw new Error((data && data.detail) || res.statusText);
+  if (!res.ok) {
+    const err = new Error((data && data.detail) || res.statusText);
+    err.status = res.status;
+    throw err;
+  }
   return data;
 }
 

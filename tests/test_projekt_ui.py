@@ -171,10 +171,72 @@ def test_wiki_in_den_projekteinstellungen_nachruesten(client, projekt_ohne_wiki,
     assert client.put("/api/projekt", json={"felder": {"wiki_art": "vorhanden", "wiki_dir": str(p.wurzel / "nix")}}).status_code == 400
     k = client.put("/api/projekt", json={"felder": {"wiki_art": "keins"}}).json()
     assert k["projekt"]["hat_wiki"] is False and client.get("/api/wiki/status").json()["zustand"] == "keins"
-    # Waehrend einer Sitzung liest der Souffleur das Wiki - dann wird nicht umgehaengt.
+    # Waehrend einer Live-Sitzung darf das Wiki wechseln: der Souffleur liest es sofort ein.
+    gewechselt = []
     monkeypatch.setattr(runner_modul.LiveRunner, "laeuft", lambda self: True)
-    assert client.put("/api/projekt", json={"felder": {"wiki_art": "neu"}}).status_code == 409
-    assert client.put("/api/projekt", json={"felder": {"sprache": "de"}}).status_code == 200
+    monkeypatch.setattr(runner_modul.LiveRunner, "souffleur", lambda self: type("S", (), {"wechsle_wiki": lambda self, pfad: gewechselt.append(pfad)})())
+    r = client.put("/api/projekt", json={"felder": {"wiki_art": "vorhanden", "wiki_dir": str(wiki)}})
+    assert r.status_code == 200, r.text
+    assert r.json()["projekt"]["hat_wiki"] is True and gewechselt == [wiki]
+    assert client.put("/api/projekt", json={"felder": {"sprache": "de"}}).status_code == 200 and len(gewechselt) == 1
+    # Analyse oder Transkription haengen am Wiki-Ordner: da bleibt die Sperre.
+    monkeypatch.setattr(runner_modul.LiveRunner, "laeuft", lambda self: False)
+    monkeypatch.setattr(runner_modul.AnalyseRunner, "laeuft", lambda self: True)
+    assert client.put("/api/projekt", json={"felder": {"wiki_art": "keins"}}).status_code == 409
+
+
+def test_vorlage_liefert_einstellungen_eines_projekts(client, wiki, tmp_path):
+    """Assistent: ein vorhandenes Projekt als Vorlage - nur lesen, der Kontext bleibt."""
+    r = _neu(client, wiki, tmp_path, ki_dienst="attrappe", wiki_speichern="immer", wiki_markierungen=True, sprache="en")
+    assert r.status_code == 200, r.text
+    wurzel = r.json()["projekt"]["wurzel"]
+    client.post("/api/kontext", json={"modus": "start"})
+    v = client.get(f"/api/projekt/vorlage?pfad={wurzel}").json()
+    assert Path(v["wiki_dir"]) == wiki and Path(v["assets_dir"]) == wiki / "raw" / "assets"
+    assert v["eigen"]["ki_dienst"] == "attrappe" and v["eigen"]["sprache"] == "en"
+    assert v["wiki_speichern"] == "immer" and v["wiki_markierungen"] is True and v["wiki_bilder"] is True
+    assert "wiki" not in v and client.get("/api/kontext").json()["modus"] == "start"
+    # Anlegen mit genau diesen Werten (dasselbe Wiki, derselbe Bilder-Ordner) geht.
+    r = client.post("/api/projekt/neu", json={
+        "name": "Zweites", "wurzel": str(tmp_path / "zweites"), "sitzungen_dir": str(tmp_path / "zweites" / "sitzungen"),
+        "wiki_art": "vorhanden", "wiki_dir": v["wiki_dir"], "assets_dir": v["assets_dir"], **v["eigen"],
+        "wiki_speichern": v["wiki_speichern"], "wiki_bilder": v["wiki_bilder"], "wiki_markierungen": v["wiki_markierungen"],
+    })
+    assert r.status_code == 200, r.text
+    assert Path(r.json()["projekt"]["wiki_dir"]) == wiki and r.json()["projekt"]["eigen"]["ki_dienst"] == "attrappe"
+
+
+def test_vorlage_ohne_wiki_und_unbekannter_pfad(client, projekt_ohne_wiki, tmp_path):
+    v = client.get(f"/api/projekt/vorlage?pfad={projekt_ohne_wiki.wurzel}").json()
+    assert v["wiki_dir"] is None and v["hat_wiki"] is False and v["assets_dir"] is None
+    assert client.get("/api/projekt/vorlage?pfad=").status_code == 400
+    assert client.get(f"/api/projekt/vorlage?pfad={tmp_path / 'nix'}").status_code == 400
+
+
+def test_wiki_wechseln_im_projekt(client, projekt_ohne_wiki, wiki, tmp_path, monkeypatch):
+    """Wiki "on the fly" (Live-Ansicht): dauerhaft in projekt.json, laufende Sitzung erfaehrt es."""
+    from audioscribe.projekt import modell
+    from audioscribe.ui import runner as runner_modul
+
+    p = projekt_ohne_wiki
+    assert client.post("/api/wiki/wechseln", json={"pfad": str(wiki)}).status_code == 409  # Startseite
+    client.post("/api/projekt/oeffnen", json={"pfad": str(p.wurzel)})
+    gewechselt = []
+    monkeypatch.setattr(runner_modul.LiveRunner, "laeuft", lambda self: True)
+    monkeypatch.setattr(runner_modul.LiveRunner, "souffleur", lambda self: type("S", (), {"wechsle_wiki": lambda self, pfad: gewechselt.append(pfad)})())
+    r = client.post("/api/wiki/wechseln", json={"pfad": str(wiki)})
+    assert r.status_code == 200, r.text
+    k = r.json()
+    assert Path(k["projekt"]["wiki_dir"]) == wiki and k["wiki"]["zustand"] == "ok" and k["projekt"]["hat_wiki"] is True
+    assert Path(k["projekt"]["assets_dir"]) == wiki / "raw" / "assets"
+    assert modell.lade(p.wurzel).wiki_dir == wiki and gewechselt == [wiki]
+    assert client.post("/api/wiki/wechseln", json={"pfad": str(tmp_path / "nix")}).status_code == 400
+    assert client.post("/api/wiki/wechseln", json={"pfad": None}).json()["projekt"]["hat_wiki"] is False
+    assert modell.lade(p.wurzel).wiki_dir is None and gewechselt == [wiki, None]
+    # Demo: nichts umhaengen.
+    monkeypatch.setattr(runner_modul.LiveRunner, "laeuft", lambda self: False)
+    client.post("/api/kontext", json={"modus": "demo"})
+    assert client.post("/api/wiki/wechseln", json={"pfad": str(wiki)}).status_code == 409
 
 
 def test_fehlerhafte_angaben_und_unbekannter_ordner(client, wiki, tmp_path):
