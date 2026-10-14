@@ -239,3 +239,72 @@ def test_ohne_wiki_wird_nicht_abgelegt(projekt_ohne_wiki, sitzung_ohne_wiki):
         wiki_ablage.speichere_sitzung(sitzung_ohne_wiki, projekt_ohne_wiki)
     assert sorted(p.name for p in sitzung_ohne_wiki.iterdir()) == vorher
     assert wiki_ablage.letzte_ablage(sitzung_ohne_wiki, projekt_ohne_wiki) is None
+
+
+# --- Speichern unter ...: frei gewaehlte Ziele ------------------------------------------------
+
+
+def test_speichere_nach_legt_transkript_und_bilder_an_zwei_freie_ziele(projekt, sitzung, tmp_path):
+    raw, bilder = tmp_path / "transkripte", tmp_path / "bilder"
+    ablage = wiki_ablage.speichere_nach(sitzung, raw_basis=raw, assets_basis=bilder)
+    ziel = raw / "2026-10-06_workshop-reisebuchung"
+    assets = bilder / ziel.name
+    assert ablage.ordner == str(ziel) and ablage.assets == str(assets) and ablage.bilder == 2 and ablage.frei is True
+    assert filecmp.cmp(sitzung / "transkript.md", ziel / "transkript.md", shallow=False)
+    assert "source_path" not in json.loads((ziel / "transcript.json").read_text(encoding="utf-8"))
+    # Die Bildlinks fuehren relativ von der Ablage ueber beide Baeume zum Bild - und das existiert.
+    marks = json.loads((ziel / "marks.json").read_text(encoding="utf-8"))
+    assert marks[0]["png"] == "../../bilder/2026-10-06_workshop-reisebuchung/0001_00-00-03.jpg"
+    assert all((ziel / m["png"]).is_file() for m in marks)
+    annotiert = (ziel / "transkript.annotiert.md").read_text(encoding="utf-8")
+    assert "](../../bilder/2026-10-06_workshop-reisebuchung/0002_00-00-12.jpg)" in annotiert
+    assert "../../bilder/2026-10-06_workshop-reisebuchung/" in (ziel / "README.md").read_text(encoding="utf-8")
+    # Das Wiki des Projekts bleibt leer; der Vermerk kennt die Ablage trotzdem - mit und ohne Projekt.
+    assert not any(projekt.raw_dir.iterdir())
+    assert wiki_ablage.letzte_ablage(sitzung)["ordner"] == str(ziel)
+    assert wiki_ablage.letzte_ablage(sitzung, projekt)["assets"] == str(assets)
+    assert wiki_ablage.letzte_ablage(sitzung, projekt, auch_freie=False) is None
+
+
+def test_speichere_nach_ohne_bilder_ordner(sitzung, tmp_path):
+    ablage = wiki_ablage.speichere_nach(sitzung, raw_basis=tmp_path / "t", assets_basis=None)
+    ziel = Path(ablage.ordner)
+    assert ablage.assets is None and ablage.bilder == 0
+    assert (ziel / "transkript.md").is_file() and not (ziel / "marks.json").exists()
+    assert not (ziel / "transkript.annotiert.md").exists()
+
+
+def test_speichere_nach_verbietet_wiki_seiten_sitzungsordner_und_gleiche_basen(projekt, sitzung, tmp_path):
+    frei = tmp_path / "frei"
+    with pytest.raises(RuntimeError, match="Wiki-Seiten"):
+        wiki_ablage.speichere_nach(
+            sitzung, raw_basis=projekt.seiten_dir / "quellen", assets_basis=frei, seiten_dir=projekt.seiten_dir
+        )
+    with pytest.raises(RuntimeError, match="Wiki-Seiten"):
+        wiki_ablage.speichere_nach(sitzung, raw_basis=frei, assets_basis=projekt.seiten_dir, seiten_dir=projekt.seiten_dir)
+    with pytest.raises(RuntimeError, match="Sitzungsordner"):
+        wiki_ablage.speichere_nach(sitzung, raw_basis=sitzung, assets_basis=frei)
+    with pytest.raises(RuntimeError, match="Sitzungsordner"):
+        wiki_ablage.speichere_nach(sitzung, raw_basis=frei, assets_basis=sitzung / "frames")
+    with pytest.raises(RuntimeError, match="Transkript-Ordner"):
+        wiki_ablage.speichere_nach(sitzung, raw_basis=frei, assets_basis=frei)
+    with pytest.raises(RuntimeError, match="Ordner für das Transkript"):
+        wiki_ablage.speichere_nach(sitzung, raw_basis=Path(""), assets_basis=None)
+    assert not (projekt.seiten_dir / "quellen").exists() and not frei.exists()
+    assert wiki_ablage.ablagen(sitzung) == []
+    assert sorted(p.name for p in (sitzung / "frames").iterdir()) == ["0001_00-00-03.jpg", "0002_00-00-12.jpg"]
+
+
+def test_speichere_sitzung_ist_die_strenge_wiki_ablage(projekt, sitzung):
+    assert wiki_ablage.speichere_sitzung(sitzung, projekt).frei is False
+    assert wiki_ablage.ablagen(sitzung)[0]["frei"] is False
+
+
+def test_nachbereitung_ignoriert_eine_freie_ablage(projekt, sitzung, tmp_path):
+    """Lag die Sitzung nur per "Speichern unter" irgendwo, kommt sie fuer die Nachbereitung ins Wiki."""
+    ws = _analyse(projekt, sitzung)
+    freie = wiki_ablage.speichere_nach(sitzung, raw_basis=tmp_path / "anderswo", assets_basis=None)
+    ablage = wiki_ablage.speichere_nachbereitung(ws, projekt, sitzung)
+    basis = projekt.raw_dir / "2026-10-06_workshop-reisebuchung"
+    assert ablage.ordner == str(basis / "nachbereitung-ki" / "reisebuchung")
+    assert (basis / "transkript.md").is_file() and not (Path(freie.ordner) / "nachbereitung-ki").exists()

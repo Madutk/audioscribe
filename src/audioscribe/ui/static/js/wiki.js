@@ -1,8 +1,10 @@
 // Wiki des Projekts: Zustandsanzeige (Einstellungen, Live, Assistent) und der Dialog
-// "Ins Wiki speichern" (PRD §21) - gemeinsam fuer Live-Ansicht und Nachbereitung.
+// "Speichern unter ..." / "Ins Wiki speichern" (PRD §21) - gemeinsam fuer Live-Ansicht und
+// Nachbereitung, im Projekt wie bei "Sofort aufnehmen".
 
-import { $, S, api, post, esc, projekt, sep, trimSep, toast, basename } from './kern.js';
+import { $, S, api, post, esc, modus, projekt, sep, trimSep, dirname, toast, basename } from './kern.js';
 import { setKontext } from './kontext.js';
+import { pickFolder } from './dialoge.js';
 
 /** "JJJJ-MM-TT HH:MM" -> "HH:MM" (die Uhrzeit reicht; das Datum steht im Tooltip). */
 const uhrzeit = (s) => (/\d\d:\d\d$/.test(s || '') ? s.slice(-5) : (s || ''));
@@ -71,43 +73,86 @@ export function slugify(text) {
   return v.slice(0, 80).replace(/-+$/, '') || 'analyse';
 }
 
-function zielVorschau() {
+/** Gleicher Ordner? (Pfade so, wie Server und Nutzer sie schreiben - ohne Schluss-Trenner.) */
+const gleicherOrdner = (a, b) => !!a && !!b && trimSep(a) === trimSep(b);
+
+/**
+ * Vorbelegung der beiden Ziele: raw/ und Assets des Projekt-Wikis; bei "Sofort aufnehmen" das
+ * Wiki aus den Einstellungen (ueber /api/wiki/status); sonst der Ordner neben der Sitzung.
+ */
+function vorgabeBasen(sitzung) {
   const p = projekt();
-  if (!p || !wikiSave) return;
+  if (p && p.raw_dir) return { raw: p.raw_dir, assets: p.assets_dir, wiki: true };
+  const a = S.wikiStatus && S.wikiStatus.ablage;
+  if (a && a.raw_basis) return { raw: a.raw_basis, assets: a.assets_basis, wiki: true };
+  const eltern = dirname(sitzung.path || '');
+  return { raw: eltern, assets: eltern ? `${eltern}${sep()}assets` : '', wiki: false };
+}
+
+/** Sind die gewaehlten Ziele genau raw/ und Assets des Projekt-Wikis? Nur dann gilt "immer". */
+function istStandard() {
+  const p = projekt();
+  if (!p || !p.raw_dir) return false;
+  const bilder = $('wikiDlgBilder').checked && !$('wikiDlgBilder').disabled;
+  return gleicherOrdner($('wikiDlgRaw').value, p.raw_dir)
+    && (!bilder || gleicherOrdner($('wikiDlgAssets').value, p.assets_dir));
+}
+
+function zielVorschau() {
+  if (!wikiSave) return;
+  const p = projekt() || {};
   const name = wikiSave.sitzung.name || '';
   const datum = (name.match(/\d{4}-\d{2}-\d{2}/) || ['JJJJ-MM-TT'])[0];
   const titel = $('wikiDlgName').value.trim();
   const live = name.match(/^live-\d{4}-\d{2}-\d{2}_(\d{2}-\d{2}-\d{2})$/);
   const kurz = titel ? slugify(titel) : (live ? `live-${live[1]}` : slugify(name.replace(/\d{4}-\d{2}-\d{2}/, '') || name));
-  $('wikiDlgTarget').innerHTML = `Ablage: <code>${esc(trimSep(p.raw_dir))}${esc(sep())}${esc(datum)}_${esc(kurz)}</code>`
-    + ($('wikiDlgBilder').checked && !$('wikiDlgBilder').disabled
-      ? `<br>Bilder: <code>${esc(trimSep(p.assets_dir))}${esc(sep())}${esc(datum)}_${esc(kurz)}</code>` : '');
+  const bilder = $('wikiDlgBilder').checked && !$('wikiDlgBilder').disabled;
+  const raw = trimSep($('wikiDlgRaw').value.trim());
+  const assets = trimSep($('wikiDlgAssets').value.trim());
+  $('wikiDlgAssetsRow').hidden = !bilder;
+  $('wikiDlgTarget').innerHTML = (raw
+    ? `Ablage: <code>${esc(raw)}${esc(sep())}${esc(datum)}_${esc(kurz)}</code>`
+    : '<span class="err">Bitte einen Ordner für das Transkript wählen.</span>')
+    + (bilder && assets ? `<br>Bilder: <code>${esc(assets)}${esc(sep())}${esc(datum)}_${esc(kurz)}</code>` : '');
+  // "Kuenftig immer" meint die Ablage ins Projekt-Wiki - bei anderen Zielen gibt es nichts zu merken.
+  $('wikiDlgImmerRow').hidden = !istStandard() || p.wiki_speichern === 'immer' || !!wikiSave.sitzung.ohneImmer;
 }
 
 /**
- * Sitzung ins Wiki speichern. `sitzung` = {path, name, titel, frames}. Loest mit der Ablage
- * auf ({ordner, assets, bilder, …}) oder mit null, wenn abgebrochen wurde.
+ * Sitzung speichern - ins Wiki oder "unter ..." in frei gewaehlte Ordner. `sitzung` = {path,
+ * name, titel, frames}. Loest mit der Ablage auf ({ordner, assets, bilder, frei, …}) oder mit
+ * null, wenn abgebrochen wurde. Ohne Projekt nur bei "Sofort aufnehmen".
  */
 export function openWikiDialog(sitzung) {
-  const p = projekt();
-  if (!p) return Promise.resolve(null);
+  if (!projekt() && modus() !== 'aufnahme') return Promise.resolve(null);
   if (wikiSave) closeWikiDialog(null);
+  const p = projekt() || {};
   const bilder = sitzung.frames || 0;
-  $('wikiDlgInfo').textContent = 'Das Transkript wird als neue Quelle abgelegt. '
-    + 'Bestehendes im Wiki bleibt unverändert; die Wiki-Seiten werden nicht angefasst.';
+  const basen = vorgabeBasen(sitzung);
+  $('wikiDlgInfo').textContent = basen.wiki
+    ? 'Das Transkript wird als neue Quelle im Wiki abgelegt, die Bilder im Assets-Ordner. '
+      + 'Bestehendes bleibt unverändert; die Wiki-Seiten werden nicht angefasst. Beide Ziele lassen sich ändern.'
+    : 'Transkript und Bilder werden in Ordner deiner Wahl kopiert; der Sitzungsordner bleibt unverändert.';
   $('wikiDlgName').value = sitzung.titel || '';
   $('wikiDlgName').placeholder = sitzung.name || '';
+  $('wikiDlgRaw').value = basen.raw || '';
+  $('wikiDlgAssets').value = basen.assets || '';
   $('wikiDlgBilder').disabled = bilder === 0;
   $('wikiDlgBilder').checked = bilder > 0 && p.wiki_bilder !== false;
   $('wikiDlgBilderLabel').textContent = bilder ? `Bilder mit übertragen (${bilder})` : 'Bilder mit übertragen – diese Sitzung hat keine';
   // Markierungen sind KI-erzeugt: nur mit, wenn das Projekt es so festgelegt hat.
   $('wikiDlgMarkierungen').checked = p.wiki_markierungen === true;
   $('wikiDlgImmer').checked = false;
-  $('wikiDlgImmerRow').hidden = p.wiki_speichern === 'immer' || !!sitzung.ohneImmer;
   $('wikiDlgErr').textContent = '';
   $('wikiDlgOk').disabled = false;
   $('wikiDlg').showModal();
   return new Promise((resolve) => { wikiSave = { sitzung, resolve }; zielVorschau(); });
+}
+
+/** "Ordner waehlen ..." neben einem Pfadfeld: Systemdialog, Start ist der aktuelle Feldwert. */
+async function ordnerWaehlen(feld, title) {
+  const pfad = await pickFolder({ title, start: $(feld).value.trim() });
+  if (pfad) { $(feld).value = pfad; zielVorschau(); }
 }
 
 function closeWikiDialog(result) {
@@ -118,7 +163,11 @@ function closeWikiDialog(result) {
 }
 
 $('wikiDlgName').oninput = zielVorschau;
+$('wikiDlgRaw').oninput = zielVorschau;
+$('wikiDlgAssets').oninput = zielVorschau;
 $('wikiDlgBilder').onchange = zielVorschau;
+$('pickWikiDlgRaw').onclick = () => ordnerWaehlen('wikiDlgRaw', 'Ordner für das Transkript wählen');
+$('pickWikiDlgAssets').onclick = () => ordnerWaehlen('wikiDlgAssets', 'Ordner für die Bilder wählen');
 $('wikiDlgCancel').onclick = () => closeWikiDialog(null);
 $('wikiDlg').addEventListener('close', () => closeWikiDialog(null));
 $('wikiDlg').addEventListener('click', (e) => { if (e.target === $('wikiDlg')) closeWikiDialog(null); });
@@ -126,18 +175,21 @@ $('wikiDlgOk').onclick = async () => {
   if (!wikiSave) return;
   $('wikiDlgErr').textContent = '';
   $('wikiDlgOk').disabled = true;
-  const immer = $('wikiDlgImmer').checked;
+  const bilder = $('wikiDlgBilder').checked && !$('wikiDlgBilder').disabled;
+  const immer = $('wikiDlgImmer').checked && !$('wikiDlgImmerRow').hidden;
   try {
     const ablage = await post('/api/wiki/speichern', {
       sitzung: wikiSave.sitzung.path,
       titel: $('wikiDlgName').value.trim(),
-      bilder: $('wikiDlgBilder').checked && !$('wikiDlgBilder').disabled,
+      bilder,
       markierungen: $('wikiDlgMarkierungen').checked,
       immer,
+      raw_basis: $('wikiDlgRaw').value.trim(),
+      assets_basis: bilder ? $('wikiDlgAssets').value.trim() : '',
     });
     if (immer) setKontext(await api('/api/kontext'));
     if (ablage.hinweis) toast(ablage.hinweis, 'fehler');
-    toast(`Ins Wiki gespeichert: ${basename(ablage.ordner)}${ablage.bilder ? ` · ${ablage.bilder} Bilder` : ''}`
+    toast(`${ablage.frei ? 'Gespeichert' : 'Ins Wiki gespeichert'}: ${basename(ablage.ordner)}${ablage.bilder ? ` · ${ablage.bilder} Bilder` : ''}`
       + `${ablage.markierungen ? ` · ${ablage.markierungen} Markierungen` : ''}`);
     closeWikiDialog(ablage);
   } catch (err) {

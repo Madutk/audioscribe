@@ -237,7 +237,7 @@ export function renderHandover(ablage) {
   box.dataset.key = key;
   if (ablage && ablage.ordner) {
     // Die Markierungen gehen nur auf Wunsch mit (KI-erzeugt) - sagen, was tatsaechlich dort liegt.
-    box.innerHTML = `Ins Wiki gespeichert: <code>${esc(ablage.ordner)}</code> (`
+    box.innerHTML = `${ablage.frei ? 'Gespeichert' : 'Ins Wiki gespeichert'}: <code>${esc(ablage.ordner)}</code> (`
       + (ablage.markierungen ? '<code>markierungen.md</code>, ' : '') + '<code>transkript.md</code>)'
       + (ablage.markierungen ? '' : ' – die Markierungen bleiben im Sitzungsordner');
   } else if (p && !p.demo && p.hat_wiki && p.wiki_speichern === 'immer') {

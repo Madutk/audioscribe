@@ -1407,6 +1407,30 @@ def test_live_runner_second_stop_kills_and_skips_refine(tmp_path):
     assert done["phase"] == "fehler" and done["refine"] is None
 
 
+def test_live_runner_kind_stirbt_nach_dem_sichern_zaehlt_als_beendet(tmp_path):
+    """Hat das Kind "fertig" gemeldet (Sitzung gesichert) und stirbt erst beim Abbau - etwa
+    durch "Sofort abbrechen" oder einen haengenden Audio-Stream -, ist die Sitzung vollstaendig:
+    kein "fehler", das Nachschaerfen laeuft."""
+    import sys
+
+    from audioscribe.ui.jobs import LiveJobOptions
+    from audioscribe.ui.runner import LiveRunner
+
+    kind = CHILD + "import os, signal\nos.kill(os.getpid(), signal.SIGTERM)\n"
+    runner = LiveRunner()
+    runner.start(
+        LiveJobOptions(output_dir=tmp_path, refine=True),
+        argv_builder=lambda opts: [sys.executable, "-c", kind, str(tmp_path)],
+        refine_builder=lambda session, opts: [sys.executable, "-c", REFINE],
+    )
+    wait_for(lambda: runner.snapshot()["stats"])
+    runner.stop()
+    done = wait_for(lambda: (s := runner.snapshot()) and not s["running"] and s)
+    assert done["phase"] == "beendet" and done["returncode"] == 0 and done.get("error") is None
+    assert done["refine"] == {"index": 1, "total": 2, "name": "Transkription Mikrofon", "percent": 50.0}
+    assert any("nach dem Sichern" in line for line in done["lines"])
+
+
 def test_live_runner_reset_discards_running_session(tmp_path):
     runner = start_runner(tmp_path, refine=True)
     wait_for(lambda: runner.snapshot()["stats"])

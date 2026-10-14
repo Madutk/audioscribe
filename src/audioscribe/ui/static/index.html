@@ -838,14 +838,29 @@
 
 <!-- Sitzung ins Wiki speichern (PRD §21) -->
 <dialog class="dialog wikisave" id="wikiDlg" aria-labelledby="wikiDlgTitle">
-  <h2 class="card-title" id="wikiDlgTitle"><svg class="ic" aria-hidden="true"><use href="#i-book-plus"/></svg>Ins Wiki speichern</h2>
+  <h2 class="card-title" id="wikiDlgTitle"><svg class="ic" aria-hidden="true"><use href="#i-book-plus"/></svg>Speichern unter …</h2>
   <p class="hint" id="wikiDlgInfo"></p>
   <div class="field"><label for="wikiDlgName">Titel der Quelle</label>
-    <input type="text" id="wikiDlgName" maxlength="120" autocomplete="off" />
-    <p class="hint target" id="wikiDlgTarget"></p></div>
+    <input type="text" id="wikiDlgName" maxlength="120" autocomplete="off" /></div>
+  <div class="field"><label for="wikiDlgRaw">Transkript – Ordner</label>
+    <div class="input-group">
+      <input type="text" id="wikiDlgRaw" autocomplete="off" spellcheck="false" />
+      <button class="secondary" type="button" id="pickWikiDlgRaw"><svg class="ic" aria-hidden="true"><use href="#i-folder"/></svg>Ordner wählen …</button>
+    </div>
+    <p class="hint">Darin entsteht <code>&lt;Datum&gt;_&lt;Titel&gt;/</code> mit <code>transkript.md</code>, <code>transcript.json</code>,
+      <code>transkript.annotiert.md</code> und <code>README.md</code>. Vorbelegt mit <code>raw/</code> des Wikis.</p></div>
   <div class="checks">
     <label><input type="checkbox" id="wikiDlgBilder" /><span><span id="wikiDlgBilderLabel">Bilder mit übertragen</span>
-      <small>Standbilder in den Assets-Ordner kopieren; das Transkript im Wiki verweist an der passenden Stelle darauf.</small></span></label>
+      <small>Standbilder in den Bilder-Ordner kopieren; das annotierte Transkript verweist an der passenden Stelle darauf.</small></span></label>
+  </div>
+  <div class="field" id="wikiDlgAssetsRow"><label for="wikiDlgAssets">Bilder – Ordner</label>
+    <div class="input-group">
+      <input type="text" id="wikiDlgAssets" autocomplete="off" spellcheck="false" />
+      <button class="secondary" type="button" id="pickWikiDlgAssets"><svg class="ic" aria-hidden="true"><use href="#i-folder"/></svg>Ordner wählen …</button>
+    </div>
+    <p class="hint">Darin entsteht ein gleichnamiger Unterordner mit den Bildern. Vorbelegt mit dem Assets-Ordner des Wikis.</p></div>
+  <p class="hint target" id="wikiDlgTarget"></p>
+  <div class="checks">
     <label><input type="checkbox" id="wikiDlgMarkierungen" /><span>Markierungen des Souffleurs mit übertragen
       <small>Widersprüche, Fragen und offene Punkte als <code>markierungen.json</code>/<code>.md</code> neben das Transkript legen. Sie sind KI-erzeugt und zitieren das Wiki – ohne Haken bleiben sie im Sitzungsordner.</small></span></label>
     <label id="wikiDlgImmerRow"><input type="checkbox" id="wikiDlgImmer" /><span>Künftig immer so speichern

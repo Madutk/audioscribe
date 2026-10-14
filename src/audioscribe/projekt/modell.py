@@ -127,9 +127,12 @@ def ist_unter(pfad: Path, basis: Path) -> bool:
 _ist_unter = ist_unter
 
 
-def _gleich(a: Path, b: Path) -> bool:
+def gleich(a: Path, b: Path) -> bool:
     """Derselbe Ordner (ohne Rücksicht auf Groß- und Kleinschreibung)."""
     return _ist_unter(a, b) and _ist_unter(b, a)
+
+
+_gleich = gleich
 
 
 _WINDOWS_PFAD = re.compile(r"^(?:[A-Za-z]:[\\/]|\\\\)")

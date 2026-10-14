@@ -301,7 +301,7 @@ dl.gegen q { quotes: "»" "«"; }
 dialog.dialog { color: var(--fg); padding: var(--s4); margin: auto; max-width: calc(100vw - 2 * var(--s4)); }
 dialog.dialog:not([open]) { display: none; }
 dialog.dialog::backdrop { background: var(--backdrop); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
-dialog.dialog.wikisave { width: min(560px, 100%); }
+dialog.dialog.wikisave { width: min(680px, 100%); }
 dialog.dialog > .hint { margin-bottom: var(--s3); }
 dialog.dialog.zuordnen { width: min(560px, 100%); }
 dialog.zuordnen .recent-list { grid-template-columns: 1fr; margin-bottom: var(--s3); }

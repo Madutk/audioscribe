@@ -850,7 +850,13 @@ class LiveRunner(_ProcessRunner):
             code = self._pump(self._spawn(argv, stdin=subprocess.PIPE), self._on_live_line)
             with self._lock:
                 session = self._info.get("dir")
-                aborted = self._discard or (self._info["stopping"] and self._info["phase"] != "fertig")
+                fertig = self._info["phase"] == "fertig"
+                aborted = self._discard or (self._info["stopping"] and not fertig)
+            if code != 0 and fertig and not self._discard:
+                # Das Kind hatte die Sitzung schon gesichert ("fertig") und starb erst beim Abbau
+                # (Signal, haengender Audio-Stream): die Sitzung ist vollstaendig - kein Fehler.
+                self._append(f"Aufnahmeprozess endete nach dem Sichern mit Code {code} - die Sitzung ist vollständig.")
+                code = 0
             if code == 0 and opts.refine and session and not aborted:
                 with self._lock:
                     self._info.update(phase="nachschaerfen", stopping=False, partials={})

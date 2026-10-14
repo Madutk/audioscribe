@@ -277,7 +277,7 @@ function resetLiveView() {
   $('liveText').innerHTML = empty('mic', 'Noch keine Sitzung.');
   $('liveThumbs').innerHTML = empty('image', 'Bildwechsel erscheinen hier.');
   $('liveLog').textContent = '';
-  $('liveResult').innerHTML = '';
+  $('liveResult').innerHTML = ''; delete $('liveResult').dataset.key;
   $('liveFazit').innerHTML = ''; $('liveFazit').hidden = true;
   $('liveShotCount').textContent = '';
   $('liveTestBadge').hidden = true;
@@ -508,22 +508,42 @@ async function pollLive() {
 
   renderFazit(s.fazit);
   renderSouffleur(s);
-  // Im Fehlerfall zuerst der Grund; der Sitzungsordner nur, wenn er angelegt wurde.
-  const demo = modus() === 'demo';
-  const fehler = s.phase === 'fehler' && s.error ? `${esc(s.error)}` : '';
-  const ordner = s.dir && !demo ? `Sitzungsordner: <code>${esc(s.dir)}</code><br>
-       Die Live-Fassung liegt als <code>transkript.live.md</code> daneben.` : '';
-  $('liveResult').innerHTML = !running && (fehler || ordner)
-    ? `<div class="result ${s.phase === 'fehler' ? 'fehler' : ''}">${[fehler, ordner].filter(Boolean).join('<br>')}</div>` : '';
   liveDir = s.dir || null;
   // Automatisch gespeichert (Nachlauf) oder frueher per Dialog - der Server kennt den Vermerk.
   if (s.nachlauf && s.nachlauf.wiki_ablage) liveAblage = s.nachlauf.wiki_ablage;
   else if (s.wiki_ablage && !liveAblage) liveAblage = s.wiki_ablage;
+  renderResult(s, running);
   renderHandover(liveAblage);
   renderNext(s);
   renderDemo(s);
   // Eine eben beendete Sitzung kann eine unterbrochene gewesen sein - Banner nachziehen.
   if (warLaufend && !running) loadUnterbrochen();
+}
+
+/**
+ * Infobox nach dem Ende: Fehler zuerst, dann der Sitzungsordner - und von dort aus
+ * "Speichern unter ..." (Transkript und Bilder an zwei Ziele, mit dem Wiki vorbelegt) bzw. wo
+ * die Sitzung schon liegt. In beiden Modi: Projekt und "Sofort aufnehmen".
+ */
+function renderResult(s, running) {
+  const box = $('liveResult');
+  const demo = modus() === 'demo';
+  const fehler = s.phase === 'fehler' && s.error ? `${esc(s.error)}` : '';
+  const beendet = !running && s.phase === 'beendet' && !!s.dir && !demo;
+  const key = JSON.stringify([running, fehler, s.dir, demo, beendet, liveAblage && liveAblage.ordner, liveAblage && liveAblage.frei]);
+  if (box.dataset.key === key) return;  // Poll alle 500 ms - nur bei Aenderung neu zeichnen
+  box.dataset.key = key;
+  const ordner = s.dir && !demo ? `Sitzungsordner: <code>${esc(s.dir)}</code><br>
+       Die Live-Fassung liegt als <code>transkript.live.md</code> daneben.` : '';
+  let ablage = '';
+  if (beendet && liveAblage) {
+    ablage = `${liveAblage.frei ? 'Gespeichert' : 'Im Wiki gespeichert'}: <code>${esc(liveAblage.ordner)}</code>
+      <button class="ghost sm" type="button" data-folder="${esc(liveAblage.ordner)}">${icon('external')}Ordner öffnen</button>`;
+  } else if (beendet) {
+    ablage = `<button class="secondary sm" type="button" data-speichern-unter>${icon('book-plus')}Speichern unter …</button>`;
+  }
+  box.innerHTML = !running && (fehler || ordner)
+    ? `<div class="result ${s.phase === 'fehler' ? 'fehler' : ''}">${[fehler, ordner, ablage].filter(Boolean).join('<br>')}</div>` : '';
 }
 
 /** Fazit (Rechendauer, Latenz) der Live-Aufnahme und des Nachschaerfens - erscheint,
@@ -787,17 +807,26 @@ export function aktualisiereLiveSprache(d) {
 function renderAblegen(s) {
   const box = $('liveNext');
   const zeigen = !s.running && !!s.dir && s.phase === 'beendet';
-  const key = JSON.stringify(['aufnahme', zeigen, s.dir]);
+  const key = JSON.stringify(['aufnahme', zeigen, s.dir, liveAblage, liveShots.length]);
   if (box.dataset.key === key) return;
   box.dataset.key = key;
   box.hidden = !zeigen;
   if (!zeigen) { box.innerHTML = ''; return; }
+  const bilder = liveShots.length;
+  const speichern = liveAblage
+    ? `<div class="next-item done"><b>${icon('check')}Gespeichert</b>
+        <span><code>${esc(liveAblage.ordner)}</code>${liveAblage.bilder ? ` · ${liveAblage.bilder} Bilder` : ''}</span>
+        <button class="ghost sm" type="button" data-folder="${esc(liveAblage.ordner)}">${icon('external')}Ordner öffnen</button></div>`
+    : `<div class="next-item"><b>${icon('book-plus')}Speichern unter …</b>
+        <span>Transkript${bilder ? ` und ${bilder} Bilder` : ''} in Ordner deiner Wahl – vorbelegt mit <code>raw/</code> des Wikis aus den Einstellungen, falls eins verknüpft ist.</span>
+        <button type="button" data-speichern-unter>${icon('book-plus')}Speichern unter …</button></div>`;
   box.innerHTML = `<h3>Sitzung ablegen</h3>
     <p>Die Sitzung liegt im Eingangsordner: <code>${esc(s.dir)}</code></p>
     <div class="next-grid">
+      ${speichern}
       <div class="next-item"><b>${icon('folder-open')}Einem Projekt zuordnen</b>
         <span>In ein vorhandenes Projekt verschieben oder dafür ein neues anlegen – danach geht es dort ins Wiki oder zur KI.</span>
-        <button type="button" id="liveZuordnen">${icon('folder-open')}Projekt zuordnen …</button></div>
+        <button class="secondary" type="button" id="liveZuordnen">${icon('folder-open')}Projekt zuordnen …</button></div>
       <div class="next-item"><b>${icon('history')}Später entscheiden</b>
         <span>Die Sitzung wartet auf der Startseite unter „Aufnahmen ohne Projekt“.</span>
         <button class="secondary" type="button" data-folder="${esc(s.dir)}">${icon('external')}Ordner öffnen</button></div>
@@ -817,19 +846,24 @@ function renderNext(s) {
   if (!zeigen) { box.innerHTML = ''; return; }
   const bilder = liveShots.length;
   let wiki = '';
-  if (!p.hat_wiki) {
-    wiki = `<div class="next-item"><b>${icon('book')}Kein Wiki im Projekt</b>
-      <span>Die Sitzung bleibt im Sitzungsordner. Mit einem Wiki ließe sie sich als neue Quelle ablegen –
-        <a class="goto" href="#/projekt/einstellungen">Wiki anlegen oder verknüpfen</a>.</span></div>`;
-  } else if (liveAblage) {
-    wiki = `<div class="next-item done"><b>${icon('check')}Im Wiki gespeichert</b>
-      <span><code>${esc(liveAblage.ordner)}</code>${liveAblage.bilder ? ` · ${liveAblage.bilder} Bilder im Assets-Ordner` : ''}${liveAblage.markierungen ? ` · ${liveAblage.markierungen} Markierungen` : ''}</span>
+  if (liveAblage) {
+    wiki = `<div class="next-item done"><b>${icon('check')}${liveAblage.frei ? 'Gespeichert' : 'Im Wiki gespeichert'}</b>
+      <span><code>${esc(liveAblage.ordner)}</code>${liveAblage.bilder ? ` · ${liveAblage.bilder} Bilder${liveAblage.frei ? '' : ' im Assets-Ordner'}` : ''}${liveAblage.markierungen ? ` · ${liveAblage.markierungen} Markierungen` : ''}</span>
       <button class="ghost sm" type="button" data-folder="${esc(liveAblage.ordner)}">${icon('external')}Ordner öffnen</button></div>`;
+  } else if (!p.hat_wiki) {
+    wiki = `<div class="next-item"><b>${icon('book-plus')}Speichern unter …</b>
+      <span>Dieses Projekt hat kein Wiki – Transkript${bilder ? ` und ${bilder} Bilder` : ''} lassen sich in Ordner deiner Wahl kopieren.
+        Mit einem Wiki ginge die Sitzung als neue Quelle hinein: <a class="goto" href="#/projekt/einstellungen">Wiki anlegen oder verknüpfen</a>.</span>
+      <button class="secondary" type="button" data-speichern-unter>${icon('book-plus')}Speichern unter …</button></div>`;
   } else if (p.wiki_speichern !== 'nie' || fehler) {
     wiki = `<div class="next-item"><b>${icon('book-plus')}Ins Wiki speichern</b>
       <span>${fehler ? `<span class="err">${esc(fehler)}</span>` : ''}Transkript${bilder ? ` und ${bilder} Bilder` : ''}
-        als neue Quelle unter <code>raw/</code> ablegen – die Markierungen des Souffleurs nur auf Wunsch.</span>
-      <button type="button" id="liveWikiSave">${icon('book-plus')}Ins Wiki speichern</button></div>`;
+        als neue Quelle unter <code>raw/</code> ablegen – oder unter einem anderen Ort; die Markierungen des Souffleurs nur auf Wunsch.</span>
+      <button type="button" id="liveWikiSave" data-speichern-unter>${icon('book-plus')}Ins Wiki speichern …</button></div>`;
+  } else {
+    wiki = `<div class="next-item"><b>${icon('book-plus')}Speichern unter …</b>
+      <span>Transkript${bilder ? ` und ${bilder} Bilder` : ''} ins Wiki oder in Ordner deiner Wahl kopieren.</span>
+      <button class="secondary" type="button" data-speichern-unter>${icon('book-plus')}Speichern unter …</button></div>`;
   }
   const ki = cloudCompliant() ? '' : `<div class="next-item"><b>${icon('sparkles')}Mit KI nachbereiten</b>
       <span>Die KI wertet Transkript und Bilder aus. Das Ergebnis kann danach ebenfalls ins Wiki.</span>
@@ -839,25 +873,35 @@ function renderNext(s) {
     <div class="next-grid">${wiki}${ki}</div>`;
 }
 
-$('liveNext').addEventListener('click', async (e) => {
+/** "Speichern unter ..." bzw. "Ins Wiki speichern": derselbe Dialog, danach Karten nachziehen. */
+async function speichernUnter() {
+  if (!liveDir) return;
+  const ablage = await openWikiDialog({
+    path: liveDir, name: basename(liveDir), titel: $('liveTitle').value.trim(), frames: liveShots.length,
+  });
+  if (ablage) {
+    liveAblage = ablage;
+    delete $('liveNext').dataset.key; delete $('liveResult').dataset.key;
+    pollLive();
+  }
+}
+
+async function nachSitzungKlick(e) {
   const folder = e.target.closest('[data-folder]');
   if (folder) { post('/api/oeffnen', { pfad: folder.dataset.folder }).catch((err) => toast(err.message, 'fehler')); return; }
   if (e.target.closest('#liveZuordnen') && liveDir) {
     zuordnenDialog(liveDir, $('liveTitle').value.trim());
     return;
   }
-  if (e.target.closest('#liveWikiSave') && liveDir) {
-    const ablage = await openWikiDialog({
-      path: liveDir, name: basename(liveDir), titel: $('liveTitle').value.trim(), frames: liveShots.length,
-    });
-    if (ablage) { liveAblage = ablage; delete $('liveNext').dataset.key; pollLive(); }
-    return;
-  }
+  if (e.target.closest('[data-speichern-unter]')) { speichernUnter(); return; }
   if (e.target.closest('#liveToKi') && liveDir) {
     S.vorwahl = liveDir;
     go('#/projekt/nachbereitung');
   }
-});
+}
+
+$('liveNext').addEventListener('click', nachSitzungKlick);
+$('liveResult').addEventListener('click', nachSitzungKlick);
 
 // --- Wiederaufnahme nach einem Absturz (PRD §21) ----------------------------------------------
 

@@ -14,6 +14,10 @@ Regeln (PRD §21):
 - Die Ablage ist ein Export. KI-Analyse und Review arbeiten weiter auf dem Sitzungsordner.
 - KI-erzeugte Nachbereitungen liegen getrennt unter ``nachbereitung-ki/`` und sind als
   KI-erzeugt gekennzeichnet - sie sind keine Quelle.
+
+„Speichern unter …“ (``speichere_nach``) ist dieselbe Ablage an frei gewählte Ordner für
+Transkript und Bilder - auch ohne Projekt. Nie unter die Wiki-Seiten, rein anhängend, die
+Bildlinks bleiben relativ; nur die Wiki-Konventionen (``raw/``, Assets im Wiki) entfallen.
 """
 
 from __future__ import annotations
@@ -27,7 +31,7 @@ from datetime import datetime
 from pathlib import Path
 from urllib.parse import quote
 
-from audioscribe.projekt.modell import Projekt, ist_unter
+from audioscribe.projekt.modell import Projekt, gleich, ist_unter
 
 VERMERK = "wiki-ablage.json"
 NACHBEREITUNG_ORDNER = "nachbereitung-ki"
@@ -49,6 +53,7 @@ class Ablage:
     titel: str
     zeit: str
     art: str = "sitzung"  # sitzung | nachbereitung
+    frei: bool = False  # Ziele vom Nutzer gewählt („Speichern unter …“) statt raw/ und Assets des Projekts
 
     def als_dict(self) -> dict:
         return asdict(self)
@@ -73,6 +78,26 @@ def _pruefe_ziele(projekt: Projekt) -> None:
         raise RuntimeError(f"Der Bilder-Ordner muss im LLM-Wiki liegen: {projekt.assets_dir}")
     if projekt.assets_dir.resolve() == projekt.raw_dir.resolve():
         raise RuntimeError("Der Bilder-Ordner darf nicht raw/ selbst sein - bitte z. B. raw/assets wählen.")
+
+
+def _pruefe_freie_ziele(
+    session_dir: Path, raw_basis: Path | None, assets_basis: Path | None, seiten_dir: Path | None
+) -> None:
+    """Regeln für frei gewählte Ziele: nie unter die Wiki-Seiten, nicht in den Sitzungsordner
+    selbst (Kopie in sich hinein), Bilder nicht in den Transkript-Ordner."""
+    if raw_basis is None or str(raw_basis) in ("", "."):
+        raise RuntimeError("Bitte einen Ordner für das Transkript wählen.")
+    if raw_basis.is_file() or (assets_basis is not None and assets_basis.is_file()):
+        raise RuntimeError("Das Ziel muss ein Ordner sein, keine Datei.")
+    for ziel in (raw_basis, assets_basis):
+        if ziel is None:
+            continue
+        if seiten_dir is not None and _ist_unter(ziel, seiten_dir):
+            raise RuntimeError(f"Ablage darf nicht unter den Wiki-Seiten liegen: {ziel}")
+        if _ist_unter(ziel, session_dir):
+            raise RuntimeError("Die Ablage darf nicht im Sitzungsordner selbst liegen.")
+    if assets_basis is not None and gleich(assets_basis, raw_basis):
+        raise RuntimeError("Der Bilder-Ordner darf nicht der Transkript-Ordner selbst sein - bitte einen Unterordner wählen.")
 
 
 def _datum(session_dir: Path) -> str:
@@ -154,21 +179,27 @@ def _vermerke(ordner: Path, ablage: Ablage) -> None:
         pass  # der Vermerk ist Komfort - die Ablage selbst ist geschrieben
 
 
-def letzte_ablage(session_dir: Path, projekt: Projekt | None = None) -> dict | None:
+def letzte_ablage(session_dir: Path, projekt: Projekt | None = None, *, auch_freie: bool = True) -> dict | None:
     """Jüngste noch vorhandene Ablage der Sitzung. Mit ``projekt`` zählen nur Ablagen in dessen
     ``raw/`` - der Vermerk ist nur eine Notiz im Sitzungsordner und kann aus einem anderen
-    Projekt oder einem kopierten Wiki stammen."""
+    Projekt oder einem kopierten Wiki stammen - und, wenn ``auch_freie``, die per „Speichern
+    unter …“ an frei gewählte Ordner gelegten."""
     for a in reversed(ablagen(session_dir)):
         ordner = str(a.get("ordner") or "")
         if a.get("art", "sitzung") != "sitzung" or not ordner or not Path(ordner).is_dir():
             continue
-        if projekt is not None:
+        frei = bool(a.get("frei"))
+        if frei and not auch_freie:
+            continue
+        if projekt is not None and not frei:
             if projekt.raw_dir is None or not _ist_unter(Path(ordner), projekt.raw_dir):
                 continue
             if a.get("assets") and (
                 projekt.assets_dir is None or not _ist_unter(Path(str(a["assets"])), projekt.assets_dir)
             ):
                 a = {**a, "assets": None}
+        if frei and a.get("assets") and not Path(str(a["assets"])).is_dir():
+            a = {**a, "assets": None}
         return a
     return None
 
@@ -182,6 +213,28 @@ def speichere_sitzung(
     """Das Transkript der Sitzung ins Wiki legen - auf Wunsch mit Bildern und mit den
     Markierungen des Souffleurs. Die Markierungen sind KI-erzeugt und zitieren das Wiki; unter
     ``raw/`` könnte der Ingest sie als Quelle lesen, deshalb gehen sie nur auf Wunsch mit."""
+    _pruefe_ziele(projekt)
+    return speichere_nach(
+        session_dir, raw_basis=projekt.raw_dir, assets_basis=projekt.assets_dir, seiten_dir=projekt.seiten_dir,
+        titel=titel, bilder=bilder, markierungen=markierungen, frei=False,
+    )
+
+
+def speichere_nach(
+    session_dir: Path,
+    *,
+    raw_basis: Path,
+    assets_basis: Path | None,
+    seiten_dir: Path | None = None,
+    titel: str = "",
+    bilder: bool = True,
+    markierungen: bool = False,
+    frei: bool = True,
+) -> Ablage:
+    """Die Sitzung an zwei Ziele legen: ``<raw_basis>/<JJJJ-MM-TT>_<kurzname>/`` bekommt das
+    Transkript, ``<assets_basis>/<derselbe Name>/`` die Bilder (``None`` = ohne Bilder). Die
+    Bildlinks sind relativ - beide Ordner lassen sich zusammen verschieben. ``seiten_dir`` sind
+    die Wiki-Seiten, unter die nie geschrieben wird."""
     from audioscribe.review.marks import load_marks, save_marks
     from audioscribe.review.merge import render_markdown_with_marks
     from audioscribe.souffleur import markierung, uebergabe
@@ -190,12 +243,14 @@ def speichere_sitzung(
     quelle = session_dir / "transkript.md"
     if not quelle.is_file():
         raise FileNotFoundError(f"Kein Transkript in {session_dir}")
-    _pruefe_ziele(projekt)
+    raw = Path(raw_basis) if raw_basis is not None else None
+    assets_basis = Path(assets_basis) if assets_basis is not None else None
+    _pruefe_freie_ziele(session_dir, raw, assets_basis, seiten_dir)
+    bilder = bilder and assets_basis is not None
     titel = titel.strip() or _titel_der_sitzung(session_dir)
 
-    raw, assets_basis = projekt.raw_dir, projekt.assets_dir
     raw.mkdir(parents=True, exist_ok=True)
-    name = _freier_name(ordnername(session_dir, titel), raw, assets_basis)
+    name = _freier_name(ordnername(session_dir, titel), raw, *([assets_basis] if assets_basis is not None else []))
     ziel = raw / name
     ziel.mkdir()
 
@@ -252,6 +307,7 @@ def speichere_sitzung(
         ablage = Ablage(
             ordner=str(ziel), assets=str(assets) if assets else None, bilder=anzahl_bilder,
             markierungen=anzahl_markierungen, titel=titel, zeit=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            frei=frei,
         )
         _vermerke(session_dir, ablage)
         return ablage
@@ -306,7 +362,8 @@ def speichere_nachbereitung(
         raise FileNotFoundError(f"Analyse-Ordner nicht gefunden: {workspace}")
     _pruefe_ziele(projekt)
 
-    sitzung = letzte_ablage(session_dir, projekt) or speichere_sitzung(
+    # Eine freie Ablage („Speichern unter …“) zählt hier nicht: die Nachbereitung gehört ins Wiki.
+    sitzung = letzte_ablage(session_dir, projekt, auch_freie=False) or speichere_sitzung(
         session_dir, projekt, bilder=bilder, markierungen=markierungen
     ).als_dict()
     basis = Path(sitzung["ordner"])

@@ -276,3 +276,46 @@ def test_zuordnen_in_unbekanntes_projekt(client, aufnahme, tmp_path):
 def test_eingang_dir_zuruecksetzen(client, eingang_dir):
     client.post("/api/state", json={"eingang_dir": ""})
     assert client.get("/api/kontext").json()["eingang_dir"] == str(eingang.standard_dir())
+
+
+# --- "Speichern unter ..." ohne Projekt ----------------------------------------------------------
+
+
+def test_speichern_unter_ohne_projekt(client, aufnahme, tmp_path, monkeypatch):
+    from audioscribe.ui import runner as runner_modul
+
+    client.post("/api/kontext", json={"modus": "aufnahme"})
+    monkeypatch.setattr(
+        runner_modul.LiveRunner, "snapshot",
+        lambda self, offset=0, ev_offset=0: {"running": False, "dir": str(aufnahme), "phase": "beendet"},
+    )
+    assert client.get("/api/live/status").json()["wiki_ablage"] is None
+    assert client.post("/api/wiki/speichern", json={"sitzung": str(aufnahme)}).status_code == 409  # kein Ziel
+    r = client.post("/api/wiki/speichern", json={
+        "sitzung": str(aufnahme), "raw_basis": str(tmp_path / "t"), "assets_basis": str(tmp_path / "b"), "immer": True,
+    })
+    assert r.status_code == 200, r.text
+    ziel = Path(r.json()["ordner"])
+    assert ziel.parent == tmp_path / "t" and r.json()["bilder"] == 2 and r.json()["frei"] is True
+    assert (ziel / "transkript.md").is_file() and (tmp_path / "b" / ziel.name / "0001_00-00-03.jpg").is_file()
+    assert client.get("/api/live/status").json()["wiki_ablage"]["ordner"] == str(ziel)
+    # Nur Aufnahmen aus dem Eingangsordner.
+    fremd = _sitzung_in(SimpleNamespace(sitzungen_dir=tmp_path / "fremd"))
+    assert client.post("/api/wiki/speichern", json={"sitzung": str(fremd), "raw_basis": str(tmp_path / "t")}).status_code == 400
+
+
+def test_wiki_status_vorbelegung_ohne_projekt(client, aufnahme, wiki, tmp_path):
+    client.post("/api/kontext", json={"modus": "aufnahme"})
+    assert client.get("/api/wiki/status").json()["ablage"] is None
+    assert client.post("/api/state", json={"wiki_dir": str(wiki)}).status_code == 200
+    a = client.get("/api/wiki/status").json()["ablage"]
+    assert a == {"raw_basis": str(wiki / "raw"), "assets_basis": str(wiki / "raw" / "assets")}
+    # Auch ohne Projekt gilt: nie unter die Seiten des Wikis.
+    r = client.post("/api/wiki/speichern", json={
+        "sitzung": str(aufnahme), "raw_basis": str(wiki / "wiki" / "quellen"), "assets_basis": str(tmp_path / "b"),
+    })
+    assert r.status_code == 400 and "Wiki-Seiten" in r.json()["detail"]
+    # Die Vorgabe selbst funktioniert: Transkript nach raw/, Bilder nach raw/assets.
+    r = client.post("/api/wiki/speichern", json={"sitzung": str(aufnahme), **a})
+    assert r.status_code == 200, r.text
+    assert Path(r.json()["ordner"]).parent == wiki / "raw" and Path(r.json()["assets"]).parent == wiki / "raw" / "assets"

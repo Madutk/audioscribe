@@ -343,6 +343,10 @@ def create_app():
         bilder: bool = True
         markierungen: bool = False  # Markierungen des Souffleurs (KI-erzeugt) nur auf Wunsch
         immer: bool = False
+        # "Speichern unter ...": Basisordner fuer Transkript und Bilder. Leer = raw/ und Assets des
+        # Projekt-Wikis; abweichende Ziele sind eine freie Ablage (ohne "immer").
+        raw_basis: str = ""
+        assets_basis: str = ""
 
     class NachbereitungIn(BaseModel):
         workspace: str
@@ -678,6 +682,37 @@ def create_app():
             return _in_ordner(raw, _eingang_dir(), "Keine Aufnahme ohne Projekt")
         return _sitzungsordner(raw)
 
+    def _wiki_ohne_projekt() -> Path | None:
+        """Das Wiki bei "Sofort aufnehmen": der Pfad der Installation (Einstellungen). Im Projekt
+        gilt er ausdruecklich nicht - dort traegt das Projekt den Pfad oder hat keins."""
+        from audioscribe.souffleur.konfig import wiki_pfad
+
+        if kontext.modus != kontext_modul.MODUS_AUFNAHME:
+            return None
+        pfad = wiki_pfad(state.load_state(), None)
+        return pfad if pfad is not None and str(pfad) not in ("", ".") and pfad.is_dir() else None
+
+    def _ablage_vorgabe() -> dict | None:
+        """Vorbelegung fuer "Speichern unter ...": raw/ und Assets des Projekt-Wikis, ohne
+        Projekt die des Wikis aus den Einstellungen - sonst None (der Nutzer waehlt frei)."""
+        p = _projekt()
+        if p is not None:
+            if p.raw_dir is None or p.demo:
+                return None
+            return {"raw_basis": str(p.raw_dir), "assets_basis": str(p.assets_dir)}
+        wiki = _wiki_ohne_projekt()
+        if wiki is None:
+            return None
+        return {"raw_basis": str(wiki / modell.RAW_ORDNER), "assets_basis": str(wiki / modell.ASSETS_VORSCHLAG)}
+
+    def _seiten_dir() -> Path | None:
+        """Die Wiki-Seiten, unter die nie geschrieben wird - auch bei freien Zielen."""
+        p = _projekt()
+        if p is not None:
+            return p.seiten_dir
+        wiki = _wiki_ohne_projekt()
+        return wiki / modell.SEITEN_ORDNER if wiki is not None else None
+
     @app.post("/api/eingang/zuordnen")
     def api_eingang_zuordnen(body: ZuordnenIn):
         """Aufnahme ohne Projekt in den Sitzungsordner eines Projekts verschieben und das
@@ -716,22 +751,41 @@ def create_app():
     @app.post("/api/wiki/speichern")
     def api_wiki_speichern(body: WikiSpeichernIn):
         """Sitzung als neue Quelle nach raw/ legen, Bilder in den Assets-Ordner; die Markierungen
-        des Souffleurs nur auf Wunsch (KI-erzeugt)."""
-        ordner = _sitzungsordner(body.sitzung)
+        des Souffleurs nur auf Wunsch (KI-erzeugt). Mit ``raw_basis``/``assets_basis`` abseits
+        des Projekt-Wikis ist es "Speichern unter ...": dieselbe Ablage an freie Ziele - auch
+        bei "Sofort aufnehmen" ohne Projekt."""
+        ordner = _live_sitzungsordner(body.sitzung)
         p = _projekt()
-        if p.wiki_dir is None:
-            raise HTTPException(409, "Dieses Projekt hat kein Wiki – in den Projekteinstellungen anlegen oder verknüpfen.")
         laufend = live.session_dir() if live.laeuft() else None
         if laufend is not None and laufend.resolve() == ordner.resolve():
             raise HTTPException(409, "Diese Sitzung läuft noch – ins Wiki geht sie nach dem Stopp.")
+        raw = browse.normalize_path(body.raw_basis, default=Path("")) if body.raw_basis.strip() else None
+        assets = browse.normalize_path(body.assets_basis, default=Path("")) if body.assets_basis.strip() else None
+        # Standard = die Ziele des Projekt-Wikis (nicht angegeben oder genau diese): strenge Wiki-Ablage.
+        standard = (
+            p is not None and p.raw_dir is not None and not p.demo
+            and (raw is None or modell.gleich(raw, p.raw_dir))
+            and (assets is None or (p.assets_dir is not None and modell.gleich(assets, p.assets_dir)))
+        )
+        if not standard and raw is None:
+            if p is not None:
+                raise HTTPException(409, "Dieses Projekt hat kein Wiki – in den Projekteinstellungen anlegen oder verknüpfen.")
+            raise HTTPException(409, "Bitte einen Ordner für das Transkript wählen.")
         try:
-            ablage = wiki_ablage.speichere_sitzung(
-                ordner, p, titel=body.titel, bilder=body.bilder, markierungen=body.markierungen
-            )
+            if standard:
+                ablage = wiki_ablage.speichere_sitzung(
+                    ordner, p, titel=body.titel, bilder=body.bilder, markierungen=body.markierungen
+                )
+            else:
+                ablage = wiki_ablage.speichere_nach(
+                    ordner, raw_basis=raw, assets_basis=assets if body.bilder else None, seiten_dir=_seiten_dir(),
+                    titel=body.titel, bilder=body.bilder, markierungen=body.markierungen,
+                )
         except (OSError, RuntimeError) as exc:
             raise HTTPException(400, str(exc)) from exc
         antwort = ablage.als_dict()
-        if body.immer:
+        # "Immer" gilt nur fuer die Ablage ins Projekt-Wiki - freie Ziele merkt sich das Projekt nicht.
+        if body.immer and standard:
             # Die Ablage ist geschrieben - scheitert nur das Merken von "immer", bleibt es dabei.
             try:
                 kontext.setze(
@@ -1588,7 +1642,11 @@ def create_app():
 
         pfad = browse.normalize_path(path, default=Path("")) if path.strip() else wiki_pfad(state.load_state(), _projekt())
         status = pruefe_wiki(pfad if str(pfad) not in ("", ".") else None)
-        return JSONResponse(status.als_dict())
+        antwort = status.als_dict()
+        if not path.strip():
+            # Vorbelegung fuer "Speichern unter ..." (raw/ und Assets) - nur fuer das eigene Wiki.
+            antwort["ablage"] = _ablage_vorgabe()
+        return JSONResponse(antwort)
 
     @app.post("/api/wiki/wechseln")
     def api_wiki_wechseln(body: WikiWechselnIn):
@@ -1637,8 +1695,9 @@ def create_app():
         # Nach dem Ende: liegt die Sitzung schon im Wiki? Der Vermerk im Sitzungsordner weiss es -
         # auch nach einem Neuladen der Seite (sonst boete die Oberflaeche das Speichern doppelt an).
         p = _projekt()
-        if p is not None and not p.demo and snap.get("dir") and not snap.get("running"):
-            snap["wiki_ablage"] = wiki_ablage.letzte_ablage(Path(snap["dir"]), p)
+        im_projekt = p is not None and not p.demo
+        if (im_projekt or kontext.modus == kontext_modul.MODUS_AUFNAHME) and snap.get("dir") and not snap.get("running"):
+            snap["wiki_ablage"] = wiki_ablage.letzte_ablage(Path(snap["dir"]), p if im_projekt else None)
         if sofort["status"]:
             snap["sofort"] = dict(sofort)
         return JSONResponse(snap)

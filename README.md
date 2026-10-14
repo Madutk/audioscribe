@@ -183,6 +183,9 @@ auf der Startseite.
 oder später über die Liste „Aufnahmen ohne Projekt“ auf der Startseite verschiebst du sie in den
 Sitzungsordner eines vorhandenen Projekts oder legst dafür ein neues Projekt an. Danach ist das
 Projekt offen, und die Nachbereitung hat die Sitzung vorgewählt (ins Wiki speichern, KI-Analyse).
+Nach dem Stopp lässt sich die Sitzung auch direkt über **„Speichern unter …“** ablegen – Transkript
+und Bilder in Ordner deiner Wahl, vorbelegt mit `raw/` und `raw/assets` des Wikis aus den
+Einstellungen (Souffleur), falls eins verknüpft ist.
 
 **Neues Projekt** – der Assistent führt in vier Schritten durch; eine Strukturvorschau
 unter den Schritten zeigt jederzeit, welche Ordner am Ende entstehen:
@@ -303,17 +306,25 @@ bahnbuchung/                        # Projektordner (vom Nutzer gewählt)
 öffnen sich unverändert: Dort ist der Wiki-Ordner zugleich der Projektordner. Bei der ersten
 Änderung wird die Projektdatei auf das neue Format gehoben; Dateien werden nicht bewegt.
 
-**Ins Wiki speichern** (Karte „Wie geht es weiter?“ nach der Sitzung oder Bereich
-„Nachbereitung“): Du vergibst einen Titel – daraus und aus dem Datum entsteht der
-Ordnername – und entscheidest, ob die Bilder und die Markierungen des Souffleurs mitgehen.
-Die Markierungen sind KI-erzeugt und zitieren das Wiki; unter `raw/` könnte der Ingest sie
-als Quelle lesen. Deshalb ist der Haken standardmäßig aus, und sie bleiben im Sitzungsordner.
-Mit Bildern werden die Standbilder
-in den Assets-Ordner kopiert, und `transkript.annotiert.md` verweist an derselben Stelle
-auf jedes Bild wie im Sitzungsordner (`![Bild #0001 – 00:01:23](../assets/…/0001_00-01-23.jpg)`).
-„Künftig immer so speichern“ stellt das Projekt auf **immer** und merkt sich beide Haken:
-Jede beendete Sitzung geht dann nach dem Nachschärfen ohne Nachfrage ins Wiki (änderbar im
-Bereich „Projekt“).
+**Speichern unter … / Ins Wiki speichern** (Infobox und Karte „Wie geht es weiter?“ nach der
+Sitzung oder Bereich „Nachbereitung“): Der Dialog zeigt zwei Ziele – den Ordner für das
+**Transkript** (darin entsteht `<Datum>_<Titel>/` mit `transkript.md`, `transcript.json`,
+`transkript.annotiert.md`, `marks.json` und `README.md`) und den Ordner für die **Bilder**
+(darin ein gleichnamiger Unterordner mit den Standbildern; nur wenn die Sitzung welche hat).
+Beide sind mit dem Wiki vorbelegt (`raw/` und der Assets-Ordner des Projekts; bei „Sofort
+aufnehmen“ das Wiki aus den Einstellungen; ohne Wiki der Ordner neben der Sitzung) und lassen
+sich über „Ordner wählen …“ im Systemdialog ändern. Du vergibst einen Titel – daraus und aus
+dem Datum entsteht der Ordnername – und entscheidest, ob die Bilder und die Markierungen des
+Souffleurs mitgehen. Die Markierungen sind KI-erzeugt und zitieren das Wiki; unter `raw/`
+könnte der Ingest sie als Quelle lesen. Deshalb ist der Haken standardmäßig aus, und sie
+bleiben im Sitzungsordner. Mit Bildern verweist `transkript.annotiert.md` an derselben Stelle
+auf jedes Bild wie im Sitzungsordner (`![Bild #0001 – 00:01:23](../assets/…/0001_00-01-23.jpg)`);
+die Links sind relativ, beide Ordner lassen sich zusammen verschieben. Die nachgeschärfte
+Fassung geht mit – die Live-Fassung (`transkript.live.md`) und `transkript.txt` bleiben im
+Sitzungsordner. „Künftig immer so speichern“ gibt es nur bei den Standardzielen des
+Projekt-Wikis: Es stellt das Projekt auf **immer** und merkt sich beide Haken; jede beendete
+Sitzung geht dann nach dem Nachschärfen ohne Nachfrage ins Wiki (änderbar im Bereich
+„Projekt“). Abweichende Ziele merkt sich das Projekt nicht.
 
 **Nachbereitung ins Wiki:** Das Ergebnis einer fertigen KI-Analyse lässt sich unter
 `nachbereitung-ki/` zur Sitzung legen. Die Dokumente sind dort als **KI-erzeugt** und nicht
@@ -321,8 +332,9 @@ als Quelle gekennzeichnet; Bildverweise zeigen auf die Bilder im Assets-Ordner. 
 Sitzung noch nicht im Wiki, wird sie dabei zuerst gespeichert.
 
 Die Ablage ist **rein anhängend**: Es wird nichts überschrieben (ein zweites Speichern
-hängt `-2` an), geschrieben wird nur nach `raw/` und in den Assets-Ordner, und nur, wenn du
-es auslöst oder „immer“ gewählt hast. Was aus einer Quelle im Wiki wird, entscheidet dessen
+hängt `-2` an), geschrieben wird nur nach `raw/` und in den Assets-Ordner bzw. in die gewählten
+Ordner – nie unter die Wiki-Seiten `wiki/` und nie in den Sitzungsordner selbst –, und nur,
+wenn du es auslöst oder „immer“ gewählt hast. Was aus einer Quelle im Wiki wird, entscheidet dessen
 eigener Ingest- bzw. Lint-Prozess. Die KI-Analyse arbeitet weiter auf dem Sitzungsordner,
 nicht auf der Kopie im Wiki.
 
