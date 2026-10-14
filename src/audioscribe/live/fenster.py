@@ -67,8 +67,27 @@ def _wanted(
     return app or not has_owner
 
 
+# Bevorzugte Anwendungen (Teilstring im Prozessnamen, ohne Groß/Klein): ihre Fenster stehen in
+# der Bildquellen-Auswahl vor allen anderen - "Microsoft Teams" (Mac), "ms-teams"/"Teams" (Windows).
+BEVORZUGT: tuple[str, ...] = ("teams",)
+
+
+def ist_bevorzugt(window: dict) -> bool:
+    prozess = str(window.get("process") or "").lower()
+    return any(name in prozess for name in BEVORZUGT)
+
+
+def sortiere_bevorzugt(windows: list[dict]) -> list[dict]:
+    """Bevorzugte Fenster zuerst, dann der Rest - innerhalb beider Teile bleibt die Z-Order
+    (zuletzt benutztes zuerst). Jedes Fenster trägt danach das Feld ``bevorzugt``."""
+    vorn = [{**w, "bevorzugt": True} for w in windows if ist_bevorzugt(w)]
+    rest = [{**w, "bevorzugt": False} for w in windows if not ist_bevorzugt(w)]
+    return vorn + rest
+
+
 def group_by_process(windows: list[dict]) -> list[dict]:
-    """Fenster nach Anwendung bündeln; Reihenfolge = erstes Auftreten (Z-Order)."""
+    """Fenster nach Anwendung bündeln; Reihenfolge = erstes Auftreten (Z-Order bzw. die
+    Sortierung von ``sortiere_bevorzugt``)."""
     gruppen: dict[str, list[dict]] = {}
     for w in windows:
         gruppen.setdefault(w["process"], []).append(w)
@@ -307,7 +326,12 @@ def _app_pid(api, hwnd: int, pid: int) -> int:
 
 
 def list_windows() -> list[dict]:
-    """Sichtbare Anwendungsfenster in Z-Order (vorderstes zuerst); leer außerhalb Windows/macOS."""
+    """Sichtbare Anwendungsfenster in Z-Order (vorderstes zuerst), bevorzugte Anwendungen
+    (``BEVORZUGT``) vorangestellt; leer außerhalb Windows/macOS."""
+    return sortiere_bevorzugt(_list_windows())
+
+
+def _list_windows() -> list[dict]:
     if _mac():
         from audioscribe.live import fenster_mac
 

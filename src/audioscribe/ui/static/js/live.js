@@ -111,10 +111,28 @@ function fallbackOnError(root, text) {
 const sourceTile = (kind, id, inner) =>
   `<div class="monitor ${isActive(kind, id) ? 'active' : ''}" data-kind="${kind}" data-id="${id}" tabindex="0" role="button">${inner}</div>`;
 
+// --- Bevorzugte Anwendung (Teams): eigene Kachel direkt hinter den Monitoren ----------------
+// Der Server stellt bevorzugte Fenster voran und markiert sie (live/fenster.py: BEVORZUGT);
+// hier zaehlt das vorderste davon, also das zuletzt benutzte Teams-Fenster.
+
+const prioFenster = () => liveDefaults.windows.find((w) => w.bevorzugt) || null;
+const prioTag = (w) => (/teams/i.test(w.process) ? 'Teams' : w.process);
+
+/** Kachel der bevorzugten Anwendung: waehlt das Fenster direkt (data-kind wie ein Monitor). */
+function prioTileHtml(stamp) {
+  const w = prioFenster();
+  if (!w) return '';
+  const inner = `<span class="tag">${esc(prioTag(w))}</span><img src="/api/live/window/${w.hwnd}?t=${stamp}" alt="" data-fallback />`
+    + `<span class="title" title="${esc(w.title)}">${esc(w.title)}</span><span class="sub">${esc(w.process)}</span>`;
+  return `<div class="monitor prio ${isActive('window', w.hwnd) ? 'active' : ''}" data-prio="1" data-kind="window" data-id="${w.hwnd}"`
+    + ` tabindex="0" role="button" title="${esc(w.process)} – ${esc(w.title)}">${inner}</div>`;
+}
+
 /** Die eine Kachel "Anwendungsfenster" in der Karte: gewaehltes Fenster mit Vorschau oder Platzhalter.
- *  Sie oeffnet den Auswahldialog und traegt darum KEIN data-kind. */
-function windowTileHtml(stamp) {
-  let chosen = liveSource.kind === 'window' && liveDefaults.windows.find((w) => w.hwnd === liveSource.id);
+ *  Sie oeffnet den Auswahldialog und traegt darum KEIN data-kind. ``ausser``: das Fenster der
+ *  bevorzugten Kachel - es erscheint dort, nicht hier noch einmal. */
+function windowTileHtml(stamp, ausser = null) {
+  let chosen = liveSource.kind === 'window' && liveSource.id !== ausser && liveDefaults.windows.find((w) => w.hwnd === liveSource.id);
   // Nach einem Neuladen der Seite kennt die Fensterliste das Fenster der laufenden Aufnahme
   // vielleicht nicht mehr - der Aufnahmeprozess hat seinen Titel gemeldet.
   if (!chosen && liveSource.kind === 'window' && liveQuelle && liveQuelle.window === liveSource.id) {
@@ -123,7 +141,8 @@ function windowTileHtml(stamp) {
   if (!chosen && !liveDefaults.windows.length && liveSource.kind !== 'window') return '';  // z. B. ausserhalb von Windows/macOS
   const attrs = 'data-winpick="window" tabindex="0" role="button" aria-haspopup="dialog" title="Anwendungsfenster wählen"';
   if (!chosen) {
-    return `<div class="monitor pick" ${attrs}><div class="none">${icon('image')}Fenster wählen …</div>Anwendungsfenster</div>`;
+    const text = ausser !== null && liveSource.kind === 'window' && liveSource.id === ausser ? 'Anderes Fenster wählen …' : 'Fenster wählen …';
+    return `<div class="monitor pick" ${attrs}><div class="none">${icon('image')}${text}</div>Anwendungsfenster</div>`;
   }
   return `<div class="monitor pick active" ${attrs}><img src="/api/live/window/${chosen.hwnd}?t=${stamp}" alt="" data-fallback />`
     + `<span class="title" title="${esc(chosen.title)}">${esc(chosen.title)}</span>`
@@ -141,7 +160,8 @@ function renderSources() {
   const monitors = liveDefaults.monitors.map((m) =>
     sourceTile('monitor', m.index, `<img src="/api/live/monitor/${m.index}?t=${stamp}" alt="" />Monitor ${m.index} · ${m.width}×${m.height}`))
     .join('') + sourceTile('none', 0, '<div class="none">ohne Bildschirm</div>nur Ton');
-  $('liveMonitors').innerHTML = `<div class="monitors">${monitors}${windowTileHtml(stamp)}${testTileHtml()}</div>`;
+  const prio = prioFenster();
+  $('liveMonitors').innerHTML = `<div class="monitors">${monitors}${prioTileHtml(stamp)}${windowTileHtml(stamp, prio ? prio.hwnd : null)}${testTileHtml()}</div>`;
   fallbackOnError($('liveMonitors'), 'kein Bild');
   updateSourceTiles();
   updateSourceHint();
@@ -158,12 +178,23 @@ function updateSourceTiles() {
   }
 }
 
-/** Nur die Fenster-Kachel neu zeichnen und die Markierung setzen - Monitorbilder bleiben stehen. */
+/** Nur die Fenster-Kacheln (bevorzugte Anwendung, "Anwendungsfenster") neu zeichnen und die
+ *  Markierung setzen - Monitorbilder bleiben stehen. */
 function renderWindowTile() {
-  const old = $('liveMonitors').querySelector('[data-winpick]');
-  const html = windowTileHtml(Date.now());
+  const stamp = Date.now();
+  const prio = prioFenster();
+  const box = $('liveMonitors').querySelector('.monitors');
+  const old = box.querySelector('[data-winpick]');
+  const html = windowTileHtml(stamp, prio ? prio.hwnd : null);
   if (old) old.outerHTML = html;
-  else if (html) $('liveMonitors').querySelector('.monitors').insertAdjacentHTML('beforeend', html);
+  else if (html) box.insertAdjacentHTML('beforeend', html);
+  const altePrio = box.querySelector('[data-prio]');
+  const prioHtml = prioTileHtml(stamp);
+  if (altePrio) { if (prioHtml) altePrio.outerHTML = prioHtml; else altePrio.remove(); }
+  else if (prioHtml) {
+    const vor = box.querySelector('[data-winpick]') || box.querySelector('#liveTestTile');
+    if (vor) vor.insertAdjacentHTML('beforebegin', prioHtml); else box.insertAdjacentHTML('beforeend', prioHtml);
+  }
   for (const t of $('liveMonitors').querySelectorAll('.monitor[data-kind]')) {
     t.classList.toggle('active', isActive(t.dataset.kind, Number(t.dataset.id)));
   }
@@ -598,9 +629,11 @@ function renderWinList() {
   // Nach Anwendung gebuendelt; Reihenfolge = Z-Order, also zuletzt benutzte zuerst.
   const groups = new Map();
   for (const w of liveDefaults.windows) (groups.get(w.process) || groups.set(w.process, []).get(w.process)).push(w);
+  // Bevorzugte Anwendungen (Teams) stehen vorn - der Server sortiert so - und sind markiert.
   $('winList').innerHTML = groups.size
     ? [...groups].map(([process, ws]) =>
-      `<div class="source-group"><div class="source-title">${esc(process)}<span class="count">${ws.length}</span></div>`
+      `<div class="source-group${ws[0].bevorzugt ? ' prio' : ''}"><div class="source-title">${esc(process)}<span class="count">${ws.length}</span>`
+      + `${ws[0].bevorzugt ? '<span class="tag">bevorzugt</span>' : ''}</div>`
       + `<div class="monitors">${ws.map((w) => winTile(w, stamp)).join('')}</div></div>`).join('')
       + `<div class="empty" id="winNoMatch" hidden>${icon('monitor')}Kein Fenster passt zum Filter.</div>`
     : empty('monitor', 'Keine Anwendungsfenster gefunden.');
@@ -659,7 +692,7 @@ async function refreshWindows() {
     if (gen !== winGen || !$('winPick').classList.contains('open')) return;
     liveDefaults.windows = d.windows || [];
     renderWinList();
-    if (liveSource.kind === 'window' && !liveDefaults.windows.some((w) => w.hwnd === liveSource.id)) renderWindowTile();
+    renderWindowTile();  // Teams-Kachel und gewaehltes Fenster folgen der frischen Liste
   } catch (err) {
     $('winCount').textContent = err.message;
   } finally {

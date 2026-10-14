@@ -16,7 +16,11 @@ INVENTAR = {
     "mics": [{"index": 3, "name": "Headset", "default": False}, {"index": 0, "name": "MacBook", "default": True}],
     "loopbacks": [{"index": 7, "name": "System-Audio", "default": True}],
     "monitors": [{"index": 1, "width": 1920, "height": 1080}, {"index": 2, "width": 2560, "height": 1440}],
-    "windows": [{"hwnd": 4711, "title": "Angebot.xlsx", "process": "Excel"}, {"hwnd": 4712, "title": "Mail", "process": "Outlook"}],
+    "windows": [
+        {"hwnd": 4710, "title": "Meeting", "process": "Microsoft Teams", "bevorzugt": True},
+        {"hwnd": 4711, "title": "Angebot.xlsx", "process": "Excel", "bevorzugt": False},
+        {"hwnd": 4712, "title": "Mail", "process": "Outlook", "bevorzugt": False},
+    ],
     "problems": [],
 }
 LEER = {"mics": [], "loopbacks": [], "monitors": [], "windows": [], "problems": []}

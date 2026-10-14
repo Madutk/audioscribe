@@ -301,6 +301,14 @@ pre#liveLog { height: 120px; }
 .monitor.pick:hover .sub, .monitor.pick:focus-visible .sub { color: var(--accent); }
 .monitor.pick:not(.active) .none { color: var(--accent); }
 .monitor.pick:not(.active) .none .ic { color: var(--accent); }
+/* Kachel der bevorzugten Anwendung (Teams): dezent hervorgehoben, mit Abzeichen oben links */
+.monitor.prio { border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); background: var(--accent-soft); }
+.monitor.prio .sub { display: block; font-size: 11px; color: var(--fg-faint); }
+.monitor .tag { position: absolute; top: 6px; left: 6px; z-index: 1; font-size: 10px; font-weight: 600; line-height: 16px;
+                padding: 0 6px; border-radius: 999px; background: var(--accent); color: var(--accent-fg); }
+.winlist .source-group.prio .source-title { color: var(--accent); }
+.winlist .source-title .tag { font-size: 10px; font-weight: 600; line-height: 16px; padding: 0 6px; border-radius: 999px;
+                              background: var(--accent); color: var(--accent-fg); }
 @media (min-width: 561px) {
   .winlist .monitor img, .winlist .monitor .none, .winlist .monitor .title { width: 200px; max-width: 200px; }
   .winlist .monitor img { max-height: 140px; }

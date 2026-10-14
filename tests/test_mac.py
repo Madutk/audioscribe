@@ -580,14 +580,15 @@ def test_fenster_delegiert_unter_macos(monkeypatch):
 
     monkeypatch.setattr(fenster.sys, "platform", "darwin")
     fake = types.ModuleType("audioscribe.live.fenster_mac")
-    fake.list_windows = lambda: [{"hwnd": 5}]
+    fake.list_windows = lambda: [{"hwnd": 5}, {"hwnd": 6, "process": "Microsoft Teams"}]
     fake.is_window = lambda h: h == 5
     fake.window_title = lambda h: "T"
     import audioscribe.live
 
     monkeypatch.setitem(sys.modules, "audioscribe.live.fenster_mac", fake)
     monkeypatch.setattr(audioscribe.live, "fenster_mac", fake, raising=False)
-    assert fenster.list_windows() == [{"hwnd": 5}]
+    # Teams vorangestellt und markiert (fenster.sortiere_bevorzugt)
+    assert fenster.list_windows() == [{"hwnd": 6, "process": "Microsoft Teams", "bevorzugt": True}, {"hwnd": 5, "bevorzugt": False}]
     assert fenster.is_window(5) and not fenster.is_window(6)
     assert fenster.window_title(5) == "T"
 

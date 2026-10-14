@@ -592,7 +592,9 @@ nur das WAV-Replay. Designentscheidungen: PRD §17 und §19.
 
 **In der Oberfläche** (Projekt › „Live-Sitzung“): optional einen **Sitzungstitel** vergeben
 (er benennt später den Ordner im Wiki), Bildquelle wählen (Monitor mit Vorschaubild,
-Anwendungsfenster oder „nur Ton“), Mikrofon und System-Audio wählen, „Aufnahme starten“.
+Anwendungsfenster oder „nur Ton“; ein offenes Teams-Fenster steht als eigene Kachel direkt
+hinter den Monitoren und im Fensterdialog ganz oben), Mikrofon und System-Audio wählen,
+„Aufnahme starten“.
 Die Bildquelle lässt sich **während der Aufnahme wechseln**: einfach eine andere Kachel
 anklicken – das erste Bild der neuen Quelle wird gesichert, die Bildnummern laufen weiter,
 der Ton läuft ungestört durch. Oben laufen Laufzeit, **Verzögerung** (Ende des Gesprochenen bis zur Anzeige) und

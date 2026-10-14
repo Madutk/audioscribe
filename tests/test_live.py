@@ -991,6 +991,31 @@ def test_group_by_process_keeps_first_seen_order():
     assert fenster.window_label(ws[0]) == "chrome – A"
 
 
+def test_sortiere_bevorzugt_zieht_teams_vor():
+    ws = [
+        {"hwnd": 1, "process": "chrome", "title": "A"},
+        {"hwnd": 2, "process": "Microsoft Teams", "title": "Meeting"},
+        {"hwnd": 3, "process": "code", "title": "B"},
+        {"hwnd": 4, "process": "ms-teams", "title": "Chat"},
+        {"hwnd": 5, "process": "Microsoft Teams", "title": "Kalender"},
+    ]
+    out = fenster.sortiere_bevorzugt(ws)
+    assert [w["hwnd"] for w in out] == [2, 4, 5, 1, 3]  # Teams zuerst, sonst Z-Order erhalten
+    assert [w["bevorzugt"] for w in out] == [True, True, True, False, False]
+    assert fenster.sortiere_bevorzugt([]) == []
+    assert fenster.ist_bevorzugt({"process": "MSTeams"}) and not fenster.ist_bevorzugt({"process": "?"})
+    assert not fenster.ist_bevorzugt({})
+    # Die Gruppen der CLI und des Dialogs erben die Reihenfolge: Teams-Gruppe zuerst.
+    assert [g["process"] for g in fenster.group_by_process(out)] == ["Microsoft Teams", "ms-teams", "chrome", "code"]
+
+
+def test_list_windows_markiert_bevorzugt(monkeypatch):
+    monkeypatch.setattr(fenster, "_list_windows", lambda: [
+        {"hwnd": 1, "process": "chrome", "title": "A"}, {"hwnd": 2, "process": "Microsoft Teams", "title": "M"},
+    ])
+    assert [(w["hwnd"], w["bevorzugt"]) for w in fenster.list_windows()] == [(2, True), (1, False)]
+
+
 def test_list_windows_is_empty_off_windows(monkeypatch):
     monkeypatch.setattr(fenster, "_api", lambda: None)
     assert fenster.list_windows() == []
@@ -1569,6 +1594,16 @@ def test_live_windows_route_lists_only_windows(client, monkeypatch):
     fenster = [{"hwnd": 4711, "title": "Jira", "process": "chrome", "pid": 7, "width": 800, "height": 600}]
     monkeypatch.setattr("audioscribe.live.fenster.list_windows", lambda: fenster)
     assert client.get("/api/live/windows").json() == {"windows": fenster}
+
+
+def test_live_js_hat_teams_kachel():
+    """Die Teams-Kachel in der Karte "Bildquelle" und die Hervorhebung im Dialog."""
+    from pathlib import Path
+
+    from audioscribe.ui import server
+
+    js = (Path(server.__file__).parent / "static" / "js" / "live.js").read_text(encoding="utf-8")
+    assert "data-prio" in js and "bevorzugt" in js
 
 
 def test_index_has_window_picker_dialog():
