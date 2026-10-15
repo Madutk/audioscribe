@@ -83,12 +83,19 @@ function tasten(e) {
 
 // --- Aufnahmeleiste im Mini-Fenster ---------------------------------------------------------
 
-/** Aus dem Live-Poll: Laufzeit, Zustand und Stopp-Knopf wie in der Hauptansicht. */
+/** Aus dem Live-Poll: Laufzeit, Zustand, Start- und Stopp-Knopf wie in der Hauptansicht. */
 export function pipStatus(s, phaseText) {
   const running = !!s.running;
   $('pipElapsed').textContent = s.stats ? hms(s.stats.elapsed) : '–';
   $('pipPhase').textContent = phaseText;
   $('pipDot').classList.toggle('an', running && !s.pausiert);
+  // Start wie im Hauptfenster (dort steht im Testmodus "Abspielen starten"): die Sitzung
+  // nimmt die Einstellungen der Live-Ansicht - so laesst sich das Meeting vorbereiten,
+  // waehrend nur das kleine Fenster offen ist.
+  $('pipStart').hidden = running;
+  if (running) $('pipStart').disabled = false;
+  $('pipStartLabel').textContent = $('liveStartLabel').textContent;
+  $('pipStartIcon').setAttribute('href', $('liveStartIcon').getAttribute('href'));
   $('pipStop').hidden = !running;
   if (!running) entschaerfe();
   stopText = s.phase === 'nachschaerfen' ? 'Nachschärfen abbrechen' : s.stopping ? 'Sofort abbrechen' : 'Stoppen';
@@ -111,6 +118,12 @@ $('pipStop').onclick = () => {
   }
   entschaerfe();
   api('/api/live/stop', { method: 'POST' }).catch(() => {});
+};
+// Starten uebernimmt live.js (dort liegen Einstellungen und Startlogik); bis zum naechsten
+// Poll bleibt der Knopf gesperrt, damit ein Doppelklick nicht zwei Sitzungen anstoesst.
+$('pipStart').onclick = () => {
+  $('pipStart').disabled = true;
+  document.dispatchEvent(new CustomEvent('audioscribe:live-start'));
 };
 $('pipBack').onclick = einkoppeln;
 $('souffleurUnpop').onclick = einkoppeln;

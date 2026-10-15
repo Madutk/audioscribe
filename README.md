@@ -849,7 +849,9 @@ Souffleur** stehen in den Einstellungen (global, je Projekt überschreibbar).
 (Schalter in der Souffleur-Karte; „Ausblenden“ oder Alt+S klappt die Spalte samt
 Markierungen weg, etwa beim Bildschirmteilen). **Auskoppeln** (Symbol in der Kopfzeile
 oder Alt+P, Chrome/Edge) setzt den Souffleur in ein kleines Fenster, das über allen anderen
-liegt – mit Laufzeit und Stopp-Knopf (zweiter Klick bestätigt). Schließen des Fensters oder
+liegt – mit Laufzeit, Start-Knopf (startet die Sitzung mit den Einstellungen der Live-Ansicht,
+so lässt sich das Meeting vorbereiten, während nur das kleine Fenster offen ist) und
+Stopp-Knopf (zweiter Klick bestätigt). Schließen des Fensters oder
 erneut Alt+P holt ihn in die Live-Ansicht zurück. Liegt das kleine Fenster auf dem
 aufgenommenen Bildschirm, ist es auf den Screenshots zu sehen; dann auf einen anderen Monitor
 ziehen oder ein einzelnes Fenster als Bildquelle wählen. Die Statuszeile zeigt, mit welchem Wiki

@@ -811,6 +811,15 @@ export async function enterLive() {
 // Ein ausgekoppelter Souffleur zeigt weiter, was die Sitzung tut - auch wenn das Hauptfenster woanders ist.
 export function leaveLive() { liveSichtbar = false; if (!istAusgekoppelt()) pollStatus.stop(); }
 document.addEventListener('audioscribe:souffleur-zurueck', () => { if (!liveSichtbar) pollStatus.stop(); });
+// Start aus dem ausgekoppelten Souffleur-Fenster: dieselbe Sitzung wie der Knopf in der
+// Live-Ansicht. Eine Fehlermeldung landet sonst nur im Hauptfenster - darum auch im Souffleur.
+document.addEventListener('audioscribe:live-start', async () => {
+  if (liveRunning) return;
+  await startLive();
+  const fehler = $('liveErr').textContent;
+  $('pipStart').disabled = false;
+  if (fehler) $('souffleurErr').textContent = fehler;
+});
 
 /** Kontextwechsel: die Ansicht beginnt leer, Geraete und Vorgaben werden neu geholt. */
 export function leereLive() {
