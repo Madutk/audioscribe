@@ -42,6 +42,7 @@ export function renderStart() {
       </div>
       <div class="actions">
         <button class="secondary sm" type="button" data-zuordnen="${esc(s.dir)}" data-titel="${esc(s.titel || '')}">${icon('folder-open')}Projekt zuordnen …</button>
+        <button class="icon-btn" type="button" data-folder="${esc(s.dir)}" aria-label="Im Finder zeigen" title="Sitzungsordner im Finder öffnen (dort löschen)">${icon('external')}</button>
       </div>
     </div>`).join('');
   // Demo nur, wenn die Demo-Daten da sind
@@ -95,10 +96,21 @@ $('viewStart').addEventListener('click', async (e) => {
   if (resume) { oeffne(resume.dataset.resume); return; }
   const zu = e.target.closest('[data-zuordnen]');
   if (zu) { zuordnenDialog(zu.dataset.zuordnen, zu.dataset.titel); return; }
+  const folder = e.target.closest('[data-folder]');
+  if (folder) { post('/api/oeffnen', { pfad: folder.dataset.folder }).catch((err) => toast(err.message, 'fehler')); return; }
+  if (e.target.closest('#eingangOrdner')) {
+    post('/api/oeffnen', { pfad: (S.kontext && S.kontext.eingang_dir) || '' }).catch((err) => toast(err.message, 'fehler'));
+    return;
+  }
   const forget = e.target.closest('[data-forget]');
   if (forget) {
     try { setKontext(await post('/api/projekte/vergessen', { pfad: forget.dataset.forget })); } catch (err) { toast(err.message, 'fehler'); }
   }
+});
+
+// Zurueck aus dem Finder (Aufnahmen geloescht oder verschoben): die Startseite frisch laden.
+window.addEventListener('focus', () => {
+  if (!$('viewStart').hidden) ladeKontext().catch(() => {});
 });
 
 // --- Assistent "Neues Projekt" ---------------------------------------------------------------

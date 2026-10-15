@@ -186,7 +186,9 @@
   </div>
 
   <section class="recents" id="eingangBox" aria-labelledby="eingangTitle" hidden>
-    <h2 id="eingangTitle"><svg class="ic" aria-hidden="true"><use href="#i-record"/></svg>Aufnahmen ohne Projekt</h2>
+    <h2 id="eingangTitle"><svg class="ic" aria-hidden="true"><use href="#i-record"/></svg>Aufnahmen ohne Projekt
+      <span class="spacer"></span>
+      <button class="ghost sm" type="button" id="eingangOrdner" title="Eingangsordner im Finder öffnen – dort lassen sich Aufnahmen löschen"><svg class="ic" aria-hidden="true"><use href="#i-external"/></svg>Ordner öffnen</button></h2>
     <div class="recent-list" id="eingangListe"></div>
   </section>
 
@@ -395,6 +397,15 @@
 
 <section class="wrap" id="tabLive" data-view="live" hidden>
   <div class="live-side">
+    <!-- Aufnahme starten/stoppen oben: der wichtigste Knopf der Ansicht -->
+    <div class="actionbar oben">
+      <button class="start rec" id="liveStart"><svg class="ic" aria-hidden="true"><use href="#i-record" id="liveStartIcon"/></svg><span id="liveStartLabel">Aufnahme starten</span></button>
+      <button class="start danger" id="liveStop" hidden><svg class="ic" aria-hidden="true"><use href="#i-square"/></svg><span id="liveStopLabel">Stoppen</span></button>
+      <button class="ghost sm reset" id="liveReset" hidden><svg class="ic" aria-hidden="true"><use href="#i-rotate-ccw"/></svg><span id="liveResetLabel">Zurücksetzen</span></button>
+      <div class="err" id="liveErr" role="alert"></div>
+      <p class="hint" id="liveSofort" hidden></p>
+    </div>
+
     <div class="card" id="liveSessionCard">
       <h2 class="card-title"><svg class="ic" aria-hidden="true"><use href="#i-mic"/></svg>Sitzung</h2>
       <div class="field"><label for="liveTitle">Sitzungstitel (optional)</label>
@@ -447,13 +458,6 @@
       <p class="hint target" id="liveTarget" style="margin-top:8px"></p>
     </div>
 
-    <div class="actionbar">
-      <button class="start" id="liveStart"><svg class="ic" aria-hidden="true"><use href="#i-record" id="liveStartIcon"/></svg><span id="liveStartLabel">Aufnahme starten</span></button>
-      <button class="start danger" id="liveStop" hidden><svg class="ic" aria-hidden="true"><use href="#i-square"/></svg><span id="liveStopLabel">Stoppen</span></button>
-      <button class="ghost sm reset" id="liveReset" hidden><svg class="ic" aria-hidden="true"><use href="#i-rotate-ccw"/></svg><span id="liveResetLabel">Zurücksetzen</span></button>
-      <div class="err" id="liveErr" role="alert"></div>
-      <p class="hint" id="liveSofort" hidden></p>
-    </div>
   </div>
 
   <div class="live-main">
