@@ -666,6 +666,7 @@ class LiveRunner(_ProcessRunner):
                 "replay": opts.replay_transcript is not None,  # Testmodus: Transkript abspielen (FR-64)
                 "replay_speed": opts.replay_speed if opts.replay_transcript is not None else None,
                 "titel": getattr(opts, "titel", "") or "",
+                "art": getattr(opts, "art", "") or "",
                 "fortgesetzt": getattr(opts, "resume_dir", None) is not None,  # Wiederaufnahme (PRD §21)
                 "pausiert": False,  # Abspielen angehalten (nur Transkript-Replay, z. B. die Demo)
                 "nachlauf": None,  # Ergebnis von on_ende, z. B. {"wiki_ablage": {...}}
@@ -929,7 +930,7 @@ class LiveRunner(_ProcessRunner):
                 self._info.update(
                     {k: event.get(k) for k in ("phase", "session", "dir", "model", "device", "step")}
                 )
-                for k in ("sitzung_id", "titel"):
+                for k in ("sitzung_id", "titel", "art"):
                     if event.get(k):
                         self._info[k] = event[k]
                 # Das Kind meldet, ob das Abspielen steht - jede andere Phase hebt die Pause auf.

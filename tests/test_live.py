@@ -1666,3 +1666,15 @@ def test_first_tab_is_renamed():
     # PRD §21: statt gleichrangiger Reiter die Bereiche je Einstieg - im Projekt Live vor Nachbereitung.
     assert html.index(">Live-Sitzung<") < html.index(">Nachbereitung<") < html.index(">Transkribieren<") < html.index(">KI-Analyse<")
     assert ">Offline Transcription<" not in html
+
+
+def test_build_live_argv_gibt_die_art_des_meetings_weiter(tmp_path):
+    from audioscribe.ui.jobs import LiveJobOptions, build_live_argv
+
+    opts = LiveJobOptions(output_dir=tmp_path, titel="Review", art="review")
+    argv = build_live_argv(opts, prefix=["audioscribe"])
+    assert "--titel=Review" in argv and "--art=review" in argv
+    assert "--art=review" in build_live_argv(
+        LiveJobOptions(output_dir=tmp_path, art="review", replay_transcript=tmp_path / "t.md"), prefix=["audioscribe"]
+    )
+    assert not any(a.startswith("--art") for a in build_live_argv(LiveJobOptions(output_dir=tmp_path), prefix=["a"]))

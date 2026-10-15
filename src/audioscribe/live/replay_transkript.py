@@ -56,6 +56,7 @@ class ReplayOptions:
     delay_s: float = 0.0
     sentences_per_timestamp: int = 2
     titel: str = ""
+    art: str = ""
     # Pausen raffen: die Absaetze folgen im Sprechtempo aufeinander statt zu ihren Zeitstempeln.
     raffen: bool = False
 
@@ -199,7 +200,7 @@ class TranskriptReplaySession:
         # Zustandsdatei wie bei einer echten Sitzung (PRD §21) - als Replay gekennzeichnet:
         # ein Replay wird nie fortgesetzt und taucht nicht unter den unterbrochenen auf.
         journal.schreibe_status(
-            self.dir, sitzung_id=self._sitzung_id, status=journal.LAEUFT, titel=o.titel.strip(), sprache="de",
+            self.dir, sitzung_id=self._sitzung_id, status=journal.LAEUFT, titel=o.titel.strip(), art=o.art.strip(), sprache="de",
             modell=MODELL_REPLAY, replay=True,
         )
         threading.Thread(target=self._watch_stdin, daemon=True).start()
@@ -287,7 +288,7 @@ class TranskriptReplaySession:
         ordner = {"session": self.dir.name, "dir": str(self.dir)} if self.dir.is_dir() else {}
         events.emit(
             events.STATE, phase=phase, model=MODELL_REPLAY, device="-", replay=True,
-            sitzung_id=self._sitzung_id, titel=self.opts.titel.strip(), **ordner, **extra,
+            sitzung_id=self._sitzung_id, titel=self.opts.titel.strip(), art=self.opts.art.strip(), **ordner, **extra,
         )
 
     def _watch_stdin(self) -> None:

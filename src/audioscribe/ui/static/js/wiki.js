@@ -98,6 +98,9 @@ function istStandard() {
     && (!bilder || gleicherOrdner($('wikiDlgAssets').value, p.assets_dir));
 }
 
+/** Legt der Server ins Projekt-Wiki im Meetings-Format ab (raw/meetings/<Datum>_<Art>_<Thema>.md)? */
+const meetingsFormat = () => istStandard() && (projekt() || {}).wiki_format === 'meetings';
+
 function zielVorschau() {
   if (!wikiSave) return;
   const p = projekt() || {};
@@ -110,10 +113,23 @@ function zielVorschau() {
   const raw = trimSep($('wikiDlgRaw').value.trim());
   const assets = trimSep($('wikiDlgAssets').value.trim());
   $('wikiDlgAssetsRow').hidden = !bilder;
-  $('wikiDlgTarget').innerHTML = (raw
-    ? `Ablage: <code>${esc(raw)}${esc(sep())}${esc(datum)}_${esc(kurz)}</code>`
-    : '<span class="err">Bitte einen Ordner für das Transkript wählen.</span>')
-    + (bilder && assets ? `<br>Bilder: <code>${esc(assets)}${esc(sep())}${esc(datum)}_${esc(kurz)}</code>` : '');
+  // Meetings-Format: Art und Thema bilden mit dem Datum den gemeinsamen Stamm von Datei und Bilder-Ordner.
+  const meetings = meetingsFormat();
+  const art = $('wikiDlgArt').value;
+  $('wikiDlgArtRow').hidden = !meetings;
+  $('wikiDlgRawHint').hidden = meetings;
+  $('wikiDlgRawHintMeetings').hidden = !meetings;
+  $('wikiDlgNameLabel').textContent = meetings ? 'Thema' : 'Titel der Quelle';
+  $('wikiDlgMarkDatei').innerHTML = meetings
+    ? '<code>&lt;Stamm&gt;.souffleur.json</code>/<code>.md</code>' : '<code>markierungen.json</code>/<code>.md</code>';
+  const stamm = meetings ? `${datum}_${art || '…'}_${kurz}` : `${datum}_${kurz}`;
+  const ziel = meetings ? `${raw}${sep()}meetings${sep()}${stamm}.md` : `${raw}${sep()}${stamm}`;
+  $('wikiDlgTarget').innerHTML = (!raw
+    ? '<span class="err">Bitte einen Ordner für das Transkript wählen.</span>'
+    : meetings && !art ? '<span class="err">Bitte die Art des Meetings wählen – sie ist Teil des Dateinamens.</span>'
+      : `${meetings ? 'Datei' : 'Ablage'}: <code>${esc(ziel)}</code>`)
+    + (bilder && assets && (!meetings || art) ? `<br>Bilder: <code>${esc(assets)}${esc(sep())}${esc(stamm)}</code>` : '');
+  $('wikiDlgOk').disabled = meetings && !art;
   // "Kuenftig immer" meint die Ablage ins Projekt-Wiki - bei anderen Zielen gibt es nichts zu merken.
   $('wikiDlgImmerRow').hidden = !istStandard() || p.wiki_speichern === 'immer' || !!wikiSave.sitzung.ohneImmer;
 }
@@ -134,6 +150,7 @@ export function openWikiDialog(sitzung) {
       + 'Bestehendes bleibt unverändert; die Wiki-Seiten werden nicht angefasst. Beide Ziele lassen sich ändern.'
     : 'Transkript und Bilder werden in Ordner deiner Wahl kopiert; der Sitzungsordner bleibt unverändert.';
   $('wikiDlgName').value = sitzung.titel || '';
+  $('wikiDlgArt').value = sitzung.art || '';
   $('wikiDlgName').placeholder = sitzung.name || '';
   $('wikiDlgRaw').value = basen.raw || '';
   $('wikiDlgAssets').value = basen.assets || '';
@@ -166,6 +183,7 @@ $('wikiDlgName').oninput = zielVorschau;
 $('wikiDlgRaw').oninput = zielVorschau;
 $('wikiDlgAssets').oninput = zielVorschau;
 $('wikiDlgBilder').onchange = zielVorschau;
+$('wikiDlgArt').onchange = zielVorschau;
 $('pickWikiDlgRaw').onclick = () => ordnerWaehlen('wikiDlgRaw', 'Ordner für das Transkript wählen');
 $('pickWikiDlgAssets').onclick = () => ordnerWaehlen('wikiDlgAssets', 'Ordner für die Bilder wählen');
 $('wikiDlgCancel').onclick = () => closeWikiDialog(null);
@@ -181,6 +199,7 @@ $('wikiDlgOk').onclick = async () => {
     const ablage = await post('/api/wiki/speichern', {
       sitzung: wikiSave.sitzung.path,
       titel: $('wikiDlgName').value.trim(),
+      art: $('wikiDlgArt').value,
       bilder,
       markierungen: $('wikiDlgMarkierungen').checked,
       immer,

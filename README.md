@@ -326,6 +326,28 @@ Projekt-Wikis: Es stellt das Projekt auf **immer** und merkt sich beide Haken; j
 Sitzung geht dann nach dem Nachschärfen ohne Nachfrage ins Wiki (änderbar im Bereich
 „Projekt“). Abweichende Ziele merkt sich das Projekt nicht.
 
+**Ablageformat „Eine Datei je Meeting“** (Vorgabe für neue Projekte, umstellbar im Bereich
+„Projekt“ → „Ablage ins Wiki“; bestehende Projekte behalten den Ordner je Sitzung): Statt des
+Ordners entsteht eine einzige Datei nach den Ablageregeln des Wikis –
+
+```
+raw/meetings/2026-10-15_review_ai-use-case-pre-review-audioscribe.md          # Transkript mit Bildlinks
+raw/meetings/2026-10-15_review_ai-use-case-pre-review-audioscribe.souffleur.md # Markierungen (nur auf Wunsch; dazu .json)
+raw/assets/2026-10-15_review_ai-use-case-pre-review-audioscribe/0001_00-10-41.jpg …
+```
+
+Der Name ist `<Datum>_<Art>_<Thema>`: die **Art des Meetings** (`abstimmung`, `review`,
+`workshop`, `brainstorming`, `anforderung`, `demo`) wählst du beim Start der Aufnahme
+(Karte „Sitzung“) oder spätestens im Dialog – ohne sie lässt sich nicht speichern, und bei
+„Immer ins Wiki speichern“ muss sie schon beim Start feststehen. Das Thema kommt aus dem Titel
+(kleingeschrieben, Umlaute ausgeschrieben, Bindestriche). Transkript, Begleitdateien und
+Bilder-Ordner teilen denselben Namensstamm; ist er in einem der Ziele belegt, bekommen alle
+`-2`. Die Kopftabelle des Transkripts nennt zusätzlich Datum, Anlass und die Teilnehmenden
+(als Sprecherrollen); der Wortlaut bleibt unverändert. `transcript.json`, `marks.json` und
+`README.md` bleiben im Sitzungsordner. Eine KI-Nachbereitung liegt daneben unter
+`<Stamm>.nachbereitung-ki/`. „Speichern unter …“ in andere Ordner nutzt weiter den Ordner je
+Sitzung.
+
 **Nachbereitung ins Wiki:** Das Ergebnis einer fertigen KI-Analyse lässt sich unter
 `nachbereitung-ki/` zur Sitzung legen. Die Dokumente sind dort als **KI-erzeugt** und nicht
 als Quelle gekennzeichnet; Bildverweise zeigen auf die Bilder im Assets-Ordner. Liegt die

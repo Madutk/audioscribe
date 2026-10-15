@@ -411,7 +411,10 @@
       <h2 class="card-title"><svg class="ic" aria-hidden="true"><use href="#i-mic"/></svg>Sitzung</h2>
       <div class="field"><label for="liveTitle">Sitzungstitel (optional)</label>
         <input type="text" id="liveTitle" maxlength="120" placeholder="z. B. Workshop Reisebuchung" autocomplete="off" />
-        <p class="hint">Benennt die Sitzung – und später ihren Ordner im Wiki.</p></div>
+        <p class="hint">Benennt die Sitzung – und später ihre Ablage im Wiki.</p></div>
+      <div class="field"><label for="liveArt">Art des Meetings (optional)</label>
+        <select id="liveArt"><option value="">– noch offen –</option><option value="abstimmung">Abstimmung</option><option value="review">Review</option><option value="workshop">Workshop</option><option value="brainstorming">Brainstorming</option><option value="anforderung">Anforderung</option><option value="demo">Demo</option></select>
+        <p class="hint">Teil des Dateinamens im Wiki, z. B. <code>2026-10-15_review_thema.md</code> – spätestens beim Speichern zu wählen.</p></div>
     </div>
 
     <div class="card">
@@ -782,6 +785,16 @@
     <div class="card" id="pAblageCard">
       <h2 class="card-title"><svg class="ic" aria-hidden="true"><use href="#i-book-plus"/></svg>Ablage ins Wiki</h2>
       <fieldset class="field choice">
+        <legend>Format</legend>
+        <label class="option"><input type="radio" name="pFormat" value="meetings" />
+          <span><b>Eine Datei je Meeting</b><small><code>raw/meetings/&lt;Datum&gt;_&lt;Art&gt;_&lt;Thema&gt;.md</code>, Bilder unter demselben Namen im
+            Assets-Ordner, Markierungen als <code>.souffleur.md</code> daneben. Die Art des Meetings ist dann Pflicht –
+            bei „Immer ins Wiki speichern“ schon beim Start der Aufnahme.</small></span></label>
+        <label class="option"><input type="radio" name="pFormat" value="ordner" />
+          <span><b>Ein Ordner je Sitzung</b><small><code>raw/&lt;Datum&gt;_&lt;Titel&gt;/</code> mit Transkript, annotiertem Transkript,
+            JSON und README.</small></span></label>
+      </fieldset>
+      <fieldset class="field choice">
         <legend>Nach einer Sitzung</legend>
         <label class="option"><input type="radio" name="pSpeichern" value="fragen" />
           <span><b>Nachfragen</b><small>Du entscheidest je Sitzung.</small></span></label>
@@ -863,15 +876,19 @@
 <dialog class="dialog wikisave" id="wikiDlg" aria-labelledby="wikiDlgTitle">
   <h2 class="card-title" id="wikiDlgTitle"><svg class="ic" aria-hidden="true"><use href="#i-book-plus"/></svg>Speichern unter …</h2>
   <p class="hint" id="wikiDlgInfo"></p>
-  <div class="field"><label for="wikiDlgName">Titel der Quelle</label>
+  <div class="field" id="wikiDlgArtRow"><label for="wikiDlgArt">Art des Meetings</label>
+    <select id="wikiDlgArt"><option value="">– bitte wählen –</option><option value="abstimmung">Abstimmung</option><option value="review">Review</option><option value="workshop">Workshop</option><option value="brainstorming">Brainstorming</option><option value="anforderung">Anforderung</option><option value="demo">Demo</option></select></div>
+  <div class="field"><label for="wikiDlgName" id="wikiDlgNameLabel">Titel der Quelle</label>
     <input type="text" id="wikiDlgName" maxlength="120" autocomplete="off" /></div>
   <div class="field"><label for="wikiDlgRaw">Transkript – Ordner</label>
     <div class="input-group">
       <input type="text" id="wikiDlgRaw" autocomplete="off" spellcheck="false" />
       <button class="secondary" type="button" id="pickWikiDlgRaw"><svg class="ic" aria-hidden="true"><use href="#i-folder"/></svg>Ordner wählen …</button>
     </div>
-    <p class="hint">Darin entsteht <code>&lt;Datum&gt;_&lt;Titel&gt;/</code> mit <code>transkript.md</code>, <code>transcript.json</code>,
-      <code>transkript.annotiert.md</code> und <code>README.md</code>. Vorbelegt mit <code>raw/</code> des Wikis.</p></div>
+    <p class="hint" id="wikiDlgRawHint">Darin entsteht <code>&lt;Datum&gt;_&lt;Titel&gt;/</code> mit <code>transkript.md</code>, <code>transcript.json</code>,
+      <code>transkript.annotiert.md</code> und <code>README.md</code>. Vorbelegt mit <code>raw/</code> des Wikis.</p>
+    <p class="hint" id="wikiDlgRawHintMeetings" hidden>Darin entsteht <code>meetings/&lt;Datum&gt;_&lt;Art&gt;_&lt;Thema&gt;.md</code> – das Transkript mit
+      Verweisen auf die Bilder, so wie es die Ablageregeln des Wikis verlangen. Vorbelegt mit <code>raw/</code> des Wikis.</p></div>
   <div class="checks">
     <label><input type="checkbox" id="wikiDlgBilder" /><span><span id="wikiDlgBilderLabel">Bilder mit übertragen</span>
       <small>Standbilder in den Bilder-Ordner kopieren; das annotierte Transkript verweist an der passenden Stelle darauf.</small></span></label>
@@ -885,7 +902,7 @@
   <p class="hint target" id="wikiDlgTarget"></p>
   <div class="checks">
     <label><input type="checkbox" id="wikiDlgMarkierungen" /><span>Markierungen des Souffleurs mit übertragen
-      <small>Widersprüche, Fragen und offene Punkte als <code>markierungen.json</code>/<code>.md</code> neben das Transkript legen. Sie sind KI-erzeugt und zitieren das Wiki – ohne Haken bleiben sie im Sitzungsordner.</small></span></label>
+      <small>Widersprüche, Fragen und offene Punkte als <span id="wikiDlgMarkDatei"><code>markierungen.json</code>/<code>.md</code></span> neben das Transkript legen. Sie sind KI-erzeugt und zitieren das Wiki – ohne Haken bleiben sie im Sitzungsordner.</small></span></label>
     <label id="wikiDlgImmerRow"><input type="checkbox" id="wikiDlgImmer" /><span>Künftig immer so speichern
       <small>Beendete Sitzungen dieses Projekts gehen dann ohne Nachfrage ins Wiki (änderbar in den Projekteinstellungen).</small></span></label>
   </div>

@@ -317,6 +317,7 @@ def create_app():
         wiki_speichern: str = modell.WIKI_FRAGEN
         wiki_bilder: bool = True
         wiki_markierungen: bool = False
+        wiki_format: str = modell.FORMAT_MEETINGS  # neue Projekte: eine Datei je Meeting unter raw/meetings/
 
     class PfadIn(BaseModel):
         pfad: str
@@ -340,6 +341,7 @@ def create_app():
     class WikiSpeichernIn(BaseModel):
         sitzung: str
         titel: str = ""
+        art: str = ""  # Art des Meetings; leer = die beim Start gewaehlte (sitzung.json)
         bilder: bool = True
         markierungen: bool = False  # Markierungen des Souffleurs (KI-erzeugt) nur auf Wunsch
         immer: bool = False
@@ -363,6 +365,7 @@ def create_app():
         output_dir: str = ""
         # Sitzungstitel (PRD §21): benennt die Sitzung und spaeter den Ordner im Wiki.
         titel: str = ""
+        art: str = ""  # Art des Meetings (modell.MEETING_ARTEN) - optional, Pflicht erst beim Speichern
         # Wiederaufnahme: Ordner einer unterbrochenen Sitzung, die fortgesetzt wird.
         resume: str = ""
         monitor: int = 1
@@ -553,6 +556,7 @@ def create_app():
                 assets_dir=assets, ki_dienst=body.ki_dienst, souffleur_model=body.souffleur_model,
                 agent_model=body.agent_model, sprache=body.sprache, wiki_speichern=body.wiki_speichern,
                 wiki_bilder=body.wiki_bilder, wiki_markierungen=body.wiki_markierungen,
+                wiki_format=body.wiki_format,
             )
         except ProjektFehler as exc:
             raise HTTPException(400, str(exc)) from exc
@@ -748,6 +752,13 @@ def create_app():
             raise HTTPException(400, f"Verschieben fehlgeschlagen: {exc}") from exc
         return JSONResponse({**_kontext_antwort(), "ziel": str(ziel)})
 
+    def _art(wert: str) -> str:
+        """Art des Meetings aus der Oberflaeche: leer oder eine der bekannten."""
+        wert = wert.strip().lower()
+        if wert and wert not in modell.MEETING_ARTEN:
+            raise HTTPException(400, f"Unbekannte Art des Meetings: {wert}")
+        return wert
+
     @app.post("/api/wiki/speichern")
     def api_wiki_speichern(body: WikiSpeichernIn):
         """Sitzung als neue Quelle nach raw/ legen, Bilder in den Assets-Ordner; die Markierungen
@@ -774,7 +785,8 @@ def create_app():
         try:
             if standard:
                 ablage = wiki_ablage.speichere_sitzung(
-                    ordner, p, titel=body.titel, bilder=body.bilder, markierungen=body.markierungen
+                    ordner, p, titel=body.titel, art=_art(body.art), bilder=body.bilder,
+                    markierungen=body.markierungen,
                 )
             else:
                 ablage = wiki_ablage.speichere_nach(
@@ -853,20 +865,27 @@ def create_app():
 
     @app.post("/api/oeffnen")
     def api_oeffnen(body: PfadIn):
-        """Ordner im Dateimanager des Systems zeigen (Explorer, Finder)."""
+        """Ordner im Dateimanager des Systems zeigen (Explorer, Finder). Eine Datei - etwa eine
+        Ablage im Meetings-Format - wird in ihrem Ordner markiert gezeigt."""
         import subprocess
         import sys
 
         ordner = browse.normalize_path(body.pfad, default=Path(""))
-        if not body.pfad.strip() or not ordner.is_dir():
+        datei = ordner.is_file()
+        if not body.pfad.strip() or not (ordner.is_dir() or datei):
             raise HTTPException(400, f"Ordner nicht gefunden: {body.pfad}")
         try:
             if browse.IS_WINDOWS:
                 import os
 
-                os.startfile(str(ordner))  # type: ignore[attr-defined]  # noqa: S606
+                if datei:
+                    subprocess.Popen(["explorer", f"/select,{ordner}"])  # noqa: S603, S607
+                else:
+                    os.startfile(str(ordner))  # type: ignore[attr-defined]  # noqa: S606
+            elif sys.platform == "darwin":
+                subprocess.Popen(["open", *(["-R"] if datei else []), str(ordner)])  # noqa: S603, S607
             else:
-                subprocess.Popen(["open" if sys.platform == "darwin" else "xdg-open", str(ordner)])  # noqa: S603, S607
+                subprocess.Popen(["xdg-open", str(ordner.parent if datei else ordner)])  # noqa: S603, S607
         except OSError as exc:
             raise HTTPException(500, f"Ordner lässt sich nicht öffnen: {exc}") from exc
         return JSONResponse({"ok": True})
@@ -1177,6 +1196,7 @@ def create_app():
                 {
                     **r,
                     "titel": str(info.get("titel") or "") if isinstance(info, dict) else "",
+                    "art": wiki_ablage.art_der_sitzung(sitzung),
                     "status": str(info.get("status") or "") if isinstance(info, dict) else "",
                     "ablagen": wiki_ablage.ablagen(sitzung),
                     "analysen": analysen.get(sitzung.name, []),
@@ -1401,6 +1421,7 @@ def create_app():
         opts = jobs.LiveJobOptions(
             output_dir=out_dir,
             titel=body.titel.strip()[:120],
+            art=_art(body.art),
             resume_dir=resume_dir,
             monitor=0 if body.window else body.monitor,
             window=body.window,
@@ -1564,6 +1585,7 @@ def create_app():
         opts = jobs.LiveJobOptions(
             output_dir=out_dir, monitor=0, mic="none", loopback="none", refine=False,
             replay_transcript=quelle, replay_speed=body.replay_speed, titel=body.titel.strip()[:120],
+            art=_art(body.art),
         )
         state.save_state(
             {"live_source": "transcript", "replay_transcript": str(quelle), "replay_speed": f"{body.replay_speed:g}"}

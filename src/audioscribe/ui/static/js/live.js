@@ -336,6 +336,7 @@ async function startLive(resume) {
     await post('/api/live/start', {
       output_dir: S.folders.output_dir,
       titel: $('liveTitle').value.trim(),
+      art: $('liveArt').value,
       resume: resume || '',
       replay_transcript: replay,
       replay_speed: replaySpeed(),
@@ -436,6 +437,8 @@ async function pollLive() {
   renderSofort(s.sofort);
   if (s.ev_offset < liveEvOffset || s.offset < liveOffset) { resetLiveView(); return; }  // neue Sitzung
   liveSession = s.session || liveSession;
+  // Fortgesetzte Sitzung: die beim ersten Start gewaehlte Art steht in sitzung.json.
+  if (s.art && !$('liveArt').value) $('liveArt').value = s.art;
   liveOffset = s.offset;
   liveEvOffset = s.ev_offset;
 
@@ -803,6 +806,7 @@ export function leereLive() {
   resetLiveView();
   renderSofort(null);
   $('liveTitle').value = '';
+  $('liveArt').value = '';
   $('liveResume').innerHTML = '';
   $('liveErr').textContent = '';
   $('demoErr').textContent = '';
@@ -889,7 +893,8 @@ function renderNext(s) {
 async function speichernUnter() {
   if (!liveDir) return;
   const ablage = await openWikiDialog({
-    path: liveDir, name: basename(liveDir), titel: $('liveTitle').value.trim(), frames: liveShots.length,
+    path: liveDir, name: basename(liveDir), titel: $('liveTitle').value.trim(), art: $('liveArt').value,
+    frames: liveShots.length,
   });
   if (ablage) {
     liveAblage = ablage;

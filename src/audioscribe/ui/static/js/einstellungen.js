@@ -147,7 +147,11 @@ export function zeigeProjekt() {
   $('pAblageCard').hidden = !mit;
   $('pSitzungen').value = p.sitzungen_dir;
   $('pAssets').value = p.assets_dir || '';
-  $('pRaw').textContent = mit ? `${trimSep(p.raw_dir)}${sep()}<Datum>_<Sitzungstitel>${sep()}` : '–';
+  $('pRaw').textContent = !mit ? '–' : p.wiki_format === 'meetings'
+    ? `${trimSep(p.raw_dir)}${sep()}meetings${sep()}<Datum>_<Art>_<Thema>.md`
+    : `${trimSep(p.raw_dir)}${sep()}<Datum>_<Sitzungstitel>${sep()}`;
+  const format = document.querySelector(`input[name="pFormat"][value="${p.wiki_format}"]`);
+  if (format) format.checked = true;
   const radio = document.querySelector(`input[name="pSpeichern"][value="${p.wiki_speichern}"]`);
   if (radio) radio.checked = true;
   $('pBilder').checked = p.wiki_bilder !== false;
@@ -211,6 +215,9 @@ $('pWikiLoesen').onclick = async () => {
   });
   if (ok) speichere({ wiki_art: 'keins' }, 'Verknüpfung gelöst');
 };
+for (const radio of document.querySelectorAll('input[name="pFormat"]')) {
+  radio.onchange = () => speichere({ wiki_format: radio.value });
+}
 for (const radio of document.querySelectorAll('input[name="pSpeichern"]')) {
   radio.onchange = () => speichere({ wiki_speichern: radio.value });
 }

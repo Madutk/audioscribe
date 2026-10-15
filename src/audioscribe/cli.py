@@ -125,6 +125,7 @@ def _live_transcript(args: argparse.Namespace) -> int:
         delay_s=args.replay_delay,
         sentences_per_timestamp=settings.sentences_per_timestamp,
         titel=args.titel or "",
+        art=args.art or "",
         raffen=bool(args.raffen),
     )
     return TranskriptReplaySession(opts).run()
@@ -193,6 +194,7 @@ def _live(args: argparse.Namespace) -> int:
         ),
         resume_dir=resume_dir,
         titel=args.titel or "",
+        art=args.art or "",
         model=model,
         device=device,
         compute_type=compute_type,
@@ -506,6 +508,7 @@ def main(argv: list[str] | None = None) -> int:
         help="mit --transcript: Pausen raffen - die Absaetze folgen im Sprechtempo aufeinander (Demo)",
     )
     live.add_argument("--titel", metavar="TEXT", help="Sitzungstitel (steht in sitzung.json)")
+    live.add_argument("--art", metavar="ART", help="Art des Meetings, z. B. review (steht in sitzung.json)")
     live.add_argument(
         "--resume",
         metavar="ORDNER",

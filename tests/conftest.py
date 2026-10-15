@@ -64,6 +64,7 @@ def projekt(wiki, tmp_path):
     return modell.lege_an(
         name="Bahnbuchung", wurzel=tmp_path / "bahn-projekt", sitzungen_dir=tmp_path / "sitzungen",
         wiki_art=modell.WIKI_VORHANDEN, wiki_dir=wiki, assets_dir=wiki / "raw" / "assets",
+        wiki_format=modell.FORMAT_ORDNER,  # die Meetings-Datei prüfen eigene Tests (projekt_meetings)
     )
 
 

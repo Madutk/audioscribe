@@ -308,3 +308,104 @@ def test_nachbereitung_ignoriert_eine_freie_ablage(projekt, sitzung, tmp_path):
     basis = projekt.raw_dir / "2026-10-06_workshop-reisebuchung"
     assert ablage.ordner == str(basis / "nachbereitung-ki" / "reisebuchung")
     assert (basis / "transkript.md").is_file() and not (Path(freie.ordner) / "nachbereitung-ki").exists()
+
+
+# --- Meetings-Format: raw/meetings/<JJJJ-MM-TT>_<art>_<thema>.md -----------------------------
+
+STAMM = "2026-10-06_workshop_workshop-reisebuchung"
+
+
+@pytest.fixture
+def projekt_meetings(projekt):
+    from audioscribe.projekt import modell
+
+    return replace(projekt, wiki_format=modell.FORMAT_MEETINGS)
+
+
+def test_meeting_eine_datei_mit_gemeinsamem_stamm(projekt_meetings, sitzung):
+    seiten_vorher = _seiten(projekt_meetings)
+    ablage = wiki_ablage.speichere_sitzung(sitzung, projekt_meetings, art="workshop")
+    meetings = projekt_meetings.raw_dir / "meetings"
+    datei = meetings / f"{STAMM}.md"
+    assets = projekt_meetings.assets_dir / STAMM
+    assert ablage.ordner == str(datei) and ablage.assets == str(assets) and ablage.bilder == 2
+    assert wiki_ablage.STAMM_MUSTER.match(Path(ablage.ordner).stem)
+    assert re.fullmatch(
+        r"\d{4}-\d{2}-\d{2}_(abstimmung|review|workshop|brainstorming|anforderung|demo)_[a-z0-9]+(-[a-z0-9]+)*\.md",
+        datei.name,
+    )
+    # Nur die Datei - kein Sitzungsordner, keine Zusatzdateien unter raw/.
+    assert sorted(p.name for p in meetings.iterdir()) == [datei.name]
+    assert not (projekt_meetings.raw_dir / "2026-10-06_workshop-reisebuchung").exists()
+    assert sorted(p.name for p in assets.iterdir()) == ["0001_00-00-03.jpg", "0002_00-00-12.jpg"]
+    assert _seiten(projekt_meetings) == seiten_vorher
+
+
+def test_meeting_kopf_und_relative_bildlinks(projekt_meetings, sitzung):
+    ablage = wiki_ablage.speichere_sitzung(sitzung, projekt_meetings, art="workshop")
+    text = Path(ablage.ordner).read_text(encoding="utf-8")
+    assert "| Datum | 2026-10-06 |" in text
+    assert "| Anlass | Workshop: Workshop Reisebuchung |" in text
+    assert "| Teilnehmende | Ich, Sprecher 1 |" in text
+    assert "| Laenge |" in text and "| Modell |" in text  # die bisherige Kopftabelle bleibt
+    # Wortlaut unverändert, Format der Zeilen wie bisher.
+    assert "**[00:00:00] Ich:** Wir buchen immer zweite Klasse." in text
+    for link in re.findall(r"!\[[^\]]*\]\(([^)]+)\)", text):
+        assert link.startswith(f"../assets/{STAMM}/") and (Path(ablage.ordner).parent / link).is_file()
+    assert f"![Bild #0001 – 00:00:03](../assets/{STAMM}/0001_00-00-03.jpg)" in text
+
+
+def test_meeting_art_aus_der_sitzung_und_pflicht(projekt_meetings, sitzung):
+    with pytest.raises(RuntimeError, match="Art des Meetings"):
+        wiki_ablage.speichere_sitzung(sitzung, projekt_meetings)
+    assert not (projekt_meetings.raw_dir / "meetings").exists() or not any((projekt_meetings.raw_dir / "meetings").iterdir())
+    status = json.loads((sitzung / "sitzung.json").read_text(encoding="utf-8"))
+    (sitzung / "sitzung.json").write_text(json.dumps({**status, "art": "review"}), encoding="utf-8")
+    ablage = wiki_ablage.speichere_sitzung(sitzung, projekt_meetings)
+    assert Path(ablage.ordner).name == "2026-10-06_review_workshop-reisebuchung.md"
+    # Eine ausdrückliche Wahl beim Speichern gilt vor der beim Start.
+    ablage = wiki_ablage.speichere_sitzung(sitzung, projekt_meetings, art="demo", titel="Änderungen & Storno")
+    assert Path(ablage.ordner).name == "2026-10-06_demo_aenderungen-storno.md"
+
+
+def test_meeting_ohne_bilder(projekt_meetings, sitzung):
+    ablage = wiki_ablage.speichere_sitzung(sitzung, projekt_meetings, art="workshop", bilder=False)
+    text = Path(ablage.ordner).read_text(encoding="utf-8")
+    assert ablage.assets is None and ablage.bilder == 0 and "![" not in text
+    assert not (projekt_meetings.assets_dir / STAMM).exists()
+
+
+def test_meeting_konflikt_verschiebt_alle_ziele(projekt_meetings, sitzung):
+    # Nur der Bilder-Ordner ist belegt - trotzdem bekommt auch die Datei "-2", damit der Stamm passt.
+    (projekt_meetings.assets_dir / STAMM).mkdir(parents=True)
+    ablage = wiki_ablage.speichere_sitzung(sitzung, projekt_meetings, art="workshop")
+    assert Path(ablage.ordner).name == f"{STAMM}-2.md" and Path(ablage.assets).name == f"{STAMM}-2"
+    zweite = wiki_ablage.speichere_sitzung(sitzung, projekt_meetings, art="workshop")
+    assert Path(zweite.ordner).name == f"{STAMM}-3.md"
+    assert wiki_ablage.STAMM_MUSTER.match(Path(zweite.ordner).stem)
+    # Nichts wird überschrieben: die erste Ablage ist unverändert da.
+    assert Path(ablage.ordner).is_file()
+
+
+def test_meeting_souffleur_als_begleitdatei(projekt_meetings, sitzung):
+    ablage = wiki_ablage.speichere_sitzung(sitzung, projekt_meetings, art="workshop", markierungen=True)
+    meetings = Path(ablage.ordner).parent
+    assert ablage.markierungen == 1
+    assert sorted(p.name for p in meetings.iterdir()) == [
+        f"{STAMM}.md", f"{STAMM}.souffleur.json", f"{STAMM}.souffleur.md",
+    ]
+    daten = json.loads((meetings / f"{STAMM}.souffleur.json").read_text(encoding="utf-8"))
+    assert daten["markierungen"][0]["art"] == "frage"
+    # Das Transkript selbst bleibt frei von Markierungen.
+    assert "Freigabe" in Path(ablage.ordner).read_text(encoding="utf-8")
+    assert "Buchungen ab 250" not in Path(ablage.ordner).read_text(encoding="utf-8")
+
+
+def test_meeting_letzte_ablage_und_nachbereitung_daneben(projekt_meetings, sitzung):
+    ablage = wiki_ablage.speichere_sitzung(sitzung, projekt_meetings, art="workshop")
+    assert wiki_ablage.letzte_ablage(sitzung, projekt_meetings)["ordner"] == ablage.ordner
+    ws = _analyse(projekt_meetings, sitzung)
+    nach = wiki_ablage.speichere_nachbereitung(ws, projekt_meetings, sitzung)
+    eltern = Path(ablage.ordner).parent / f"{STAMM}.nachbereitung-ki"
+    assert Path(nach.ordner).parent == eltern
+    assert f"`{STAMM}.md`" in (Path(nach.ordner) / "README.md").read_text(encoding="utf-8")

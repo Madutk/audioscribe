@@ -299,3 +299,21 @@ def test_demo_projekt_wird_nie_gespeichert(tmp_path):
     modell.speichere(demo)
     assert not (tmp_path / ".audioscribe").exists()
     assert Path(demo.datei).name == "projekt.json"
+
+
+def test_ablageformat_neu_meetings_bestehend_ordner(wiki, tmp_path):
+    """Neue Projekte legen Meetings als Datei ab; Projektdateien ohne Angabe behalten den Ordner."""
+    neu = modell.lege_an(
+        name="Neu", wurzel=tmp_path / "neu", sitzungen_dir=tmp_path / "neu" / "sitzungen",
+        wiki_art=modell.WIKI_VORHANDEN, wiki_dir=wiki,
+    )
+    assert neu.wiki_format == modell.FORMAT_MEETINGS
+    assert modell.lade(neu.wurzel).wiki_format == modell.FORMAT_MEETINGS
+    data = json.loads(neu.datei.read_text(encoding="utf-8"))
+    del data["wiki_format"]
+    neu.datei.write_text(json.dumps(data), encoding="utf-8")
+    alt = modell.lade(neu.wurzel)
+    assert alt.wiki_format == modell.FORMAT_ORDNER
+    assert modell.aendere(alt, {"wiki_format": modell.FORMAT_MEETINGS}).wiki_format == modell.FORMAT_MEETINGS
+    with pytest.raises(modell.ProjektFehler):
+        modell.aendere(alt, {"wiki_format": "irgendwas"})

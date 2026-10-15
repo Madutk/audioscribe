@@ -476,6 +476,8 @@ class LiveJobOptions:
     resume_dir: Path | None = None
     # Optionaler Sitzungstitel - landet in sitzung.json und benennt später die Wiki-Ablage.
     titel: str = ""
+    # Art des Meetings (z. B. "review") - ebenso; Teil des Dateinamens im Meetings-Format.
+    art: str = ""
 
 
 REPLAY_SPEEDS: tuple[float, ...] = (1.0, 2.0, 5.0, 10.0, 20.0)
@@ -484,7 +486,9 @@ REPLAY_SPEEDS: tuple[float, ...] = (1.0, 2.0, 5.0, 10.0, 20.0)
 def build_live_argv(opts: LiveJobOptions, *, prefix: Sequence[str] | None = None) -> list[str]:
     """Baut den vollstaendigen ``audioscribe live``-Aufruf."""
     argv = list(prefix if prefix is not None else cli_prefix())
-    titel = [f"--titel={opts.titel.strip()}"] if opts.titel.strip() else []
+    benennung = [f"--titel={opts.titel.strip()}"] if opts.titel.strip() else []
+    if opts.art.strip():
+        benennung.append(f"--art={opts.art.strip()}")
     if opts.replay_transcript is not None:
         return [
             *argv,
@@ -493,7 +497,7 @@ def build_live_argv(opts: LiveJobOptions, *, prefix: Sequence[str] | None = None
             f"--transcript={Path(opts.replay_transcript)}",
             f"--speed={opts.replay_speed:g}",
             *(["--raffen"] if opts.replay_raffen else []),
-            *titel,
+            *benennung,
         ]
     argv += [
         "live",
@@ -515,7 +519,7 @@ def build_live_argv(opts: LiveJobOptions, *, prefix: Sequence[str] | None = None
         argv.append("--no-speakers")
     if opts.resume_dir is not None:
         argv.append(f"--resume={Path(opts.resume_dir)}")
-    return [*argv, *titel]
+    return [*argv, *benennung]
 
 
 def build_finalize_argv(session_dir: Path, *, prefix: Sequence[str] | None = None) -> list[str]:

@@ -92,6 +92,7 @@ class LiveOptions:
     # Wiederaufnahme (PRD §21): diesen Sitzungsordner fortsetzen statt einen neuen anzulegen.
     resume_dir: Path | None = None
     titel: str = ""
+    art: str = ""  # Art des Meetings (Wiki-Ablage im Meetings-Format)
 
 
 class LiveSession:
@@ -124,6 +125,7 @@ class LiveSession:
         self._teil_nr = 1
         self._sitzung_id = uuid.uuid4().hex
         self._titel = opts.titel.strip()
+        self._art = opts.art.strip()
         self._journal = journal.Journal(self.dir)
         self._sperre: journal.Sperre | None = None
         self._status_offen = False  # sitzung.json steht auf "laeuft" und gehört diesem Lauf
@@ -159,6 +161,7 @@ class LiveSession:
         self._chunk_index = self._diagnose.uebernehme(lies_diagnose(self.dir))
         self._sitzung_id = str(status.get("sitzung_id") or self._sitzung_id)
         self._titel = self._titel or str(status.get("titel") or "")
+        self._art = self._art or str(status.get("art") or "")
         teile = _teile(status)
         self._teil_nr = max((int(t.get("nr") or 0) for t in teile), default=0) + 1
         # Reste eines gescheiterten Fortsetzungsversuchs (Spur geöffnet, dann Abbruch vor dem
@@ -230,6 +233,7 @@ class LiveSession:
             sitzung_id=self._sitzung_id,
             status=journal.LAEUFT,
             titel=self._titel,
+            art=self._art,
             sprache=self.opts.language,
             modell=self.opts.model,
             replay=False,
@@ -762,6 +766,7 @@ class LiveSession:
             backend=self.opts.backend,
             sitzung_id=self._sitzung_id,
             titel=self._titel,
+            art=self._art,
             **extra,
         )
 
@@ -832,6 +837,7 @@ def finalisiere_sitzung(session_dir: str | Path, *, sentences_per_timestamp: int
     zustand = dict(
         session=session_dir.name, dir=str(session_dir), model=modell, device="-",
         sitzung_id=str(status.get("sitzung_id") or ""), titel=str(status.get("titel") or ""),
+        art=str(status.get("art") or ""),
     )
     try:
         events.emit(events.STATE, phase="laden", step="Sitzung abschließen", **zustand)

@@ -156,6 +156,7 @@ def projekt_dict(projekt: Projekt, state: Mapping[str, object], *, mit_wiki: boo
         "wiki_speichern": projekt.wiki_speichern,
         "wiki_bilder": projekt.wiki_bilder,
         "wiki_markierungen": projekt.wiki_markierungen,
+        "wiki_format": projekt.wiki_format,
         "demo": projekt.demo,
         "hinweis": projekt.hinweis,
         "eigen": {k: getattr(projekt, k) for k in modell.UEBERSCHREIBBAR},

@@ -47,6 +47,15 @@ WIKI_IMMER = "immer"
 WIKI_NIE = "nie"
 WIKI_SPEICHERN: tuple[str, ...] = (WIKI_FRAGEN, WIKI_IMMER, WIKI_NIE)
 
+# Wie eine Sitzung unter raw/ liegt: ein Ordner je Sitzung (raw/<JJJJ-MM-TT>_<kurzname>/) oder eine
+# Datei je Meeting nach den Namensregeln des Wikis (raw/meetings/<JJJJ-MM-TT>_<art>_<thema>.md).
+# Bestehende Projekte behalten den Ordner, neue bekommen die Meetings-Datei.
+FORMAT_ORDNER = "ordner"
+FORMAT_MEETINGS = "meetings"
+WIKI_FORMATE: tuple[str, ...] = (FORMAT_ORDNER, FORMAT_MEETINGS)
+# Art des Meetings - Teil des Dateinamens im Meetings-Format (CLAUDE.md des Wikis).
+MEETING_ARTEN: tuple[str, ...] = ("abstimmung", "review", "workshop", "brainstorming", "anforderung", "demo")
+
 # Felder, die ein Projekt von den globalen Einstellungen überschreiben kann (None = global).
 UEBERSCHREIBBAR: tuple[str, ...] = ("ki_dienst", "souffleur_model", "agent_model", "sprache")
 
@@ -72,6 +81,7 @@ class Projekt:
     wiki_bilder: bool = True
     # Markierungen des Souffleurs mit ablegen: KI-erzeugt, deshalb nur auf Wunsch (Vorgabe: nein).
     wiki_markierungen: bool = False
+    wiki_format: str = FORMAT_ORDNER
     # Demo-Projekt: liegt nicht auf der Platte, wird nie gespeichert (ui/kontext.py).
     demo: bool = False
     # Hinweis vom Laden (nicht gespeichert): z. B. ein Ordner aus der Projektdatei war auf
@@ -244,6 +254,7 @@ def lade(pfad: Path | str) -> Projekt:
             assets = Path(ersatz["assets_dir"])
 
     speichern = data.get("wiki_speichern")
+    format_ = data.get("wiki_format")
     return Projekt(
         wurzel=wurzel,
         name=text("name") or wurzel.name,
@@ -260,6 +271,7 @@ def lade(pfad: Path | str) -> Projekt:
         wiki_speichern=speichern if speichern in WIKI_SPEICHERN else WIKI_FRAGEN,
         wiki_bilder=bool(data.get("wiki_bilder", True)),
         wiki_markierungen=data.get("wiki_markierungen") is True,
+        wiki_format=format_ if format_ in WIKI_FORMATE else FORMAT_ORDNER,
     )
 
 
@@ -283,6 +295,7 @@ def speichere(projekt: Projekt) -> Path:
         "wiki_speichern": projekt.wiki_speichern,
         "wiki_bilder": projekt.wiki_bilder,
         "wiki_markierungen": projekt.wiki_markierungen,
+        "wiki_format": projekt.wiki_format,
     }
     datei = projekt.datei
     datei.parent.mkdir(parents=True, exist_ok=True)
@@ -436,6 +449,7 @@ def lege_an(
     wiki_speichern: str = WIKI_FRAGEN,
     wiki_bilder: bool = True,
     wiki_markierungen: bool = False,
+    wiki_format: str = FORMAT_MEETINGS,
 ) -> Projekt:
     """Projekt anlegen: Angaben prüfen, den Projektordner anlegen, bei Bedarf das Wiki-Gerüst
     schreiben, Ordner und Projektdatei erzeugen. Ein vorhandenes Wiki wird dabei nicht verändert."""
@@ -479,6 +493,7 @@ def lege_an(
         wiki_speichern=wiki_speichern if wiki_speichern in WIKI_SPEICHERN else WIKI_FRAGEN,
         wiki_bilder=bool(wiki_bilder),
         wiki_markierungen=bool(wiki_markierungen),
+        wiki_format=wiki_format if wiki_format in WIKI_FORMATE else FORMAT_MEETINGS,
     )
     try:
         projekt.sitzungen_dir.mkdir(parents=True, exist_ok=True)
@@ -522,6 +537,10 @@ def aendere(projekt: Projekt, felder: dict) -> Projekt:
         if felder["wiki_speichern"] not in WIKI_SPEICHERN:
             raise ProjektFehler(f"Unbekannte Wiki-Ablage: {felder['wiki_speichern']}")
         neu["wiki_speichern"] = felder["wiki_speichern"]
+    if "wiki_format" in felder:
+        if felder["wiki_format"] not in WIKI_FORMATE:
+            raise ProjektFehler(f"Unbekanntes Ablageformat: {felder['wiki_format']}")
+        neu["wiki_format"] = felder["wiki_format"]
     for key in ("wiki_bilder", "wiki_markierungen"):
         if key in felder and felder[key] is not None:
             if not isinstance(felder[key], bool):

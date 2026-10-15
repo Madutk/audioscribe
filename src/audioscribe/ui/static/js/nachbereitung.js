@@ -127,7 +127,7 @@ function renderWiki() {
       <span class="hint">${esc((a.zeit || '').slice(0, 16))}${a.bilder ? ` · ${a.bilder} Bilder` : ' · ohne Bilder'}</span>
       <button class="ghost sm" type="button" data-folder="${esc(a.ordner)}">${icon('external')}Öffnen</button></div>`).join('');
   box.innerHTML = `<div class="wikistate">
-      ${liste || `<p class="hint">Diese Sitzung liegt noch nicht im Wiki. Gespeichert wird nach <code>${esc(trimSep(p.raw_dir))}</code>, Bilder nach <code>${esc(trimSep(p.assets_dir))}</code>.</p>`}
+      ${liste || `<p class="hint">Diese Sitzung liegt noch nicht im Wiki. Gespeichert wird nach <code>${esc(trimSep(p.raw_dir))}${p.wiki_format === 'meetings' ? esc(sep() + 'meetings') : ''}</code>, Bilder nach <code>${esc(trimSep(p.assets_dir))}</code>.</p>`}
       <div class="row">
         <button class="${ablagen.length ? 'secondary' : ''} sm" type="button" id="anaWikiSave">${icon('book-plus')}${ablagen.length ? 'Erneut speichern' : 'Ins Wiki speichern'}</button>
         <button class="ghost sm" type="button" data-preview="${esc(q.path)}" data-title="${esc(q.titel || q.name)}">${icon('file-text')}Transkript ansehen</button>
@@ -269,7 +269,7 @@ function renderProgress(s) {
 async function speichereSitzung() {
   const q = quelle();
   if (!q) return;
-  const ablage = await openWikiDialog({ path: q.path, name: q.name, titel: q.titel, frames: q.frames, ohneImmer: true });
+  const ablage = await openWikiDialog({ path: q.path, name: q.name, titel: q.titel, art: q.art, frames: q.frames, ohneImmer: true });
   if (ablage) loadSources();
 }
 

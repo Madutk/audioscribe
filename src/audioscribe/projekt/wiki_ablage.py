@@ -15,6 +15,11 @@ Regeln (PRD §21):
 - KI-erzeugte Nachbereitungen liegen getrennt unter ``nachbereitung-ki/`` und sind als
   KI-erzeugt gekennzeichnet - sie sind keine Quelle.
 
+Meetings-Format (Projekteinstellung ``wiki_format``, ``speichere_meeting``): statt eines Ordners
+eine Datei ``raw/meetings/<JJJJ-MM-TT>_<art>_<thema>.md`` - das Transkript mit den Bildlinks -,
+daneben auf Wunsch ``<stamm>.souffleur.md``/``.json`` und die Bilder unter ``<assets>/<stamm>/``.
+Alle teilen denselben Namensstamm; so verlangt es die ``CLAUDE.md`` des Wikis.
+
 „Speichern unter …“ (``speichere_nach``) ist dieselbe Ablage an frei gewählte Ordner für
 Transkript und Bilder - auch ohne Projekt. Nie unter die Wiki-Seiten, rein anhängend, die
 Bildlinks bleiben relativ; nur die Wiki-Konventionen (``raw/``, Assets im Wiki) entfallen.
@@ -31,10 +36,12 @@ from datetime import datetime
 from pathlib import Path
 from urllib.parse import quote
 
-from audioscribe.projekt.modell import Projekt, gleich, ist_unter
+from audioscribe.projekt.modell import FORMAT_MEETINGS, MEETING_ARTEN, Projekt, gleich, ist_unter
 
 VERMERK = "wiki-ablage.json"
 NACHBEREITUNG_ORDNER = "nachbereitung-ki"
+MEETINGS_ORDNER = "meetings"  # unter raw/ - Meetings-Format
+SOUFFLEUR_ENDUNG = ".souffleur"  # Begleitdatei der Markierungen: <stamm>.souffleur.md/.json
 # Aus dem Analyse-Ordner nicht mitgenommen: Materialkopie, Kontext, Skills, Protokoll, Manifest.
 _ANALYSE_AUSGELASSEN = {"material", "kontext", "agent-log.txt", "analyse.json", VERMERK}
 
@@ -42,11 +49,13 @@ _DATUM = re.compile(r"(\d{4}-\d{2}-\d{2})")
 _LIVE_NAME = re.compile(r"^live-\d{4}-\d{2}-\d{2}_(\d{2}-\d{2}-\d{2})$")
 _BILD_LINK = re.compile(r"!\[([^\]]*)\]\((?:\./)?material/frames/([^)\s]+)(?:\s+\"[^\"]*\")?\)")
 _FRAME_PFAD = re.compile(r"(?:\./)?material/frames/([^)\s\"'<>]+)")
+# Namensstamm im Meetings-Format, wie ihn die CLAUDE.md des Wikis vorgibt.
+STAMM_MUSTER = re.compile(r"^\d{4}-\d{2}-\d{2}_(" + "|".join(MEETING_ARTEN) + r")_[a-z0-9]+(-[a-z0-9]+)*$")
 
 
 @dataclass(frozen=True)
 class Ablage:
-    ordner: str  # Ziel unter raw/
+    ordner: str  # Ziel unter raw/ (Meetings-Format: die Transkript-Datei)
     assets: str | None  # Bilder-Ordner dieser Sitzung (None = ohne Bilder gespeichert)
     bilder: int
     markierungen: int
@@ -152,12 +161,22 @@ def _atomar(pfad: Path, text: str) -> None:
     os.replace(tmp, pfad)
 
 
-def _titel_der_sitzung(session_dir: Path) -> str:
+def _aus_sitzung(session_dir: Path, feld: str) -> str:
     try:
         data = json.loads((session_dir / "sitzung.json").read_text(encoding="utf-8"))
-        return str(data.get("titel") or "").strip()
+        return str(data.get(feld) or "").strip()
     except (OSError, ValueError, AttributeError):
         return ""
+
+
+def _titel_der_sitzung(session_dir: Path) -> str:
+    return _aus_sitzung(session_dir, "titel")
+
+
+def art_der_sitzung(session_dir: Path) -> str:
+    """Die beim Start gewählte Art des Meetings (leer = keine)."""
+    art = _aus_sitzung(Path(session_dir), "art").lower()
+    return art if art in MEETING_ARTEN else ""
 
 
 # --- Vermerk im Sitzungs- bzw. Analyse-Ordner ------------------------------------------------
@@ -186,7 +205,8 @@ def letzte_ablage(session_dir: Path, projekt: Projekt | None = None, *, auch_fre
     unter …“ an frei gewählte Ordner gelegten."""
     for a in reversed(ablagen(session_dir)):
         ordner = str(a.get("ordner") or "")
-        if a.get("art", "sitzung") != "sitzung" or not ordner or not Path(ordner).is_dir():
+        # Meetings-Format: "ordner" ist die Transkript-Datei.
+        if a.get("art", "sitzung") != "sitzung" or not ordner or not Path(ordner).exists():
             continue
         frei = bool(a.get("frei"))
         if frei and not auch_freie:
@@ -208,12 +228,18 @@ def letzte_ablage(session_dir: Path, projekt: Projekt | None = None, *, auch_fre
 
 
 def speichere_sitzung(
-    session_dir: Path, projekt: Projekt, *, titel: str = "", bilder: bool = True, markierungen: bool = False
+    session_dir: Path, projekt: Projekt, *, titel: str = "", art: str = "", bilder: bool = True,
+    markierungen: bool = False,
 ) -> Ablage:
     """Das Transkript der Sitzung ins Wiki legen - auf Wunsch mit Bildern und mit den
     Markierungen des Souffleurs. Die Markierungen sind KI-erzeugt und zitieren das Wiki; unter
-    ``raw/`` könnte der Ingest sie als Quelle lesen, deshalb gehen sie nur auf Wunsch mit."""
+    ``raw/`` könnte der Ingest sie als Quelle lesen, deshalb gehen sie nur auf Wunsch mit.
+    Das Ablageformat bestimmt das Projekt (``wiki_format``)."""
     _pruefe_ziele(projekt)
+    if projekt.wiki_format == FORMAT_MEETINGS:
+        return speichere_meeting(
+            session_dir, projekt, titel=titel, art=art, bilder=bilder, markierungen=markierungen
+        )
     return speichere_nach(
         session_dir, raw_basis=projekt.raw_dir, assets_basis=projekt.assets_dir, seiten_dir=projekt.seiten_dir,
         titel=titel, bilder=bilder, markierungen=markierungen, frei=False,
@@ -317,6 +343,148 @@ def speichere_nach(
         raise
 
 
+# --- Meetings-Format ---------------------------------------------------------------------------
+
+
+def meeting_stamm(session_dir: Path, art: str, titel: str = "") -> str:
+    """``<JJJJ-MM-TT>_<art>_<thema>`` - Thema aus dem Titel wie beim Ordnernamen (kebab-case)."""
+    datum, thema = ordnername(session_dir, titel).split("_", 1)
+    return f"{datum}_{art}_{thema}"
+
+
+def _meeting_dateien(meetings: Path, stamm: str) -> list[Path]:
+    """Was unter einem Namensstamm neben dem Transkript liegen kann."""
+    return [
+        meetings / f"{stamm}.md",
+        meetings / f"{stamm}{SOUFFLEUR_ENDUNG}.md",
+        meetings / f"{stamm}{SOUFFLEUR_ENDUNG}.json",
+        meetings / f"{stamm}.{NACHBEREITUNG_ORDNER}",
+    ]
+
+
+def _freier_stamm(stamm: str, meetings: Path, assets_basis: Path | None) -> str:
+    """Erster Stamm, unter dem weder eine der Dateien noch der Bilder-Ordner existiert - ein
+    Konflikt in einem der Ziele verschiebt alle (``-2``, ``-3`` …), damit sie zusammenpassen."""
+    kandidat, n = stamm, 2
+    while any(p.exists() for p in _meeting_dateien(meetings, kandidat)) or (
+        assets_basis is not None and (assets_basis / kandidat).exists()
+    ):
+        kandidat = f"{stamm}-{n}"
+        n += 1
+    return kandidat
+
+
+def _neu(pfad: Path, text: str) -> None:
+    """Neue Datei schreiben - nie über eine bestehende."""
+    with open(pfad, "x", encoding="utf-8") as f:
+        f.write(text)
+
+
+def _mit_meeting_kopf(markdown: str, datum: str, art: str, titel: str, sprecher: list[str]) -> str:
+    """Datum, Anlass und Teilnehmende (als Rollen) oben in die Kopftabelle des Transkripts."""
+    zeilen = [f"| Datum | {datum} |", f"| Anlass | {art.capitalize()}{': ' + titel if titel else ''} |"]
+    if sprecher:
+        zeilen.append(f"| Teilnehmende | {', '.join(sprecher)} |")
+    trenner = "|---|---|\n"
+    if trenner not in markdown:
+        return markdown
+    return markdown.replace(trenner, trenner + "\n".join(zeilen) + "\n", 1)
+
+
+def speichere_meeting(
+    session_dir: Path, projekt: Projekt, *, titel: str = "", art: str = "", bilder: bool = True,
+    markierungen: bool = False,
+) -> Ablage:
+    """Die Sitzung als eine Datei ``raw/meetings/<stamm>.md`` ins Wiki legen: das Transkript mit
+    erweitertem Kopf und relativen Bildlinks; Bilder unter ``<assets>/<stamm>/``, Markierungen
+    auf Wunsch in ``<stamm>.souffleur.md``/``.json``. Der Wortlaut bleibt unverändert."""
+    from audioscribe.review.marks import load_marks
+    from audioscribe.review.merge import render_markdown_with_marks
+    from audioscribe.souffleur import markierung, uebergabe
+
+    _pruefe_ziele(projekt)
+    session_dir = Path(session_dir)
+    quelle = session_dir / "transkript.md"
+    if not quelle.is_file():
+        raise FileNotFoundError(f"Kein Transkript in {session_dir}")
+    art = (art.strip().lower() or art_der_sitzung(session_dir))
+    if art not in MEETING_ARTEN:
+        raise RuntimeError(
+            "Bitte die Art des Meetings wählen (" + ", ".join(MEETING_ARTEN) + ") – sie ist Teil des Dateinamens im Wiki."
+        )
+    titel = titel.strip() or _titel_der_sitzung(session_dir)
+    try:
+        data = json.loads((session_dir / "transcript.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        data = None
+    if not isinstance(data, dict):
+        data = None
+
+    meetings = projekt.raw_dir / MEETINGS_ORDNER
+    meetings.mkdir(parents=True, exist_ok=True)
+    stamm = _freier_stamm(meeting_stamm(session_dir, art, titel), meetings, projekt.assets_dir)
+    datei = meetings / f"{stamm}.md"
+
+    # Scheitert die Ablage unterwegs, verschwindet das selbst Angelegte wieder (wie beim Ordner).
+    angelegt: list[Path] = []
+    try:
+        verlinkt = []
+        assets: Path | None = None
+        if bilder and data is not None:
+            try:
+                marks = load_marks(session_dir)
+            except (OSError, ValueError, KeyError, TypeError):
+                marks = []
+            vorhandene = [m for m in marks if (session_dir / m.png).is_file()]
+            if vorhandene:
+                assets = projekt.assets_dir / stamm
+                assets.mkdir(parents=True)
+                angelegt.append(assets)
+                for m in vorhandene:
+                    bild = assets / Path(m.png).name
+                    shutil.copyfile(session_dir / m.png, bild)
+                    verlinkt.append(replace(m, png=_link(_rel_posix(bild, meetings))))
+
+        if data is not None:
+            sprecher = list(dict.fromkeys(str(p.get("speaker") or "") for p in data.get("paragraphs", [])))
+            text = _mit_meeting_kopf(
+                render_markdown_with_marks(data, verlinkt), _datum(session_dir), art, titel, [s for s in sprecher if s]
+            )
+        else:  # ohne transcript.json: das Transkript, wie es ist
+            text = quelle.read_text(encoding="utf-8")
+        _neu(datei, text)
+        angelegt.append(datei)
+
+        anzahl_markierungen = 0
+        stand = markierung.lade(session_dir) if markierungen else None
+        if stand is not None:
+            fassung = uebergabe.fassung(session_dir)
+            sitzung = stand.sitzung or session_dir.name
+            inhalt = uebergabe.daten(stand, sitzung=sitzung, transkript_fassung=fassung)
+            for endung, text in (
+                (".json", json.dumps(inhalt, ensure_ascii=False, indent=2) + "\n"),
+                (".md", uebergabe.render_md(sitzung, stand, fassung)),
+            ):
+                begleit = meetings / f"{stamm}{SOUFFLEUR_ENDUNG}{endung}"
+                _neu(begleit, text)
+                angelegt.append(begleit)
+            anzahl_markierungen = len(stand.markierungen)
+
+        ablage = Ablage(
+            ordner=str(datei), assets=str(assets) if assets else None, bilder=len(verlinkt),
+            markierungen=anzahl_markierungen, titel=titel, zeit=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        )
+        _vermerke(session_dir, ablage)
+        return ablage
+    except BaseException:
+        for pfad in reversed(angelegt):
+            if pfad.is_dir():
+                shutil.rmtree(pfad, ignore_errors=True)
+            else:
+                pfad.unlink(missing_ok=True)
+        raise
+
+
 def _readme(titel: str, sitzung: str, assets: Path | None, ziel: Path, mit_markierungen: bool) -> str:
     zeilen = [
         f"# Quelle aus AudioScribe: {titel}",
@@ -367,14 +535,16 @@ def speichere_nachbereitung(
         session_dir, projekt, bilder=bilder, markierungen=markierungen
     ).als_dict()
     basis = Path(sitzung["ordner"])
+    # Meetings-Format: die Sitzung ist eine Datei - die Nachbereitung liegt daneben unter demselben Stamm.
+    name = basis.stem if basis.is_file() else basis.name
     # Liegt die Sitzung ohne Bilder im Wiki, bekommt die Nachbereitung ihren eigenen Bilder-Ordner
     # unter demselben Namen - die Sitzung wird dafuer nicht ein zweites Mal abgelegt.
     if sitzung.get("assets"):
         assets: Path | None = Path(sitzung["assets"])
     else:
-        assets = projekt.assets_dir / basis.name if bilder else None
+        assets = projekt.assets_dir / name if bilder else None
 
-    eltern = basis / NACHBEREITUNG_ORDNER
+    eltern = basis.parent / f"{name}.{NACHBEREITUNG_ORDNER}" if basis.is_file() else basis / NACHBEREITUNG_ORDNER
     eltern.mkdir(exist_ok=True)
     ziel = eltern / _freier_name(workspace.name, eltern)
     ziel.mkdir()
@@ -422,8 +592,8 @@ def speichere_nachbereitung(
             ziel / ("KI-ERZEUGT.md" if (ziel / "README.md").exists() else "README.md"),
             f"# KI-Nachbereitung: {workspace.name}\n\n"
             "**KI-erzeugt – keine Quelle.** Diese Dokumente hat der Analyse-Agent von AudioScribe aus dem\n"
-            "Transkript (und den Bildern) dieser Sitzung erstellt. Beleg ist allein das Transkript im\n"
-            "übergeordneten Ordner.\n",
+            "Transkript (und den Bildern) dieser Sitzung erstellt. Beleg ist allein das Transkript "
+            + (f"`{basis.name}` daneben.\n" if basis.is_file() else "im\nübergeordneten Ordner.\n"),
         )
     except BaseException:
         shutil.rmtree(ziel, ignore_errors=True)
