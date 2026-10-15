@@ -115,6 +115,13 @@ class Settings:
     )
     live_partial_min_s: float = field(default_factory=lambda: float(_env("LIVE_PARTIAL_MIN_S", "1.0")))
     live_vad_every_tick: bool = field(default_factory=lambda: _flag("LIVE_VAD_EVERY_TICK", "0"))
+    # Uebersprechen (live/uebersprechen.py): Mikrofon-Abschnitte, deren Lautstaerke-Huellkurve
+    # so stark mit dem System-Audio korreliert, sind das Lautsprecher-Echo der Gegenseite und
+    # werden verworfen - live und beim Nachschaerfen. Basis ab 3 s Laenge, kuerzere Abschnitte
+    # brauchen mehr, unter 0,8 s wird nie verworfen. 0 = aus.
+    live_uebersprechen_schwelle: float = field(
+        default_factory=lambda: float(_env("LIVE_UEBERSPRECHEN_SCHWELLE", "0.7"))
+    )
 
     # --- Stufe 3: Wort-Alignment (wav2vec2) ---
     enable_alignment: bool = field(default_factory=lambda: _flag("ALIGNMENT", "1"))

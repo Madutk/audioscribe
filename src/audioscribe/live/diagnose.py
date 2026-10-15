@@ -17,12 +17,16 @@ import threading
 from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 
-from audioscribe.live.bilanz import LiveBilanz
+from audioscribe.live.bilanz import TEIL_LIVE, LiveBilanz
+from audioscribe.live.uebersprechen import VERWORFEN
 
 DIAGNOSE_NAME = "diagnose.jsonl"
 
 ART_ABSCHNITT = "abschnitt"
 ART_VORSCHAU = "vorschau"
+# Prüfung eines Mikrofon-Abschnitts gegen die System-Spur (``live/uebersprechen.py``); live
+# wie beim Nachschärfen, unterschieden über ``teil``.
+ART_UEBERSPRECHEN = "uebersprechen"
 
 
 @dataclass
@@ -73,6 +77,7 @@ class Diagnose:
         self._file = None
         self.abschnitte: list[Abschnitt] = []
         self.vorschauen: list[Vorschau] = []
+        self.uebersprechen_zeilen: list[dict] = []  # Live-Prüfungen (teil = live)
         self.rueckstand_proben: list[tuple[float, float]] = []  # (t, backlog_s)
 
     # --- schreiben ---------------------------------------------------------------
@@ -97,6 +102,14 @@ class Diagnose:
         with self._lock:
             self._write({"art": art, **daten})
 
+    def uebersprechen(self, **daten: object) -> None:
+        """Prüfung eines Mikrofon-Abschnitts gegen die System-Spur; Live-Zeilen zählen ins Fazit."""
+        zeile = {"art": ART_UEBERSPRECHEN, **daten}
+        with self._lock:
+            if daten.get("teil") == TEIL_LIVE:
+                self.uebersprechen_zeilen.append(zeile)
+            self._write(zeile)
+
     def uebernehme(self, zeilen: list[dict]) -> int:
         """Wiederaufnahme (PRD §21): Abschnitte und Vorschauen eines früheren Teils in den
         Speicher holen, ohne sie erneut zu schreiben - sonst zählte das Fazit nur den letzten
@@ -111,6 +124,8 @@ class Diagnose:
                         self.abschnitte.append(Abschnitt(**{k: v for k, v in z.items() if k in felder_a}))
                     elif z.get("art") == ART_VORSCHAU:
                         self.vorschauen.append(Vorschau(**{k: v for k, v in z.items() if k in felder_v}))
+                    elif z.get("art") == ART_UEBERSPRECHEN and z.get("teil") == TEIL_LIVE:
+                        self.uebersprechen_zeilen.append(dict(z))
                 except TypeError:
                     continue
             return max((int(a.chunk_index) for a in self.abschnitte), default=0)
@@ -165,6 +180,7 @@ class Diagnose:
         with self._lock:
             abschnitte = list(self.abschnitte)
             vorschauen = list(self.vorschauen)
+            uebersprechen = list(self.uebersprechen_zeilen)
             proben = list(self.rueckstand_proben)
 
         mit_text = [a for a in abschnitte if a.anzahl_woerter > 0]
@@ -198,6 +214,8 @@ class Diagnose:
             ),
             aufholmodus_anteil=round(aufhol_s / aufnahme_s, 2) if aufnahme_s > 0 else 0.0,
             eco_abschnitte=sum(1 for a in abschnitte if a.eco),
+            uebersprechen_geprueft=len(uebersprechen),
+            uebersprechen_verworfen=sum(1 for u in uebersprechen if u.get("entscheidung") == VERWORFEN),
         )
 
 

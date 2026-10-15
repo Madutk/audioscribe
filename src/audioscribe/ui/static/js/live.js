@@ -567,6 +567,7 @@ function renderFazit(f) {
     const klammer = [];
     if (l.zusammengelegt) klammer.push(`${l.zusammengelegt} zusammengelegt`);
     if (l.eco_abschnitte) klammer.push(`${l.eco_abschnitte} sparsam dekodiert`);
+    if (l.uebersprechen_verworfen) klammer.push(`${l.uebersprechen_verworfen} als Übersprechen verworfen`);
     if (klammer.length) rechnen += ` (${klammer.join(', ')})`;
     if (l.sprecher_s) rechnen += ` · davon Sprecher ${secs(l.sprecher_s)}`;
     if (l.vorschau_n) rechnen += ` · ${l.vorschau_n} Vorschauen ${secs(l.vorschau_s)}${tempo(l.tempo_inkl_vorschau).replace('× Echtzeit', '× inkl. Vorschau')}`;
@@ -585,6 +586,19 @@ function renderFazit(f) {
   if (n) {
     const stufen = (n.stufen || []).map((st) => `${st.name} ${secs(st.dauer_s)}`).join(' · ');
     rows.push(['Nachschärfen', `${hms(n.gesamt_s)}${tempo(n.tempo)}${stufen ? ' · ' + stufen : ''}`]);
+    // Übersprechen: Mikrofon-Segmente, die nur das Lautsprecher-Echo der Gegenseite waren,
+    // und der Abgleich mit den Live-Entscheidungen (zurückgeholt = live zu Unrecht verworfen).
+    const u = n.uebersprechen;
+    if (u && u.geprueft) {
+      const abgleich = [];
+      if (u.bestaetigt) abgleich.push(`live bestätigt ${u.bestaetigt}`);
+      if (u.zurueckgeholt) abgleich.push(`zurückgeholt ${u.zurueckgeholt}`);
+      if (u.nachtraeglich_entfernt) abgleich.push(`nachträglich entfernt ${u.nachtraeglich_entfernt}`);
+      let text = `${u.verworfen} von ${u.geprueft} Mikrofon-Segmenten verworfen`;
+      if (abgleich.length) text += ` (${abgleich.join(', ')})`;
+      if (u.lag_s !== undefined && u.lag_s !== null) text += ` · Zeitversatz ${u.lag_s.toLocaleString('de-DE')} s`;
+      rows.push(['Übersprechen', text]);
+    }
   }
   box.innerHTML = `<div class="result fazit"><b>Fazit</b><dl>${rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl></div>`;
   box.hidden = false;

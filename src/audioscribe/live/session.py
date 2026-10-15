@@ -22,6 +22,8 @@ import uuid
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 
+import numpy as np
+
 from audioscribe.live import events, journal
 from audioscribe.live.asr import Ergebnis
 from audioscribe.live.bilanz import TEIL_LIVE, beschreibe_live, save_bilanz
@@ -39,6 +41,7 @@ from audioscribe.live.store import (
     write_transcript,
 )
 from audioscribe.live.track import SAMPLE_RATE
+from audioscribe.live.uebersprechen import Pruefung, Rueckblick, lag_samples, pruefe
 from audioscribe.models import Segment, format_timecode
 from audioscribe.review.marks import Mark, load_marks, save_marks
 
@@ -79,6 +82,9 @@ class LiveOptions:
     partial_interval_s: float = 2.0
     # VAD jeden Takt (0,25 s) statt jeden zweiten: ~0,25 s weniger Verzögerung.
     vad_every_tick: bool = False
+    # Übersprechen: Mikrofon-Abschnitte, deren Hüllkurve so stark mit dem System-Audio
+    # korreliert, sind das Lautsprecher-Echo der Gegenseite und werden verworfen (0 = aus).
+    uebersprechen_schwelle: float = 0.7
     # Aufholmodus (PRD §17, NFR-15): ab catchup_s WARTENDEM Rückstand billig dekodieren,
     # wartende Abschnitte derselben Spur bis coalesce_s zusammenlegen (0 = nie).
     catchup_s: float = 5.0
@@ -110,6 +116,8 @@ class LiveSession:
         self._open: dict[str, int | None] = {}
         self._last_delay: float | None = None
         self._board = JobBoard(coalesce_s=opts.coalesce_s, catchup_s=opts.catchup_s)
+        # Die letzten 40 s je Spur für den Übersprech-Vergleich; leer ohne beide Spuren.
+        self._rueckblick: dict[str, Rueckblick] = {}
         self._catchup = False
         self._t0 = 0.0
         self._aufnahme_s: float | None = None  # gesetzt beim Stopp; danach läuft die Uhr weiter
@@ -345,6 +353,8 @@ class LiveSession:
                 name: Chunker(vad, pause_s=o.pause_s, max_s=o.max_chunk_s, start=self._start_sample)
                 for name in tracks
             }
+            if o.uebersprechen_schwelle > 0 and {"mic", "system"} <= set(tracks):
+                self._rueckblick = {name: Rueckblick() for name in ("mic", "system")}
             threads = [
                 threading.Thread(target=self._cut_loop, args=(tracks, chunkers), daemon=True),
                 threading.Thread(target=self._asr_loop, daemon=True),
@@ -368,10 +378,10 @@ class LiveSession:
         threads[0].join(timeout=5)
         if self._notfall.is_set():
             return self._notabschluss()
-        for name, track in tracks.items():
-            chunkers[name].feed(*track.take(self.clock()))
+        self._einlesen(tracks, chunkers, self.clock())
+        for name in tracks:
             for utt in chunkers[name].poll(flush=True):
-                self._board.put_final(Job(name, utt, final=True, t_abgeschlossen=self.clock()))
+                self._schliesse_ab(name, utt, self.clock())
         stopped = time.monotonic()
         self._drain()
         self._threads_stop.set()
@@ -454,15 +464,69 @@ class LiveSession:
         while not self._stop.wait(_TICK_S / self.opts.speed):
             tick += 1
             now = self.clock()
-            for name, track in tracks.items():
-                chunker = chunkers[name]
-                chunker.feed(*track.take(now))
-                if tick % 2 and not self.opts.vad_every_tick:
-                    continue  # VAD nur jeden zweiten Takt - sie ist der teure Teil
+            # Erst alle Spuren einlesen, dann schneiden: der Übersprech-Vergleich eines
+            # Mikrofon-Abschnitts braucht die System-Spur bis zum selben Takt.
+            self._einlesen(tracks, chunkers, now)
+            if tick % 2 and not self.opts.vad_every_tick:
+                continue  # VAD nur jeden zweiten Takt - sie ist der teure Teil
+            for name, chunker in chunkers.items():
                 done = chunker.poll()
                 for utt in done:
-                    self._board.put_final(Job(name, utt, final=True, t_abgeschlossen=now))
+                    self._schliesse_ab(name, utt, now)
                 self._offer_partial(name, chunker, bool(done), now, last_partial)
+
+    def _einlesen(self, tracks: dict, chunkers: dict[str, Chunker], now: float) -> None:
+        for name, track in tracks.items():
+            start, samples = track.take(now)
+            if name in self._rueckblick:
+                self._rueckblick[name].feed(start, samples)
+            chunkers[name].feed(start, samples)
+
+    def _schliesse_ab(self, name: str, utt, now: float) -> None:
+        """Fertiger Abschnitt: aufs Brett - oder verwerfen, wenn er nur Übersprechen ist."""
+        pruefung = self._pruefe_uebersprechen(name, utt)
+        if pruefung is not None and pruefung.verworfen:
+            self._board.drop_partial(name)
+            events.emit(events.PARTIAL, track=name, text="")  # Vorschau zurücknehmen
+            return
+        self._board.put_final(Job(name, utt, final=True, t_abgeschlossen=now))
+
+    def _pruefe_uebersprechen(self, name: str, utt, *, protokoll: bool = True) -> Pruefung | None:
+        """Mikrofon-Abschnitt gegen die System-Spur halten; jede Prüfung eines fertigen
+        Abschnitts steht im Diagnose-Log (auch „behalten“ - daran lässt sich die Schwelle
+        später nachjustieren)."""
+        if name != "mic" or not self._rueckblick:
+            return None
+        rb_mic, rb_sys = self._rueckblick["mic"], self._rueckblick["system"]
+        lag_min, lag_max = lag_samples()
+        # Das System-Fenster reicht bis end - lag_min. Fehlt davon am Ende etwas (Zeitlimit-
+        # Schnitt), wird der Abschnitt gekürzt statt mit Stille aufgefüllt - Stille gegen
+        # Sprache drückte den Score und ließe Echo durch.
+        end = min(utt.end, rb_sys.ende + lag_min)
+        leer = end <= utt.start
+        abdeckung = 0.0 if leer else (end - utt.start) / max(1, utt.end - utt.start)
+        mic = np.zeros(0, dtype=np.float32) if leer else rb_mic.ausschnitt(utt.start, end)
+        system = np.zeros(0, dtype=np.float32) if leer else rb_sys.ausschnitt(utt.start - lag_max, end - lag_min)
+        p = pruefe(
+            mic, system, dauer_s=utt.duration_s, schwelle=self.opts.uebersprechen_schwelle, abdeckung=abdeckung
+        )
+        if not protokoll:
+            return p
+        self._diagnose.uebersprechen(
+            teil=TEIL_LIVE,
+            track=name,
+            start_s=round(utt.start_s, 2),
+            end_s=round(utt.end_s, 2),
+            dauer_s=p.dauer_s,
+            score=p.score,
+            lag_s=p.lag_s,
+            abdeckung=p.abdeckung,
+            schwelle=p.schwelle,
+            schluss=utt.schluss,
+            entscheidung=p.entscheidung,
+            grund=p.grund,
+        )
+        return p
 
     def _offer_partial(
         self, name: str, chunker: Chunker, finalized: bool, now: float, last_partial: dict
@@ -481,9 +545,16 @@ class LiveSession:
             and utt.duration_s >= self.opts.partial_min_s
             and now - last_partial[name] >= self.opts.partial_interval_s
             and self._board.backlog_s() <= _PARTIAL_MAX_BACKLOG_S
+            and not self._ist_uebersprechen(name, utt)
         ):
             last_partial[name] = now
             self._board.put_partial(Job(name, utt, final=False))
+
+    def _ist_uebersprechen(self, name: str, utt) -> bool:
+        """Sieht der offene Abschnitt schon wie Echo aus, gibt es dafür keine Vorschau -
+        sonst stünde die Gegenseite kurz als „Ich“ im Souffleur. Ohne Diagnosezeile."""
+        p = self._pruefe_uebersprechen(name, utt, protokoll=False)
+        return p is not None and p.verworfen
 
     def _asr_loop(self) -> None:
         while not self._threads_stop.is_set():

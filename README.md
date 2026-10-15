@@ -659,9 +659,16 @@ Kommandozeile unter `--output`, Default `output/`):
 Nach dem Stopp zeigt die Karte **„Wie geht es weiter?“** die beiden nächsten Schritte: „Ins
 Wiki speichern“ und „Mit KI nachbereiten“ (siehe [Projekte](#projekte-und-ablage-ins-wiki)).
 
-**Zwei Fallstricke:** Mit Lautsprechern statt Headset hört das Mikrofon die Gegenseite mit,
-dann stehen Textstellen doppelt. Und bei Monitoraufnahme gehört die AudioScribe-Oberfläche
-nicht auf den überwachten Monitor, sonst lösen neue Thumbnails selbst Bildwechsel aus.
+**Zwei Fallstricke:** Mit Lautsprechern statt Headset hört das Mikrofon die Gegenseite mit
+(„Übersprechen“). Die Sitzung erkennt solche Mikrofon-Abschnitte am Abgleich ihrer
+Lautstärke-Hüllkurve mit dem System-Audio und verwirft sie, bevor sie transkribiert werden;
+das Nachschärfen prüft noch einmal über den ganzen Mitschnitt (siehe unten). Ein Headset
+bleibt trotzdem sauberer, vor allem beim Durcheinanderreden, und Abschnitte unter 0,8 s
+werden nie verworfen (zu wenig Hüllkurve für ein sicheres Urteil).
+`AUDIOSCRIBE_LIVE_UEBERSPRECHEN_SCHWELLE` (Standard 0,7; 0 = aus) stellt die Empfindlichkeit;
+mit Kopfhörern greift der Filter von selbst nicht, weil nichts korreliert. Und bei
+Monitoraufnahme gehört die AudioScribe-Oberfläche nicht auf den überwachten Monitor, sonst
+lösen neue Thumbnails selbst Bildwechsel aus.
 
 <details>
 <summary>Modelle, Sprecher, Nachschärfen</summary>
@@ -690,8 +697,11 @@ Stopp nachschärfen“ läuft die Offline-Pipeline (Alignment, Diarisierung der 
 auf Stoppen bricht hart ab. Danach zeigt die Ansicht ein **Fazit**: Aufnahmedauer, Ladezeit,
 Rechenzeit und Tempo (Rechenzeit je Audiosekunde, nur das Dekodieren; daneben „inkl.
 Vorschau“), Verzögerung (Ø, Median, max), Abschnitte (davon zusammengelegt bzw. sparsam
-dekodiert), höchster Rückstand und Zeit im Aufholmodus, nach dem Nachschärfen die Dauer je
-Stufe. Dieselben Zahlen stehen im Protokoll und in `bilanz.json`.
+dekodiert, als Übersprechen verworfen), höchster Rückstand und Zeit im Aufholmodus, nach dem
+Nachschärfen die Dauer je Stufe und der Abgleich des Übersprechens: wie viele Mikrofon-Segmente
+offline verworfen wurden, davon live bestätigt, zurückgeholt (live verworfen, offline behalten;
+der Text steht durch die Neutranskription wieder im Transkript) und nachträglich entfernt (live
+behalten, offline verworfen). Dieselben Zahlen stehen im Protokoll und in `bilanz.json`.
 
 **Diagnose-Log:** Das Fazit ist aus `diagnose.jsonl` abgeleitet, einer JSON-Lines-Datei mit
 einer Zeile je fertigem Abschnitt (`art: "abschnitt"`): Lage im Audio, Zeitpunkte auf der
@@ -699,8 +709,14 @@ Sitzungsuhr, `wartezeit_s`, `rechenzeit_s`, `sprecher_s`, `latenz_s`, Modell, `e
 (sparsam dekodiert), Wortzahl, `schluss` (`pause`, `zeitlimit`, `flush`) und je
 Whisper-Segment `avg_logprob`, `compression_ratio`, `no_speech_prob`, `temperature` (> 0
 heißt: der Fallback hat gegriffen). Vorschauen stehen als eigene Zeilen, das Nachschärfen
-hängt je Segment und je Stufe eine Zeile an. Für Messläufe erzwingt `audioscribe live --eco`
-den Sparmodus für alle Abschnitte.
+hängt je Segment und je Stufe eine Zeile an. Jede Übersprech-Prüfung eines Mikrofon-Abschnitts
+steht als Zeile `art: "uebersprechen"` (`teil` live oder nachschaerfen) mit `score` (normierte
+Korrelation der Hüllkurven), `lag_s` (Zeitversatz Lautsprecher zu Mikrofon), `dauer_s`,
+`schwelle` (für diese Länge geltend), `abdeckung` und `entscheidung`. Daraus lässt sich die
+Schwelle nachjustieren: die Scores der behaltenen und der verworfenen Zeilen gegenüberstellen,
+die Schwelle gehört ins Tal dazwischen; sammeln sich die `lag_s` der verworfenen Zeilen am
+Rand des Fensters (-0,16 bis 0,5 s), passt das Fenster nicht. Für Messläufe erzwingt
+`audioscribe live --eco` den Sparmodus für alle Abschnitte.
 
 **Zurücksetzen** leert nach Rückfrage Transkript, Screenshots und Protokoll. Während einer
 Aufnahme heißt der Knopf „Verwerfen und neu beginnen“: Die Sitzung wird hart beendet (ohne
@@ -725,7 +741,8 @@ Zahl physischer Kerne.
 
 `live --wav DATEI` schickt eine WAV-Datei als System-Audio durch dieselbe Pipeline, als käme
 sie gerade aus dem Lautsprecher: derselbe Schnitt, dieselbe Warteschlange, dasselbe Fazit und
-Diagnose-Log. `--wav-mic DATEI` spielt eine zweite Datei als Mikrofon. Standbilder gibt es
+Diagnose-Log. `--wav-mic DATEI` spielt eine zweite Datei als Mikrofon; mit beiden Spuren
+lässt sich so auch der Übersprech-Filter reproduzierbar prüfen. Standbilder gibt es
 dabei nicht, und es läuft auch unter Linux. Die Sitzung endet von selbst, sobald die Datei
 durch ist. So lassen sich Modelle und Schnitt-Einstellungen reproduzierbar gegen ein
 Referenztranskript messen, etwa mit `transkript.txt` und einem WER-Werkzeug. `--speed 4`

@@ -42,6 +42,10 @@ class LiveBilanz:
     tempo_inkl_vorschau: float | None = None  # (Dekodieren + Sprecher + Vorschau) je Audiosekunde
     aufholmodus_anteil: float = 0.0  # aufholmodus_s / aufnahme_s
     eco_abschnitte: int = 0  # sparsam dekodierte Abschnitte (Beam 1, kein Fallback)
+    # Übersprechen: Mikrofon-Abschnitte, die gegen die System-Spur geprüft wurden, und
+    # wie viele davon als Lautsprecher-Echo verworfen wurden (``live/uebersprechen.py``).
+    uebersprechen_geprueft: int = 0
+    uebersprechen_verworfen: int = 0
     backend: str = ""  # faster-whisper | mlx (FR-52)
     geraet: str = ""  # cuda | mps | cpu
     modell: str = ""
@@ -54,6 +58,10 @@ class RefineBilanz:
     tempo: float | None = None  # Gesamtzeit je Audiosekunde
     modell: str | None = None
     stufen: list[dict] = field(default_factory=list)  # {"name", "dauer_s"}
+    # Übersprechen offline geprüft (beide Spuren vorhanden): geprueft, verworfen, lag_s,
+    # lag_score und der Abgleich mit den Live-Entscheidungen (bestaetigt, zurueckgeholt,
+    # nachtraeglich_entfernt, ohne_text). None ohne System-Spur oder bei Schwelle 0.
+    uebersprechen: dict | None = None
 
 
 # --- Datei ---------------------------------------------------------------------------
@@ -119,6 +127,8 @@ def beschreibe_live(b: LiveBilanz) -> str:
     if b.eco_abschnitte:
         abschnitte += f" ({b.eco_abschnitte} sparsam)"
     teile.append(abschnitte)
+    if b.uebersprechen_verworfen:
+        teile.append(f"Übersprechen {b.uebersprechen_verworfen} verworfen")
     if b.aufholmodus_s:
         anteil = f" ({round(b.aufholmodus_anteil * 100)} %)" if b.aufholmodus_anteil else ""
         teile.append(f"Aufholmodus {_s(b.aufholmodus_s)}{anteil}")
@@ -130,4 +140,23 @@ def beschreibe_live(b: LiveBilanz) -> str:
 
 def beschreibe_refine(b: RefineBilanz) -> str:
     stufen = ", ".join(f"{st['name']} {_s(st['dauer_s'])}" for st in b.stufen)
-    return f"Fazit Nachschärfen: {_hms(b.gesamt_s)}{_tempo(b.tempo)}" + (f" · {stufen}" if stufen else "")
+    text = f"Fazit Nachschärfen: {_hms(b.gesamt_s)}{_tempo(b.tempo)}" + (f" · {stufen}" if stufen else "")
+    if b.uebersprechen and b.uebersprechen.get("geprueft"):
+        text += " · " + beschreibe_uebersprechen(b.uebersprechen)
+    return text
+
+
+def beschreibe_uebersprechen(u: dict) -> str:
+    """Eine Zeile zum Offline-Abgleich: ``Übersprechen 3 von 12 verworfen (live bestätigt 2, ...)``."""
+    abgleich = []
+    for key, name in (
+        ("bestaetigt", "live bestätigt"),
+        ("zurueckgeholt", "zurückgeholt"),
+        ("nachtraeglich_entfernt", "nachträglich entfernt"),
+    ):
+        if u.get(key):
+            abgleich.append(f"{name} {u[key]}")
+    text = f"Übersprechen {u.get('verworfen', 0)} von {u.get('geprueft', 0)} verworfen"
+    if abgleich:
+        text += f" ({', '.join(abgleich)})"
+    return text

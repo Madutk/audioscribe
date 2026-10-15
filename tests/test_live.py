@@ -1678,3 +1678,303 @@ def test_build_live_argv_gibt_die_art_des_meetings_weiter(tmp_path):
         LiveJobOptions(output_dir=tmp_path, art="review", replay_transcript=tmp_path / "t.md"), prefix=["audioscribe"]
     )
     assert not any(a.startswith("--art") for a in build_live_argv(LiveJobOptions(output_dir=tmp_path), prefix=["a"]))
+
+
+# --- Übersprechen: Mikrofon hört die Lautsprecher mit ------------------------------
+
+
+def sprechbursts(rng, dauer_s: float, pegel: float = 0.9) -> np.ndarray:
+    """Sprachähnliche Hüllkurve: Silben 80-250 ms mit zufälligem Pegel, kleine Pausen,
+    Rauschen als Träger. ``speech()`` ist konstant und hat keine Hüllkurve zum Vergleichen."""
+    n = int(dauer_s * SR)
+    env = np.zeros(n)
+    i = 0
+    while i < n:
+        sil = int(rng.uniform(0.08, 0.25) * SR)
+        t = np.arange(min(sil, n - i))
+        env[i : i + len(t)] = rng.uniform(0.4, 1.0) * np.sin(np.pi * t / sil) ** 0.7
+        i += sil + (int(rng.uniform(0.0, 0.3) * SR) if rng.random() < 0.4 else 0)
+    return (rng.standard_normal(n) * env * pegel / 3).astype(np.float32)
+
+
+def lautsprecher_echo(rng, signal: np.ndarray, lag_s: float, daempfung: float = 0.35) -> np.ndarray:
+    """Was das Mikrofon vom Lautsprecher hört: tiefpassgefiltert, leicht verhallt, verzögert, leiser."""
+    from scipy.signal import butter, lfilter
+
+    b, a = butter(2, 3000 / (SR / 2))
+    y = lfilter(b, a, signal)
+    hall = int(0.03 * SR)
+    y = y + 0.3 * np.concatenate([np.zeros(hall), y[:-hall]])
+    lag = int(lag_s * SR)
+    out = np.concatenate([np.zeros(lag), y[: len(y) - lag]]) * daempfung
+    return (out + rng.standard_normal(len(out)) * 0.003).astype(np.float32)
+
+
+def _mit_system_fenster(mic_t0: int, mic_t1: int, mic: np.ndarray, system: np.ndarray):
+    from audioscribe.live.uebersprechen import lag_samples
+
+    lag_min, lag_max = lag_samples()
+    return mic[mic_t0:mic_t1], system[mic_t0 - lag_max : mic_t1 - lag_min]
+
+
+def test_uebersprech_score_erkennt_verzoegerte_gedaempfte_kopie():
+    from audioscribe.live.uebersprechen import uebersprech_score
+
+    rng = np.random.default_rng(1)
+    system = np.zeros(6 * SR, dtype=np.float32)
+    system[SR : SR + 3 * SR] = sprechbursts(rng, 3.0)
+    mic = lautsprecher_echo(rng, system, 0.08)
+    t0, t1 = SR + int(0.08 * SR), SR + int(3.08 * SR)
+    score, lag = uebersprech_score(*_mit_system_fenster(t0, t1, mic, system))
+    assert score > 0.8 and abs(lag - 0.08) < 0.03
+
+
+def test_uebersprech_score_fremde_sprache_und_stille_bleiben_niedrig():
+    from audioscribe.live.uebersprechen import uebersprech_score
+
+    rng = np.random.default_rng(2)
+    system = np.zeros(6 * SR, dtype=np.float32)
+    system[SR : SR + 3 * SR] = sprechbursts(rng, 3.0)
+    fremd = np.zeros_like(system)
+    fremd[SR : SR + 3 * SR] = sprechbursts(rng, 3.0)
+    score, _ = uebersprech_score(*_mit_system_fenster(SR, SR + 3 * SR, fremd, system))
+    assert score < 0.6
+    # Stilles System: da kann nichts durchgesprochen haben, egal was das Mikrofon hört.
+    still = np.zeros_like(system)
+    assert uebersprech_score(*_mit_system_fenster(SR, SR + 3 * SR, fremd, still)) == (0.0, 0.0)
+
+
+def test_pruefe_schwelle_haengt_von_der_laenge_ab_und_kurze_werden_nie_verworfen():
+    from audioscribe.live.uebersprechen import GRUND_ZU_KURZ, pruefe, schwelle_fuer
+
+    assert schwelle_fuer(3.0, 0.7) == 0.7 and schwelle_fuer(8.0, 0.7) == 0.7
+    assert schwelle_fuer(2.0, 0.7) == 0.8 and schwelle_fuer(1.0, 0.7) == 0.9
+    assert schwelle_fuer(1.0, 0.0) == 0.0  # aus bleibt aus
+    rng = np.random.default_rng(3)
+    system = np.zeros(4 * SR, dtype=np.float32)
+    system[SR : SR + int(0.5 * SR)] = sprechbursts(rng, 0.5)
+    mic = lautsprecher_echo(rng, system, 0.08)
+    t0, t1 = SR + int(0.08 * SR), SR + int(0.58 * SR)
+    p = pruefe(*_mit_system_fenster(t0, t1, mic, system), dauer_s=0.5, schwelle=0.7)
+    assert p.verworfen is False and p.grund == GRUND_ZU_KURZ and p.schwelle == 0.95
+    assert p.entscheidung == "behalten"
+
+
+def test_pruefe_doppelsprechen_bleibt_erhalten_und_echo_wird_verworfen():
+    from audioscribe.live.uebersprechen import pruefe
+
+    rng = np.random.default_rng(4)
+    system = np.zeros(6 * SR, dtype=np.float32)
+    system[SR : SR + 3 * SR] = sprechbursts(rng, 3.0)
+    echo = lautsprecher_echo(rng, system, 0.1)
+    t0, t1 = SR + int(0.1 * SR), SR + int(3.1 * SR)
+    p = pruefe(*_mit_system_fenster(t0, t1, echo, system), dauer_s=3.0, schwelle=0.7)
+    assert p.verworfen is True and p.entscheidung == "verworfen" and abs(p.lag_s - 0.1) < 0.03
+    # Ich rede über das Echo hinweg: meine Stimme ist am eigenen Mikrofon lauter und
+    # bestimmt die Hüllkurve - der Abschnitt bleibt.
+    doppel = echo.copy()
+    doppel[t0:t1] += sprechbursts(rng, 3.0)
+    p = pruefe(*_mit_system_fenster(t0, t1, doppel, system), dauer_s=3.0, schwelle=0.7)
+    assert p.verworfen is False
+    # Ohne System-Fenster (live: noch nichts da) wird nie verworfen.
+    p = pruefe(echo[t0:t1], np.zeros(0, dtype=np.float32), dauer_s=3.0, schwelle=0.7, abdeckung=0.0)
+    assert p.verworfen is False and p.grund == "ohne_system" and p.abdeckung == 0.0
+
+
+def test_rueckblick_ring_mit_startversatz_umlauf_und_luecke():
+    from audioscribe.live.uebersprechen import Rueckblick
+
+    rb = Rueckblick(dauer_s=1.0)  # 16 000 Samples Ring
+    rb.feed(100_000, np.arange(8_000, dtype=np.float32))
+    rb.feed(108_000, np.arange(8_000, 20_000, dtype=np.float32))  # läuft über die Ringgröße
+    assert rb.ende == 120_000
+    assert np.array_equal(rb.ausschnitt(104_000, 120_000), np.arange(4_000, 20_000, dtype=np.float32))
+    # Jenseits des Endes und älter als der Ring: Nullen, kein altes Audio.
+    assert rb.ausschnitt(118_000, 124_000)[2_000:].max() == 0.0
+    assert rb.ausschnitt(99_000, 104_000)[:1_000].max() == 0.0  # vor dem Startversatz
+    assert rb.ausschnitt(100_000, 104_000)[0] == 0.0 and rb.ausschnitt(104_000, 104_001)[0] == 4_000.0
+    rb.feed(130_000, np.ones(800, dtype=np.float32))  # Lücke 120 000..130 000
+    assert rb.ausschnitt(120_000, 130_000).max() == 0.0 and rb.ausschnitt(130_000, 130_800).min() == 1.0
+    assert len(rb.ausschnitt(5, 5)) == 0
+
+
+def test_gleiche_ab_zaehlt_die_vier_faelle():
+    from audioscribe.live.uebersprechen import gleiche_ab
+
+    live = [
+        {"start_s": 1.0, "end_s": 4.0, "entscheidung": "verworfen"},  # offline auch weg
+        {"start_s": 6.0, "end_s": 9.0, "entscheidung": "behalten"},  # offline weg
+        {"start_s": 11.0, "end_s": 14.0, "entscheidung": "verworfen"},  # offline da: zurückgeholt
+        {"start_s": 20.0, "end_s": 21.0, "entscheidung": "verworfen"},  # Whisper fand dort nichts
+        {"start_s": 30.0, "end_s": 33.0, "entscheidung": "behalten"},  # einvernehmlich behalten
+    ]
+    offline = [(1.1, 2.0, True), (2.0, 4.1, True), (6.1, 9.1, True), (11.1, 14.1, False), (30.0, 33.0, False)]
+    assert gleiche_ab(live, offline) == {
+        "bestaetigt": 1, "zurueckgeholt": 1, "nachtraeglich_entfernt": 1, "ohne_text": 1
+    }
+    # Überlappt ein Live-Fenster mehrere Segmente, zählt es nur als weg, wenn alle weg sind.
+    assert gleiche_ab(live[:1], [(1.1, 2.0, True), (2.0, 4.1, False)])["zurueckgeholt"] == 1
+
+
+def test_beschreibe_uebersprechen_in_live_und_refine_fazit():
+    from audioscribe.live.bilanz import LiveBilanz, RefineBilanz, beschreibe_live, beschreibe_refine
+
+    b = LiveBilanz(laden_s=1.0, aufnahme_s=60.0, abschluss_s=0.5, gesamt_s=70.0, abschnitte=4,
+                   uebersprechen_geprueft=3, uebersprechen_verworfen=2)
+    assert " · 4 Abschnitte · Übersprechen 2 verworfen · " in beschreibe_live(b)
+    assert "Übersprechen" not in beschreibe_live(LiveBilanz(1.0, 60.0, 0.5, 70.0, uebersprechen_geprueft=3))
+    r = RefineBilanz(gesamt_s=10.0, audio_s=60.0, uebersprechen={
+        "geprueft": 12, "verworfen": 3, "bestaetigt": 2, "zurueckgeholt": 1, "nachtraeglich_entfernt": 0,
+        "ohne_text": 0, "lag_s": 0.08, "lag_score": 0.9})
+    assert beschreibe_refine(r).endswith("Übersprechen 3 von 12 verworfen (live bestätigt 2, zurückgeholt 1)")
+    assert "Übersprechen" not in beschreibe_refine(RefineBilanz(gesamt_s=10.0, audio_s=60.0))
+
+
+def test_diagnose_zaehlt_live_uebersprechen_auch_nach_wiederaufnahme(tmp_path):
+    from audioscribe.live.diagnose import Diagnose, lies_diagnose
+
+    d = Diagnose(tmp_path / "diagnose.jsonl")
+    d.uebersprechen(teil="live", track="mic", start_s=1.0, end_s=4.0, entscheidung="verworfen")
+    d.uebersprechen(teil="live", track="mic", start_s=6.0, end_s=9.0, entscheidung="behalten")
+    d.uebersprechen(teil="nachschaerfen", spur="Mikrofon", start_s=1.0, end_s=4.0, entscheidung="verworfen")
+    d.close()
+    zeilen = lies_diagnose(tmp_path)
+    assert [z["art"] for z in zeilen] == ["uebersprechen"] * 3
+    neu = Diagnose(None)
+    neu.uebernehme(zeilen)  # Offline-Zeilen bleiben außen vor
+    b = neu.bilanz(laden_s=1.0, aufnahme_s=10.0, abschluss_s=0.0, gesamt_s=11.0, schwelle_s=12.0)
+    assert (b.uebersprechen_geprueft, b.uebersprechen_verworfen) == (2, 1)
+
+
+def _echo_sitzung(tmp_path, rng):
+    """System: zwei Blöcke der Gegenseite; Mikrofon: deren Lautsprecher-Echo plus ein eigener Block."""
+    system = np.zeros(16 * SR, dtype=np.float32)
+    system[1 * SR : 4 * SR] = sprechbursts(rng, 3.0)
+    system[6 * SR : 9 * SR] = sprechbursts(rng, 3.0)
+    # Kräftiges Echo: die Pegel-Attrappe ``energy_vad`` soll den Block nicht an leisen
+    # Silben zerteilen (abgesplitterte Reste unter 0,8 s blieben absichtlich stehen).
+    mic = lautsprecher_echo(rng, system, 0.08, daempfung=0.6)
+    mic[11 * SR : 14 * SR] += sprechbursts(rng, 3.0)
+    write_wav(tmp_path / "system.wav", system)
+    write_wav(tmp_path / "mikrofon.wav", mic)
+    return tmp_path / "system.wav", tmp_path / "mikrofon.wav"
+
+
+def test_live_session_verwirft_uebersprechen_im_replay(tmp_path, monkeypatch):
+    from audioscribe.live.bilanz import load_bilanz
+    from audioscribe.live.diagnose import lies_diagnose
+    from audioscribe.live.session import LiveOptions, LiveSession
+
+    system_wav, mic_wav = _echo_sitzung(tmp_path, np.random.default_rng(5))
+    emitted = []
+    monkeypatch.setattr(events, "emit", lambda typ, **d: emitted.append((typ, d)))
+    monkeypatch.setattr(events, "log", lambda *_a, **_k: None)
+    opts = LiveOptions(output_dir=tmp_path / "out", model="m", device="cpu", compute_type="int8",
+                       replay_system=system_wav, replay_mic=mic_wav, speed=10.0, monitor=0,
+                       mic="default", loopback="default", partials=False, speakers=False)
+    session = LiveSession(opts)
+    monkeypatch.setattr(session, "_load_asr", lambda: FakeAsr())
+    monkeypatch.setattr(session, "_load_vad", lambda: energy_vad)
+    monkeypatch.setattr(session, "_watch_stdin", lambda: None)
+
+    assert session.run() == 0
+
+    segs = [d for typ, d in emitted if typ == events.SEGMENT]
+    system_segs = sorted(s["start"] for s in segs if s["track"] == "system")
+    mic_segs = [s for s in segs if s["track"] == "mic"]
+    assert len(system_segs) == 2 and abs(system_segs[0] - 1.0) < 0.2 and abs(system_segs[1] - 6.0) < 0.2
+    # Vom Mikrofon bleibt nur der eigene Block; die beiden Echos sind weg.
+    assert len(mic_segs) == 1 and abs(mic_segs[0]["start"] - 11.0) < 0.2 and mic_segs[0]["speaker"] == ICH
+    pruefungen = [z for z in lies_diagnose(session.dir) if z["art"] == "uebersprechen"]
+    assert [(z["teil"], z["track"], z["entscheidung"]) for z in pruefungen] == [
+        ("live", "mic", "verworfen"), ("live", "mic", "verworfen"), ("live", "mic", "behalten")
+    ]
+    assert all(z["score"] >= 0.8 and abs(z["lag_s"] - 0.08) < 0.03 for z in pruefungen[:2])
+    # Eigener Block: das System ist still, der Score null. Die VAD schneidet die Blöcke
+    # knapp unter 3 s, die Schwelle liegt dann minimal über der Basis.
+    assert pruefungen[2]["score"] == 0.0
+    assert all(z["abdeckung"] >= 0.9 and 0.7 <= z["schwelle"] <= 0.76 and 2.6 <= z["dauer_s"] <= 3.2 for z in pruefungen)
+    bilanz = load_bilanz(session.dir)["live"]
+    assert (bilanz["uebersprechen_geprueft"], bilanz["uebersprechen_verworfen"], bilanz["abschnitte"]) == (3, 2, 3)
+    # Je verworfenem Abschnitt wird die Vorschau zurückgenommen.
+    assert sum(1 for typ, d in emitted if typ == events.PARTIAL and d["track"] == "mic" and d["text"] == "") >= 2
+
+
+def test_live_session_ohne_filter_oder_ohne_system_prueft_nichts(tmp_path, monkeypatch):
+    from audioscribe.live.diagnose import lies_diagnose
+    from audioscribe.live.session import LiveOptions, LiveSession
+
+    system_wav, mic_wav = _echo_sitzung(tmp_path, np.random.default_rng(6))
+    emitted = []
+    monkeypatch.setattr(events, "emit", lambda typ, **d: emitted.append((typ, d)))
+    monkeypatch.setattr(events, "log", lambda *_a, **_k: None)
+    basis = dict(model="m", device="cpu", compute_type="int8", speed=10.0, monitor=0, partials=False, speakers=False)
+    for i, extra in enumerate((
+        dict(replay_system=system_wav, replay_mic=mic_wav, mic="default", loopback="default", uebersprechen_schwelle=0.0),
+        dict(replay_mic=mic_wav, mic="default", loopback="none"),
+    )):
+        session = LiveSession(LiveOptions(output_dir=tmp_path / f"out{i}", **basis, **extra))
+        monkeypatch.setattr(session, "_load_asr", lambda: FakeAsr())
+        monkeypatch.setattr(session, "_load_vad", lambda: energy_vad)
+        monkeypatch.setattr(session, "_watch_stdin", lambda: None)
+        assert session.run() == 0
+        assert session._rueckblick == {}
+        assert not [z for z in lies_diagnose(session.dir) if z["art"] == "uebersprechen"]
+        mic_segs = [d for typ, d in emitted if typ == events.SEGMENT and d["track"] == "mic"]
+        assert len(mic_segs) == 3  # Echo wird mittranskribiert - wie vor dem Filter
+        emitted.clear()
+
+
+def test_refine_verwirft_uebersprechen_und_gleicht_mit_live_ab(tmp_path, monkeypatch):
+    import json as _json
+    from dataclasses import replace
+
+    from audioscribe.live import refine
+    from audioscribe.live.bilanz import load_bilanz
+    from audioscribe.live.diagnose import lies_diagnose
+
+    rng = np.random.default_rng(7)
+    (tmp_path / "audio").mkdir()
+    _echo_sitzung(tmp_path / "audio", rng)
+    # Live-Entscheidungen: eine richtig, eine falsch behalten, eine falsch verworfen, eine ohne Text.
+    live = [
+        {"art": "uebersprechen", "teil": "live", "track": "mic", "start_s": 1.1, "end_s": 4.1, "entscheidung": "verworfen"},
+        {"art": "uebersprechen", "teil": "live", "track": "mic", "start_s": 6.1, "end_s": 9.1, "entscheidung": "behalten"},
+        {"art": "uebersprechen", "teil": "live", "track": "mic", "start_s": 11.0, "end_s": 14.0, "entscheidung": "verworfen"},
+        {"art": "uebersprechen", "teil": "live", "track": "mic", "start_s": 15.5, "end_s": 15.9, "entscheidung": "verworfen"},
+    ]
+    (tmp_path / "diagnose.jsonl").write_text("".join(_json.dumps(z) + "\n" for z in live), encoding="utf-8")
+    monkeypatch.setattr(refine, "settings", replace(refine.settings, enable_alignment=False, enable_diarization=False,
+                                                    whisper_model="tiny", live_uebersprechen_schwelle=0.7))
+    antworten = iter([
+        {"language": "de", "segments": [  # Mikrofon: zwei Echos, ein eigener Block, ein kurzer Einwurf
+            {"start": 1.08, "end": 4.08, "text": "Echo eins"},
+            {"start": 6.08, "end": 9.08, "text": "Echo zwei"},
+            {"start": 11.0, "end": 14.0, "text": "Ich selbst"},
+            {"start": 14.5, "end": 14.9, "text": "Mhm"},
+        ]},
+        {"language": "de", "segments": [{"start": 1.0, "end": 4.0, "text": "Gegenseite eins"},
+                                        {"start": 6.0, "end": 9.0, "text": "Gegenseite zwei"}]},
+    ])
+    monkeypatch.setattr("audioscribe.pipeline.transcribe.transcribe", lambda audio, reporter: next(antworten))
+    emitted = []
+    monkeypatch.setattr(events, "emit", lambda typ, **d: emitted.append((typ, d)))
+
+    assert refine.refine_session(tmp_path) == tmp_path / "transkript.md"
+
+    absaetze = _json.loads((tmp_path / "transcript.json").read_text(encoding="utf-8"))["paragraphs"]
+    # Absätze fassen aufeinanderfolgende Segmente desselben Sprechers zusammen; die Echos fehlen.
+    assert [(p["speaker"], p["text"]) for p in absaetze] == [
+        ("Gegenseite", "Gegenseite eins Gegenseite zwei"), ("Ich", "Ich selbst Mhm")
+    ]
+    u = load_bilanz(tmp_path)["nachschaerfen"]["uebersprechen"]
+    assert {k: u[k] for k in ("geprueft", "verworfen", "bestaetigt", "zurueckgeholt", "nachtraeglich_entfernt", "ohne_text")} == {
+        "geprueft": 4, "verworfen": 2, "bestaetigt": 1, "zurueckgeholt": 1, "nachtraeglich_entfernt": 1, "ohne_text": 1
+    }
+    assert abs(u["lag_s"] - 0.08) < 0.03 and u["lag_score"] > 0.5
+    stufen = [st["name"] for st in load_bilanz(tmp_path)["nachschaerfen"]["stufen"]]
+    assert stufen[0] == "Übersprechen: Zeitversatz schätzen" and stufen[-1] == "Zusammenführen & Export"
+    offline = [z for z in lies_diagnose(tmp_path) if z["art"] == "uebersprechen" and z["teil"] == "nachschaerfen"]
+    assert [z["entscheidung"] for z in offline] == ["verworfen", "verworfen", "behalten", "behalten"]
+    assert offline[3]["grund"] == "zu_kurz" and offline[0]["spur"] == "Mikrofon"
+    assert emitted[-1][0] == events.FAZIT and emitted[-1][1]["uebersprechen"]["verworfen"] == 2

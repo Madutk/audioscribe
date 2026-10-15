@@ -220,6 +220,7 @@ def _live(args: argparse.Namespace) -> int:
         partial_interval_s=settings.live_partial_interval_s,
         partial_min_s=settings.live_partial_min_s,
         vad_every_tick=settings.live_vad_every_tick,
+        uebersprechen_schwelle=settings.live_uebersprechen_schwelle,
     )
     try:
         return LiveSession(opts).run()
