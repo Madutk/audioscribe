@@ -9,6 +9,7 @@ import { askConfirm, pickFolder } from './dialoge.js';
 import { openWikiDialog } from './wiki.js';
 import { addHint, markSegment, hintBySeg, renderSouffleur, resetSouffleurView, gotoHint, setSouffleurHidden, renderHandover, zeigeWikiStatus, hinweisZahlen } from './souffleur.js';
 import { ladeVorgeschichte, demoZustand, vorspann } from './demo.js';
+import { pipStatus, umschalten as souffleurPip, einkoppeln as souffleurEinkoppeln, istAusgekoppelt, pipMoeglich } from './souffleur-pip.js';
 
 // --- Live Transcription -----------------------------------------------------
 
@@ -305,6 +306,7 @@ async function resetLive() {
   try {
     const r = await post('/api/live/reset', {});
     resetLiveView();
+    if (!restart) souffleurEinkoppeln();  // beim Neubeginnen bleibt das Mini-Fenster offen
     if (restart) await startLive();
     else await pollLive();
     if (r.discarded) $('liveLog').textContent = `Verworfene Sitzung liegt noch unter: ${r.discarded}\n` + $('liveLog').textContent;
@@ -478,6 +480,7 @@ async function pollLive() {
 
   const st = s.stats;
   $('liveElapsed').textContent = st ? hms(st.elapsed) : '–';
+  pipStatus(s, $('livePhase').textContent);
   gauge('liveDelayBox', 'liveDelay', st ? st.delay : null, 5, 10);
   gauge('liveBacklogBox', 'liveBacklog', st ? st.backlog : null, 3, 10);
   // Tooltip: gemessenes Tempo (Rechenzeit je Audiosekunde) und was die Sitzung gerade drosselt.
@@ -740,7 +743,13 @@ document.addEventListener('keydown', (e) => {
   // Alt+S: Souffleur aus- und einblenden (global, auch bei Fokus im Transkript).
   if (e.altKey && !e.ctrlKey && !e.metaKey && e.key.toLowerCase() === 's' && !$('tabLive').hidden) {
     e.preventDefault();
-    setSouffleurHidden(!$('liveAside').classList.contains('collapsed'));
+    if (!istAusgekoppelt()) setSouffleurHidden(!$('liveAside').classList.contains('collapsed'));
+    return;
+  }
+  // Alt+P: Souffleur als kleines Fenster aus- und wieder einkoppeln (e.code: Alt+P liefert auf dem Mac "π").
+  if (e.altKey && !e.ctrlKey && !e.metaKey && e.code === 'KeyP' && !$('tabLive').hidden && pipMoeglich) {
+    e.preventDefault();
+    souffleurPip();
     return;
   }
   if (e.key === 'Escape' && $('winPick').classList.contains('open')) { closeWinPick(); return; }
@@ -782,12 +791,15 @@ export async function enterLive() {
   pollStatus.start();
 }
 
-export function leaveLive() { liveSichtbar = false; pollStatus.stop(); }
+// Ein ausgekoppelter Souffleur zeigt weiter, was die Sitzung tut - auch wenn das Hauptfenster woanders ist.
+export function leaveLive() { liveSichtbar = false; if (!istAusgekoppelt()) pollStatus.stop(); }
+document.addEventListener('audioscribe:souffleur-zurueck', () => { if (!liveSichtbar) pollStatus.stop(); });
 
 /** Kontextwechsel: die Ansicht beginnt leer, Geraete und Vorgaben werden neu geholt. */
 export function leereLive() {
   liveBereit = false;
   liveRunning = false;
+  souffleurEinkoppeln();
   resetLiveView();
   renderSofort(null);
   $('liveTitle').value = '';

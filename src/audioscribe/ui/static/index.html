@@ -60,6 +60,7 @@
   <symbol id="i-arrow-left" viewBox="0 0 24 24"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></symbol>
   <symbol id="i-arrow-right" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></symbol>
   <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></symbol>
+  <symbol id="i-pip" viewBox="0 0 24 24"><path d="M21 9V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h4"/><rect width="10" height="7" x="12" y="13" rx="2"/></symbol>
   <symbol id="i-external" viewBox="0 0 24 24"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></symbol>
   <symbol id="i-book-plus" viewBox="0 0 24 24"><path d="M12 7v6"/><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20"/><path d="M9 10h6"/></symbol>
   <symbol id="i-history" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></symbol>
@@ -511,7 +512,24 @@
        Alt+S blendet die Spalte zu einem Streifen aus (.collapsed) und verbirgt die Chips im Transkript. -->
   <div class="live-aside" id="liveAside">
     <button class="reopen" type="button" id="souffleurShow" title="Souffleur einblenden (Alt+S)" aria-label="Souffleur einblenden (Alt+S)"><svg class="ic" aria-hidden="true"><use href="#i-eye"/></svg>Souffleur einblenden</button>
+    <!-- Platzhalter, solange der Souffleur ausgekoppelt ist (souffleur-pip.js) -->
+    <div class="card popped" id="souffleurPopped" hidden>
+      <h2 class="card-title"><svg class="ic" aria-hidden="true"><use href="#i-pip"/></svg>Souffleur ist ausgekoppelt</h2>
+      <p class="hint">Er läuft im kleinen Fenster weiter, das über allen anderen liegt. Schließt du es, kehrt er hierher zurück.</p>
+      <p class="hint">Liegt das Fenster auf dem aufgenommenen Bildschirm, ist es auf den Screenshots zu sehen – dann auf einen
+        anderen Monitor ziehen oder ein einzelnes Fenster (z. B. Teams) als Bildquelle wählen.</p>
+      <div class="row"><button class="secondary sm" type="button" id="souffleurUnpop"><svg class="ic" aria-hidden="true"><use href="#i-arrow-left"/></svg>Zurückholen <span class="key">Alt+P</span></button></div>
+    </div>
     <div class="card souffleur" id="souffleur">
+      <!-- Aufnahmeleiste: nur im ausgekoppelten Fenster sichtbar (body.pip) -->
+      <div class="pip-bar" id="pipBar">
+        <span class="rec-dot" id="pipDot" aria-hidden="true"></span>
+        <b id="pipElapsed">–</b>
+        <span class="hint" id="pipPhase">bereit</span>
+        <span class="spacer"></span>
+        <button class="start danger sm" type="button" id="pipStop" hidden><svg class="ic" aria-hidden="true"><use href="#i-square"/></svg><span id="pipStopLabel">Stoppen</span></button>
+        <button class="icon-btn" type="button" id="pipBack" aria-label="Zurück ins Hauptfenster (Alt+P)" title="Zurück ins Hauptfenster (Alt+P)"><svg class="ic" aria-hidden="true"><use href="#i-arrow-left"/></svg></button>
+      </div>
       <h2 class="card-title">
         <svg class="ic lead" aria-hidden="true"><use href="#i-lightbulb"/></svg>Souffleur
         <span id="souffleurCount">0 Hinweise</span>
@@ -519,6 +537,7 @@
         <span class="spacer"></span>
         <label class="switch" title="Auswertung ein/aus"><input type="checkbox" id="souffleurOn" checked /><span class="sr-only">Souffleur auswerten</span></label>
         <span class="badge" id="souffleurState">bereit</span>
+        <button class="icon-btn" type="button" id="souffleurPop" hidden aria-label="Souffleur auskoppeln (Alt+P)" title="Als kleines Fenster auskoppeln (Alt+P)"><svg class="ic" aria-hidden="true"><use href="#i-pip"/></svg></button>
         <button class="icon-btn" type="button" id="souffleurHide" aria-label="Souffleur ausblenden (Alt+S)" title="Ausblenden (Alt+S)"><svg class="ic" aria-hidden="true"><use href="#i-eye-off"/></svg></button>
       </h2>
 

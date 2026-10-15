@@ -491,6 +491,27 @@ details.shots > summary .hint { font-weight: 400; }
 .reopen .ic { width: 16px; height: 16px; transform: rotate(90deg); }
 .reopen:hover { color: var(--accent); background: var(--surface); border-color: var(--accent); }
 
+/* Ausgekoppelter Souffleur (souffleur-pip.js): Platzhalter in der Spalte, die Karte im kleinen Fenster */
+.popped .row { margin-top: var(--s2); }
+.popped .key { font: 11px/1 var(--mono); color: var(--fg-faint); border: 1px solid var(--border); border-radius: 4px; padding: 2px 5px; }
+.pip-bar { display: none; }
+body.pip { height: 100vh; overflow: hidden; background: var(--surface); }
+body.pip .souffleur { height: 100vh; box-sizing: border-box; margin: 0; border: 0; border-radius: 0; box-shadow: none;
+                      padding: var(--s3); display: flex; flex-direction: column; }
+body.pip .souffleur .hint-list { flex: 1 1 auto; max-height: none; min-height: 80px; }
+body.pip .open-box { flex: 0 1 auto; max-height: 35vh; overflow: auto; }
+body.pip #souffleurHide, body.pip #souffleurPop, body.pip #souffleurWikiActions,
+body.pip .souffleur-tools > .spacer, body.pip .souffleur-tools > .hint { display: none; }
+body.pip .pip-bar { display: flex; align-items: center; gap: var(--s2); margin: calc(-1 * var(--s1)) 0 var(--s3);
+                    padding-bottom: var(--s2); border-bottom: 1px solid var(--border); font-variant-numeric: tabular-nums; }
+.pip-bar .rec-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--fg-faint); flex: none; }
+.pip-bar .rec-dot.an { background: var(--err); animation: pulse 1.4s ease-in-out infinite; }
+.pip-bar .icon-btn { width: 28px; height: 28px; }
+.pip-bar .icon-btn .ic { width: 16px; height: 16px; }
+.pip-bar button.start { width: auto; min-height: 28px; padding: 4px 10px; font-size: 12px; }
+.pip-bar button.start.scharf { outline: 2px solid var(--err); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .pip-bar .rec-dot.an { animation: none; } }
+
 /* Testmodus: Kachel in "1 Bildquelle" + Unteroptionen */
 .monitor.test { border-style: dashed; }
 .monitor.test:not(.active) .none, .monitor.test:not(.active) .none .ic { color: var(--accent); }

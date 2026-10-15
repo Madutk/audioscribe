@@ -808,7 +808,12 @@ Souffleur** stehen in den Einstellungen (global, je Projekt überschreibbar).
 
 **2. Souffleur starten:** In der Live-Ansicht läuft er automatisch mit jeder Sitzung
 (Schalter in der Souffleur-Karte; „Ausblenden“ oder Alt+S klappt die Spalte samt
-Markierungen weg, etwa beim Bildschirmteilen). Die Statuszeile zeigt, mit welchem Wiki
+Markierungen weg, etwa beim Bildschirmteilen). **Auskoppeln** (Symbol in der Kopfzeile
+oder Alt+P, Chrome/Edge) setzt den Souffleur in ein kleines Fenster, das über allen anderen
+liegt – mit Laufzeit und Stopp-Knopf (zweiter Klick bestätigt). Schließen des Fensters oder
+erneut Alt+P holt ihn in die Live-Ansicht zurück. Liegt das kleine Fenster auf dem
+aufgenommenen Bildschirm, ist es auf den Screenshots zu sehen; dann auf einen anderen Monitor
+ziehen oder ein einzelnes Fenster als Bildquelle wählen. Die Statuszeile zeigt, mit welchem Wiki
 abgeglichen wird. Ohne lesbares Wiki oder ohne KI-Dienst läuft die Transkription normal
 weiter; der Souffleur meldet seinen Zustand („ohne Wiki – nur Fragen und Essenz“, „KI nicht
 verfügbar“).

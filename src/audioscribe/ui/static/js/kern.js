@@ -1,6 +1,9 @@
 // Gemeinsame Bausteine aller Ansichten: DOM-Helfer, Server-Aufrufe, geteilter Zustand, Meldungen.
 
-export const $ = (id) => document.getElementById(id);
+// Ist der Souffleur ausgekoppelt (souffleur-pip.js), liegt seine Karte im Dokument des Mini-Fensters.
+let pipDoc = null;
+export const setPipDoc = (d) => { pipDoc = d; neuTakten(); };
+export const $ = (id) => document.getElementById(id) || (pipDoc && pipDoc.getElementById(id));
 export const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 export const icon = (name) => `<svg class="ic" aria-hidden="true"><use href="#i-${name}"/></svg>`;
 export const empty = (name, text) => `<div class="empty">${icon(name)}${esc(text)}</div>`;
@@ -172,11 +175,19 @@ export function toast(text, art = 'ok') {
   }, art === 'fehler' ? 7000 : 3200);
 }
 
+// Liegt das Hauptfenster verdeckt (etwa hinter Teams), drosselt Chrome seine Timer bis auf einen Lauf je
+// Minute. Das ausgekoppelte Souffleur-Fenster bleibt sichtbar - solange es offen ist, takten seine Timer.
+const laufende = new Set();
+const taktgeber = () => (pipDoc && pipDoc.defaultView) || window;
+function neuTakten() { for (const p of [...laufende]) { p.stop(); p.start(); } }  // Kopie: start() fuegt wieder ein
+
 /** Wiederkehrende Abfrage, die nur laeuft, solange ihre Ansicht sichtbar ist. */
 export function poller(fn, ms) {
   let timer = null;
-  return {
-    start() { if (timer === null) { timer = setInterval(fn, ms); fn(); } },
-    stop() { if (timer !== null) { clearInterval(timer); timer = null; } },
+  let takt = null;
+  const p = {
+    start() { if (timer === null) { takt = taktgeber(); timer = takt.setInterval(fn, ms); laufende.add(p); fn(); } },
+    stop() { if (timer !== null) { takt.clearInterval(timer); timer = null; laufende.delete(p); } },
   };
+  return p;
 }

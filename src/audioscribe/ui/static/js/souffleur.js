@@ -343,7 +343,7 @@ function flash(el) {
 
 /** Vom Chip in der Transkriptzeile zum Hinweis: aufklappen, ins Bild scrollen, kurz pulsen. */
 export function gotoHint(id) {
-  const el = document.getElementById(id);
+  const el = $(id);
   if (!el) return;
   setSouffleurHidden(false);
   const older = el.closest('details.older');
@@ -361,6 +361,7 @@ export function gotoHint(id) {
 function gotoSeg(segId) {
   const row = $('liveText').querySelector(`.seg[data-id="${CSS.escape(String(segId))}"]`);
   if (!row) return;
+  window.focus();  // aus dem ausgekoppelten Souffleur: das Hauptfenster mit dem Transkript nach vorn
   row.scrollIntoView({ block: 'center', behavior: reducedMotion() ? 'auto' : 'smooth' });
   flash(row);
 }
