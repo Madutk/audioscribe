@@ -30,6 +30,7 @@ from datetime import datetime
 from pathlib import Path
 
 from audioscribe.config import settings
+from audioscribe.i18n import tr
 from audioscribe.models import format_timecode
 from audioscribe.progress import Reporter, emit_progress
 from audioscribe.review.marks import Mark, load_marks, save_marks
@@ -283,23 +284,32 @@ def detect_changes(
             fehler.seek(0)
             tail = fehler.read().decode("utf-8", errors="replace").strip().splitlines()[-3:]
             raise RuntimeError(
-                f"Video-Analyse fehlgeschlagen (ffmpeg-Code {proc.returncode})"
+                tr("Video-Analyse fehlgeschlagen (ffmpeg-Code {code})", code=proc.returncode)
                 + (": " + " / ".join(tail) if tail else "")
             )
 
     zeitpunkte = merge_runs(treffer, fps=fps, min_gap=min_gap)
     if reporter:
         reporter.info(
-            f"{index} Abtastungen ({sensitivity}), {len(treffer)} Rohtreffer "
-            f"-> {len(zeitpunkte)} Bildwechsel"
+            tr(
+                "{abtastungen} Abtastungen ({empfindlichkeit}), {rohtreffer} Rohtreffer -> {anzahl} Bildwechsel",
+                abtastungen=index,
+                empfindlichkeit=sensitivity,
+                rohtreffer=len(treffer),
+                anzahl=len(zeitpunkte),
+            )
         )
     if max_bilder > 0 and len(zeitpunkte) > max_bilder:
         # Nie stillschweigend abschneiden: der Nutzer muss erfahren, an welchem Regler
         # er drehen kann.
         if reporter:
             reporter.info(
-                f"Auf {max_bilder} Bilder begrenzt (von {len(zeitpunkte)}) - mit "
-                "--frame-min-gap oder --frame-sensitivity grob nachjustieren"
+                tr(
+                    "Auf {grenze} Bilder begrenzt (von {anzahl}) - mit "
+                    "--frame-min-gap oder --frame-sensitivity grob nachjustieren",
+                    grenze=max_bilder,
+                    anzahl=len(zeitpunkte),
+                )
             )
         zeitpunkte = zeitpunkte[:max_bilder]
     return zeitpunkte

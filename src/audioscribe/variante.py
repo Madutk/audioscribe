@@ -42,9 +42,24 @@ def dienst_zulaessig(dienst: str | None) -> bool:
     return not aktiv() or (dienst or "").strip().lower() in DIENSTE_LOKAL
 
 
+def hinweis_analyse() -> str:
+    """``HINWEIS_ANALYSE`` in der Sprache der Oberfläche."""
+    from audioscribe.i18n import tr  # erst hier: das Modul selbst bleibt bei der Standardbibliothek
+
+    return tr("Die KI-Analyse ist in der Variante cloud-compliant nicht verfügbar.")
+
+
 def pruefe_dienst(dienst: str | None) -> str | None:
-    """Hinweistext, wenn der KI-Dienst in dieser Variante nicht zulässig ist - sonst ``None``."""
-    return None if dienst_zulaessig(dienst) else f"KI-Dienst '{dienst}' abgelehnt. {HINWEIS_DIENST}"
+    """Hinweistext, wenn der KI-Dienst in dieser Variante nicht zulässig ist - sonst ``None``.
+    Deutsch enthält er ``HINWEIS_DIENST`` wörtlich."""
+    if dienst_zulaessig(dienst):
+        return None
+    from audioscribe.i18n import tr
+
+    return tr(
+        "KI-Dienst '{dienst}' abgelehnt. In der Variante cloud-compliant ist nur die lokale KI (Ollama) zulässig.",
+        dienst=dienst,
+    )
 
 
 def pruefe_ollama_url(url: str) -> str | None:
@@ -58,4 +73,9 @@ def pruefe_ollama_url(url: str) -> str | None:
         host = ""
     if host in LOKALE_HOSTS:
         return None
-    return f"Ollama-Adresse {url} nicht zulässig - in der Variante cloud-compliant nur localhost, 127.0.0.1 oder ::1."
+    from audioscribe.i18n import tr
+
+    return tr(
+        "Ollama-Adresse {url} nicht zulässig - in der Variante cloud-compliant nur localhost, 127.0.0.1 oder ::1.",
+        url=url,
+    )

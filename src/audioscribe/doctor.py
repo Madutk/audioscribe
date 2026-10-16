@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Literal
 
 from audioscribe.config import ct2_device, ensure_ffmpeg_on_path, resolve_compute_type, settings
+from audioscribe.i18n import tr
 
 Status = Literal["OK", "WARN", "FAIL"]
 
@@ -53,7 +54,7 @@ def evaluate_mac_platform(
     version: str, machine: str, translated: bool, chip: str | None, host: str
 ) -> CheckResult:
     """Reine Bewertung der macOS-Plattform (testbar ohne Mac)."""
-    teile = [f"macOS {version or '?'} ({machine}{', ' + chip if chip else ''})", f"Terminal-App: {host}"]
+    teile = [f"macOS {version or '?'} ({machine}{', ' + chip if chip else ''})", tr("Terminal-App: {host}", host=host)]
     try:
         parts = tuple(int(p) for p in version.split(".")[:2])
     except ValueError:
@@ -62,13 +63,15 @@ def evaluate_mac_platform(
     if machine != "arm64" or translated:
         status = "WARN"
         teile.append(
-            "Rosetta/Intel -> kein MPS/MLX, CPU-Betrieb"
-            + (" (arm64-Python verwenden: uv python install 3.12)" if translated else "")
+            tr("Rosetta/Intel -> kein MPS/MLX, CPU-Betrieb")
+            + (tr(" (arm64-Python verwenden: uv python install 3.12)") if translated else "")
         )
     if parts and parts < MACOS_MIN:
         status = "WARN"
-        teile.append(f"MLX braucht macOS >= {MACOS_MIN[0]}, ScreenCaptureKit-Audio >= 13 -> ohne MLX nur CPU")
-    return CheckResult(status, "Plattform", "; ".join(teile))
+        teile.append(
+            tr("MLX braucht macOS >= {version}, ScreenCaptureKit-Audio >= 13 -> ohne MLX nur CPU", version=MACOS_MIN[0])
+        )
+    return CheckResult(status, tr("Plattform"), "; ".join(teile))
 
 
 def _check_platform() -> CheckResult:
@@ -83,10 +86,10 @@ def _check_platform() -> CheckResult:
             host_app(),
         )
     if sys.platform == "win32":
-        return CheckResult("OK", "Plattform", f"Windows {platform.release()} ({platform.machine()})")
+        return CheckResult("OK", tr("Plattform"), f"Windows {platform.release()} ({platform.machine()})")
     release = os.uname().release
     wsl = " (WSL2)" if "microsoft" in release.lower() else ""
-    return CheckResult("OK", "Plattform", f"Linux {release}{wsl} ({platform.machine()})")
+    return CheckResult("OK", tr("Plattform"), f"Linux {release}{wsl} ({platform.machine()})")
 
 
 def _check_python() -> CheckResult:
@@ -95,18 +98,18 @@ def _check_python() -> CheckResult:
     return CheckResult(
         "OK" if ok else "WARN",
         "Python",
-        f"{v.major}.{v.minor}.{v.micro}" + ("" if ok else " (empfohlen: 3.12)"),
+        f"{v.major}.{v.minor}.{v.micro}" + ("" if ok else tr(" (empfohlen: 3.12)")),
     )
 
 
 def _check_ffmpeg() -> CheckResult:
     if shutil.which("ffmpeg"):
-        return CheckResult("OK", "ffmpeg", f"System-ffmpeg: {shutil.which('ffmpeg')}")
+        return CheckResult("OK", "ffmpeg", tr("System-ffmpeg: {pfad}", pfad=shutil.which("ffmpeg")))
     try:
         path = ensure_ffmpeg_on_path()
     except Exception as exc:  # noqa: BLE001
         return CheckResult("FAIL", "ffmpeg", str(exc))
-    return CheckResult("OK", "ffmpeg", f"gebuendelt (imageio-ffmpeg) via Wrapper: {path}")
+    return CheckResult("OK", "ffmpeg", tr("gebuendelt (imageio-ffmpeg) via Wrapper: {pfad}", pfad=path))
 
 
 def evaluate_device(
@@ -133,15 +136,22 @@ def evaluate_device(
         return CheckResult(
             "FAIL",
             "PyTorch/Device",
-            f"{build} -> Device '{raw_device}' erzwungen, aber CUDA nicht verfuegbar "
-            "(CPU-Build/Treiber?) -> '--device auto|cpu' oder 'uv sync --extra cu124'",
+            tr(
+                "{build} -> Device '{device}' erzwungen, aber CUDA nicht verfuegbar "
+                "(CPU-Build/Treiber?) -> '--device auto|cpu' oder 'uv sync --extra cu124'",
+                build=build,
+                device=raw_device,
+            ),
         )
     if raw == "mps" and not mps_ok:
         return CheckResult(
             "FAIL",
             "PyTorch/Device",
-            f"{build} -> Device 'mps' erzwungen, aber Metal (MPS) nicht verfuegbar "
-            "(Intel-Mac/Rosetta/macOS < 13?) -> '--device auto|cpu'",
+            tr(
+                "{build} -> Device 'mps' erzwungen, aber Metal (MPS) nicht verfuegbar "
+                "(Intel-Mac/Rosetta/macOS < 13?) -> '--device auto|cpu'",
+                build=build,
+            ),
         )
 
     if raw == "auto":
@@ -156,8 +166,14 @@ def evaluate_device(
         return CheckResult(
             "OK",
             "PyTorch/Device",
-            f"{build} -> {label}{wo}; Alignment/Diarisierung auf MPS, faster-whisper auf CPU "
-            f"(ctranslate2 ohne Metal, compute_type={compute_type}) -> Whisper siehe 'ASR-Backend'",
+            tr(
+                "{build} -> {label}{wo}; Alignment/Diarisierung auf MPS, faster-whisper auf CPU "
+                "(ctranslate2 ohne Metal, compute_type={compute_type}) -> Whisper siehe 'ASR-Backend'",
+                build=build,
+                label=label,
+                wo=wo,
+                compute_type=compute_type,
+            ),
         )
 
     if device.startswith("cuda"):
@@ -168,21 +184,23 @@ def evaluate_device(
         )
 
     if raw == "auto":
-        detail = f"{build} -> auto=cpu, CPU-Fallback (langsam), compute_type={compute_type}"
+        detail = tr("{build} -> auto=cpu, CPU-Fallback (langsam), compute_type={compute_type}", build=build, compute_type=compute_type)
     else:
-        hint = " — Hinweis: CUDA waere verfuegbar" if cuda_ok else ""
-        detail = f"{build} -> cpu (explizit; langsam), compute_type={compute_type}{hint}"
+        hint = tr(" — Hinweis: CUDA waere verfuegbar") if cuda_ok else ""
+        detail = tr(
+            "{build} -> cpu (explizit; langsam), compute_type={compute_type}", build=build, compute_type=compute_type
+        ) + hint
     if darwin:
         if not mps_ok:
-            detail += " — Tipp: arm64-Python und macOS >= 13 fuer MPS/MLX"
+            detail += tr(" — Tipp: arm64-Python und macOS >= 13 fuer MPS/MLX")
     elif not cuda_ok and "+cpu" not in torch_version:
         # CUDA-/PyPI-Build ohne nutzbares CUDA: die schlanken CPU-Wheels sparen ~3 GB.
-        detail += " — Tipp: 'uv sync --extra cpu' installiert die schlanken CPU-Wheels"
+        detail += tr(" — Tipp: 'uv sync --extra cpu' installiert die schlanken CPU-Wheels")
     elif not cuda_ok and nvidia_karte:
         # Karte da, aber CPU-Wheels installiert. Das passiert schneller als man denkt:
         # 'uv run' synchronisiert vorher ohne die gewaehlten Extras und ersetzt die
         # CUDA-Wheels stillschweigend wieder durch die von PyPI.
-        detail += (
+        detail += tr(
             " — NVIDIA-Karte erkannt, aber CPU-Build installiert: "
             "'uv sync --extra cu124 --extra review' (und die UI danach ohne 'uv run' starten)"
         )
@@ -196,7 +214,7 @@ def _check_torch_device() -> CheckResult:
         return CheckResult(
             "FAIL",
             "PyTorch",
-            f"Import fehlgeschlagen: {exc} -> 'uv sync --extra cpu' oder '--extra cu124'",
+            tr("Import fehlgeschlagen: {fehler} -> 'uv sync --extra cpu' oder '--extra cu124'", fehler=exc),
         )
     cuda_ok = torch.cuda.is_available()
     gpu_name = torch.cuda.get_device_name(0) if cuda_ok else None
@@ -230,8 +248,8 @@ def _check_whisperx() -> CheckResult:
         # in Stufe 3 ab, nach Audio-Extraktion und Modell-Download.
         import ctranslate2  # noqa: F401
     except ImportError as exc:
-        return CheckResult("FAIL", "WhisperX", f"Import fehlgeschlagen: {exc}")
-    return CheckResult("OK", "WhisperX", f"verfuegbar; Modell konfiguriert: {settings.whisper_model}")
+        return CheckResult("FAIL", "WhisperX", tr("Import fehlgeschlagen: {fehler}", fehler=exc))
+    return CheckResult("OK", "WhisperX", tr("verfuegbar; Modell konfiguriert: {modell}", modell=settings.whisper_model))
 
 
 def evaluate_asr_backend(
@@ -248,25 +266,27 @@ def evaluate_asr_backend(
             detail = f"mlx-whisper {mlx_version}{' (' + mlx_device + ')' if mlx_device else ''}; "
             detail += f"AUDIOSCRIBE_ASR_BACKEND={raw} -> {backend}"
             if backend == "mlx":
-                detail += f"; Live-Modell: {ziel}"
+                detail += tr("; Live-Modell: {modell}", modell=ziel)
             else:
-                detail += " (MLX waere schneller: AUDIOSCRIBE_ASR_BACKEND=auto)"
+                detail += tr(" (MLX waere schneller: AUDIOSCRIBE_ASR_BACKEND=auto)")
             return CheckResult("OK", "ASR-Backend", detail)
         if raw == "mlx":
             return CheckResult(
                 "FAIL",
                 "ASR-Backend",
-                "mlx erzwungen, aber mlx-whisper fehlt -> 'uv sync --extra cpu --extra mac --extra live'",
+                tr("mlx erzwungen, aber mlx-whisper fehlt -> 'uv sync --extra cpu --extra mac --extra live'"),
             )
         return CheckResult(
             "WARN",
             "ASR-Backend",
-            "mlx-whisper fehlt -> 'uv sync --extra cpu --extra mac --extra live' "
-            "(sonst faster-whisper auf der CPU: large-v3-turbo nicht live-tauglich)",
+            tr(
+                "mlx-whisper fehlt -> 'uv sync --extra cpu --extra mac --extra live' "
+                "(sonst faster-whisper auf der CPU: large-v3-turbo nicht live-tauglich)"
+            ),
         )
     if raw == "mlx":
-        return CheckResult("WARN", "ASR-Backend", "mlx nur auf Apple Silicon -> faster-whisper oder 'auto'")
-    return CheckResult("OK", "ASR-Backend", "faster-whisper (ctranslate2); MLX nur auf Apple Silicon")
+        return CheckResult("WARN", "ASR-Backend", tr("mlx nur auf Apple Silicon -> faster-whisper oder 'auto'"))
+    return CheckResult("OK", "ASR-Backend", tr("faster-whisper (ctranslate2); MLX nur auf Apple Silicon"))
 
 
 def _check_asr_backend() -> CheckResult:
@@ -288,11 +308,13 @@ def _check_asr_backend() -> CheckResult:
 
 def _check_diarization() -> CheckResult:
     if not settings.enable_diarization:
-        return CheckResult("WARN", "Diarisierung", "deaktiviert (--no-diarize / AUDIOSCRIBE_DIARIZATION=0)")
+        return CheckResult(
+            "WARN", tr("Diarisierung"), tr("deaktiviert (--no-diarize / AUDIOSCRIBE_DIARIZATION=0)")
+        )
     try:
         import pyannote.audio  # noqa: F401
     except ImportError as exc:
-        return CheckResult("FAIL", "pyannote.audio", f"Import fehlgeschlagen: {exc}")
+        return CheckResult("FAIL", "pyannote.audio", tr("Import fehlgeschlagen: {fehler}", fehler=exc))
     # Zuerst der Token selbst: ein abgelehnter Token laesst JEDES gesperrte Repo als
     # "Bedingungen nicht akzeptiert" erscheinen - die Meldung schickte den Nutzer sonst
     # zum falschen Knopf.
@@ -300,11 +322,11 @@ def _check_diarization() -> CheckResult:
 
     status, detail = token_status(settings.hf_token)
     if status == "FEHLT":
-        return CheckResult("FAIL", "Diarisierung", f"{detail} -> 'run' bricht ab")
+        return CheckResult("FAIL", tr("Diarisierung"), tr("{detail} -> 'run' bricht ab", detail=detail))
     if status == "UNGUELTIG":
-        return CheckResult("FAIL", "HF_TOKEN", f"{detail} -> 'run' bricht ab")
+        return CheckResult("FAIL", "HF_TOKEN", tr("{detail} -> 'run' bricht ab", detail=detail))
     if status == "UNPRUEFBAR":
-        return CheckResult("WARN", "Diarisierung", f"{detail}; HF_TOKEN gesetzt")
+        return CheckResult("WARN", tr("Diarisierung"), tr("{detail}; HF_TOKEN gesetzt", detail=detail))
 
     # Ein gueltiger Token heisst NICHT, dass die Modell-Bedingungen akzeptiert sind.
     # auth_check fragt das ohne Download ab.
@@ -313,7 +335,9 @@ def _check_diarization() -> CheckResult:
         from huggingface_hub.utils import GatedRepoError, RepositoryNotFoundError
     except Exception:  # noqa: BLE001
         return CheckResult(
-            "OK", "Diarisierung", f"HF_TOKEN gesetzt (Zugriff nicht pruefbar); {settings.diarization_model}"
+            "OK",
+            tr("Diarisierung"),
+            tr("HF_TOKEN gesetzt (Zugriff nicht pruefbar); {modell}", modell=settings.diarization_model),
         )
     for repo in (settings.diarization_model, "pyannote/segmentation-3.0"):
         try:
@@ -321,23 +345,29 @@ def _check_diarization() -> CheckResult:
         except (GatedRepoError, RepositoryNotFoundError):
             return CheckResult(
                 "FAIL",
-                "Diarisierung",
-                f"Bedingungen NICHT akzeptiert: https://hf.co/{repo} "
-                "(eingeloggt 'Agree' klicken) -> 'run' bricht ab",
+                tr("Diarisierung"),
+                tr(
+                    "Bedingungen NICHT akzeptiert: https://hf.co/{repo} (eingeloggt 'Agree' klicken) -> 'run' bricht ab",
+                    repo=repo,
+                ),
             )
         except Exception as exc:  # noqa: BLE001 - Netzwerk o.ae.
             return CheckResult(
-                "WARN", "Diarisierung", f"Zugriff nicht pruefbar ({type(exc).__name__}); HF_TOKEN gesetzt"
+                "WARN",
+                tr("Diarisierung"),
+                tr("Zugriff nicht pruefbar ({fehler}); HF_TOKEN gesetzt", fehler=type(exc).__name__),
             )
-    return CheckResult("OK", "Diarisierung", "Token + Bedingungen ok (speaker-diarization-3.1, segmentation-3.0)")
+    return CheckResult(
+        "OK", tr("Diarisierung"), tr("Token + Bedingungen ok (speaker-diarization-3.1, segmentation-3.0)")
+    )
 
 
 def _check_dirs() -> CheckResult:
     try:
         settings.ensure_dirs()
     except OSError as exc:
-        return CheckResult("FAIL", "Verzeichnisse", f"nicht anlegbar: {exc}")
-    return CheckResult("OK", "Verzeichnisse", f"input/output/work unter {settings.project_root}")
+        return CheckResult("FAIL", tr("Verzeichnisse"), tr("nicht anlegbar: {fehler}", fehler=exc))
+    return CheckResult("OK", tr("Verzeichnisse"), tr("input/output/work unter {pfad}", pfad=settings.project_root))
 
 
 def _check_agent() -> CheckResult:
@@ -346,12 +376,12 @@ def _check_agent() -> CheckResult:
 
     if variante.aktiv():
         # Nichts importieren, nichts suchen: die Analyse gibt es in dieser Variante nicht.
-        return CheckResult("OK", "KI-Analyse", "deaktiviert (Variante cloud-compliant)")
+        return CheckResult("OK", tr("KI-Analyse"), tr("deaktiviert (Variante cloud-compliant)"))
     try:
         import claude_agent_sdk
     except ImportError:
         return CheckResult(
-            "WARN", "KI-Analyse", "Claude Agent SDK fehlt (optional) -> 'uv sync --extra agent'"
+            "WARN", tr("KI-Analyse"), tr("Claude Agent SDK fehlt (optional) -> 'uv sync --extra agent'")
         )
     from audioscribe.agent.skills import discover_skills
 
@@ -362,32 +392,40 @@ def _check_agent() -> CheckResult:
     known = {s.name for s in skills}
     fehlend = [n for n in settings.agent_skills if n not in known]
 
-    teile = [f"SDK {getattr(claude_agent_sdk, '__version__', '?')}, Modell {settings.agent_model}"]
-    teile.append(f"{len(skills)} Skill(s) in {settings.agent_skills_dir}")
+    teile = [
+        tr(
+            "SDK {version}, Modell {modell}",
+            version=getattr(claude_agent_sdk, "__version__", "?"),
+            modell=settings.agent_model,
+        )
+    ]
+    teile.append(tr("{anzahl} Skill(s) in {ordner}", anzahl=len(skills), ordner=settings.agent_skills_dir))
     status: Status = "OK"
     if not has_cli:
         status = "WARN"
-        teile.append("Claude Code nicht gefunden")
+        teile.append(tr("Claude Code nicht gefunden"))
     if fehlend:
         status = "WARN"
-        teile.append("Vorauswahl fehlt: " + ", ".join(fehlend))
+        teile.append(tr("Vorauswahl fehlt: {namen}", namen=", ".join(fehlend)))
     from audioscribe.agent.prozessbild import find_browser
 
     browser = find_browser()
     if browser is None:
         status = "WARN"
         teile.append(
-            "Prozessbild: kein Edge/Chrome gefunden -> Chrome oder Edge installieren "
-            "(einzige Komponente ausserhalb von pip; nur fuers Prozessbild) oder AUDIOSCRIBE_BROWSER setzen"
+            tr(
+                "Prozessbild: kein Edge/Chrome gefunden -> Chrome oder Edge installieren "
+                "(einzige Komponente ausserhalb von pip; nur fuers Prozessbild) oder AUDIOSCRIBE_BROWSER setzen"
+            )
         )
     else:
-        teile.append(f"Prozessbild via {browser.name}")
+        teile.append(tr("Prozessbild via {browser}", browser=browser.name))
     if os.environ.get("ANTHROPIC_API_KEY"):
         status = "WARN"
-        teile.append("ANTHROPIC_API_KEY gesetzt -> Abrechnung ueber die API statt ueber das Abo")
+        teile.append(tr("ANTHROPIC_API_KEY gesetzt -> Abrechnung ueber die API statt ueber das Abo"))
     else:
-        teile.append("Abrechnung ueber das Claude-Abo (Login per 'claude')")
-    return CheckResult(status, "KI-Analyse", "; ".join(teile))
+        teile.append(tr("Abrechnung ueber das Claude-Abo (Login per 'claude')"))
+    return CheckResult(status, tr("KI-Analyse"), "; ".join(teile))
 
 
 def _check_ollama() -> CheckResult:
@@ -400,27 +438,36 @@ def _check_ollama() -> CheckResult:
     status = ollama_status(settings.ollama_url)
     eingestellt = settings.souffleur_backend == BACKEND_OLLAMA or variante.aktiv()
     if not status.erreichbar:
-        detail = (
-            f"nicht erreichbar unter {settings.ollama_url} ({status.fehler}) -> "
-            "'brew install ollama' bzw. ollama.com, dann 'ollama serve'"
+        detail = tr(
+            "nicht erreichbar unter {url} ({fehler}) -> 'brew install ollama' bzw. ollama.com, dann 'ollama serve'",
+            url=settings.ollama_url,
+            fehler=status.fehler,
         )
         if eingestellt:
-            return CheckResult("WARN", "KI lokal", f"als KI-Dienst eingestellt, aber {detail}")
-        return CheckResult("OK", "KI lokal", f"nicht eingerichtet (optional); {detail}")
+            return CheckResult("WARN", tr("KI lokal"), tr("als KI-Dienst eingestellt, aber {detail}", detail=detail))
+        return CheckResult("OK", tr("KI lokal"), tr("nicht eingerichtet (optional); {detail}", detail=detail))
     st: Status = "OK"
-    teile = [f"Ollama {status.version or '?'} unter {settings.ollama_url}", f"{len(status.modelle)} Modell(e)"]
+    teile = [
+        tr("Ollama {version} unter {url}", version=status.version or "?", url=settings.ollama_url),
+        tr("{anzahl} Modell(e)", anzahl=len(status.modelle)),
+    ]
     zwecke = [("Souffleur", modell_fuer(BACKEND_OLLAMA, settings.souffleur_model))]
     if not variante.aktiv():
-        zwecke.append(("Analyse", modell_fuer(BACKEND_OLLAMA, settings.agent_model)))
+        zwecke.append((tr("Analyse"), modell_fuer(BACKEND_OLLAMA, settings.agent_model)))
     for zweck, modell in zwecke:
         if status.hat_modell(modell):
             teile.append(f"{zweck}: {modell}")
         else:
             st = "WARN"
-            teile.append(f"{zweck}: {modell} fehlt -> 'ollama pull {modell}'")
+            teile.append(tr("{zweck}: {modell} fehlt -> 'ollama pull {modell}'", zweck=zweck, modell=modell))
     if not variante.aktiv():
-        teile.append(f"KI-Analyse lokal ist experimentell und braucht OLLAMA_CONTEXT_LENGTH>={ANALYSE_MIN_CTX}")
-    return CheckResult(st, "KI lokal", "; ".join(teile))
+        teile.append(
+            tr(
+                "KI-Analyse lokal ist experimentell und braucht OLLAMA_CONTEXT_LENGTH>={ctx}",
+                ctx=ANALYSE_MIN_CTX,
+            )
+        )
+    return CheckResult(st, tr("KI lokal"), "; ".join(teile))
 
 
 def _live_inventory(prefix: list[str], status: Status = "OK") -> CheckResult:
@@ -429,9 +476,9 @@ def _live_inventory(prefix: list[str], status: Status = "OK") -> CheckResult:
     inv = inventory()
     teile = [
         *prefix,
-        f"{len(inv['mics'])} Mikrofon(e)",
-        f"{len(inv['loopbacks'])} Loopback-Geraet(e)",
-        f"{len(inv['monitors'])} Monitor(e)",
+        tr("{anzahl} Mikrofon(e)", anzahl=len(inv["mics"])),
+        tr("{anzahl} Loopback-Geraet(e)", anzahl=len(inv["loopbacks"])),
+        tr("{anzahl} Monitor(e)", anzahl=len(inv["monitors"])),
         *inv["problems"],
     ]
     ok = status == "OK" and not inv["problems"] and inv["loopbacks"] and inv["monitors"]
@@ -453,7 +500,7 @@ def _check_live() -> CheckResult:
         )
         return _live_inventory(teile, "OK" if status == "OK" else "WARN")
     return CheckResult(
-        "WARN", "Live", "nur unter nativem Windows (WASAPI) und macOS (ScreenCaptureKit) verfuegbar"
+        "WARN", "Live", tr("nur unter nativem Windows (WASAPI) und macOS (ScreenCaptureKit) verfuegbar")
     )
 
 
@@ -485,22 +532,23 @@ def _check_souffleur() -> CheckResult:
     if projekte and konfig.wiki_dir is None:
         # Seit den Projekten (PRD §21) gehoert das Wiki zum Projekt - geprueft werden die bekannten.
         zustaende = [(name, pruefe_wiki(wiki) if wiki is not None else None) for name, wiki in projekte]
-        teile = ["Wiki je Projekt: " + ", ".join(
-            f"{name} (ohne Wiki)" if w is None
-            else f"{name} ({w.seiten} Seiten)" if w.zustand == ZUSTAND_OK else f"{name} (nicht erreichbar)"
+        teile = [tr("Wiki je Projekt: {liste}", liste=", ".join(
+            tr("{name} (ohne Wiki)", name=name) if w is None
+            else tr("{name} ({seiten} Seiten)", name=name, seiten=w.seiten) if w.zustand == ZUSTAND_OK
+            else tr("{name} (nicht erreichbar)", name=name)
             for name, w in zustaende
-        )]
+        ))]
         status = "OK" if all(w is None or w.zustand == ZUSTAND_OK for _, w in zustaende) else "WARN"
     else:
         wiki = pruefe_wiki(konfig.wiki_dir)
-        teile = [f"Wiki: {wiki.meldung}"]
+        teile = [tr("Wiki: {meldung}", meldung=wiki.meldung)]
         status = "OK" if wiki.zustand == ZUSTAND_OK else "WARN"
     if konfig.backend == BACKEND_CLAUDE and not sdk_verfuegbar():
-        teile.append("KI: Agent SDK fehlt -> 'uv sync --extra agent'")
+        teile.append(tr("KI: Agent SDK fehlt -> 'uv sync --extra agent'"))
         status = "WARN"
     else:
-        teile.append(f"KI: {konfig.backend}, Modell {konfig.modell}")
-    teile.append(f"Einstellungen: {state.state_path()}")
+        teile.append(tr("KI: {backend}, Modell {modell}", backend=konfig.backend, modell=konfig.modell))
+    teile.append(tr("Einstellungen: {pfad}", pfad=state.state_path()))
     return CheckResult(status, "Souffleur", " | ".join(teile))
 
 
@@ -509,8 +557,8 @@ def _check_variante() -> CheckResult:
     from audioscribe import variante
 
     if variante.aktiv():
-        return CheckResult("OK", "Variante", "cloud-compliant - nur lokale KI (Ollama), ohne KI-Analyse")
-    return CheckResult("OK", "Variante", "standard")
+        return CheckResult("OK", tr("Variante"), tr("cloud-compliant - nur lokale KI (Ollama), ohne KI-Analyse"))
+    return CheckResult("OK", tr("Variante"), tr("standard"))
 
 
 CHECKS = (
@@ -537,7 +585,9 @@ def _safe(check) -> CheckResult:
         return check()
     except Exception as exc:  # noqa: BLE001 - ein Check darf die anderen nicht mitreissen
         name = check.__name__.removeprefix("_check_")
-        return CheckResult("FAIL", name, f"Pruefung abgebrochen: {type(exc).__name__}: {exc}")
+        return CheckResult(
+            "FAIL", name, tr("Pruefung abgebrochen: {typ}: {fehler}", typ=type(exc).__name__, fehler=exc)
+        )
 
 
 def run_doctor(*, as_json: bool = False) -> int:

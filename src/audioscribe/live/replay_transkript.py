@@ -18,6 +18,7 @@ import uuid
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+from audioscribe.i18n import tr
 from audioscribe.live import events, journal
 from audioscribe.live.bilanz import TEIL_LIVE, LiveBilanz, beschreibe_live, save_bilanz
 from audioscribe.live.store import keep_live_copy, session_name, write_transcript
@@ -71,9 +72,9 @@ def finde_transkript(quelle: Path) -> Path:
         for name in _ORDNER_KANDIDATEN:
             if (quelle / name).is_file():
                 return quelle / name
-        raise FileNotFoundError(f"Kein Transkript im Ordner: {quelle}")
+        raise FileNotFoundError(tr("Kein Transkript im Ordner: {ordner}", ordner=quelle))
     if not quelle.is_file():
-        raise FileNotFoundError(f"Transkript nicht gefunden: {quelle}")
+        raise FileNotFoundError(tr("Transkript nicht gefunden: {pfad}", pfad=quelle))
     return quelle
 
 
@@ -83,7 +84,7 @@ def lade_transkript(quelle: Path) -> list[Segment]:
     text = pfad.read_text(encoding="utf-8")
     segmente = _aus_json(text) if pfad.suffix.lower() == ".json" else _aus_markdown(text)
     if not segmente:
-        raise ValueError(f"Keine Absätze mit Zeitstempel in {pfad}")
+        raise ValueError(tr("Keine Absätze mit Zeitstempel in {pfad}", pfad=pfad))
     return sorted(segmente, key=lambda s: (s.start, s.end))
 
 
@@ -110,10 +111,10 @@ def _aus_json(text: str) -> list[Segment]:
     try:
         data = json.loads(text)
     except ValueError as exc:
-        raise ValueError(f"transcript.json nicht lesbar: {exc}") from exc
+        raise ValueError(tr("transcript.json nicht lesbar: {fehler}", fehler=exc)) from exc
     absaetze = data.get("paragraphs") if isinstance(data, dict) else None
     if not isinstance(absaetze, list):
-        raise ValueError("transcript.json ohne 'paragraphs'")
+        raise ValueError(tr("transcript.json ohne 'paragraphs'"))
     out: list[Segment] = []
     for p in absaetze:
         if not isinstance(p, dict) or not str(p.get("text", "")).strip():
@@ -177,12 +178,12 @@ class TranskriptReplaySession:
                 self._pausiert_s += time.monotonic() - self._pause_seit
                 self._pause_seit = None
         self._state("laeuft", pausiert=an)
-        events.log("Abspielen angehalten." if an else "Abspielen läuft weiter.")
+        events.log(tr("Abspielen angehalten.") if an else tr("Abspielen läuft weiter."))
 
     def run(self) -> int:
         o = self.opts
         t_start = time.monotonic()
-        self._state("laden", step="Transkript lesen")
+        self._state("laden", step=tr("Transkript lesen"))
         try:
             alle = lade_transkript(o.quelle)
         except (OSError, ValueError) as exc:
@@ -191,10 +192,16 @@ class TranskriptReplaySession:
         if o.raffen:
             original_s = alle[-1].end
             alle = raffe(alle)
-            events.log(f"Pausen gerafft: {original_s:.0f} s -> {alle[-1].end:.0f} s")
+            events.log(tr("Pausen gerafft: {vorher} s -> {nachher} s", vorher=f"{original_s:.0f}", nachher=f"{alle[-1].end:.0f}"))
         events.log(
-            f"Replay von {finde_transkript(o.quelle)}: {len(alle)} Absätze, "
-            f"{alle[-1].end:.0f} s, Tempo {o.speed:g}×, Verzögerung {o.delay_s:g} s"
+            tr(
+                "Replay von {quelle}: {anzahl} Absätze, {dauer} s, Tempo {tempo}×, Verzögerung {verzoegerung} s",
+                quelle=finde_transkript(o.quelle),
+                anzahl=len(alle),
+                dauer=f"{alle[-1].end:.0f}",
+                tempo=f"{o.speed:g}",
+                verzoegerung=f"{o.delay_s:g}",
+            )
         )
         self.dir.mkdir(parents=True, exist_ok=True)
         # Zustandsdatei wie bei einer echten Sitzung (PRD §21) - als Replay gekennzeichnet:
@@ -231,7 +238,7 @@ class TranskriptReplaySession:
                     self._persist()
                     last_persist = time.monotonic()
         except KeyboardInterrupt:
-            events.log("Strg+C - Replay wird abgeschlossen ...")
+            events.log(tr("Strg+C - Replay wird abgeschlossen ..."))
         aufnahme_s = self.clock()
         self._state("stoppt")
         self._finish(laden_s=self._t0 - t_start, aufnahme_s=aufnahme_s, gesamt_s=time.monotonic() - t_start)
@@ -280,7 +287,7 @@ class TranskriptReplaySession:
         events.log(beschreibe_live(bilanz))
         events.emit(events.FAZIT, teil=TEIL_LIVE, **asdict(bilanz))
         self._state("fertig")
-        events.log(f"Sitzung gespeichert: {self.dir}")
+        events.log(tr("Sitzung gespeichert: {ordner}", ordner=self.dir))
 
     def _state(self, phase: str, **extra: object) -> None:
         # Den Ordner erst nennen, wenn es ihn gibt - scheitert schon das Lesen, verwiese die

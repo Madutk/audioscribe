@@ -18,6 +18,7 @@ from collections.abc import Callable
 
 from audioscribe.compat import free_accelerator as _free_vram
 from audioscribe.config import resolve_device, settings, torch_device
+from audioscribe.i18n import tr
 from audioscribe.progress import Reporter, emit_progress
 
 SAMPLE_RATE = 16_000
@@ -124,25 +125,36 @@ def _ladefehler_meldung(status: str, detail: str, hint: str = "") -> str:
 
     if status in ("FEHLT", "UNGUELTIG"):
         return (
-            f"Diarisierungsmodell konnte nicht geladen werden: {detail}\n"
-            f"Neuen Token erstellen ({TOKENS_URL}, Rolle 'read'), in die .env eintragen "
-            "und mit 'audioscribe doctor' pruefen. "
-            "Alternativ ohne Sprecher-Trennung: '--no-diarize'." + hint
+            tr(
+                "Diarisierungsmodell konnte nicht geladen werden: {detail}\n"
+                "Neuen Token erstellen ({url}, Rolle 'read'), in die .env eintragen "
+                "und mit 'audioscribe doctor' pruefen. "
+                "Alternativ ohne Sprecher-Trennung: '--no-diarize'.",
+                detail=detail,
+                url=TOKENS_URL,
+            )
+            + hint
         )
     if status == "UNPRUEFBAR":
         return (
-            "Diarisierungsmodell konnte nicht geladen werden - Hugging Face ist nicht "
-            f"erreichbar oder der Token nicht pruefbar ({detail}). Netzwerk/Proxy pruefen "
-            "und mit 'audioscribe doctor' gegenchecken. "
-            "Alternativ ohne Sprecher-Trennung: '--no-diarize'." + hint
+            tr(
+                "Diarisierungsmodell konnte nicht geladen werden - Hugging Face ist nicht "
+                "erreichbar oder der Token nicht pruefbar ({detail}). Netzwerk/Proxy pruefen "
+                "und mit 'audioscribe doctor' gegenchecken. "
+                "Alternativ ohne Sprecher-Trennung: '--no-diarize'.",
+                detail=detail,
+            )
+            + hint
         )
     return (
-        "Diarisierungsmodell konnte nicht geladen werden - der HF_TOKEN ist gueltig, also "
-        "sind die Modell-Bedingungen noch nicht (vollstaendig) akzeptiert. BEIDE Seiten "
-        "muessen EINGELOGGT akzeptiert werden:\n"
-        "  https://huggingface.co/pyannote/speaker-diarization-3.1\n"
-        "  https://huggingface.co/pyannote/segmentation-3.0\n"
-        "Status pruefen mit 'audioscribe doctor'. Alternativ ohne Sprecher-Trennung: '--no-diarize'."
+        tr(
+            "Diarisierungsmodell konnte nicht geladen werden - der HF_TOKEN ist gueltig, also "
+            "sind die Modell-Bedingungen noch nicht (vollstaendig) akzeptiert. BEIDE Seiten "
+            "muessen EINGELOGGT akzeptiert werden:\n"
+            "  https://huggingface.co/pyannote/speaker-diarization-3.1\n"
+            "  https://huggingface.co/pyannote/segmentation-3.0\n"
+            "Status pruefen mit 'audioscribe doctor'. Alternativ ohne Sprecher-Trennung: '--no-diarize'."
+        )
         + hint
     )
 
@@ -151,13 +163,15 @@ def diarize(audio, result: dict, reporter: Reporter | None = None) -> dict:
     """Weist Sprecher zu und liefert das angereicherte Result-Dict zurueck."""
     if not result.get("segments"):
         if reporter:
-            reporter.info("Diarisierung uebersprungen (keine Segmente)")
+            reporter.info(tr("Diarisierung uebersprungen (keine Segmente)"))
         return result
 
     if not settings.hf_token:
         raise RuntimeError(
-            "HF_TOKEN fehlt - Diarisierung nicht moeglich. Siehe .env.example "
-            "(Token setzen + Modell-Bedingungen akzeptieren) oder '--no-diarize' nutzen."
+            tr(
+                "HF_TOKEN fehlt - Diarisierung nicht moeglich. Siehe .env.example "
+                "(Token setzen + Modell-Bedingungen akzeptieren) oder '--no-diarize' nutzen."
+            )
         )
 
     from audioscribe.compat import (
@@ -183,7 +197,7 @@ def diarize(audio, result: dict, reporter: Reporter | None = None) -> dict:
     else:
         load_exc = None
     if pipeline is None:
-        hint = f"\n(Ursache: {type(load_exc).__name__}: {str(load_exc)[:200]})" if load_exc else ""
+        hint = "\n" + tr("(Ursache: {typ}: {meldung})", typ=type(load_exc).__name__, meldung=str(load_exc)[:200]) if load_exc else ""
         # Ein abgelehnter Token sieht fuer Hugging Face aus wie ein anonymer Zugriff, das
         # gesperrte Repo meldet dann ebenfalls "gated". Erst nachfragen, dann anleiten -
         # sonst klickt der Nutzer 'Agree', obwohl sein Token widerrufen ist.
@@ -223,5 +237,5 @@ def diarize(audio, result: dict, reporter: Reporter | None = None) -> dict:
 
     if reporter:
         n = len({s.get("speaker") for s in result.get("segments", []) if s.get("speaker")})
-        reporter.info(f"{n} Sprecher erkannt")
+        reporter.info(tr("{anzahl} Sprecher erkannt", anzahl=n))
     return result

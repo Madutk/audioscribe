@@ -15,6 +15,8 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
+from audioscribe.i18n import tr
+
 # Tiefe relativ zum Suchordner, in der ein SKILL.md noch gefunden wird
 # (synced/<konto-id>/<skill>/SKILL.md liegt auf Ebene 3).
 _MAX_DEPTH = 3
@@ -104,8 +106,11 @@ def select_skills(available: Iterable[Skill], names: Iterable[str]) -> list[Skil
     missing = [n for n in names if n not in by_name]
     if missing:
         raise KeyError(
-            "Skill(s) nicht gefunden: " + ", ".join(missing) + ". Verfuegbar: "
-            + (", ".join(sorted(by_name)) or "(keine)")
+            tr(
+                "Skill(s) nicht gefunden: {fehlend}. Verfuegbar: {verfuegbar}",
+                fehlend=", ".join(missing),
+                verfuegbar=", ".join(sorted(by_name)) or tr("(keine)"),
+            )
         )
     seen: set[str] = set()
     out: list[Skill] = []

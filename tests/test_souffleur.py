@@ -430,6 +430,49 @@ def test_glossar_korrigiert_suchtext_und_wird_erkannt():
     assert g.eintraege == [("A B", "AB"), ("Soundshark", "Splunk")]
 
 
+def test_englisches_wiki_glossar_und_stoppwoerter(tmp_path):
+    from audioscribe.souffleur import wiki
+
+    seiten = tmp_path / "wiki"
+    seiten.mkdir()
+    (seiten / "glossary.md").write_text(
+        "# Glossary\n\n| Misrecognition | Correct |\n|---|---|\n| Fak Tura | Faktura |\n\n"
+        "| Term | Meaning |\n|---|---|\n| Approval | Prior consent of the team lead |\n",
+        encoding="utf-8",
+    )
+    (seiten / "invoices.md").write_text(
+        "# Invoices\n\n## Systems\n\nSupplier master data is maintained in Faktura.\n", encoding="utf-8"
+    )
+    index = wiki.WikiIndex.laden(tmp_path)
+    assert index.glossar.datei == "wiki/glossary.md"
+    assert index.glossar.eintraege == [("Fak Tura", "Faktura")]
+    assert index.glossar.fachbegriffe == [("Approval", "Prior consent of the team lead")]
+    assert index.suche("Where do we maintain this in Fak Tura?")[0].ueberschrift == "Systems"
+    assert wiki.tokenisiere("Where is the data that we have") == ["data"]
+    assert wiki.ist_glossar(Path("terms.md"), "# Project Glossary\n")
+    # Deutsche Wörter, die englisch Stoppwörter sein könnten, bleiben Inhaltswörter.
+    assert wiki.tokenisiere("kind still fast") == ["kind", "still", "fast"]
+
+
+def test_englische_oberflaeche_waehlt_englische_prompts():
+    from audioscribe.souffleur import essenz, prompt
+    from audioscribe.ui import state
+
+    assert prompt.system_prompt().startswith("Du bist der Souffleur")
+    state.save_state({"ui_sprache": "en"})
+    try:
+        assert prompt.system_prompt().startswith("You are the Souffleur")
+        assert "English" in essenz.system_prompt()
+        text = prompt.baue_prompt(
+            [{"id": 1, "start": 0, "text": "Who approves invoices?"}], kontext=[], fundstellen=[], wiki_verknuepft=False
+        )
+        assert text.startswith("## Window") and "Unknown: Who approves" in text and "No wiki linked" in text
+        assert "## Excerpt (2 minutes" in essenz.prompt([], minuten=2, t_von=0, t_bis=120)
+    finally:
+        state.save_state({"ui_sprache": "de"})
+    assert prompt.system_prompt().startswith("Du bist der Souffleur")
+
+
 def test_wiki_wird_nur_gelesen(tmp_path):
     import os
     import shutil

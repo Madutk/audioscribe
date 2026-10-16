@@ -3,13 +3,21 @@
 // Meeting, aus dem sein Beleg stammt, statt der Datei im Wiki.
 
 import { $, api, esc, icon, modus, reducedMotion } from './kern.js';
+import { tr, englisch } from './i18n.js';
 
 let vor = null;     // Antwort von /api/demo/vorgeschichte: meetings, heute, wiki, seiten
 let laedt = null;   // laufende bzw. erledigte Abfrage - die Vorgeschichte aendert sich nicht
 
-/** "2026-09-08" -> "08.09." */
-const tag = (iso) => { const m = /^\d{4}-(\d\d)-(\d\d)/.exec(iso || ''); return m ? `${m[2]}.${m[1]}.` : ''; };
-const mehrzahl = (n, eins, viele) => `${n} ${n === 1 ? eins : viele}`;
+const MONATE = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/** "2026-09-08" -> "08.09." (englische Oberflaeche: "Sep 8") */
+const tag = (iso) => {
+  const m = /^\d{4}-(\d\d)-(\d\d)/.exec(iso || '');
+  if (!m) return '';
+  return englisch ? `${MONATE[Number(m[1]) - 1]} ${Number(m[2])}` : `${m[2]}.${m[1]}.`;
+};
+/** Einzahl oder Mehrzahl - beide Fassungen kommen schon uebersetzt (tr mit {n}). */
+const mehrzahl = (n, eins, viele) => (n === 1 ? eins : viele);
 
 /** Erst mit geladener Vorgeschichte gilt die Demo-Darstellung der Hinweise. */
 export const demoAktiv = () => !!vor && modus() === 'demo';
@@ -21,12 +29,15 @@ function zeichne() {
   const punkt = (cls, i, q, nr, wann, thema) =>
     `<li${cls ? ` class="${cls}"` : ''}${q ? ` data-q="${esc(q)}"` : ''} style="--i:${i}">`
     + `<span class="nr">${nr}</span><b>${esc(wann)}</b><span class="thema">${esc(thema)}</span></li>`;
-  box.innerHTML = `<ol aria-label="${n} Meetings stehen im Wiki, heute läuft Meeting ${vor.heute.nr}">`
+  const a = vor.wiki.anforderungen, o = vor.wiki.offene_punkte;
+  const imWiki = tr('im Wiki: {anforderungen} · {offen}', {
+    anforderungen: mehrzahl(a, tr('{n} Anforderung', { n: a }), tr('{n} Anforderungen', { n: a })),
+    offen: mehrzahl(o, tr('{n} offener Punkt', { n: o }), tr('{n} offene Punkte', { n: o })),
+  });
+  box.innerHTML = `<ol aria-label="${esc(tr('{n} Meetings stehen im Wiki, heute läuft Meeting {nr}', { n, nr: vor.heute.nr }))}">`
     + vor.meetings.map((m, i) => punkt('', i, m.id, m.nr, tag(m.datum), m.titel)).join('')
-    + punkt('heute', n + 1, '', vor.heute.nr, 'heute', vor.heute.titel) + '</ol>'
-    + `<div class="im-wiki" style="--i:${n}">${icon('book')}im Wiki: `
-    + `${mehrzahl(vor.wiki.anforderungen, 'Anforderung', 'Anforderungen')} · `
-    + `${mehrzahl(vor.wiki.offene_punkte, 'offener Punkt', 'offene Punkte')}</div>`;
+    + punkt('heute', n + 1, '', vor.heute.nr, tr('heute'), vor.heute.titel) + '</ol>'
+    + `<div class="im-wiki" style="--i:${n}">${icon('book')}${esc(imWiki)}</div>`;
 }
 
 /** Vorgeschichte einmal holen und den Zeitstrahl zeichnen; ohne sie bleibt die Demo wie bisher. */
@@ -81,8 +92,10 @@ export function demoZustand(s, z) {
   box.hidden = !fertig;
   if (!fertig) { box.innerHTML = ''; return; }
   const chip = (n, cls, ic, text) => (n ? `<span class="mark ${cls}">${icon(ic)}${esc(text)}</span>` : '');
-  box.innerHTML = `Meeting ${vor.heute.nr} gegen ${mehrzahl(vor.meetings.length, 'Meeting', 'Meetings')} geprüft:`
-    + chip(z.widerspruch, 'widerspruch', 'zap', mehrzahl(z.widerspruch, 'Widerspruch', 'Widersprüche'))
-    + chip(z.beantwortet, 'frage', 'help-circle', `${z.beantwortet} aus dem Wiki beantwortet`)
-    + chip(z.neu, 'offen', 'circle-dashed', `${z.neu} neu`);
+  const nr = vor.heute.nr, n = vor.meetings.length, w = z.widerspruch;
+  box.innerHTML = esc(mehrzahl(n, tr('Meeting {nr} gegen 1 Meeting geprüft:', { nr }),
+    tr('Meeting {nr} gegen {n} Meetings geprüft:', { nr, n })))
+    + chip(w, 'widerspruch', 'zap', mehrzahl(w, tr('{n} Widerspruch', { n: w }), tr('{n} Widersprüche', { n: w })))
+    + chip(z.beantwortet, 'frage', 'help-circle', tr('{n} aus dem Wiki beantwortet', { n: z.beantwortet }))
+    + chip(z.neu, 'offen', 'circle-dashed', tr('{n} neu', { n: z.neu }));
 }

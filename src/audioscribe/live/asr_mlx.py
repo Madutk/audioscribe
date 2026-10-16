@@ -18,6 +18,7 @@ from collections.abc import Callable
 
 import numpy as np
 
+from audioscribe.i18n import tr
 from audioscribe.live.asr import Ergebnis, SegmentInfo
 from audioscribe.live.track import SAMPLE_RATE
 from audioscribe.pipeline.models import fetch_mlx_model
@@ -44,8 +45,12 @@ def mlx_repo(model: str, override: str | None = None) -> str:
         return MLX_REPOS[model]
     except KeyError:
         raise RuntimeError(
-            f"Kein MLX-Modell für '{model}' bekannt ({', '.join(MLX_REPOS)}); alternativ ein "
-            "Hugging-Face-Repo 'org/name' angeben oder AUDIOSCRIBE_MLX_REPO setzen"
+            tr(
+                "Kein MLX-Modell für '{modell}' bekannt ({bekannt}); alternativ ein "
+                "Hugging-Face-Repo 'org/name' angeben oder AUDIOSCRIBE_MLX_REPO setzen",
+                modell=model,
+                bekannt=", ".join(MLX_REPOS),
+            )
         ) from None
 
 
@@ -101,8 +106,10 @@ class MlxTranscriber:
             import mlx_whisper
         except ImportError as exc:
             raise RuntimeError(
-                "mlx-whisper fehlt -> 'uv sync --extra cpu --extra mac --extra live' "
-                "(oder --backend faster-whisper)"
+                tr(
+                    "mlx-whisper fehlt -> 'uv sync --extra cpu --extra mac --extra live' "
+                    "(oder --backend faster-whisper)"
+                )
             ) from exc
         self._mlx = mlx_whisper
         self.model = model

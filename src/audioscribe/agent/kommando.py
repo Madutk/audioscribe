@@ -11,6 +11,7 @@ from pathlib import Path
 from audioscribe.agent.manifest import load_manifest
 from audioscribe.agent.material import Auftrag, find_transcript
 from audioscribe.agent.skills import Skill, discover_skills, select_skills
+from audioscribe.i18n import tr
 
 
 def _ask(prompt: str, default: str | None = None) -> str:
@@ -41,7 +42,7 @@ def analyze(args: argparse.Namespace, resolve_out_dir: Callable[[str], Path]) ->
         return 0
 
     if not args.target:
-        print("Bitte ORDNER|VIDEO angeben (Ergebnisordner eines 'audioscribe run').")
+        print(tr("Bitte ORDNER|VIDEO angeben (Ergebnisordner eines 'audioscribe run')."))
         return 2
     quelle = resolve_out_dir(args.target)
     interaktiv = sys.stdin.isatty()
@@ -50,7 +51,7 @@ def analyze(args: argparse.Namespace, resolve_out_dir: Callable[[str], Path]) ->
     if not name and interaktiv:
         name = _ask("Prozessname", quelle.name)
     if not name:
-        print("Bitte einen Prozessnamen angeben (--name).")
+        print(tr("Bitte einen Prozessnamen angeben (--name)."))
         return 2
 
     out = args.out
@@ -66,7 +67,7 @@ def analyze(args: argparse.Namespace, resolve_out_dir: Callable[[str], Path]) ->
     if args.resume:
         manifest = load_manifest(workspace)
         if manifest is None or not manifest.session_id:
-            print(f"Keine fortsetzbare Sitzung in {workspace} (analyse.json ohne session_id).")
+            print(tr("Keine fortsetzbare Sitzung in {ordner} (analyse.json ohne session_id).", ordner=workspace))
             return 1
         resume = manifest.session_id
         # Bei einer Fortsetzung gelten die Skills, die damals kopiert wurden.
@@ -108,15 +109,15 @@ def analyze(args: argparse.Namespace, resolve_out_dir: Callable[[str], Path]) ->
         resume=resume,
     )
 
-    print(f"Analyse '{auftrag.name}'")
-    print(f"  Quelle:  {quelle}")
-    print(f"  Ziel:    {auftrag.workspace}")
-    print(f"  Modell:  {auftrag.model}")
+    print(tr("Analyse '{name}'", name=auftrag.name))
+    print(tr("  Quelle:  {quelle}", quelle=quelle))
+    print(tr("  Ziel:    {ziel}", ziel=auftrag.workspace))
+    print(tr("  Modell:  {modell}", modell=auftrag.model))
     if dienst == BACKEND_OLLAMA:
-        print("  Dienst:  lokal (Ollama auf diesem Rechner, experimentell)")
-    print(f"  Skills:  {', '.join(auftrag.skills) or '(keine)'}")
+        print(tr("  Dienst:  lokal (Ollama auf diesem Rechner, experimentell)"))
+    print(tr("  Skills:  {skills}", skills=", ".join(auftrag.skills) or tr("(keine)")))
     if resume:
-        print(f"  Fortsetzung der Sitzung {resume}")
+        print(tr("  Fortsetzung der Sitzung {sitzung}", sitzung=resume))
 
     # Abbruch aus der Oberflaeche kommt als SIGTERM: in KeyboardInterrupt uebersetzen,
     # damit Manifest und Log sauber mit 'abgebrochen' abschliessen.
@@ -136,7 +137,7 @@ def analyze(args: argparse.Namespace, resolve_out_dir: Callable[[str], Path]) ->
         # dann zusaetzlich die [Agent-Status]-Zeilen fuer ihre Fortschrittsanzeige.
         return run_analysis(auftrag, skills, emit=emit, status_zeilen=settings.emit_progress)
     except KeyboardInterrupt:
-        print("Analyse abgebrochen.")
+        print(tr("Analyse abgebrochen."))
         return 130
 
 

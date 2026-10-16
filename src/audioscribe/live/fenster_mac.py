@@ -12,6 +12,8 @@ from __future__ import annotations
 import os
 from collections.abc import Callable
 
+from audioscribe.i18n import tr
+
 Rect = tuple[int, int, int, int]  # left, top, right, bottom
 
 # Fenster dieser Prozesse sind Teile der Shell, nie eine Anwendung.
@@ -58,7 +60,7 @@ def _quartz():
     try:
         import Quartz
     except ImportError as exc:
-        raise RuntimeError("Fensteraufnahme braucht PyObjC (Quartz) -> 'uv sync --extra cpu --extra mac --extra live'") from exc
+        raise RuntimeError(tr("Fensteraufnahme braucht PyObjC (Quartz) -> 'uv sync --extra cpu --extra mac --extra live'")) from exc
     return Quartz
 
 
@@ -143,7 +145,7 @@ def window_rect(hwnd: int) -> Rect:
 
     info = _info(hwnd)
     if info is None:
-        raise WindowGone(f"Fenster {hwnd} existiert nicht mehr")
+        raise WindowGone(tr("Fenster {hwnd} existiert nicht mehr", hwnd=hwnd))
     b = info.get("kCGWindowBounds") or {}
     x, y = int(b.get("X", 0)), int(b.get("Y", 0))
     return (x, y, x + int(b.get("Width", 0)), y + int(b.get("Height", 0)))
@@ -158,7 +160,7 @@ def grab_window(hwnd: int, fallback: Callable[[Rect], object] | None = None):
     Q = _quartz()
     info = _info(hwnd)
     if info is None:
-        raise WindowGone(f"Fenster {hwnd} existiert nicht mehr")
+        raise WindowGone(tr("Fenster {hwnd} existiert nicht mehr", hwnd=hwnd))
     if not bool(info.get("kCGWindowIsOnscreen", False)):
         return None
     image = Q.CGWindowListCreateImage(

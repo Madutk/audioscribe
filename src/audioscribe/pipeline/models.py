@@ -5,6 +5,8 @@ from __future__ import annotations
 import os
 from collections.abc import Callable
 
+from audioscribe.i18n import tr
+
 
 def progress_tqdm(on_progress: Callable[[int, int], None]):
     """tqdm-Klasse, die nur den Byte-Balken als ``on_progress(geladen, gesamt)`` meldet.
@@ -61,8 +63,13 @@ def fetch_mlx_model(repo: str, on_progress: Callable[[int, int], None] | None = 
     path = snapshot_download(repo, **kwargs)
     if not mlx_weights_present(path):
         raise RuntimeError(
-            f"Modell '{repo}' ist unvollständig: keine Gewichtsdatei "
-            f"({' oder '.join(MLX_WEIGHTS)}) in {path}. Ordner löschen und erneut starten."
+            tr(
+                "Modell '{repo}' ist unvollständig: keine Gewichtsdatei ({dateien}) in {pfad}. "
+                "Ordner löschen und erneut starten.",
+                repo=repo,
+                dateien=" / ".join(MLX_WEIGHTS),
+                pfad=path,
+            )
         )
     return path
 

@@ -25,6 +25,7 @@ from pathlib import Path
 
 import numpy as np
 
+from audioscribe.i18n import tr
 from audioscribe.live.track import Track
 
 SAMPLE_RATE_SCK = 48_000
@@ -116,7 +117,7 @@ def _frameworks():
         from Foundation import NSObject
     except ImportError as exc:
         raise RuntimeError(
-            "ScreenCaptureKit-Brücke fehlt (PyObjC) -> 'uv sync --extra cpu --extra mac --extra live'"
+            tr("ScreenCaptureKit-Brücke fehlt (PyObjC) -> 'uv sync --extra cpu --extra mac --extra live'")
         ) from exc
     return SCK, CM, objc, NSObject
 
@@ -181,7 +182,7 @@ def _output_class():
                 data = _block_bytes(CM, bb, n)
                 self._sink.audio(pcm_to_mono(data, frames, self._fmt[0], self._fmt[1]))
             except Exception as exc:  # noqa: BLE001 - ein kaputter Puffer darf den Stream nicht reißen
-                self._sink.error(f"Audiopuffer übersprungen: {exc}")
+                self._sink.error(tr("Audiopuffer übersprungen: {fehler}", fehler=exc))
 
         def stream_didStopWithError_(self, stream, error):  # noqa: N802, ARG002
             self._sink.stopped(str(error) if error is not None else "")
@@ -206,7 +207,12 @@ class _Sink:
         if self.rate != SAMPLE_RATE_SCK:
             self._track.reset_rate(self.rate)
         self._log(
-            f"System-Audio: Float32 {'planar' if planar else 'interleaved'}, {channels} Kanäle, {self.rate} Hz"
+            tr(
+                "System-Audio: Float32 {art}, {kanaele} Kanäle, {rate} Hz",
+                art="planar" if planar else "interleaved",
+                kanaele=channels,
+                rate=self.rate,
+            )
         )
 
     def audio(self, mono: np.ndarray) -> None:
@@ -221,7 +227,7 @@ class _Sink:
     def stopped(self, text: str) -> None:
         self.gestoppt = text
         if text:
-            self._log(f"System-Audio: Stream beendet ({text})")
+            self._log(tr("System-Audio: Stream beendet ({grund})", grund=text))
 
 
 def _wait(call, timeout_s: float = STARTUP_TIMEOUT_S):
@@ -236,11 +242,14 @@ def _wait(call, timeout_s: float = STARTUP_TIMEOUT_S):
     call(handler)
     if not fertig.wait(timeout_s):
         raise RuntimeError(
-            "ScreenCaptureKit antwortet nicht (Zeitüberschreitung). Typische Ursache: ein "
-            "anderer, noch laufender Prozess mit demselben Python "
-            f"({sys.executable}) hat Bildschirmfotos gemacht (z. B. ein älterer AudioScribe-"
-            "Server) - diesen beenden bzw. den Server neu starten. Sonst: Systemeinstellungen "
-            "> Datenschutz & Sicherheit > Bildschirm- & Systemaudioaufnahme prüfen"
+            tr(
+                "ScreenCaptureKit antwortet nicht (Zeitüberschreitung). Typische Ursache: ein "
+                "anderer, noch laufender Prozess mit demselben Python "
+                "({python}) hat Bildschirmfotos gemacht (z. B. ein älterer AudioScribe-"
+                "Server) - diesen beenden bzw. den Server neu starten. Sonst: Systemeinstellungen "
+                "> Datenschutz & Sicherheit > Bildschirm- & Systemaudioaufnahme prüfen",
+                python=sys.executable,
+            )
         )
     return ergebnis
 
@@ -249,8 +258,11 @@ def _shareable_content(SCK):
     content, error = (_wait(SCK.SCShareableContent.getShareableContentWithCompletionHandler_) + [None, None])[:2]
     if content is None:
         raise RuntimeError(
-            "ScreenCaptureKit: keine freigegebenen Inhalte - Bildschirmaufnahme in den "
-            f"Systemeinstellungen erlauben und die App neu starten ({error})"
+            tr(
+                "ScreenCaptureKit: keine freigegebenen Inhalte - Bildschirmaufnahme in den "
+                "Systemeinstellungen erlauben und die App neu starten ({fehler})",
+                fehler=error,
+            )
         )
     return content
 
@@ -274,7 +286,7 @@ class SckStream:
         content = _shareable_content(SCK)
         displays = list(content.displays() or [])
         if not displays:
-            raise RuntimeError("ScreenCaptureKit: kein Bildschirm gefunden")
+            raise RuntimeError(tr("ScreenCaptureKit: kein Bildschirm gefunden"))
         filt = SCK.SCContentFilter.alloc().initWithDisplay_excludingWindows_(displays[0], [])
         cfg = SCK.SCStreamConfiguration.alloc().init()
         cfg.setCapturesAudio_(True)
@@ -296,7 +308,7 @@ class SckStream:
             self._output, SCK.SCStreamOutputTypeAudio, _queue(), None
         )
         if not ok:
-            raise RuntimeError(f"ScreenCaptureKit: Audio-Ausgang nicht anmeldbar ({err})")
+            raise RuntimeError(tr("ScreenCaptureKit: Audio-Ausgang nicht anmeldbar ({fehler})", fehler=err))
         try:
             error = (_wait(self._stream.startCaptureWithCompletionHandler_) + [None])[0]
         except RuntimeError:
@@ -310,8 +322,7 @@ class SckStream:
             raise
         if error is not None:
             raise RuntimeError(
-                "ScreenCaptureKit: Aufnahme startet nicht - Bildschirmaufnahme erlaubt? "
-                f"({error})"
+                tr("ScreenCaptureKit: Aufnahme startet nicht - Bildschirmaufnahme erlaubt? ({fehler})", fehler=error)
             )
         self._started = time.monotonic()
         threading.Thread(target=self._watch_start, name="sck-watch", daemon=True).start()
@@ -320,8 +331,11 @@ class SckStream:
         time.sleep(SILENT_START_S)
         if self._sink.puffer == 0 and self._sink.gestoppt is None:
             self._log(
-                f"System-Audio: kein Ton nach {SILENT_START_S:.0f} s - spielt gerade etwas? "
-                "Bildschirmaufnahme für die Terminal-App erlaubt?"
+                tr(
+                    "System-Audio: kein Ton nach {sekunden} s - spielt gerade etwas? "
+                    "Bildschirmaufnahme für die Terminal-App erlaubt?",
+                    sekunden=f"{SILENT_START_S:.0f}",
+                )
             )
 
     @property

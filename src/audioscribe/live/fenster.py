@@ -19,6 +19,8 @@ from collections.abc import Callable
 from pathlib import Path
 from types import SimpleNamespace
 
+from audioscribe.i18n import tr
+
 # Fensterstile und DWM-Attribute (winuser.h / dwmapi.h)
 GWL_EXSTYLE = -20
 WS_EX_TOOLWINDOW = 0x80
@@ -206,7 +208,7 @@ def _mac() -> bool:
 def _need_api() -> SimpleNamespace:
     api = _api()
     if api is None:
-        raise RuntimeError("Fensteraufnahme gibt es nur unter Windows und macOS")
+        raise RuntimeError(tr("Fensteraufnahme gibt es nur unter Windows und macOS"))
     return api
 
 
@@ -278,7 +280,7 @@ def _dwm_attr(api, hwnd: int, attr: int, ctype):
 def _get_window_rect(api, hwnd: int) -> Rect:
     r = api.wt.RECT()
     if not api.user32.GetWindowRect(hwnd, api.ctypes.byref(r)):
-        raise WindowGone(f"Fenster {hwnd} nicht mehr lesbar")
+        raise WindowGone(tr("Fenster {hwnd} nicht mehr lesbar", hwnd=hwnd))
     return (r.left, r.top, r.right, r.bottom)
 
 
@@ -406,7 +408,7 @@ def grab_window(hwnd: int, fallback: Callable[[Rect], object] | None = None):
 
     api = _need_api()
     if not api.user32.IsWindow(hwnd):
-        raise WindowGone(f"Fenster {hwnd} existiert nicht mehr")
+        raise WindowGone(tr("Fenster {hwnd} existiert nicht mehr", hwnd=hwnd))
     # Auch "in den Tray geschlossene" Fenster (Teams, Spotify) sind nur unsichtbar.
     if api.user32.IsIconic(hwnd) or not api.user32.IsWindowVisible(hwnd):
         return None
@@ -471,7 +473,7 @@ def preview_window_jpeg(hwnd: int, width: int = 480) -> bytes | None:
         from audioscribe.live import fenster_mac
 
         if not fenster_mac.is_window(hwnd):
-            raise WindowGone(f"Fenster {hwnd} existiert nicht mehr")
+            raise WindowGone(tr("Fenster {hwnd} existiert nicht mehr", hwnd=hwnd))
         if fenster_mac.is_iconic(hwnd):
             return None
         img = fenster_mac.screencapture_image(["-l", str(hwnd)])

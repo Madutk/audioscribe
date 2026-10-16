@@ -10,6 +10,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from pathlib import Path
 
+from audioscribe.i18n import tr
 from audioscribe.live.track import Track
 
 INSTALL_HINT = "uv sync --extra cpu --extra mac --extra review --extra live"
@@ -20,7 +21,7 @@ def _sounddevice():
     try:
         import sounddevice
     except ImportError as exc:
-        raise RuntimeError(f"sounddevice fehlt -> {INSTALL_HINT}") from exc
+        raise RuntimeError(tr("sounddevice fehlt -> {hinweis}", hinweis=INSTALL_HINT)) from exc
     return sounddevice
 
 
@@ -121,10 +122,10 @@ class MicStream:
                 continue
             if rate != int(device["rate"]):
                 if log:
-                    log(f"Mikrofon: {device['rate']} Hz nicht möglich, nehme {rate} Hz")
+                    log(tr("Mikrofon: {soll} Hz nicht möglich, nehme {rate} Hz", soll=device["rate"], rate=rate))
             self._stream = stream
             return
-        raise RuntimeError(f"Mikrofon '{device['name']}' lässt sich nicht öffnen ({letzter})")
+        raise RuntimeError(tr("Mikrofon '{name}' lässt sich nicht öffnen ({fehler})", name=device["name"], fehler=letzter))
 
     def close(self) -> None:
         if self._stream is not None:

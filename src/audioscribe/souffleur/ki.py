@@ -23,6 +23,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Protocol
 
+from audioscribe.i18n import tr
 from audioscribe.verbrauch import Verbrauch, aus_ergebnis
 
 BACKEND_CLAUDE = "claude-agent"
@@ -41,6 +42,10 @@ DEFAULT_MODEL = SOUFFLEUR_MODELS[0]
 DEFAULT_TIMEOUT_S = 45.0
 
 INSTALL_HINT = "KI-Dienst nicht verfügbar: Paket 'claude-agent-sdk' fehlt (uv sync --extra agent)."
+
+
+def install_hint() -> str:
+    return tr("KI-Dienst nicht verfügbar: Paket 'claude-agent-sdk' fehlt (uv sync --extra agent).")
 
 
 class KiFehler(RuntimeError):
@@ -116,7 +121,7 @@ class ClaudeAgentKi:
         except KiFehler:
             raise
         except Exception as exc:  # noqa: BLE001 - jede SDK-/Prozess-Ausnahme wird zum KiFehler
-            raise KiFehler(f"KI-Aufruf gescheitert: {type(exc).__name__}: {exc}") from exc
+            raise KiFehler(tr("KI-Aufruf gescheitert: {fehler}", fehler=f"{type(exc).__name__}: {exc}")) from exc
 
     async def _frage(self, auftrag: KiAuftrag) -> KiAntwort:
         import anyio
@@ -147,19 +152,19 @@ class ClaudeAgentKi:
                     if isinstance(msg, ResultMessage):
                         ergebnis = msg
         except TimeoutError as exc:
-            raise KiFehler(f"KI-Aufruf nach {auftrag.timeout_s:.0f} s abgebrochen") from exc
+            raise KiFehler(tr("KI-Aufruf nach {sekunden} s abgebrochen", sekunden=f"{auftrag.timeout_s:.0f}")) from exc
         antwort_s = time.monotonic() - t0
         if ergebnis is None:
-            raise KiFehler("KI-Aufruf ohne Ergebnis")
+            raise KiFehler(tr("KI-Aufruf ohne Ergebnis"))
         self._loesche_sitzungsdatei(ergebnis.session_id)
         # Vor der Fehlerprüfung: auch ein gescheiterter Aufruf hat Tokens verbraucht.
         verbrauch = aus_ergebnis(ergebnis)
         self._on_verbrauch(verbrauch)
         if ergebnis.is_error:
-            raise KiFehler(f"KI-Dienst meldet Fehler: {ergebnis.result or ergebnis.subtype}")
+            raise KiFehler(tr("KI-Dienst meldet Fehler: {fehler}", fehler=ergebnis.result or ergebnis.subtype))
         daten = ergebnis.structured_output
         if not isinstance(daten, dict):
-            raise KiFehler("KI-Antwort ohne strukturierte Daten")
+            raise KiFehler(tr("KI-Antwort ohne strukturierte Daten"))
         return KiAntwort(
             daten=daten, start_s=start_s if start_s is not None else antwort_s, antwort_s=antwort_s,
             modell=self.modell, session_id=ergebnis.session_id, verbrauch=verbrauch,
@@ -183,8 +188,11 @@ class ClaudeAgentKi:
 
 # --- Attrappe ---------------------------------------------------------------------------------
 
-_RHETORISCH = ("oder?", "nicht wahr?", "stimmt's?", "ne?", "gell?", "doch klar")
-_OFFEN = ("noch offen", "ungeklärt", "noch unklar", "muss jemand prüfen", "klären wir noch", "nicht geklärt")
+_RHETORISCH = ("oder?", "nicht wahr?", "stimmt's?", "ne?", "gell?", "doch klar", "right?", "isn't it?", "don't you think?")
+_OFFEN = (
+    "noch offen", "ungeklärt", "noch unklar", "muss jemand prüfen", "klären wir noch", "nicht geklärt",
+    "still open", "unresolved", "still unclear", "need to clarify", "not clarified",
+)
 _STOPP = {
     "der", "die", "das", "und", "oder", "ist", "sind", "ein", "eine", "wir", "bei", "uns", "von", "im", "in",
     "mit", "für", "auf", "zu", "den", "dem", "des", "es", "sich", "auch", "nicht", "ab", "an", "wer", "wie",
@@ -257,14 +265,14 @@ class AttrappeKi:
                     "segment_id": seg["id"], "art": "frage", "aussage": text,
                     "fundstelle_id": treffer["id"] if treffer else None,
                     "wiki_zitat": _erster_satz(treffer["auszug"]) if treffer else None,
-                    "ki_text": "Im Wiki steht dazu etwas." if treffer else "Im Wiki liegt dazu nichts vor.",
+                    "ki_text": tr("Im Wiki steht dazu etwas.") if treffer else tr("Im Wiki liegt dazu nichts vor."),
                     "suchbegriffe": sorted(_woerter(text))[:3], "sicherheit": "hoch",
                 })
                 continue
             if any(s in unten for s in _OFFEN):
                 befunde.append({
                     "segment_id": seg["id"], "art": "offener_punkt", "aussage": text, "fundstelle_id": None,
-                    "wiki_zitat": None, "ki_text": "Wurde als ungeklärt benannt.", "suchbegriffe": [],
+                    "wiki_zitat": None, "ki_text": tr("Wurde als ungeklärt benannt."), "suchbegriffe": [],
                     "sicherheit": "hoch",
                 })
                 continue
@@ -347,15 +355,15 @@ def make_ki(
         return None, KiStatus("fehlt", backend, modell, hinweis)
     modell = modell_fuer(backend, modell)
     if backend == BACKEND_ATTRAPPE:
-        return AttrappeKi(regeln=regeln), KiStatus("bereit", backend, "attrappe", "KI-Attrappe (regelbasiert, ohne Netz)")
+        return AttrappeKi(regeln=regeln), KiStatus("bereit", backend, "attrappe", tr("KI-Attrappe (regelbasiert, ohne Netz)"))
     if backend == BACKEND_OLLAMA:
         return _make_ollama(modell, log=log)
     if backend != BACKEND_CLAUDE:
-        return None, KiStatus("fehlt", backend, modell, f"Unbekanntes KI-Backend: {backend}")
+        return None, KiStatus("fehlt", backend, modell, tr("Unbekanntes KI-Backend: {backend}", backend=backend))
     if not sdk_verfuegbar():
-        return None, KiStatus("fehlt", backend, modell, INSTALL_HINT)
+        return None, KiStatus("fehlt", backend, modell, install_hint())
     ki = ClaudeAgentKi(modell, cwd=Path(cache_dir) / "souffleur", log=log, on_verbrauch=on_verbrauch)
-    return ki, KiStatus("bereit", backend, modell, f"KI bereit (Modell {modell})")
+    return ki, KiStatus("bereit", backend, modell, tr("KI bereit (Modell {modell})", modell=modell))
 
 
 def _make_ollama(modell: str, *, log: Callable[[str], None] | None) -> tuple[Any | None, KiStatus]:
@@ -372,11 +380,14 @@ def _make_ollama(modell: str, *, log: Callable[[str], None] | None) -> tuple[Any
     if not status.erreichbar:
         return None, KiStatus(
             "fehlt", BACKEND_OLLAMA, modell,
-            f"Lokale KI nicht erreichbar unter {settings.ollama_url} ({status.fehler}; 'ollama serve' starten)",
+            tr(
+                "Lokale KI nicht erreichbar unter {url} ({fehler}; 'ollama serve' starten)",
+                url=settings.ollama_url, fehler=status.fehler,
+            ),
         )
     if not status.hat_modell(modell):
         return None, KiStatus(
-            "fehlt", BACKEND_OLLAMA, modell, f"Lokales Modell {modell} nicht geladen - 'ollama pull {modell}'"
+            "fehlt", BACKEND_OLLAMA, modell, tr("Lokales Modell {modell} nicht geladen - 'ollama pull {modell}'", modell=modell)
         )
     ki = OllamaKi(modell, url=settings.ollama_url, keep_alive=settings.ollama_keep_alive, log=log)
-    return ki, KiStatus("bereit", BACKEND_OLLAMA, modell, f"KI bereit (lokal auf diesem Rechner, Modell {modell})")
+    return ki, KiStatus("bereit", BACKEND_OLLAMA, modell, tr("KI bereit (lokal auf diesem Rechner, Modell {modell})", modell=modell))

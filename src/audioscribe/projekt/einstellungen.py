@@ -12,9 +12,11 @@ from dataclasses import dataclass
 
 from audioscribe import variante
 from audioscribe.config import settings
+from audioscribe.i18n import tr
 from audioscribe.projekt.modell import UEBERSCHREIBBAR, Projekt
 
 # KI-Dienste zur Auswahl; weitere Dienste kommen hier dazu (Factory: souffleur/ki.make_ki).
+# Die Bezeichnungen sind deutsch - übersetzt wird erst bei der Ausgabe (``ki_dienste``).
 KI_DIENSTE: tuple[tuple[str, str], ...] = (
     ("claude-agent", "Claude (Agent SDK)"),
     ("ollama", "Lokal (Ollama auf diesem Rechner)"),
@@ -22,10 +24,23 @@ KI_DIENSTE: tuple[tuple[str, str], ...] = (
 
 
 def ki_dienste() -> tuple[tuple[str, str], ...]:
-    """Die in dieser Programmvariante wählbaren Dienste (``variante.py``)."""
+    """Die in dieser Programmvariante wählbaren Dienste (``variante.py``), Bezeichnungen in der
+    Sprache der Oberfläche."""
     if variante.aktiv():
-        return ((variante.DIENST_LOKAL, "Lokale KI (auf diesem Rechner)"),)
-    return KI_DIENSTE
+        return ((variante.DIENST_LOKAL, tr("Lokale KI (auf diesem Rechner)")),)
+    return tuple((dienst, _label(text)) for dienst, text in KI_DIENSTE)
+
+
+def _label(text: str) -> str:
+    """Bezeichnung aus ``KI_DIENSTE``/``_SPRACHEN`` übersetzen - je Text ein eigener ``tr``-Aufruf,
+    damit der Test der Übersetzungen jeden Text als Literal findet."""
+    return {
+        "Claude (Agent SDK)": tr("Claude (Agent SDK)"),
+        "Lokal (Ollama auf diesem Rechner)": tr("Lokal (Ollama auf diesem Rechner)"),
+        "Deutsch": tr("Deutsch"),
+        "Englisch": tr("Englisch"),
+        "Automatisch erkennen": tr("Automatisch erkennen"),
+    }.get(text, text)
 
 
 def _zulaessig(dienst: str) -> str:
@@ -127,7 +142,7 @@ def optionen(state: Mapping[str, object]) -> dict:
         "ki_dienste": mit([{"id": i, "label": l} for i, l in dienste], g["ki_dienst"]),
         "souffleur_models": mit(je_dienst("souffleur"), g["souffleur_model"], dienst=g["ki_dienst"]),
         "agent_models": mit(je_dienst("agent"), g["agent_model"], dienst=g["ki_dienst"]),
-        "sprachen": mit([{"id": s, "label": _SPRACHEN.get(s, s)} for s in jobs.LANGUAGES], g["sprache"]),
+        "sprachen": mit([{"id": s, "label": _label(_SPRACHEN.get(s, s))} for s in jobs.LANGUAGES], g["sprache"]),
     }
 
 

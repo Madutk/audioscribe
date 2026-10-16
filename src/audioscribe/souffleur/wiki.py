@@ -9,10 +9,12 @@ Jede Seite wird an ihren Überschriften in Abschnitte geteilt; ein Abschnitt ist
 Fundstelle (Datei, Überschrift, Zeile, Auszug). Gesucht wird lexikalisch (BM25 über
 Abschnitte, Überschriften doppelt gewichtet) - ohne neue Abhängigkeit, ohne Netz.
 
-Das Glossar ist Teil des Wikis: eine Datei ``glossar.md`` oder eine Seite mit „Glossar“ in
-der H1. Tabellen mit Kopf ``Fehlerkennung | Korrekt`` liefern bestätigte Fehlerkennungen der
-Spracherkennung (Format des Skills transkript-normalisierung); übrige zweispaltige Tabellen
-gelten als Fachbegriffe.
+Das Glossar ist Teil des Wikis: eine Datei ``glossar.md`` (englisch ``glossary.md``) oder eine
+Seite mit „Glossar“ bzw. „Glossary“ in der H1. Tabellen mit Kopf ``Fehlerkennung | Korrekt``
+(englisch ``Misrecognition | Correct``) liefern bestätigte Fehlerkennungen der Spracherkennung
+(Format des Skills transkript-normalisierung); übrige zweispaltige Tabellen gelten als
+Fachbegriffe. Stoppwörter gibt es für Deutsch und Englisch, damit auch ein englisches Wiki
+sinnvoll durchsucht wird.
 
 Dieses Modul öffnet Dateien ausschließlich zum Lesen.
 """
@@ -27,6 +29,7 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
 
+from audioscribe.i18n import tr
 from audioscribe.souffleur.markierung import Fundstelle
 
 ZUSTAND_KEINS = "keins"
@@ -57,6 +60,18 @@ _STOPP = set(
     soll sollte sondern sonst um und uns unser unsere unter viel vom von vor während war waren warst was weg weil weiter welche
     welchem welchen welcher welches wenn werde werden wie wieder will wir wird wirst wo wollen wollte würde würden zu zum zur
     zwar zwischen eigentlich halt mal gut okay ok genau ne bei uns ab denen dafür darum dies gibt geht macht machen wer wann
+    """.split()
+)
+# Englische Stoppwörter für ein englisches Wiki - nur Wörter, die im Deutschen kein Inhaltswort
+# sind (also nicht etwa "kind", "still", "fast", "per", "her"), damit die deutsche Suche unverändert bleibt.
+_STOPP |= set(
+    """
+    the and or but if then than that this these those there here is are was were be been being have has had having
+    do does did done doing will would shall should can could may might must not no yes of off on to at by for from with
+    without into onto about over after before again once only just some any each every both few more many much other
+    others such own too very what which who whom whose when where why how it its he him his she we our ours you
+    your yours they them their theirs me my us let lets get gets got go goes going make makes something anything
+    nothing thing things like think know actually really well okay right yeah out up down
     """.split()
 )
 
@@ -106,7 +121,9 @@ class WikiStatus:
 
 
 def status_keins() -> WikiStatus:
-    return WikiStatus(ZUSTAND_KEINS, meldung="Kein Wiki verknüpft. Der Souffleur erkennt nur Fragen und liefert Essenzen.")
+    return WikiStatus(
+        ZUSTAND_KEINS, meldung=tr("Kein Wiki verknüpft. Der Souffleur erkennt nur Fragen und liefert Essenzen.")
+    )
 
 
 # --- Glossar -------------------------------------------------------------------------------
@@ -158,7 +175,7 @@ def parse_glossar(text: str, datei: str = "") -> Glossar:
             continue
         kopf = [z.lower() for z in tabelle[0]]
         zeilen = [z for z in tabelle[1:] if len(z) >= 2 and z[0] and z[1]]
-        if "fehlerkennung" in kopf[0] and any(k in kopf[1] for k in ("korrekt", "richtig")):
+        if _ist_fehlerkennung_kopf(kopf[0], kopf[1]):
             glossar.eintraege += [(z[0], z[1]) for z in zeilen]
         else:
             glossar.fachbegriffe += [(z[0], z[1]) for z in zeilen]
@@ -168,13 +185,21 @@ def parse_glossar(text: str, datei: str = "") -> Glossar:
     return glossar
 
 
+def _ist_fehlerkennung_kopf(links: str, rechts: str) -> bool:
+    """Kopf einer Tabelle bestätigter Fehlerkennungen: ``Fehlerkennung | Korrekt`` (oder
+    ``richtig``), englisch ``Misrecognition | Correct``."""
+    if "fehlerkennung" in links and any(k in rechts for k in ("korrekt", "richtig")):
+        return True
+    return any(k in links for k in ("misrecognition", "misrecognized")) and "correct" in rechts
+
+
 def ist_glossar(datei: Path, text: str) -> bool:
     if datei.stem.lower() in ("glossar", "glossary"):
         return True
     for line in text.splitlines():
         m = _HEADING.match(line.strip())
         if m and len(m.group(1)) == 1:
-            return "glossar" in m.group(2).lower()
+            return any(w in m.group(2).lower() for w in ("glossar", "glossary"))
     return False
 
 
@@ -256,7 +281,7 @@ class WikiIndex:
         pfad = Path(pfad)
         gelesen = datetime.now().strftime("%Y-%m-%d %H:%M")
         if not pfad.is_dir():
-            raise FileNotFoundError(f"Ordner nicht gefunden: {pfad}")
+            raise FileNotFoundError(tr("Ordner nicht gefunden: {pfad}", pfad=pfad))
         dateien = seiten_dateien(pfad)
         warnungen: list[str] = []
         abschnitte: list[Abschnitt] = []
@@ -266,12 +291,14 @@ class WikiIndex:
         for datei in dateien:
             try:
                 if datei.stat().st_size > MAX_DATEI_BYTES:
-                    warnungen.append(f"übersprungen (zu groß): {datei.relative_to(pfad).as_posix()}")
+                    warnungen.append(tr("übersprungen (zu groß): {datei}", datei=datei.relative_to(pfad).as_posix()))
                     continue
                 text = datei.read_text(encoding="utf-8", errors="replace")
                 stand = max(stand, datei.stat().st_mtime)
             except OSError as exc:
-                warnungen.append(f"nicht lesbar: {datei.relative_to(pfad).as_posix()} ({exc.strerror or exc})")
+                warnungen.append(
+                    tr("nicht lesbar: {datei} ({grund})", datei=datei.relative_to(pfad).as_posix(), grund=exc.strerror or exc)
+                )
                 continue
             rel = datei.relative_to(pfad).as_posix()
             if ist_glossar(datei, text) and not glossar.datei:
@@ -279,11 +306,11 @@ class WikiIndex:
             seiten += 1
             abschnitte += abschnitte_aus(text, rel)
             if len(abschnitte) > MAX_ABSCHNITTE:
-                warnungen.append(f"Index bei {MAX_ABSCHNITTE} Abschnitten abgeschnitten")
+                warnungen.append(tr("Index bei {anzahl} Abschnitten abgeschnitten", anzahl=MAX_ABSCHNITTE))
                 abschnitte = abschnitte[:MAX_ABSCHNITTE]
                 break
         if not seiten:
-            raise ValueError(f"Keine Markdown-Seiten gefunden unter {pfad}")
+            raise ValueError(tr("Keine Markdown-Seiten gefunden unter {pfad}", pfad=pfad))
         name = _wiki_name(pfad)
         status = WikiStatus(
             ZUSTAND_OK, pfad=str(pfad), name=name, seiten=seiten, abschnitte=len(abschnitte),
@@ -336,8 +363,11 @@ def _wiki_name(pfad: Path) -> str:
 
 
 def _meldung_ok(name: str, seiten: int, glossar: Glossar) -> str:
-    g = f"Glossar: {len(glossar.eintraege)} Einträge ({glossar.datei})" if glossar.datei else "Glossar: keins im Wiki"
-    return f"{name}: {seiten} Seiten gelesen. {g}."
+    if glossar.datei:
+        g = tr("Glossar: {anzahl} Einträge ({datei})", anzahl=len(glossar.eintraege), datei=glossar.datei)
+    else:
+        g = tr("Glossar: keins im Wiki")
+    return tr("{name}: {seiten} Seiten gelesen. {glossar}.", name=name, seiten=seiten, glossar=g)
 
 
 def pruefe_wiki(pfad: Path | str | None) -> WikiStatus:
@@ -348,10 +378,10 @@ def pruefe_wiki(pfad: Path | str | None) -> WikiStatus:
     try:
         return WikiIndex.laden(pfad).status
     except FileNotFoundError:
-        return WikiStatus(ZUSTAND_FEHLER, pfad=str(pfad), meldung="Ordner nicht gefunden oder nicht erreichbar.")
+        return WikiStatus(ZUSTAND_FEHLER, pfad=str(pfad), meldung=tr("Ordner nicht gefunden oder nicht erreichbar."))
     except PermissionError:
-        return WikiStatus(ZUSTAND_FEHLER, pfad=str(pfad), meldung="Keine Leserechte für diesen Ordner.")
+        return WikiStatus(ZUSTAND_FEHLER, pfad=str(pfad), meldung=tr("Keine Leserechte für diesen Ordner."))
     except ValueError as exc:
-        return WikiStatus(ZUSTAND_FEHLER, pfad=str(pfad), meldung=f"Kein Wiki gefunden: {exc}")
+        return WikiStatus(ZUSTAND_FEHLER, pfad=str(pfad), meldung=tr("Kein Wiki gefunden: {fehler}", fehler=exc))
     except OSError as exc:
-        return WikiStatus(ZUSTAND_FEHLER, pfad=str(pfad), meldung=f"Nicht lesbar: {exc.strerror or exc}")
+        return WikiStatus(ZUSTAND_FEHLER, pfad=str(pfad), meldung=tr("Nicht lesbar: {fehler}", fehler=exc.strerror or exc))

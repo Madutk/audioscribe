@@ -27,6 +27,7 @@ from pathlib import Path
 from xml.sax.saxutils import escape
 
 from audioscribe import __version__
+from audioscribe.i18n import tr
 
 JSON_NAME = "bpmn-modell.json"
 BPMN_NAME = "bpmn-modell.bpmn"
@@ -128,49 +129,49 @@ def parse_modell(data: object) -> Modell:
     """JSON-Daten -> ``Modell``; sammelt ALLE Fehler und wirft ``ModellFehler``."""
     fehler: list[str] = []
     if not isinstance(data, dict):
-        raise ModellFehler(["Oberste Ebene muss ein JSON-Objekt sein."])
+        raise ModellFehler([tr("Oberste Ebene muss ein JSON-Objekt sein.")])
 
     lanes: list[Lane] = []
     for i, raw in enumerate(data.get("lanes") or []):
         lid = _str(raw.get("id")) if isinstance(raw, dict) else ""
         name = _str(raw.get("name")) if isinstance(raw, dict) else ""
         if not lid or not _ID_RE.match(lid):
-            fehler.append(f"lanes[{i}]: ungueltige id {lid!r}")
+            fehler.append(tr("lanes[{i}]: ungueltige id {id}", i=i, id=repr(lid)))
             continue
         if any(lane.id == lid for lane in lanes):
-            fehler.append(f"lanes[{i}]: doppelte id {lid!r}")
+            fehler.append(tr("lanes[{i}]: doppelte id {id}", i=i, id=repr(lid)))
             continue
         lanes.append(Lane(lid, name or lid))
     if not lanes:
-        fehler.append("Mindestens eine Lane noetig (lanes).")
+        fehler.append(tr("Mindestens eine Lane noetig (lanes)."))
     lane_ids = {lane.id for lane in lanes}
 
     knoten: list[Knoten] = []
     for i, raw in enumerate(data.get("knoten") or []):
         if not isinstance(raw, dict):
-            fehler.append(f"knoten[{i}]: kein Objekt")
+            fehler.append(tr("knoten[{i}]: kein Objekt", i=i))
             continue
         kid, typ, lane = _str(raw.get("id")), _str(raw.get("typ")), _str(raw.get("lane"))
         where = f"knoten[{i}] ({kid or '?'})"
         if not kid or not _ID_RE.match(kid):
-            fehler.append(f"{where}: ungueltige id (Buchstabe am Anfang, keine Leerzeichen)")
+            fehler.append(tr("{wo}: ungueltige id (Buchstabe am Anfang, keine Leerzeichen)", wo=where))
             continue
         if any(k.id == kid for k in knoten):
-            fehler.append(f"{where}: doppelte id")
+            fehler.append(tr("{wo}: doppelte id", wo=where))
             continue
         # Falscher Typ / falsche Lane: melden, den Knoten aber behalten - sonst
         # folgen Dutzende Folgefehler ("unbekannter Knoten", "nicht erreichbar").
         if typ not in TYPEN:
-            fehler.append(f"{where}: typ {typ!r} unbekannt (erlaubt: {', '.join(TYPEN)})")
+            fehler.append(tr("{wo}: typ {typ} unbekannt (erlaubt: {erlaubt})", wo=where, typ=repr(typ), erlaubt=", ".join(TYPEN)))
         if lane not in lane_ids:
-            fehler.append(f"{where}: lane {lane!r} unbekannt")
+            fehler.append(tr("{wo}: lane {lane} unbekannt", wo=where, lane=repr(lane)))
         art = _str(raw.get("art")) or None
         if art is not None and art not in ARTEN:
-            fehler.append(f"{where}: art {art!r} unbekannt (erlaubt: {', '.join(ARTEN)})")
+            fehler.append(tr("{wo}: art {art} unbekannt (erlaubt: {erlaubt})", wo=where, art=repr(art), erlaubt=", ".join(ARTEN)))
             art = None
         text = _str(raw.get("text"))
         if typ in ("aufgabe", "entscheidung") and not text:
-            fehler.append(f"{where}: text fehlt")
+            fehler.append(tr("{wo}: text fehlt", wo=where))
         knoten.append(Knoten(kid, typ, lane, text, art, bool(raw.get("unsicher"))))
     ids = {k.id for k in knoten}
 
@@ -180,10 +181,10 @@ def parse_modell(data: object) -> Modell:
         nach = _str(raw.get("nach")) if isinstance(raw, dict) else ""
         where = f"fluesse[{i}] ({von or '?'} -> {nach or '?'})"
         if von not in ids or nach not in ids:
-            fehler.append(f"{where}: verweist auf unbekannten Knoten")
+            fehler.append(tr("{wo}: verweist auf unbekannten Knoten", wo=where))
             continue
         if von == nach:
-            fehler.append(f"{where}: Fluss auf sich selbst")
+            fehler.append(tr("{wo}: Fluss auf sich selbst", wo=where))
             continue
         fluesse.append(Fluss(von, nach, _str(raw.get("text")), f"Flow_{len(fluesse) + 1}"))
 
@@ -194,18 +195,18 @@ def parse_modell(data: object) -> Modell:
         ein[f.nach] += 1
     starts = [k.id for k in knoten if k.typ == "start"]
     if not starts:
-        fehler.append("Mindestens ein Knoten mit typ 'start' noetig.")
+        fehler.append(tr("Mindestens ein Knoten mit typ 'start' noetig."))
     if not any(k.typ == "ende" for k in knoten):
-        fehler.append("Mindestens ein Knoten mit typ 'ende' noetig.")
+        fehler.append(tr("Mindestens ein Knoten mit typ 'ende' noetig."))
     for k in knoten:
         if k.typ == "start" and ein[k.id]:
-            fehler.append(f"{k.id}: ein Start darf keinen eingehenden Fluss haben")
+            fehler.append(tr("{id}: ein Start darf keinen eingehenden Fluss haben", id=k.id))
         if k.typ == "ende" and aus[k.id]:
-            fehler.append(f"{k.id}: ein Ende darf keinen ausgehenden Fluss haben")
+            fehler.append(tr("{id}: ein Ende darf keinen ausgehenden Fluss haben", id=k.id))
         if k.typ != "ende" and not aus[k.id]:
-            fehler.append(f"{k.id}: hat keinen ausgehenden Fluss (Sackgasse)")
+            fehler.append(tr("{id}: hat keinen ausgehenden Fluss (Sackgasse)", id=k.id))
         if k.typ == "entscheidung" and aus[k.id] < 2:
-            fehler.append(f"{k.id}: eine Entscheidung braucht mindestens zwei Ausgaenge")
+            fehler.append(tr("{id}: eine Entscheidung braucht mindestens zwei Ausgaenge", id=k.id))
     # Erreichbarkeit ab den Starts
     seen, stack = set(starts), list(starts)
     while stack:
@@ -216,7 +217,7 @@ def parse_modell(data: object) -> Modell:
                 stack.append(f.nach)
     for k in knoten:
         if starts and k.id not in seen:
-            fehler.append(f"{k.id}: vom Start aus nicht erreichbar")
+            fehler.append(tr("{id}: vom Start aus nicht erreichbar", id=k.id))
 
     if fehler:
         raise ModellFehler(fehler)
@@ -233,9 +234,9 @@ def lade_modell(path: Path) -> Modell:
     try:
         data = json.loads(Path(path).read_text(encoding="utf-8"))
     except (OSError, UnicodeDecodeError) as exc:
-        raise ModellFehler([f"{Path(path).name} nicht lesbar: {exc}"]) from exc
+        raise ModellFehler([tr("{datei} nicht lesbar: {fehler}", datei=Path(path).name, fehler=exc)]) from exc
     except ValueError as exc:
-        raise ModellFehler([f"{Path(path).name} ist kein gueltiges JSON: {exc}"]) from exc
+        raise ModellFehler([tr("{datei} ist kein gueltiges JSON: {fehler}", datei=Path(path).name, fehler=exc)]) from exc
     return parse_modell(data)
 
 
@@ -783,22 +784,25 @@ def erzeuge_bpmn(
     ws = Path(workspace)
     quelle = ws / JSON_NAME
     if not quelle.is_file():
-        log(f"[BPMN] Kein {JSON_NAME} - kein BPMN-Modell erzeugt.")
+        log(tr("[BPMN] Kein {datei} - kein BPMN-Modell erzeugt.", datei=JSON_NAME))
         return []
     bpmn_path = ws / BPMN_NAME
     if bpmn_path.exists() and not neu and not ist_von_audioscribe(bpmn_path):
         log(
-            f"[BPMN] {BPMN_NAME} wurde in einem BPMN-Werkzeug bearbeitet und bleibt unveraendert "
-            "(Neuaufbau aus dem JSON nur mit --neu)."
+            tr(
+                "[BPMN] {datei} wurde in einem BPMN-Werkzeug bearbeitet und bleibt unveraendert "
+                "(Neuaufbau aus dem JSON nur mit --neu).",
+                datei=BPMN_NAME,
+            )
         )
         return []
     try:
         modell = lade_modell(quelle)
     except ModellFehler as exc:
         for f in exc.fehler[:12]:
-            log(f"[BPMN] Fehler in {JSON_NAME}: {f}")
+            log(tr("[BPMN] Fehler in {datei}: {fehler}", datei=JSON_NAME, fehler=f))
         if len(exc.fehler) > 12:
-            log(f"[BPMN] ... und {len(exc.fehler) - 12} weitere")
+            log(tr("[BPMN] ... und {anzahl} weitere", anzahl=len(exc.fehler) - 12))
         return []
 
     lay = layout(modell)
@@ -812,15 +816,19 @@ def erzeuge_bpmn(
 
     browser = browser or find_browser()
     if browser is None:
-        log("[BPMN] Kein Edge/Chrome gefunden - PNG fehlt (AUDIOSCRIBE_BROWSER setzen).")
+        log(tr("[BPMN] Kein Edge/Chrome gefunden - PNG fehlt (AUDIOSCRIBE_BROWSER setzen)."))
     else:
         try:
             erzeugt.append(svg_to_png(svg, ws / PNG_NAME, browser))
         except RuntimeError as exc:
             log(f"[BPMN] {exc}")
     log(
-        f"[BPMN] {', '.join(p.name for p in erzeugt)} "
-        f"({len(modell.lanes)} Lane(s), {len(modell.knoten)} Knoten)"
+        tr(
+            "[BPMN] {dateien} ({lanes} Lane(s), {knoten} Knoten)",
+            dateien=", ".join(p.name for p in erzeugt),
+            lanes=len(modell.lanes),
+            knoten=len(modell.knoten),
+        )
     )
     return erzeugt
 
@@ -829,7 +837,7 @@ def pruefe(workspace: Path) -> list[str]:
     """Nur validieren (fuer den Agenten und ``audioscribe bpmn --pruefen``)."""
     quelle = Path(workspace) / JSON_NAME
     if not quelle.is_file():
-        return [f"{JSON_NAME} nicht gefunden in {workspace}"]
+        return [tr("{datei} nicht gefunden in {ordner}", datei=JSON_NAME, ordner=workspace)]
     try:
         lade_modell(quelle)
     except ModellFehler as exc:

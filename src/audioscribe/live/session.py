@@ -24,6 +24,7 @@ from pathlib import Path
 
 import numpy as np
 
+from audioscribe.i18n import tr
 from audioscribe.live import events, journal
 from audioscribe.live.asr import Ergebnis
 from audioscribe.live.bilanz import TEIL_LIVE, beschreibe_live, save_bilanz
@@ -154,11 +155,19 @@ class LiveSession:
         """Erst laden, dann schreiben: Segmente, Standbilder, Diagnose und Startversatz."""
         status = journal.lies_status(self.dir)
         if status is None:
-            raise RuntimeError(f"Keine fortsetzbare Sitzung ({journal.STATUS_DATEI} fehlt): {self.dir}")
+            raise RuntimeError(
+                tr("Keine fortsetzbare Sitzung ({datei} fehlt): {ordner}", datei=journal.STATUS_DATEI, ordner=self.dir)
+            )
         if status.get("replay"):
-            raise RuntimeError("Ein Transkript-Replay lässt sich nicht fortsetzen.")
+            raise RuntimeError(tr("Ein Transkript-Replay lässt sich nicht fortsetzen."))
         if status.get("status") in (journal.BEENDET, journal.VERWORFEN):
-            raise RuntimeError(f"Die Sitzung ist {status.get('status')} und wird nicht fortgesetzt: {self.dir}")
+            raise RuntimeError(
+                tr(
+                    "Die Sitzung ist {status} und wird nicht fortgesetzt: {ordner}",
+                    status=status.get("status"),
+                    ordner=self.dir,
+                )
+            )
         bestand = journal.lies_journal(self.dir)
         self._bestand = sorted(bestand.segmente, key=lambda s: int(s["id"]))
         self._segments = [
@@ -223,8 +232,14 @@ class LiveSession:
             if mark.id is not None:
                 events.emit(events.SHOT, id=mark.id, t=mark.t, file=Path(mark.png).name, restored=True)
         events.log(
-            f"Sitzung wird fortgesetzt: {len(self._bestand)} Abschnitte, {len(self._marks)} Standbilder, "
-            f"weiter bei {format_timecode(self._basis_s)} (Teil {self._teil_nr})"
+            tr(
+                "Sitzung wird fortgesetzt: {abschnitte} Abschnitte, {standbilder} Standbilder, "
+                "weiter bei {zeit} (Teil {teil})",
+                abschnitte=len(self._bestand),
+                standbilder=len(self._marks),
+                zeit=format_timecode(self._basis_s),
+                teil=self._teil_nr,
+            )
         )
 
     def _wav_name(self, spur: str) -> str:
@@ -300,33 +315,33 @@ class LiveSession:
             # Vor allem anderen: kein zweiter Prozess auf demselben Ordner, und das bisherige
             # Transkript steht sofort in der Oberfläche - nicht erst nach dem Modellladen.
             self._sperre = journal.sperre(self.dir)
-            self._state("laden", step="Sitzung wiederherstellen")
+            self._state("laden", step=tr("Sitzung wiederherstellen"))
             self._melde_bestand()
             self._sichere_alte_teile()
         self._state("laden", step=f"Whisper {o.model}")
         wie = "Metal" if o.backend == "mlx" else o.compute_type
-        events.log(f"Lade Modell {o.model} ({o.backend}, {o.device}, {wie}) ...")
+        events.log(tr("Lade Modell {modell} ({backend}, {geraet}, {wie}) ...", modell=o.model, backend=o.backend, geraet=o.device, wie=wie))
         started = time.monotonic()
         self._asr = self._load_asr()
-        events.log(f"Whisper {o.model} geladen ({_took(started)})")
+        events.log(tr("Whisper {modell} geladen ({dauer})", modell=o.model, dauer=_took(started)))
         # Vor dem Hintergrund-Thread: torch.set_num_threads wirkt prozessweit.
         self._limit_torch_threads()
         self._labeler = SpeakerLabeler(self._load_embedder(), pfad=self.dir / SPRECHER_DATEI)
-        self._state("laden", step="Sprachaktivität (VAD)")
+        self._state("laden", step=tr("Sprachaktivität (VAD)"))
         started = time.monotonic()
         vad = self._load_vad()
-        events.log(f"Sprachaktivität bereit ({_took(started)})")
+        events.log(tr("Sprachaktivität bereit ({dauer})", dauer=_took(started)))
 
         self.dir.mkdir(parents=True, exist_ok=True)
         if self._sperre is None:
             self._sperre = journal.sperre(self.dir)  # Lebenszeichen für die Dauer des Prozesses
         if o.replay_system is None and o.replay_mic is None:
             # Vor der Sitzungsuhr: die macOS-Dialoge dürfen nicht in die Aufnahme fallen.
-            self._state("laden", step="Berechtigungen")
+            self._state("laden", step=tr("Berechtigungen"))
             ensure_permissions(
                 mic=o.mic.strip().lower() != "none", system=o.loopback.strip().lower() != "none", log=events.log
             )
-        self._state("laden", step="Audio-Geräte")
+        self._state("laden", step=tr("Audio-Geräte"))
         self._t0 = time.monotonic()
         audio = self._open_capture()
         tracks: dict = {}
@@ -339,13 +354,13 @@ class LiveSession:
             ):
                 device = pick(geraete, wahl)
                 if device is None:
-                    events.log(f"Spur '{name}': aus")
+                    events.log(tr("Spur '{name}': aus", name=name))
                     continue
                 spuren[name] = self._wav_name(name)
                 tracks[name] = audio.open(name, device, self.dir / spuren[name])
-                events.log(f"Spur '{name}': {device['name']} ({device['rate']} Hz)")
+                events.log(tr("Spur '{name}': {geraet} ({rate} Hz)", name=name, geraet=device["name"], rate=device["rate"]))
             if not tracks and not (o.monitor or o.window):
-                events.log("Weder Audio noch Bildquelle gewählt - nichts aufzunehmen.")
+                events.log(tr("Weder Audio noch Bildquelle gewählt - nichts aufzunehmen."))
                 return 1
 
             self._beginne_teil(spuren)
@@ -410,13 +425,13 @@ class LiveSession:
             try:
                 verbinde_teile(self.dir)
             except OSError as exc:
-                events.log(f"Mitschnitt-Teile nicht verbunden: {exc}")
+                events.log(tr("Mitschnitt-Teile nicht verbunden: {fehler}", fehler=exc))
         self._setze_status(journal.UNTERBROCHEN if allein else journal.BEENDET)
         events.log(beschreibe_live(bilanz))
         # Vor "fertig": der Runner muss das Fazit haben, bevor er das Nachschärfen anstößt.
         events.emit(events.FAZIT, teil=TEIL_LIVE, **asdict(bilanz))
         self._state("fertig")
-        events.log(f"Sitzung gespeichert: {self.dir}")
+        events.log(tr("Sitzung gespeichert: {ordner}", ordner=self.dir))
 
     def _main_loop(self, tracks: dict) -> None:
         last_persist = last_takt = time.monotonic()
@@ -442,19 +457,19 @@ class LiveSession:
                     self._persist()
                     last_persist = time.monotonic()
         except KeyboardInterrupt:
-            events.log("Strg+C - Sitzung wird abgeschlossen ...")
+            events.log(tr("Strg+C - Sitzung wird abgeschlossen ..."))
         self._stop.set()
 
     def _drain(self) -> None:
         """Wartet auf die letzten Abschnitte; ein zweites Strg+C bricht das Warten ab."""
         backlog = self._board.backlog_s()
         if backlog:
-            events.log(f"Transkribiere die letzten {backlog:.0f} s ...")
+            events.log(tr("Transkribiere die letzten {sekunden} s ...", sekunden=f"{backlog:.0f}"))
         try:
             while not self._board.wait_idle(1.0):
                 pass
         except KeyboardInterrupt:
-            events.log("Warten abgebrochen - der Rest steht nur im Mitschnitt.")
+            events.log(tr("Warten abgebrochen - der Rest steht nur im Mitschnitt."))
 
     # --- Threads ------------------------------------------------------------
 
@@ -567,7 +582,7 @@ class LiveSession:
                 else:
                     self._do_partial(job)
             except Exception as exc:  # noqa: BLE001 - ein Abschnitt darf die Sitzung nie kippen
-                events.log(f"Transkription fehlgeschlagen: {exc}")
+                events.log(tr("Transkription fehlgeschlagen: {fehler}", fehler=exc))
             finally:
                 self._board.done(job)
 
@@ -677,7 +692,7 @@ class LiveSession:
         """Bildquelle der laufenden Aufnahme tauschen; ohne Standbild-Thread (WAV-Replay,
         mss fehlt) nur ein Hinweis im Protokoll."""
         if self._screen is None:
-            events.log("Keine Bildquelle in dieser Sitzung - Wechsel nicht möglich")
+            events.log(tr("Keine Bildquelle in dieser Sitzung - Wechsel nicht möglich"))
             return
         self._screen.wechsle(monitor=monitor, window=window)
 
@@ -710,7 +725,7 @@ class LiveSession:
         if o.replay_system is not None or o.replay_mic is not None:
             from audioscribe.live.replay import ReplayCapture
 
-            events.log(f"Replay statt Aufnahme (Tempo {o.speed:g}×)")
+            events.log(tr("Replay statt Aufnahme (Tempo {tempo}×)", tempo=f"{o.speed:g}"))
             return ReplayCapture(
                 self.clock, system=o.replay_system, mic=o.replay_mic, speed=o.speed, on_end=self._stop.set,
                 start_sample=self._start_sample,
@@ -728,10 +743,13 @@ class LiveSession:
             self._catchup = catchup
             if catchup:
                 events.log(
-                    f"Rückstand {backlog_s:.0f} s - Aufholmodus: Abschnitte zusammenlegen, Beam 1"
+                    tr(
+                        "Rückstand {sekunden} s - Aufholmodus: Abschnitte zusammenlegen, Beam 1",
+                        sekunden=f"{backlog_s:.0f}",
+                    )
                 )
             else:
-                events.log("Rückstand abgebaut - wieder volle Qualität")
+                events.log(tr("Rückstand abgebaut - wieder volle Qualität"))
         return catchup
 
     def rtf(self) -> float | None:
@@ -755,7 +773,7 @@ class LiveSession:
         if not o.speakers or o.loopback.strip().lower() == "none":
             return None
         if not o.hf_token:
-            events.log("HF_TOKEN fehlt - System-Spur heißt 'Gegenseite' statt 'Sprecher N'")
+            events.log(tr("HF_TOKEN fehlt - System-Spur heißt 'Gegenseite' statt 'Sprecher N'"))
             return None
         from audioscribe.live.speakers import BackgroundEmbedder
 
@@ -764,7 +782,7 @@ class LiveSession:
 
             return SpeakerEmbedder(o.device, o.hf_token)
 
-        events.log("Sprecher-Modell lädt im Hintergrund ...")
+        events.log(tr("Sprecher-Modell lädt im Hintergrund ..."))
         return BackgroundEmbedder(load, log=events.log)
 
     def _start_screen(self):
@@ -792,7 +810,7 @@ class LiveSession:
             self._screen = watcher
             return watcher
         except ImportError:
-            events.log("Standbilder-Modul nicht ladbar - keine Standbilder (uv sync ... --extra live)")
+            events.log(tr("Standbilder-Modul nicht ladbar - keine Standbilder (uv sync ... --extra live)"))
             return None
 
     def _on_quelle(self, quelle: dict) -> None:
@@ -890,13 +908,15 @@ def finalisiere_sitzung(session_dir: str | Path, *, sentences_per_timestamp: int
     session_dir = Path(session_dir)
     status = journal.lies_status(session_dir)
     if status is None:
-        events.log(f"Keine Sitzung zum Abschließen ({journal.STATUS_DATEI} fehlt): {session_dir}")
+        events.log(
+            tr("Keine Sitzung zum Abschließen ({datei} fehlt): {ordner}", datei=journal.STATUS_DATEI, ordner=session_dir)
+        )
         return 1
     if status.get("replay"):
-        events.log("Ein Transkript-Replay braucht keinen Abschluss.")
+        events.log(tr("Ein Transkript-Replay braucht keinen Abschluss."))
         return 1
     if status.get("status") in (journal.BEENDET, journal.VERWORFEN):
-        events.log(f"Die Sitzung ist bereits {status.get('status')}: {session_dir}")
+        events.log(tr("Die Sitzung ist bereits {status}: {ordner}", status=status.get("status"), ordner=session_dir))
         return 1
     try:
         sperre = journal.sperre(session_dir)
@@ -911,7 +931,7 @@ def finalisiere_sitzung(session_dir: str | Path, *, sentences_per_timestamp: int
         art=str(status.get("art") or ""),
     )
     try:
-        events.emit(events.STATE, phase="laden", step="Sitzung abschließen", **zustand)
+        events.emit(events.STATE, phase="laden", step=tr("Sitzung abschließen"), **zustand)
         bestand = journal.lies_journal(session_dir)
         segments = [
             Segment(float(s["start"]), float(s["end"]), str(s["text"]), s.get("speaker"))
@@ -955,11 +975,17 @@ def finalisiere_sitzung(session_dir: str | Path, *, sentences_per_timestamp: int
         diagnose.close()
         save_bilanz(session_dir, TEIL_LIVE, bilanz)
         journal.schreibe_status(session_dir, status=journal.BEENDET)
-        events.log(f"Abgeschlossen aus dem Journal: {len(segments)} Abschnitte, {len(marks)} Standbilder")
+        events.log(
+            tr(
+                "Abgeschlossen aus dem Journal: {abschnitte} Abschnitte, {standbilder} Standbilder",
+                abschnitte=len(segments),
+                standbilder=len(marks),
+            )
+        )
         events.log(beschreibe_live(bilanz))
         events.emit(events.FAZIT, teil=TEIL_LIVE, **asdict(bilanz))
         events.emit(events.STATE, phase="fertig", **zustand)
-        events.log(f"Sitzung gespeichert: {session_dir}")
+        events.log(tr("Sitzung gespeichert: {ordner}", ordner=session_dir))
         return 0
     finally:
         sperre.gib_frei()

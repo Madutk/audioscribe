@@ -12,7 +12,7 @@ from pathlib import Path
 
 from audioscribe.config import resolve_asr_backend, resolve_device, settings
 from audioscribe.live import events
-from audioscribe.live.bilanz import TEIL_LIVE, TEIL_REFINE, RefineBilanz, beschreibe_refine, save_bilanz
+from audioscribe.live.bilanz import TEIL_LIVE, TEIL_REFINE, RefineBilanz, _komma, beschreibe_refine, save_bilanz
 from audioscribe.live.diagnose import ART_UEBERSPRECHEN, DIAGNOSE_NAME, Diagnose, lies_diagnose
 from audioscribe.live.speakers import GEGENSEITE, ICH
 from audioscribe.live.store import MIC_WAV, SYSTEM_WAV, keep_live_copy, write_transcript
@@ -20,6 +20,7 @@ from audioscribe.live.track import SAMPLE_RATE, load_wav
 from audioscribe.live.uebersprechen import ausschnitt, gleiche_ab, lag_samples, pruefe, schaetze_lag
 from audioscribe.models import Segment
 from audioscribe.pipeline.merge import fill_segment_speakers, relabel_speakers, result_to_segments
+from audioscribe.i18n import tr
 from audioscribe.progress import ConsoleReporter
 
 
@@ -34,7 +35,7 @@ def refine_session(session_dir: str | Path) -> Path:
         if (session_dir / wav).is_file()
     ]
     if not spuren:
-        raise FileNotFoundError(f"Kein Mitschnitt in {session_dir / 'audio'} - keine Live-Sitzung?")
+        raise FileNotFoundError(tr("Kein Mitschnitt in {ordner} - keine Live-Sitzung?", ordner=session_dir / "audio"))
 
     do_align = settings.enable_alignment
     do_diar = settings.enable_diarization and (session_dir / SYSTEM_WAV).is_file()
@@ -60,6 +61,8 @@ def refine_session(session_dir: str | Path) -> Path:
     ]
     diagnose = Diagnose(session_dir / DIAGNOSE_NAME)  # FR-47: an das Live-Log anhängen
 
+    anzeige = {"Mikrofon": tr("Mikrofon"), "System-Audio": tr("System-Audio")}
+
     def stage(name: str) -> None:
         nonlocal step
         step += 1
@@ -69,14 +72,14 @@ def refine_session(session_dir: str | Path) -> Path:
     uebersprechen: dict | None = None
     offline: list[tuple[float, float, bool]] = []  # (start_s, end_s, verworfen) je Mikrofon-Segment
     if mit_filter:
-        stage("Übersprechen: Zeitversatz schätzen")
+        stage(tr("Übersprechen: Zeitversatz schätzen"))
         lag_s, lag_score = schaetze_lag(audios["Mikrofon"], audios["System-Audio"])
         uebersprechen = {"geprueft": 0, "verworfen": 0, "lag_s": lag_s, "lag_score": lag_score}
 
     for name, wav in spuren:
         audio = audios[name]
         dauer = max(dauer, len(audio) / SAMPLE_RATE)
-        stage(f"Transkription {name} ({backend} {settings.whisper_model})")
+        stage(tr("Transkription {spur} ({backend} {modell})", spur=anzeige[name], backend=backend, modell=settings.whisper_model))
         result = transcribe(audio, reporter)
         sprache = result.get("language") or sprache
         # WhisperX liefert keine Qualitätswerte je Segment - nur Lage und Wortzahl.
@@ -92,7 +95,7 @@ def refine_session(session_dir: str | Path) -> Path:
                 modell=settings.whisper_model,
             )
         if do_align:
-            stage(f"Wort-Alignment {name}")
+            stage(tr("Wort-Alignment {spur}", spur=anzeige[name]))
             result = align(audio, result, reporter)
 
         ist_system = wav.name == Path(SYSTEM_WAV).name
@@ -101,17 +104,21 @@ def refine_session(session_dir: str | Path) -> Path:
                 result.get("segments") or [], audio, audios["System-Audio"], schwelle, diagnose, offline, uebersprechen
             )
             reporter.info(
-                f"Übersprechen: {uebersprechen['verworfen']} von {uebersprechen['geprueft']} Mikrofon-Segmenten "
-                f"verworfen (Zeitversatz {uebersprechen['lag_s']:.2f} s)".replace(".", ",")
+                tr(
+                    "Übersprechen: {verworfen} von {geprueft} Mikrofon-Segmenten verworfen (Zeitversatz {lag} s)",
+                    verworfen=uebersprechen["verworfen"],
+                    geprueft=uebersprechen["geprueft"],
+                    lag=_komma(f"{uebersprechen['lag_s']:.2f}"),
+                )
             )
         diarisiert = False
         if ist_system and do_diar:
-            stage("Diarisierung System-Audio (pyannote)")
+            stage(tr("Diarisierung System-Audio (pyannote)"))
             try:
                 result = diarize(audio, result, reporter)
                 diarisiert = True
             except RuntimeError as exc:
-                reporter.info(f"Diarisierung übersprungen: {str(exc).splitlines()[0]}")
+                reporter.info(tr("Diarisierung übersprungen: {grund}", grund=str(exc).splitlines()[0]))
 
         teil = result_to_segments(result)
         if diarisiert:
@@ -125,7 +132,7 @@ def refine_session(session_dir: str | Path) -> Path:
                     word.speaker = label
         segments += teil
 
-    stage("Zusammenführen & Export")
+    stage(tr("Zusammenführen & Export"))
     keep_live_copy(session_dir, overwrite=False)
     write_transcript(
         session_dir,

@@ -17,6 +17,7 @@ import wave
 from collections.abc import Callable
 from pathlib import Path
 
+from audioscribe.i18n import tr
 from audioscribe.live.track import SAMPLE_RATE, Track
 
 BLOCK_S = 0.1  # wie der PortAudio-Callback: rate // 10 Frames je Block
@@ -38,7 +39,7 @@ class ReplayCapture:
         start_sample: int = 0,
     ) -> None:
         if speed <= 0:
-            raise RuntimeError("--speed muss größer als 0 sein")
+            raise RuntimeError(tr("--speed muss größer als 0 sein"))
         self._clock = clock
         self._speed = speed
         self._on_end = on_end
@@ -117,12 +118,12 @@ class ReplayCapture:
 
 def _wav_info(path: Path) -> dict:
     if not path.is_file():
-        raise RuntimeError(f"WAV nicht gefunden: {path}")
+        raise RuntimeError(tr("WAV nicht gefunden: {pfad}", pfad=path))
     try:
         with wave.open(str(path), "rb") as wav:
             if wav.getsampwidth() != 2:
-                raise RuntimeError(f"{path.name}: nur 16-Bit-PCM (int16) wird abgespielt")
+                raise RuntimeError(tr("{datei}: nur 16-Bit-PCM (int16) wird abgespielt", datei=path.name))
             rate, channels, frames = wav.getframerate(), wav.getnchannels(), wav.getnframes()
     except wave.Error as exc:
-        raise RuntimeError(f"{path.name}: keine lesbare WAV-Datei ({exc})") from exc
+        raise RuntimeError(tr("{datei}: keine lesbare WAV-Datei ({fehler})", datei=path.name, fehler=exc)) from exc
     return {"rate": rate, "channels": channels, "dauer_s": frames / rate if rate else 0.0}

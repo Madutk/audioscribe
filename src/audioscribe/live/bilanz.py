@@ -13,6 +13,8 @@ import os
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
+from audioscribe.i18n import sprache, tr
+
 BILANZ_NAME = "bilanz.json"
 BILANZ_VERSION = 1
 
@@ -97,8 +99,13 @@ def save_bilanz(session_dir: Path, teil: str, daten: LiveBilanz | RefineBilanz |
 # --- Protokollzeile ------------------------------------------------------------------
 
 
+def _komma(text: str) -> str:
+    """Dezimalkomma für die deutsche Oberfläche, Punkt für die englische."""
+    return text.replace(".", ",") if sprache() == "de" else text
+
+
 def _s(value: float | None) -> str:
-    return "–" if value is None else f"{value:.1f}".replace(".", ",") + " s"
+    return "–" if value is None else _komma(f"{value:.1f}") + " s"
 
 
 def _hms(seconds: float) -> str:
@@ -109,38 +116,40 @@ def _hms(seconds: float) -> str:
 
 
 def _tempo(value: float | None) -> str:
-    return "" if value is None else f" ({value:.2f}× Echtzeit)".replace(".", ",")
+    return "" if value is None else tr(" ({wert}× Echtzeit)", wert=_komma(f"{value:.2f}"))
 
 
 def beschreibe_live(b: LiveBilanz) -> str:
-    rechenzeit = f"Rechenzeit {_s(b.rechenzeit_s)}{_tempo(b.tempo)}"
+    rechenzeit = tr("Rechenzeit {dauer}", dauer=_s(b.rechenzeit_s)) + _tempo(b.tempo)
     if b.vorschau_n:
-        rechenzeit += f" · {b.vorschau_n} Vorschauen {_s(b.vorschau_s)}{_tempo(b.tempo_inkl_vorschau)}"
-    teile = [f"Aufnahme {_hms(b.aufnahme_s)}", f"Modelle {_s(b.laden_s)}", rechenzeit]
+        rechenzeit += tr(" · {anzahl} Vorschauen {dauer}", anzahl=b.vorschau_n, dauer=_s(b.vorschau_s)) + _tempo(
+            b.tempo_inkl_vorschau
+        )
+    teile = [tr("Aufnahme {dauer}", dauer=_hms(b.aufnahme_s)), tr("Modelle {dauer}", dauer=_s(b.laden_s)), rechenzeit]
     if b.abschnitte:
         teile.append(
-            f"Verzögerung Ø {_s(b.verzoegerung_mittel_s)} / max {_s(b.verzoegerung_max_s)}"
+            tr("Verzögerung Ø {mittel} / max {max}", mittel=_s(b.verzoegerung_mittel_s), max=_s(b.verzoegerung_max_s))
         )
-    abschnitte = f"{b.abschnitte} Abschnitte"
+    abschnitte = tr("{anzahl} Abschnitte", anzahl=b.abschnitte)
     if b.zusammengelegt:
-        abschnitte += f" ({b.zusammengelegt} zusammengelegt)"
+        abschnitte += tr(" ({anzahl} zusammengelegt)", anzahl=b.zusammengelegt)
     if b.eco_abschnitte:
-        abschnitte += f" ({b.eco_abschnitte} sparsam)"
+        abschnitte += tr(" ({anzahl} sparsam)", anzahl=b.eco_abschnitte)
     teile.append(abschnitte)
     if b.uebersprechen_verworfen:
-        teile.append(f"Übersprechen {b.uebersprechen_verworfen} verworfen")
+        teile.append(tr("Übersprechen {anzahl} verworfen", anzahl=b.uebersprechen_verworfen))
     if b.aufholmodus_s:
         anteil = f" ({round(b.aufholmodus_anteil * 100)} %)" if b.aufholmodus_anteil else ""
-        teile.append(f"Aufholmodus {_s(b.aufholmodus_s)}{anteil}")
-    teile.append(f"Abschluss {_s(b.abschluss_s)}")
+        teile.append(tr("Aufholmodus {dauer}", dauer=_s(b.aufholmodus_s)) + anteil)
+    teile.append(tr("Abschluss {dauer}", dauer=_s(b.abschluss_s)))
     if b.backend or b.geraet:
         teile.append("/".join(t for t in (b.modell, b.backend, b.geraet) if t))
-    return "Fazit: " + " · ".join(teile)
+    return tr("Fazit: ") + " · ".join(teile)
 
 
 def beschreibe_refine(b: RefineBilanz) -> str:
     stufen = ", ".join(f"{st['name']} {_s(st['dauer_s'])}" for st in b.stufen)
-    text = f"Fazit Nachschärfen: {_hms(b.gesamt_s)}{_tempo(b.tempo)}" + (f" · {stufen}" if stufen else "")
+    text = tr("Fazit Nachschärfen: {dauer}", dauer=_hms(b.gesamt_s)) + _tempo(b.tempo) + (f" · {stufen}" if stufen else "")
     if b.uebersprechen and b.uebersprechen.get("geprueft"):
         text += " · " + beschreibe_uebersprechen(b.uebersprechen)
     return text
@@ -148,15 +157,13 @@ def beschreibe_refine(b: RefineBilanz) -> str:
 
 def beschreibe_uebersprechen(u: dict) -> str:
     """Eine Zeile zum Offline-Abgleich: ``Übersprechen 3 von 12 verworfen (live bestätigt 2, ...)``."""
-    abgleich = []
-    for key, name in (
-        ("bestaetigt", "live bestätigt"),
-        ("zurueckgeholt", "zurückgeholt"),
-        ("nachtraeglich_entfernt", "nachträglich entfernt"),
-    ):
-        if u.get(key):
-            abgleich.append(f"{name} {u[key]}")
-    text = f"Übersprechen {u.get('verworfen', 0)} von {u.get('geprueft', 0)} verworfen"
+    namen = {
+        "bestaetigt": tr("live bestätigt"),
+        "zurueckgeholt": tr("zurückgeholt"),
+        "nachtraeglich_entfernt": tr("nachträglich entfernt"),
+    }
+    abgleich = [f"{name} {u[key]}" for key, name in namen.items() if u.get(key)]
+    text = tr("Übersprechen {verworfen} von {geprueft} verworfen", verworfen=u.get("verworfen", 0), geprueft=u.get("geprueft", 0))
     if abgleich:
         text += f" ({', '.join(abgleich)})"
     return text

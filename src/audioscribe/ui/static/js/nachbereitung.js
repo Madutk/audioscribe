@@ -6,6 +6,7 @@ import { ladeDefaults } from './kontext.js';
 import { pickFolder, showTranscript } from './dialoge.js';
 import { openWikiDialog, slugify } from './wiki.js';
 import { verbrauchText } from './verbrauch.js';
+import { tr } from './i18n.js';
 
 let anaOffset = 0;
 let anaSource = null;     // Pfad der gewaehlten Transkription
@@ -17,6 +18,9 @@ const pollAna = poller(pollAnalyse, 1500);
 const imProjekt = () => modus() === 'projekt';
 const mitWiki = () => imProjekt() && !!(projekt() && projekt().hat_wiki);
 const quelle = () => anaSources.find((s) => s.path === anaSource) || null;
+// Status einer Analyse (Server) -> Anzeige; der Wert selbst bleibt CSS-Klasse.
+const STATUS = { fertig: tr('fertig'), fehler: tr('fehler'), laeuft: tr('läuft'), abgebrochen: tr('abgebrochen'), unterbrochen: tr('unterbrochen') };
+const statusText = (st) => STATUS[st] || st;
 
 let anaSichtbar = false;   // die Ansicht ist betreten und nicht wieder verlassen
 
@@ -24,8 +28,8 @@ export async function enterAna() {
   anaSichtbar = true;
   await ladeDefaults();
   const proj = imProjekt();
-  $('anaSourceTitle').textContent = proj ? 'Sitzung' : 'Quelle';
-  $('anaSourceHint').textContent = proj ? 'Sitzungen dieses Projekts' : 'fertige Transkriptionen im Speicherort';
+  $('anaSourceTitle').textContent = proj ? tr('Sitzung') : tr('Quelle');
+  $('anaSourceHint').textContent = proj ? tr('Sitzungen dieses Projekts') : tr('fertige Transkriptionen im Speicherort');
   if (cloudCompliant()) {
     // Ohne KI-Analyse: nur Sitzungen wählen und ins Wiki ablegen (die Karten blendet das CSS aus).
     if (S.vorwahl) { anaSource = S.vorwahl; S.vorwahl = null; }
@@ -37,8 +41,7 @@ export async function enterAna() {
   const lokal = anaDefaults.dienst === 'ollama';
   $('anaDienstHint').hidden = !lokal;
   $('anaDienstHint').textContent = lokal
-    ? 'Lokales Modell über Ollama – experimentell: Qualität und Dauer sind nicht mit Claude vergleichbar; '
-      + 'der Dienst braucht OLLAMA_CONTEXT_LENGTH ≥ 32768. Dienst und Modell stehen in den Einstellungen.'
+    ? tr('Lokales Modell über Ollama – experimentell: Qualität und Dauer sind nicht mit Claude vergleichbar; der Dienst braucht OLLAMA_CONTEXT_LENGTH ≥ 32768. Dienst und Modell stehen in den Einstellungen.')
     : '';
   $('anaBash').checked = anaDefaults.bash !== false;
   $('anaSkillsDir').textContent = anaDefaults.skills_dir;
@@ -48,7 +51,7 @@ export async function enterAna() {
          <input type="checkbox" value="${esc(s.name)}" ${s.selected ? 'checked' : ''} />
          <span><b>${esc(s.name)}</b><span class="desc">${esc(s.description.slice(0, 220))}${s.description.length > 220 ? '…' : ''}</span></span>
        </label>`).join('')
-    : empty('list', 'Keine Skills gefunden (AUDIOSCRIBE_AGENT_SKILLS_DIR).');
+    : empty('list', tr('Keine Skills gefunden (AUDIOSCRIBE_AGENT_SKILLS_DIR).'));
   // Vorwahl aus der Live-Ansicht bzw. von "Aufnahme transkribieren"
   if (S.vorwahl) { anaSource = S.vorwahl; S.vorwahl = null; $('anaName').value = ''; }
   await loadSources();
@@ -70,10 +73,10 @@ export function resetAna() {
 // --- Quellen --------------------------------------------------------------------------------
 
 function sourceBadges(s) {
-  const b = [`<span class="badge">${s.frames ? s.frames + ' Bilder' : 'ohne Bilder'}</span>`];
-  if (s.status === 'unterbrochen' || s.status === 'laeuft') b.push('<span class="badge warn">unterbrochen</span>');
-  if (s.ablagen && s.ablagen.length) b.push('<span class="badge ok">im Wiki</span>');
-  if (s.analysen && s.analysen.some((a) => a.status === 'fertig')) b.push('<span class="badge fertig">nachbereitet</span>');
+  const b = [`<span class="badge">${s.frames ? tr('{n} Bilder', { n: s.frames }) : tr('ohne Bilder')}</span>`];
+  if (s.status === 'unterbrochen' || s.status === 'laeuft') b.push(`<span class="badge warn">${tr('unterbrochen')}</span>`);
+  if (s.ablagen && s.ablagen.length) b.push(`<span class="badge ok">${tr('im Wiki')}</span>`);
+  if (s.analysen && s.analysen.some((a) => a.status === 'fertig')) b.push(`<span class="badge fertig">${tr('nachbereitet')}</span>`);
   return `<span class="badges">${b.join('')}</span>`;
 }
 
@@ -81,7 +84,7 @@ export async function loadSources() {
   try {
     const data = await api('/api/agent/sources?output_dir=' + encodeURIComponent(S.folders.output_dir));
     anaSources = data.sources;
-    $('anaSourceDir').textContent = 'Gesucht in: ' + data.output_dir;
+    $('anaSourceDir').textContent = tr('Gesucht in: {ordner}', { ordner: data.output_dir });
     if (!anaSources.some((s) => s.path === anaSource)) anaSource = anaSources[0]?.path || null;
     $('anaSources').innerHTML = anaSources.length
       ? anaSources.map((s) => `<label class="source">
@@ -89,8 +92,8 @@ export async function loadSources() {
            <span class="name" title="${esc(s.path)}">${esc(s.titel || s.name)}${s.titel ? `<small>${esc(s.name)}</small>` : ''}</span>
            ${sourceBadges(s)}</label>`).join('')
       : empty('file-audio', imProjekt()
-        ? 'Noch keine Sitzung in diesem Projekt – starte eine unter „Live-Sitzung“.'
-        : 'Noch keine fertigen Transkriptionen im Speicherort.');
+        ? tr('Noch keine Sitzung in diesem Projekt – starte eine unter „Live-Sitzung“.')
+        : tr('Noch keine fertigen Transkriptionen im Speicherort.'));
   } catch (err) {
     $('anaSources').innerHTML = `<p class="err">${esc(err.message)}</p>`;
     anaSources = [];
@@ -114,23 +117,23 @@ function renderWiki() {
   const q = quelle();
   const p = projekt();
   if (!imProjekt() || !p) { box.innerHTML = ''; return; }
-  if (!q) { box.innerHTML = '<p class="hint">Sitzung wählen …</p>'; return; }
+  if (!q) { box.innerHTML = `<p class="hint">${tr('Sitzung wählen …')}</p>`; return; }
   if (!p.hat_wiki) {
-    box.innerHTML = `<div class="wikistate"><p class="hint">Dieses Projekt hat kein Wiki – die Sitzung bleibt im Sitzungsordner.
-        <a class="goto" href="#/projekt/einstellungen">Wiki anlegen oder verknüpfen</a></p>
-      <div class="row"><button class="ghost sm" type="button" data-preview="${esc(q.path)}" data-title="${esc(q.titel || q.name)}">${icon('file-text')}Transkript ansehen</button></div></div>`;
+    box.innerHTML = `<div class="wikistate"><p class="hint">${tr('Dieses Projekt hat kein Wiki – die Sitzung bleibt im Sitzungsordner.')}
+        <a class="goto" href="#/projekt/einstellungen">${tr('Wiki anlegen oder verknüpfen')}</a></p>
+      <div class="row"><button class="ghost sm" type="button" data-preview="${esc(q.path)}" data-title="${esc(q.titel || q.name)}">${icon('file-text')}${tr('Transkript ansehen')}</button></div></div>`;
     return;
   }
   const ablagen = (q.ablagen || []).filter((a) => (a.art || 'sitzung') === 'sitzung');
-  const liste = ablagen.map((a) => `<div class="row"><span class="badge ok">gespeichert</span>
+  const liste = ablagen.map((a) => `<div class="row"><span class="badge ok">${tr('gespeichert')}</span>
       <code title="${esc(a.ordner)}">${esc(basename(dirOf(a.ordner)))}/${esc(basename(a.ordner))}</code>
-      <span class="hint">${esc((a.zeit || '').slice(0, 16))}${a.bilder ? ` · ${a.bilder} Bilder` : ' · ohne Bilder'}</span>
-      <button class="ghost sm" type="button" data-folder="${esc(a.ordner)}">${icon('external')}Öffnen</button></div>`).join('');
+      <span class="hint">${esc((a.zeit || '').slice(0, 16))} · ${a.bilder ? tr('{n} Bilder', { n: a.bilder }) : tr('ohne Bilder')}</span>
+      <button class="ghost sm" type="button" data-folder="${esc(a.ordner)}">${icon('external')}${tr('Öffnen')}</button></div>`).join('');
   box.innerHTML = `<div class="wikistate">
-      ${liste || `<p class="hint">Diese Sitzung liegt noch nicht im Wiki. Gespeichert wird nach <code>${esc(trimSep(p.raw_dir))}${p.wiki_format === 'meetings' ? esc(sep() + 'meetings') : ''}</code>, Bilder nach <code>${esc(trimSep(p.assets_dir))}</code>.</p>`}
+      ${liste || `<p class="hint">${tr('Diese Sitzung liegt noch nicht im Wiki. Gespeichert wird nach <code>{ziel}</code>, Bilder nach <code>{bilder}</code>.', { ziel: esc(trimSep(p.raw_dir)) + (p.wiki_format === 'meetings' ? esc(sep() + 'meetings') : ''), bilder: esc(trimSep(p.assets_dir)) })}</p>`}
       <div class="row">
-        <button class="${ablagen.length ? 'secondary' : ''} sm" type="button" id="anaWikiSave">${icon('book-plus')}${ablagen.length ? 'Erneut speichern' : 'Ins Wiki speichern'}</button>
-        <button class="ghost sm" type="button" data-preview="${esc(q.path)}" data-title="${esc(q.titel || q.name)}">${icon('file-text')}Transkript ansehen</button>
+        <button class="${ablagen.length ? 'secondary' : ''} sm" type="button" id="anaWikiSave">${icon('book-plus')}${ablagen.length ? tr('Erneut speichern') : tr('Ins Wiki speichern')}</button>
+        <button class="ghost sm" type="button" data-preview="${esc(q.path)}" data-title="${esc(q.titel || q.name)}">${icon('file-text')}${tr('Transkript ansehen')}</button>
       </div></div>`;
 }
 
@@ -145,18 +148,18 @@ function renderHistory() {
     const imWiki = a.ablagen && a.ablagen.length;
     return `<div class="history-item">
       <span class="name">${esc(a.name)}</span>
-      <span class="badge ${a.status === 'fertig' ? 'fertig' : a.status === 'fehler' ? 'fehler' : ''}">${esc(a.status)}</span>
-      ${imWiki ? '<span class="badge ok">im Wiki</span>' : ''}
-      <button class="ghost sm" type="button" data-folder="${esc(a.workspace)}">${icon('external')}Ordner</button>
-      ${a.status === 'fertig' && mitWiki() ? `<button class="${imWiki ? 'ghost' : 'secondary'} sm" type="button" data-nach-wiki="${esc(a.workspace)}">${icon('book-plus')}${imWiki ? 'Erneut ins Wiki' : 'Ins Wiki speichern'}</button>` : ''}
+      <span class="badge ${a.status === 'fertig' ? 'fertig' : a.status === 'fehler' ? 'fehler' : ''}">${esc(statusText(a.status))}</span>
+      ${imWiki ? `<span class="badge ok">${tr('im Wiki')}</span>` : ''}
+      <button class="ghost sm" type="button" data-folder="${esc(a.workspace)}">${icon('external')}${tr('Ordner')}</button>
+      ${a.status === 'fertig' && mitWiki() ? `<button class="${imWiki ? 'ghost' : 'secondary'} sm" type="button" data-nach-wiki="${esc(a.workspace)}">${icon('book-plus')}${imWiki ? tr('Erneut ins Wiki') : tr('Ins Wiki speichern')}</button>` : ''}
     </div>`;
   }).join('');
 }
 
 function updateTarget() {
   const name = $('anaName').value.trim();
-  const ziel = `${trimSep(S.folders.agent_output_dir)}${sep()}${name ? slugify(name) : '<prozessname>'}`;
-  $('anaTarget').innerHTML = `Ergebnisse landen in: <code>${esc(ziel)}</code>`;
+  const ziel = `${trimSep(S.folders.agent_output_dir)}${sep()}${name ? slugify(name) : tr('<prozessname>')}`;
+  $('anaTarget').innerHTML = tr('Ergebnisse landen in: <code>{ziel}</code>', { ziel: esc(ziel) });
   $('anaStart').disabled = !anaSource || !name || anaRunning;
 }
 
@@ -201,28 +204,28 @@ async function pollAnalyse() {
   anaRunning = !!s.running;
   $('anaCancel').disabled = !s.running;
   $('anaElapsed').textContent = s.running
-    ? `– ${s.name} läuft seit ${hms(s.elapsed_s)}` : '';
+    ? tr('– {name} läuft seit {dauer}', { name: s.name, dauer: hms(s.elapsed_s) }) : '';
   updateTarget();
   renderProgress(s);
 
   const r = s.result;
   if (!s.running && s.workspace && s.returncode !== null && s.returncode !== undefined) {
     const status = r ? r.status : (s.returncode === 0 ? 'fertig' : 'fehler');
-    const index = r && r.index ? `<br>Übersicht: <code>${esc(r.index)}</code>` : '';
+    const index = r && r.index ? '<br>' + tr('Übersicht: <code>{pfad}</code>', { pfad: esc(r.index) }) : '';
     const err = r && r.fehler ? `<br>${esc(r.fehler)}` : '';
     // Verbrauch dieses Laufs; der Preis ist der Gegenwert zu API-Preisen (bei Abo keine Rechnung).
     const verbrauch = r && r.verbrauch && r.verbrauch.tokens
-      ? `<br>KI-Verbrauch: ${esc(verbrauchText(r.verbrauch))} <span class="hint">(Gegenwert zu API-Preisen)</span>` : '';
+      ? '<br>' + tr('KI-Verbrauch: {verbrauch} <span class="hint">(Gegenwert zu API-Preisen)</span>', { verbrauch: esc(verbrauchText(r.verbrauch)) }) : '';
     const key = JSON.stringify([s.workspace, status, imProjekt(), mitWiki()]);
     if ($('anaResult').dataset.key !== key) {
       $('anaResult').dataset.key = key;
       const knoepfe = status === 'fertig'
-        ? `<div class="row" style="margin-top:8px"><button class="secondary sm" type="button" data-folder="${esc(s.workspace)}">${icon('external')}Ergebnisordner öffnen</button>`
-          + (mitWiki() ? `<button class="sm" type="button" data-nach-wiki="${esc(s.workspace)}">${icon('book-plus')}Nachbereitung ins Wiki speichern</button>` : '')
+        ? `<div class="row" style="margin-top:8px"><button class="secondary sm" type="button" data-folder="${esc(s.workspace)}">${icon('external')}${tr('Ergebnisordner öffnen')}</button>`
+          + (mitWiki() ? `<button class="sm" type="button" data-nach-wiki="${esc(s.workspace)}">${icon('book-plus')}${tr('Nachbereitung ins Wiki speichern')}</button>` : '')
           + '</div>'
         : '';
       $('anaResult').innerHTML = `<div class="result ${status === 'fertig' ? '' : 'fehler'}">
-        <b>${esc(status)}</b><br>Ergebnisordner: <code>${esc(s.workspace)}</code>${index}${verbrauch}${err}${knoepfe}</div>`;
+        <b>${esc(statusText(status))}</b><br>${tr('Ergebnisordner: <code>{pfad}</code>', { pfad: esc(s.workspace) })}${index}${verbrauch}${err}${knoepfe}</div>`;
     }
   }
   // Eine eben beendete Analyse erscheint in der Liste der Nachbereitungen.
@@ -242,17 +245,17 @@ function renderProgress(s) {
   const finished = !s.running && s.returncode === 0;
 
   if (total) {
-    const now = p.current ? ` · jetzt: <span class="stage">${esc(p.current)}</span>` : '';
-    $('anaStep').innerHTML = `Schritt ${Math.min(done + (p.current ? 1 : 0), total)} von ${total}${now}`;
+    const now = p.current ? ' · ' + tr('jetzt: <span class="stage">{schritt}</span>', { schritt: esc(p.current) }) : '';
+    $('anaStep').innerHTML = tr('Schritt {i} von {n}', { i: Math.min(done + (p.current ? 1 : 0), total), n: total }) + now;
   } else {
-    $('anaStep').textContent = s.running ? 'Agent liest sich ein und plant …' : '';
+    $('anaStep').textContent = s.running ? tr('Agent liest sich ein und plant …') : '';
   }
   $('anaBarWrap').classList.toggle('wait', s.running && !total);
   $('anaBar').style.width = (finished ? 100 : total ? Math.round((done / total) * 100) : 0) + '%';
 
   const chips = [];
-  if (p && p.skill) chips.push(`<span class="badge laeuft">Skill: ${esc(p.skill)}</span>`);
-  if (p && p.frames_total) chips.push(`<span class="badge">Standbilder angesehen: ${p.frames_seen} von ${p.frames_total}</span>`);
+  if (p && p.skill) chips.push(`<span class="badge laeuft">${tr('Skill: {name}', { name: esc(p.skill) })}</span>`);
+  if (p && p.frames_total) chips.push(`<span class="badge">${tr('Standbilder angesehen: {i} von {n}', { i: p.frames_seen, n: p.frames_total })}</span>`);
   $('anaChips').innerHTML = chips.join('');
 
   const mark = { completed: icon('check'), in_progress: icon('loader'), pending: icon('circle') };
@@ -261,7 +264,7 @@ function renderProgress(s) {
 
   const docs = p ? p.docs : [];
   $('anaDocs').innerHTML = docs.length
-    ? 'Dokumente: ' + docs.map((d) => `<code>${esc(d)}</code>`).join(', ') : '';
+    ? tr('Dokumente: {liste}', { liste: docs.map((d) => `<code>${esc(d)}</code>`).join(', ') }) : '';
 }
 
 // --- Wiki-Ablage ----------------------------------------------------------------------------
@@ -279,7 +282,7 @@ async function speichereNachbereitung(workspace, btn) {
   if (btn) btn.disabled = true;
   try {
     const ablage = await post('/api/wiki/speichern-nachbereitung', { workspace, bilder: !p || p.wiki_bilder !== false });
-    toast(`Nachbereitung im Wiki: ${basename(ablage.ordner)}`);
+    toast(tr('Nachbereitung im Wiki: {name}', { name: basename(ablage.ordner) }));
     await loadSources();
   } catch (err) {
     toast(err.message, 'fehler');
@@ -315,7 +318,7 @@ $('anaSkills').onchange = rememberAnalyse;
 $('anaStart').onclick = startAnalyse;
 $('anaCancel').onclick = () => api('/api/agent/cancel', { method: 'POST' }).catch(() => {});
 $('pickAnaOut').onclick = async () => {
-  const pfad = await pickFolder({ title: 'Ausgabeordner Analysen wählen', start: $('anaOut').value });
+  const pfad = await pickFolder({ title: tr('Ausgabeordner Analysen wählen'), start: $('anaOut').value });
   if (pfad) setAnaOut(pfad);
 };
 $('anaOut').onchange = () => setAnaOut($('anaOut').value.trim());

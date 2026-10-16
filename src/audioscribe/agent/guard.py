@@ -13,6 +13,8 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
+from audioscribe.i18n import tr
+
 # Werkzeug -> Name des Pfad-Parameters.
 WRITE_TOOLS: dict[str, str] = {
     "Write": "file_path",
@@ -69,18 +71,18 @@ def check_tool(
     if tool == "Bash":
         if bash:
             return Entscheidung(True)
-        return Entscheidung(False, "Bash ist fuer diesen Lauf abgeschaltet (--no-bash).")
+        return Entscheidung(False, tr("Bash ist fuer diesen Lauf abgeschaltet (--no-bash)."))
 
     if tool in WRITE_TOOLS:
         target = _resolve(tool_input.get(WRITE_TOOLS[tool]), ws)
         if target is None:
-            return Entscheidung(False, "Kein Zielpfad angegeben.")
+            return Entscheidung(False, tr("Kein Zielpfad angegeben."))
         if not _inside(target, ws):
             return Entscheidung(
-                False, f"Schreiben nur im Ergebnisordner erlaubt ({ws}), nicht in {target}."
+                False, tr("Schreiben nur im Ergebnisordner erlaubt ({ordner}), nicht in {ziel}.", ordner=ws, ziel=target)
             )
         if _inside(target, ws / ".claude"):
-            return Entscheidung(False, "Die Skill-Kopien unter .claude/ sind schreibgeschuetzt.")
+            return Entscheidung(False, tr("Die Skill-Kopien unter .claude/ sind schreibgeschuetzt."))
         return Entscheidung(True)
 
     if tool in READ_TOOLS:
@@ -90,6 +92,6 @@ def check_tool(
         roots = [ws, *(Path(r).resolve() for r in read_roots)]
         if any(_inside(target, r) for r in roots):
             return Entscheidung(True)
-        return Entscheidung(False, f"Lesen nur im Ergebnisordner erlaubt, nicht in {target}.")
+        return Entscheidung(False, tr("Lesen nur im Ergebnisordner erlaubt, nicht in {ziel}.", ziel=target))
 
-    return Entscheidung(False, f"Werkzeug '{tool}' ist fuer die Analyse nicht freigegeben.")
+    return Entscheidung(False, tr("Werkzeug '{werkzeug}' ist fuer die Analyse nicht freigegeben.", werkzeug=tool))

@@ -6,6 +6,7 @@ import { renderWikiState, loadWikiStatus } from './wiki.js';
 import { pickFolder, askConfirm } from './dialoge.js';
 import { setKontext } from './kontext.js';
 import { herkunft, blinke, demoAktiv } from './demo.js';
+import { tr } from './i18n.js';
 
 // --- Souffleur (PRD §20): Hinweise aus Wiki und KI neben dem Transkript -----------
 // Ereignisse vom Typ "hinweis" kommen ueber /api/live/status wie Segmente und Standbilder.
@@ -26,14 +27,19 @@ const ART = {
   offener_punkt: { cls: 'offen', icon: 'circle-dashed', wort: 'Offen', label: 'Offener Punkt' },
   frage: { cls: 'frage', icon: 'help-circle', wort: 'Frage', label: 'Frage' },
 };
-const artOf = (h) => ART[h.art] || { cls: 'frage', icon: 'help-circle', wort: h.label || h.art, label: h.label || h.art };
+// wort und label der drei Arten sind deutsche Schluessel - uebersetzt erst hier (en/module-b.js).
+const artOf = (h) => {
+  const a = ART[h.art];
+  return a ? { ...a, wort: tr(a.wort), label: tr(a.label) }
+    : { cls: 'frage', icon: 'help-circle', wort: h.label || h.art, label: h.label || h.art };
+};
 const hintId = (h) => `h-${h.id}`;
-const tagKi = () => `<span class="tag ki">${icon('sparkles')}KI</span>`;
+const tagKi = () => `<span class="tag ki">${icon('sparkles')}${tr('KI')}</span>`;
 
 export function resetSouffleurView() {
   souffleurInfo = null; souffleurHints = []; souffleurEssenzen = [];
   hintBySeg.clear(); hintEls.clear();
-  $('souffleurList').innerHTML = empty('lightbulb', 'Hinweise zu Fragen, Widersprüchen und offenen Punkten erscheinen hier.');
+  $('souffleurList').innerHTML = empty('lightbulb', tr('Hinweise zu Fragen, Widersprüchen und offenen Punkten erscheinen hier.'));
   $('souffleurEssenz').innerHTML = ''; $('souffleurEssenz').hidden = true;
   $('souffleurErr').textContent = '';
   $('souffleurLive').textContent = '';
@@ -64,7 +70,7 @@ async function wikiSetzen(pfad) {
   try {
     setKontext(await post('/api/wiki/wechseln', { pfad }));
     await loadWikiStatus();
-    toast(pfad ? 'Wiki gewechselt – der Souffleur liest es ein' : 'Wiki gelöst');
+    toast(pfad ? tr('Wiki gewechselt – der Souffleur liest es ein') : tr('Wiki gelöst'));
   } catch (err) {
     $('souffleurErr').textContent = err.message;
   } finally {
@@ -76,16 +82,16 @@ $('souffleurWikiWechseln').onclick = async () => {
   const w = souffleurInfo ? souffleurInfo.wiki : S.wikiStatus;
   const p = projekt();
   const pfad = await pickFolder({
-    title: 'LLM-Wiki wählen', ok: 'Dieses Wiki verwenden',
+    title: tr('LLM-Wiki wählen'), ok: tr('Dieses Wiki verwenden'),
     start: (w && w.pfad) || (p && (p.wiki_dir || p.wurzel)) || '',
   });
   if (pfad) wikiSetzen(pfad);
 };
 $('souffleurWikiLoesen').onclick = async () => {
   const ok = await askConfirm({
-    title: 'Wiki lösen?',
-    text: 'Der Souffleur arbeitet danach ohne Belege; im Projekt wird die Verknüpfung gelöst. Die Dateien des Wikis bleiben unverändert.',
-    ok: 'Wiki lösen',
+    title: tr('Wiki lösen?'),
+    text: tr('Der Souffleur arbeitet danach ohne Belege; im Projekt wird die Verknüpfung gelöst. Die Dateien des Wikis bleiben unverändert.'),
+    ok: tr('Wiki lösen'),
   });
   if (ok) wikiSetzen(null);
 };
@@ -98,7 +104,7 @@ export function markSegment(h) {
   row.classList.add('marked', a.cls);
   row.dataset.hint = hintId(h);
   row.insertAdjacentHTML('beforeend',
-    `<button class="mark ${a.cls}" type="button" data-goto-hint="${hintId(h)}" aria-label="${esc(a.label)} – zum Hinweis ${tc(h.t_start)}">`
+    `<button class="mark ${a.cls}" type="button" data-goto-hint="${hintId(h)}" aria-label="${esc(tr('{art} – zum Hinweis {zeit}', { art: a.label, zeit: tc(h.t_start) }))}">`
     + `${icon(a.icon)}${esc(a.wort)}</button>`);
 }
 
@@ -109,7 +115,7 @@ function wikiQuoteHtml(h) {
   const fund = h.fundstelle || f.datei || '';
   return `<blockquote class="wiki"><div class="src">${icon('book')}Wiki <span class="sep">·</span><code>${esc(f.datei || fund)}</code>`
     + (f.ueberschrift ? `<span class="sep">›</span>${esc(f.ueberschrift)}` : '')
-    + `<button class="ghost copy" type="button" data-copy="${esc(fund)}" aria-label="Fundstelle kopieren" title="Fundstelle kopieren">${icon('copy')}</button>`
+    + `<button class="ghost copy" type="button" data-copy="${esc(fund)}" aria-label="${tr('Fundstelle kopieren')}" title="${tr('Fundstelle kopieren')}">${icon('copy')}</button>`
     + `</div>${esc(zitat)}</blockquote>`;
 }
 
@@ -119,21 +125,22 @@ const hatBeleg = (h) => !h.ohne_befund && !!(h.wiki_zitat || (h.fundstellen && h
 function gegenHtml(h, her) {
   const f = (h.fundstellen && h.fundstellen[0]) || {};
   const zitat = (h.wiki_zitat || f.auszug || '').replace(/\s*\[Q-\d+[^\]]*\]/g, '');
-  const heute = h.art === 'frage' ? '' : `<dt>Heute</dt><dd><q>${esc(h.aussage || '')}</q></dd>`;
-  return `<dl class="gegen">${heute}<dt>Meeting ${her.nr}<span>${esc(her.datum)}</span></dt>`
+  const heute = h.art === 'frage' ? '' : `<dt>${tr('Heute')}</dt><dd><q>${esc(h.aussage || '')}</q></dd>`;
+  return `<dl class="gegen">${heute}<dt>${esc(tr('Meeting {nr}', { nr: her.nr }))}<span>${esc(her.datum)}</span></dt>`
     + `<dd class="frueher"><q>${esc(zitat)}</q></dd></dl>`;
 }
 
+// rolle: 'Antwortvorschlag' | 'Einschätzung' - deutscher Schluessel, uebersetzt erst hier.
 const kiHtml = (rolle, text) => text
-  ? `<div class="ki"><div class="ki-head">${tagKi()}${esc(rolle)}</div>${esc(text)}</div>` : '';
+  ? `<div class="ki"><div class="ki-head">${tagKi()}${esc(tr(rolle))}</div>${esc(text)}</div>` : '';
 
 /** Inhalt je Art: Widerspruch = Gesagt + Beleg + KI-Einschaetzung; Frage = Beleg (+ Antwortvorschlag);
  *  ohne Befund = nur "Im Wiki liegt dazu nichts vor." - bewusst kein KI-Text (Entscheidung des Auftraggebers). */
 function hintBodyHtml(h) {
-  const said = `<p class="said">Gesagt${h.sprecher ? ` (${esc(h.sprecher)})` : ''}: <q>${esc(h.aussage || '')}</q></p>`;
+  const said = `<p class="said">${h.sprecher ? tr('Gesagt ({sprecher}):', { sprecher: esc(h.sprecher) }) : tr('Gesagt:')} <q>${esc(h.aussage || '')}</q></p>`;
   if (!hatBeleg(h)) {
-    return demoAktiv() ? `<p class="wiki none">${icon('plus')}Neu – steht noch nicht im Wiki.</p>`
-      : `<p class="wiki none">${icon('book-x')}Im Wiki liegt dazu nichts vor.</p>`;
+    return demoAktiv() ? `<p class="wiki none">${icon('plus')}${tr('Neu – steht noch nicht im Wiki.')}</p>`
+      : `<p class="wiki none">${icon('book-x')}${tr('Im Wiki liegt dazu nichts vor.')}</p>`;
   }
   const her = herkunft(h);
   if (her) return gegenHtml(h, her) + kiHtml(h.art === 'frage' ? 'Antwortvorschlag' : 'Einschätzung', h.ki_text);
@@ -149,9 +156,9 @@ function hintItemEl(h) {
   el.open = true;
   const lag = h.verzoegerung_s === null || h.verzoegerung_s === undefined ? '' : '+' + secs(h.verzoegerung_s);
   el.innerHTML = `<summary><span class="mark ${a.cls}">${icon(a.icon)}${esc(a.wort)}</span>`
-    + `<button class="ts" type="button" data-goto-seg="${esc(String(h.segment_id))}" title="Zur Transkriptzeile">${tc(h.t_start)}</button>`
+    + `<button class="ts" type="button" data-goto-seg="${esc(String(h.segment_id))}" title="${tr('Zur Transkriptzeile')}">${tc(h.t_start)}</button>`
     + `<span class="title">${esc(h.aussage || a.label)}</span>`
-    + `<span class="lag" title="Verzögerung Aussage → Hinweis">${esc(lag)}</span></summary>`
+    + `<span class="lag" title="${tr('Verzögerung Aussage → Hinweis')}">${esc(lag)}</span></summary>`
     + `<div class="hint-body">${hintBodyHtml(h)}</div>`;
   setTimeout(() => el.classList.remove('new'), 400);
   return el;
@@ -173,7 +180,7 @@ export function addHint(h) {
   layoutHints();
   limitOpenHints();
   updateHintCount();
-  $('souffleurLive').textContent = `${souffleurHints.length} Hinweise, zuletzt: ${artOf(h).label} ${tc(h.t_start)}`;
+  $('souffleurLive').textContent = tr('{n} Hinweise, zuletzt: {art} {zeit}', { n: souffleurHints.length, art: artOf(h).label, zeit: tc(h.t_start) });
   renderOpenPoints();
 }
 
@@ -191,7 +198,7 @@ function layoutHints() {
     for (const el of direct.slice(HINT_DIRECT)) { el.open = false; older.querySelector('summary').after(el); }
   }
   if (older) {
-    older.querySelector('summary span').textContent = `Ältere (${older.querySelectorAll('.hint-item').length})`;
+    older.querySelector('summary span').textContent = tr('Ältere ({n})', { n: older.querySelectorAll('.hint-item').length });
     list.append(older);
   }
 }
@@ -204,7 +211,7 @@ function limitOpenHints() {
 
 function updateHintCount() {
   const n = souffleurHints.length;
-  $('souffleurCount').textContent = `${n} ${n === 1 ? 'Hinweis' : 'Hinweise'}`;
+  $('souffleurCount').textContent = n === 1 ? tr('{n} Hinweis', { n }) : tr('{n} Hinweise', { n });
 }
 
 /** Bilanz fuer die Schlusszeile der Demo: Widersprueche, aus dem Wiki beantwortete Fragen, Neues ohne Beleg. */
@@ -221,11 +228,11 @@ export function hinweisZahlen() {
 /** Offene Punkte: alle Hinweise mit offener_punkt=true (offener Punkt, Frage ohne Befund), neueste oben. */
 function renderOpenPoints() {
   const offen = souffleurHints.filter((h) => h.offener_punkt).reverse();
-  $('souffleurOpenCount').textContent = offen.length ? `(${offen.length} offen)` : '(keine)';
+  $('souffleurOpenCount').textContent = offen.length ? tr('({n} offen)', { n: offen.length }) : tr('(keine)');
   $('souffleurOpenList').innerHTML = offen.map((h) =>
-    `<li><button class="ts" type="button" data-goto-seg="${esc(String(h.segment_id))}" title="Zur Transkriptzeile">[${tc(h.t_start)}]</button>`
-    + `<span class="text">${esc(h.aussage || '')}</span><span class="mark offen">${icon('circle-dashed')}Offen</span></li>`).join('')
-    || '<li class="hint">Noch keine offenen Punkte.</li>';
+    `<li><button class="ts" type="button" data-goto-seg="${esc(String(h.segment_id))}" title="${tr('Zur Transkriptzeile')}">[${tc(h.t_start)}]</button>`
+    + `<span class="text">${esc(h.aussage || '')}</span><span class="mark offen">${icon('circle-dashed')}${tr('Offen')}</span></li>`).join('')
+    || `<li class="hint">${tr('Noch keine offenen Punkte.')}</li>`;
 }
 
 /** Hinweiszeile zur Wiki-Ablage: was nach dem Stopp mit der Sitzung geschieht bzw. geschehen ist. */
@@ -237,13 +244,14 @@ export function renderHandover(ablage) {
   box.dataset.key = key;
   if (ablage && ablage.ordner) {
     // Die Markierungen gehen nur auf Wunsch mit (KI-erzeugt) - sagen, was tatsaechlich dort liegt.
-    box.innerHTML = `${ablage.frei ? 'Gespeichert' : 'Ins Wiki gespeichert'}: <code>${esc(ablage.ordner)}</code> (`
+    const ordner = `<code>${esc(ablage.ordner)}</code>`;
+    box.innerHTML = (ablage.frei ? tr('Gespeichert: {ordner}', { ordner }) : tr('Ins Wiki gespeichert: {ordner}', { ordner })) + ' ('
       + (ablage.markierungen ? '<code>markierungen.md</code>, ' : '') + '<code>transkript.md</code>)'
-      + (ablage.markierungen ? '' : ' – die Markierungen bleiben im Sitzungsordner');
+      + (ablage.markierungen ? '' : ' – ' + tr('die Markierungen bleiben im Sitzungsordner'));
   } else if (p && !p.demo && p.hat_wiki && p.wiki_speichern === 'immer') {
     box.innerHTML = p.wiki_markierungen
-      ? `Beim Stopp gehen Transkript und Markierungen ins Wiki: <code>${esc(trimSep(p.raw_dir))}${esc(sep())}…${esc(sep())}markierungen.md</code>`
-      : `Beim Stopp geht das Transkript ins Wiki: <code>${esc(trimSep(p.raw_dir))}</code> – die Markierungen bleiben im Sitzungsordner`;
+      ? tr('Beim Stopp gehen Transkript und Markierungen ins Wiki: {pfad}', { pfad: `<code>${esc(trimSep(p.raw_dir))}${esc(sep())}…${esc(sep())}markierungen.md</code>` })
+      : tr('Beim Stopp geht das Transkript ins Wiki: {pfad} – die Markierungen bleiben im Sitzungsordner', { pfad: `<code>${esc(trimSep(p.raw_dir))}</code>` });
   } else {
     box.innerHTML = '';
   }
@@ -254,14 +262,14 @@ function renderSouffleurState(sf, running) {
   const aktiv = sf ? sf.aktiv : $('souffleurOn').checked;
   const wiki = sf ? sf.wiki : S.wikiStatus;
   const ki = sf ? sf.ki : null;
-  let text = 'bereit', cls = '', title = '';
-  if (!aktiv) { text = 'pausiert'; title = 'Auswertung ausgeschaltet – es entstehen keine neuen Hinweise.'; }
-  else if (ki && (ki.zustand === 'fehlt' || ki.zustand === 'fehler')) { text = cloudCompliant() ? 'lokale KI fehlt' : 'KI fehlt'; cls = 'fail'; title = ki.meldung || 'KI nicht verfügbar'; }
-  else if (wiki && wiki.zustand === 'laedt') { text = 'Wiki lädt'; cls = 'laeuft'; title = wiki.meldung || 'Wiki wird gelesen …'; }
-  else if (!wiki || wiki.zustand !== 'ok') { text = 'ohne Wiki'; cls = 'warn'; title = 'Ohne Wiki: nur Fragen und Essenz – keine Belege, keine Widersprüche.'; }
-  else if (sf && sf.beendet) { text = 'beendet'; cls = 'fertig'; }
-  else if (sf && running) { text = 'läuft'; cls = 'laeuft'; }
-  else if (ki && ki.zustand === 'pause') { text = 'pausiert'; title = ki.meldung || ''; }
+  let text = tr('bereit'), cls = '', title = '';
+  if (!aktiv) { text = tr('pausiert'); title = tr('Auswertung ausgeschaltet – es entstehen keine neuen Hinweise.'); }
+  else if (ki && (ki.zustand === 'fehlt' || ki.zustand === 'fehler')) { text = cloudCompliant() ? tr('lokale KI fehlt') : tr('KI fehlt'); cls = 'fail'; title = ki.meldung || tr('KI nicht verfügbar'); }
+  else if (wiki && wiki.zustand === 'laedt') { text = tr('Wiki lädt'); cls = 'laeuft'; title = wiki.meldung || tr('Wiki wird gelesen …'); }
+  else if (!wiki || wiki.zustand !== 'ok') { text = tr('ohne Wiki'); cls = 'warn'; title = tr('Ohne Wiki: nur Fragen und Essenz – keine Belege, keine Widersprüche.'); }
+  else if (sf && sf.beendet) { text = tr('beendet'); cls = 'fertig'; }
+  else if (sf && running) { text = tr('läuft'); cls = 'laeuft'; }
+  else if (ki && ki.zustand === 'pause') { text = tr('pausiert'); title = ki.meldung || ''; }
   const badge = $('souffleurState');
   badge.textContent = text;
   badge.className = 'badge ' + cls;
@@ -315,10 +323,10 @@ async function essenz(minuten) {
 function essenzHtml(e) {
   const punkte = (e.punkte || []).map((p) => `<li>${esc(p)}</li>`).join('');
   const offen = (e.offen || []).length
-    ? `<div class="offen-titel">Offen:</div><ul>${e.offen.map((o) => `<li>${esc(o)}</li>`).join('')}</ul>` : '';
-  return `<div class="ki-head">${tagKi()}Essenz ${esc(e.fenster || `${e.minuten} min`)}<span class="spacer"></span>`
-    + `<span class="lag" title="Dauer der Erzeugung">erzeugt in ${secs(e.ki_s)}</span></div>`
-    + (punkte ? `<ul>${punkte}</ul>` : '<p class="hint">Keine Punkte.</p>') + offen;
+    ? `<div class="offen-titel">${tr('Offen:')}</div><ul>${e.offen.map((o) => `<li>${esc(o)}</li>`).join('')}</ul>` : '';
+  return `<div class="ki-head">${tagKi()}${esc(tr('Essenz {fenster}', { fenster: e.fenster || `${e.minuten} min` }))}<span class="spacer"></span>`
+    + `<span class="lag" title="${tr('Dauer der Erzeugung')}">${tr('erzeugt in {dauer}', { dauer: secs(e.ki_s) })}</span></div>`
+    + (punkte ? `<ul>${punkte}</ul>` : `<p class="hint">${tr('Keine Punkte.')}</p>`) + offen;
 }
 
 /** Nur die letzte Essenz offen; aeltere unter "Ältere Essenzen (n)". */
@@ -328,7 +336,7 @@ function renderEssenz() {
   const letzte = souffleurEssenzen[souffleurEssenzen.length - 1];
   const aeltere = souffleurEssenzen.slice(0, -1).reverse();
   box.innerHTML = essenzHtml(letzte) + (aeltere.length
-    ? `<details class="older"><summary>${icon('chevron-right')}Ältere Essenzen (${aeltere.length})</summary>`
+    ? `<details class="older"><summary>${icon('chevron-right')}${tr('Ältere Essenzen ({n})', { n: aeltere.length })}</summary>`
       + aeltere.map((e) => `<div class="ki">${essenzHtml(e)}</div>`).join('') + '</details>' : '');
   box.hidden = false;
 }
@@ -370,12 +378,12 @@ async function copyFundstelle(btn) {
   const use = btn.querySelector('use');
   try {
     await navigator.clipboard.writeText(btn.dataset.copy || '');
-    btn.title = 'Kopiert';
+    btn.title = tr('Kopiert');
     if (use) use.setAttribute('href', '#i-check');
   } catch (e) {
-    btn.title = 'Kopieren nicht möglich';
+    btn.title = tr('Kopieren nicht möglich');
   }
-  setTimeout(() => { btn.title = 'Fundstelle kopieren'; if (use) use.setAttribute('href', '#i-copy'); }, 1500);
+  setTimeout(() => { btn.title = tr('Fundstelle kopieren'); if (use) use.setAttribute('href', '#i-copy'); }, 1500);
 }
 
 /** Ausblenden = nur Sicht (Streifen + keine Chips); die Auswertung laeuft weiter. Ein Frame, kein Uebergang. */

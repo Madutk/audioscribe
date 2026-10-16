@@ -2,6 +2,7 @@
 // Sitzungen) und der
 // Assistent "Neues Projekt" (PRD §21).
 
+import { tr } from './i18n.js';
 import { $, S, api, post, esc, icon, hms, toast, fillOptions, sep, trimSep, dirname, basename, dienstHinweis, modelleFuer, passendesModell } from './kern.js';
 import { go, HOME, setKontext, wechsle, oeffneProjekt, ladeKontext } from './kontext.js';
 import { pickFolder } from './dialoge.js';
@@ -26,9 +27,9 @@ export function renderStart() {
       ${icon(z.vorhanden ? 'book' : 'book-x')}
       <button class="open" type="button" data-open="${esc(z.pfad)}" ${z.vorhanden ? '' : 'disabled'}>
         <span>${esc(z.name || z.pfad)}</span>
-        <small title="${esc(z.pfad)}">${esc(z.vorhanden ? z.pfad : 'nicht erreichbar: ' + z.pfad)}</small>
+        <small title="${esc(z.pfad)}">${esc(z.vorhanden ? z.pfad : tr('nicht erreichbar: {pfad}', { pfad: z.pfad }))}</small>
       </button>
-      <button class="icon-btn" type="button" data-forget="${esc(z.pfad)}" aria-label="Aus der Liste entfernen" title="Aus der Liste entfernen (das Projekt bleibt erhalten)">${icon('x')}</button>
+      <button class="icon-btn" type="button" data-forget="${esc(z.pfad)}" aria-label="${tr('Aus der Liste entfernen')}" title="${tr('Aus der Liste entfernen (das Projekt bleibt erhalten)')}">${icon('x')}</button>
     </div>`).join('');
   // Aufnahmen ohne Projekt, die auf ein Projekt warten
   const eingang = k.eingang || [];
@@ -41,8 +42,8 @@ export function renderStart() {
         <small title="${esc(s.dir)}">${esc(s.gestartet ? s.gestartet.replace('T', ' ').slice(0, 16) : s.name)} · ${hms(s.dauer_s || 0)}</small>
       </div>
       <div class="actions">
-        <button class="secondary sm" type="button" data-zuordnen="${esc(s.dir)}" data-titel="${esc(s.titel || '')}">${icon('folder-open')}Projekt zuordnen …</button>
-        <button class="icon-btn" type="button" data-folder="${esc(s.dir)}" aria-label="Im Finder zeigen" title="Sitzungsordner im Finder öffnen (dort löschen)">${icon('external')}</button>
+        <button class="secondary sm" type="button" data-zuordnen="${esc(s.dir)}" data-titel="${esc(s.titel || '')}">${icon('folder-open')}${tr('Projekt zuordnen …')}</button>
+        <button class="icon-btn" type="button" data-folder="${esc(s.dir)}" aria-label="${tr('Im Finder zeigen')}" title="${tr('Sitzungsordner im Finder öffnen (dort löschen)')}">${icon('external')}</button>
       </div>
     </div>`).join('');
   // Demo nur, wenn die Demo-Daten da sind
@@ -52,11 +53,11 @@ export function renderStart() {
   $('startBanner').innerHTML = (k.unterbrochen || []).map((s) => `
     <div class="banner" role="status">
       ${icon('triangle')}
-      <div class="text"><b>Unterbrochene Sitzung${s.titel ? ` „${esc(s.titel)}“` : ''}</b> ${s.projekt ? `im Projekt ${esc(s.projekt_name || '')}` : 'ohne Projekt'}
-        <small>${esc(s.gestartet ? s.gestartet.replace('T', ' ').slice(0, 16) : s.name)} · ${hms(s.dauer_s || 0)} aufgezeichnet · ${s.segmente || 0} Abschnitte gesichert</small></div>
+      <div class="text"><b>${s.titel ? tr('Unterbrochene Sitzung „{titel}“', { titel: esc(s.titel) }) : tr('Unterbrochene Sitzung')}</b> ${s.projekt ? tr('im Projekt {name}', { name: esc(s.projekt_name || '') }) : tr('ohne Projekt')}
+        <small>${esc(s.gestartet ? s.gestartet.replace('T', ' ').slice(0, 16) : s.name)} · ${tr('{dauer} aufgezeichnet · {n} Abschnitte gesichert', { dauer: hms(s.dauer_s || 0), n: s.segmente || 0 })}</small></div>
       <div class="actions">${s.projekt
-        ? `<button type="button" data-resume="${esc(s.projekt)}">${icon('folder-open')}Projekt öffnen und fortsetzen</button>`
-        : `<button type="button" data-launch="aufnahme">${icon('record')}Aufnahme öffnen und fortsetzen</button>`}</div>
+        ? `<button type="button" data-resume="${esc(s.projekt)}">${icon('folder-open')}${tr('Projekt öffnen und fortsetzen')}</button>`
+        : `<button type="button" data-launch="aufnahme">${icon('record')}${tr('Aufnahme öffnen und fortsetzen')}</button>`}</div>
     </div>`).join('');
 }
 
@@ -67,7 +68,7 @@ async function launch(what, btn) {
     else if (what === 'datei' || what === 'demo' || what === 'aufnahme') await wechsle(what);
     else if (what === 'oeffnen') {
       // Projektordner (enthaelt .audioscribe/) - bei aelteren Projekten ist das der Wiki-Ordner.
-      const pfad = await pickFolder({ title: 'Projekt öffnen – Projektordner wählen', ok: 'Projekt in diesem Ordner öffnen',
+      const pfad = await pickFolder({ title: tr('Projekt öffnen – Projektordner wählen'), ok: tr('Projekt in diesem Ordner öffnen'),
         start: (S.kontext.zuletzt[0] && dirname(S.kontext.zuletzt[0].pfad)) || (S.kontext.neu && S.kontext.neu.speicherort) || '' });
       if (pfad) await oeffne(pfad);
     }
@@ -156,7 +157,7 @@ export async function enterNeu() {
   // Vorlage: eines der zuletzt geoeffneten Projekte - Wiki und Einstellungen uebernehmen.
   W.vorlage = null;
   const vorlagen = ((S.kontext && S.kontext.zuletzt) || []).filter((e) => e.vorhanden);
-  $('wizVorlage').innerHTML = '<option value="">– keine Vorlage –</option>'
+  $('wizVorlage').innerHTML = `<option value="">${tr('– keine Vorlage –')}</option>`
     + vorlagen.map((e) => `<option value="${esc(e.pfad)}" title="${esc(e.pfad)}">${esc(e.name || basename(e.pfad))}</option>`).join('');
   $('wizVorlageField').hidden = !vorlagen.length;
   $('wizVorlageHint').textContent = VORLAGE_HINT;
@@ -164,12 +165,12 @@ export async function enterNeu() {
   showStep();
   renderTree(null);
   $('wizZuordnen').hidden = !S.zuordnen;
-  if (S.zuordnen) $('wizZuordnen').textContent = `Die Aufnahme „${basename(S.zuordnen)}“ wird in das neue Projekt verschoben.`;
+  if (S.zuordnen) $('wizZuordnen').textContent = tr('Die Aufnahme „{name}“ wird in das neue Projekt verschoben.', { name: basename(S.zuordnen) });
   $('wizName').focus();
   try {
     const e = await api('/api/einstellungen');
     W.optionen = e;
-    const global = (liste, wert) => `Globale Einstellung (${(liste.find((x) => x.id === wert) || { label: wert }).label})`;
+    const global = (liste, wert) => tr('Globale Einstellung ({wert})', { wert: (liste.find((x) => x.id === wert) || { label: wert }).label });
     fillOptions($('wizKiDienst'), e.optionen.ki_dienste, '', global(e.optionen.ki_dienste, e.werte.ki_dienst));
     fillOptions($('wizSprache'), e.optionen.sprachen, '', global(e.optionen.sprachen, e.werte.sprache));
     zeigeWizModelle();
@@ -178,7 +179,7 @@ export async function enterNeu() {
   }
 }
 
-const VORLAGE_HINT = 'Übernimmt Wiki, Ablage, KI-Dienst, Modelle und Sprache des gewählten Projekts – alles lässt sich danach anpassen.';
+const VORLAGE_HINT = tr('Übernimmt Wiki, Ablage, KI-Dienst, Modelle und Sprache des gewählten Projekts – alles lässt sich danach anpassen.');
 
 /** Wert setzen; steht er nicht in der Liste (aelteres Modell), wird er vorangestellt - wie in den Einstellungen. */
 function setzeOderErgaenze(sel, wert) {
@@ -223,7 +224,7 @@ function zeigeWizModelle() {
   const e = W.optionen;
   if (!e) return;
   const dienst = $('wizKiDienst').value || e.werte.ki_dienst;
-  const global = (liste, wert) => `Globale Einstellung (${(liste.find((x) => x.id === wert) || { label: wert }).label})`;
+  const global = (liste, wert) => tr('Globale Einstellung ({wert})', { wert: (liste.find((x) => x.id === wert) || { label: wert }).label });
   for (const [id, key] of [['wizSouffleurModel', 'souffleur_model'], ['wizAgentModel', 'agent_model']]) {
     const alle = e.optionen[key + 's'];
     const liste = modelleFuer(alle, dienst);
@@ -264,7 +265,7 @@ function renderTree(r) {
   const ort = trimSep($('wizSpeicherort').value.trim());
   const name = $('wizOrdnername').value.trim();
   // Solange der Ordnername fehlt, steht ein Platzhalter - die Zeile bleibt lesbar.
-  const wurzel = name ? trimSep(pf.wurzel || wizWurzel()) : `${ort || '…'}${s}<Projektordner>`;
+  const wurzel = name ? trimSep(pf.wurzel || wizWurzel()) : `${ort || '…'}${s}<${tr('Projektordner')}>`;
   const art = wizWikiArt();
   const rel = (pfad) => {
     // Pfad relativ zum Projektordner, wenn er darin liegt - sonst absolut (mit Pfeil).
@@ -275,22 +276,22 @@ function renderTree(r) {
   };
   const rows = [];
   const row = (pfad, was, cls = '') => rows.push(`<div class="row ${cls}" role="listitem"><code>${esc(pfad)}</code><span class="was">${was}</span></div>`);
-  row(`${wurzel}${s}`, 'Projektordner', 'root');
-  row(`.audioscribe${s}projekt.json`, 'Projekteinstellungen');
+  row(`${wurzel}${s}`, tr('Projektordner'), 'root');
+  row(`.audioscribe${s}projekt.json`, tr('Projekteinstellungen'));
   const aussen = [];
   const sitz = rel(pf.sitzungen_dir || $('wizSitzungen').value) || { innen: true, text: 'sitzungen' };
-  const sitzText = `Sitzungen (live-…${s}) und KI-Analysen (analysen${s})`;
+  const sitzText = tr('Sitzungen (live-…{s}) und KI-Analysen (analysen{s})', { s });
   if (sitz.innen) row(`${sitz.text}${s}`, sitzText); else aussen.push([`${sitz.text}${s}`, sitzText]);
   if (art === 'neu') {
-    row(`llm-wiki${s}`, `neues LLM-Wiki – raw${s} (Quellen, Bilder) und wiki${s} (Seiten)`);
+    row(`llm-wiki${s}`, tr('neues LLM-Wiki – raw{s} (Quellen, Bilder) und wiki{s} (Seiten)', { s }));
   } else if (art === 'vorhanden') {
     const wiki = rel(pf.wiki_dir || $('wizWikiDir').value);
-    const text = `verknüpftes LLM-Wiki – raw${s} (Quellen) und wiki${s} (Seiten)`;
-    if (!wiki) row('…', 'verknüpftes LLM-Wiki – Ordner noch wählen');
+    const text = tr('verknüpftes LLM-Wiki – raw{s} (Quellen) und wiki{s} (Seiten)', { s });
+    if (!wiki) row('…', tr('verknüpftes LLM-Wiki – Ordner noch wählen'));
     else if (wiki.innen) row(`${wiki.text}${s}`, text);
     else aussen.push([`${wiki.text}${s}`, text]);
   } else {
-    row('(kein Wiki)', 'Souffleur ohne Belege, keine Ablage ins Wiki');
+    row(tr('(kein Wiki)'), tr('Souffleur ohne Belege, keine Ablage ins Wiki'));
   }
   for (const [pfad, was] of aussen) row(pfad, was, 'aussen');
   $('wizTree').innerHTML = rows.join('');
@@ -365,7 +366,7 @@ async function anlegen() {
       wiki_markierungen: mitWiki ? $('wizMarkierungen').checked : false,
     });
     setKontext(k);
-    toast(`Projekt „${k.projekt.name}“ angelegt`);
+    toast(tr('Projekt „{name}“ angelegt', { name: k.projekt.name }));
     if (S.zuordnen) {
       // Aus "Sofort aufnehmen": die Aufnahme gleich ins neue Projekt uebernehmen.
       try {
@@ -393,10 +394,10 @@ async function wizPick(feld, titel, start) {
   pruefe({ zeigen: SCHRITT[W.step] });
 }
 
-$('pickWizSpeicherort').onclick = () => wizPick('wizSpeicherort', 'Speicherort wählen – hier entsteht der Projektordner', $('wizSpeicherort').value.trim());
-$('pickWizWikiDir').onclick = () => wizPick('wizWikiDir', 'Ordner des LLM-Wikis wählen', $('wizWikiDir').value.trim() || (S.kontext.neu && S.kontext.neu.speicherort) || '');
-$('pickWizSitzungen').onclick = () => wizPick('wizSitzungen', 'Ordner für Sitzungen wählen');
-$('pickWizAssets').onclick = () => wizPick('wizAssets', 'Ordner für Bilder im Wiki wählen', $('wizAssets').value.trim() || $('wizWikiDir').value.trim());
+$('pickWizSpeicherort').onclick = () => wizPick('wizSpeicherort', tr('Speicherort wählen – hier entsteht der Projektordner'), $('wizSpeicherort').value.trim());
+$('pickWizWikiDir').onclick = () => wizPick('wizWikiDir', tr('Ordner des LLM-Wikis wählen'), $('wizWikiDir').value.trim() || (S.kontext.neu && S.kontext.neu.speicherort) || '');
+$('pickWizSitzungen').onclick = () => wizPick('wizSitzungen', tr('Ordner für Sitzungen wählen'));
+$('pickWizAssets').onclick = () => wizPick('wizAssets', tr('Ordner für Bilder im Wiki wählen'), $('wizAssets').value.trim() || $('wizWikiDir').value.trim());
 $('wizName').oninput = () => {
   if (W.auto.ordnername) $('wizOrdnername').value = slugify($('wizName').value);
   pruefeSpaeter();

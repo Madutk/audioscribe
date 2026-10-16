@@ -15,6 +15,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Protocol
 
+from audioscribe.i18n import tr
 from audioscribe.live.track import Track
 
 INSTALL_HINT = "uv sync --extra <cu124|cpu> --extra review --extra live"
@@ -40,7 +41,7 @@ def pick(devices: list[dict], wahl: str) -> dict | None:
     try:
         return next(d for d in devices if str(d["index"]) == wahl or d["index"] == int(wahl))
     except (ValueError, StopIteration):
-        raise RuntimeError(f"Audio-Gerät '{wahl}' nicht gefunden") from None
+        raise RuntimeError(tr("Audio-Gerät '{wahl}' nicht gefunden", wahl=wahl)) from None
 
 
 def open_capture(
@@ -66,8 +67,10 @@ def open_capture(
 
         return MacCapture(clock, log=log, **versatz)
     raise RuntimeError(
-        "Live-Aufnahme braucht Windows (WASAPI) oder macOS (ScreenCaptureKit); unter Linux/WSL "
-        "geht nur das Replay: audioscribe live --wav DATEI"
+        tr(
+            "Live-Aufnahme braucht Windows (WASAPI) oder macOS (ScreenCaptureKit); unter Linux/WSL "
+            "geht nur das Replay: audioscribe live --wav DATEI"
+        )
     )
 
 
@@ -83,8 +86,10 @@ def list_devices(platform: str | None = None) -> dict:
 
         return mac()
     raise RuntimeError(
-        "Live-Aufnahme braucht Windows (WASAPI) oder macOS (ScreenCaptureKit); unter WSL/Linux "
-        "nicht verfügbar."
+        tr(
+            "Live-Aufnahme braucht Windows (WASAPI) oder macOS (ScreenCaptureKit); unter WSL/Linux "
+            "nicht verfügbar."
+        )
     )
 
 
@@ -105,20 +110,26 @@ def ensure_permissions(
     if mic:
         status = berechtigungen.mikrofon_status()
         if status == berechtigungen.NICHT_GEFRAGT:
-            log("macOS fragt nach der Mikrofon-Berechtigung ...")
+            log(tr("macOS fragt nach der Mikrofon-Berechtigung ..."))
             status = berechtigungen.mikrofon_anfragen()
         # UNBEKANNT (PyObjC fehlt, Abfrage scheiterte) ist kein Verbot - der Stream versucht es.
         if status not in (berechtigungen.ERTEILT, berechtigungen.UNBEKANNT):
             raise RuntimeError(
-                "Mikrofon nicht erlaubt - Systemeinstellungen > Datenschutz & Sicherheit > "
-                f"Mikrofon: '{berechtigungen.host_app()}' freigeben (oder '--mic none')."
+                tr(
+                    "Mikrofon nicht erlaubt - Systemeinstellungen > Datenschutz & Sicherheit > "
+                    "Mikrofon: '{app}' freigeben (oder '--mic none').",
+                    app=berechtigungen.host_app(),
+                )
             )
     # None heißt unbekannt (siehe oben); nur ein klares False bricht ab.
     if system and berechtigungen.bildschirm_erlaubt() is False:
         berechtigungen.bildschirm_anfragen()  # öffnet den Dialog; wirkt erst nach Neustart
         raise RuntimeError(
-            "Bildschirmaufnahme nicht erlaubt - das System-Audio läuft über ScreenCaptureKit. "
-            "Systemeinstellungen > Datenschutz & Sicherheit > Bildschirmaufnahme: "
-            f"'{berechtigungen.host_app()}' freigeben, die App neu starten und 'audioscribe live' "
-            "erneut aufrufen (oder '--loopback none')."
+            tr(
+                "Bildschirmaufnahme nicht erlaubt - das System-Audio läuft über ScreenCaptureKit. "
+                "Systemeinstellungen > Datenschutz & Sicherheit > Bildschirmaufnahme: "
+                "'{app}' freigeben, die App neu starten und 'audioscribe live' "
+                "erneut aufrufen (oder '--loopback none').",
+                app=berechtigungen.host_app(),
+            )
         )

@@ -21,6 +21,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
+from audioscribe.i18n import tr
 from audioscribe.live.events import parse_event
 from audioscribe.ui.jobs import (
     AnalyseOptions,
@@ -234,7 +235,7 @@ class _ProcessRunner:
                 start_new_session=True,
             )
         except OSError as exc:
-            self._append(f"   Prozessstart fehlgeschlagen: {exc}")
+            self._append(tr("   Prozessstart fehlgeschlagen: {fehler}", fehler=exc))
             return None
         with self._lock:
             self._proc = proc
@@ -267,7 +268,7 @@ class BatchRunner(_ProcessRunner):
         durations = durations or {}
         with self._lock:
             if self._state.running:
-                raise RuntimeError("Es laeuft bereits ein Durchlauf.")
+                raise RuntimeError(tr("Es laeuft bereits ein Durchlauf."))
             self._state = _State(
                 running=True,
                 output_dir=str(opts.output_dir),
@@ -283,10 +284,15 @@ class BatchRunner(_ProcessRunner):
             )
             self._reset_log()
 
-        self._append(f"Starte Stapellauf: {len(files)} Datei(en) -> {opts.output_dir}")
+        self._append(tr("Starte Stapellauf: {anzahl} Datei(en) -> {ziel}", anzahl=len(files), ziel=opts.output_dir))
         self._append(
-            f"Modell: {opts.model} | Sprache: {opts.language} | Geraet: {opts.device} | "
-            f"Diarisierung: {'an' if opts.diarize else 'aus'}"
+            tr(
+                "Modell: {modell} | Sprache: {sprache} | Geraet: {geraet} | Diarisierung: {diarisierung}",
+                modell=opts.model,
+                sprache=opts.language,
+                geraet=opts.device,
+                diarisierung=tr("an") if opts.diarize else tr("aus"),
+            )
         )
 
         self._thread = threading.Thread(
@@ -316,7 +322,7 @@ class BatchRunner(_ProcessRunner):
             self._state.cancelled = True
             proc = self._proc
         if proc and proc.poll() is None:
-            self._append("Abbruch angefordert - beende laufenden Prozess ...")
+            self._append(tr("Abbruch angefordert - beende laufenden Prozess ..."))
             _terminate(proc)
 
     def snapshot(self, offset: int = 0) -> dict:
@@ -393,10 +399,10 @@ class BatchRunner(_ProcessRunner):
                     self._set_file(
                         index, state=DONE, returncode=0, seconds=elapsed, fraction=1.0
                     )
-                    self._append(f"   -> fertig in {elapsed}s")
+                    self._append(tr("   -> fertig in {sekunden}s", sekunden=elapsed))
                 else:
                     self._set_file(index, state=FAILED, returncode=code, seconds=elapsed)
-                    self._append(f"   -> FEHLER (Exit-Code {code}) - weiter mit der naechsten Datei")
+                    self._append(tr("   -> FEHLER (Exit-Code {code}) - weiter mit der naechsten Datei", code=code))
         finally:
             self._finish()
 
@@ -461,11 +467,11 @@ class BatchRunner(_ProcessRunner):
             ok = sum(1 for f in files if f.state == DONE)
             failed = [f.name for f in files if f.state == FAILED]
 
-            parts = [f"{ok} von {len(files)} transkribiert"]
+            parts = [tr("{ok} von {gesamt} transkribiert", ok=ok, gesamt=len(files))]
             if failed:
-                parts.append(f"{len(failed)} fehlgeschlagen: {', '.join(failed)}")
+                parts.append(tr("{anzahl} fehlgeschlagen: {namen}", anzahl=len(failed), namen=", ".join(failed)))
             if cancelled:
-                parts.append("abgebrochen")
+                parts.append(tr("abgebrochen"))
             summary = " | ".join(parts)
 
             self._state.summary = summary
@@ -473,7 +479,7 @@ class BatchRunner(_ProcessRunner):
             self._state.current = None
             self._state.stage = None
             self._state.file_started = None
-        self._append(f"\nZusammenfassung: {summary}")
+        self._append("\n" + tr("Zusammenfassung: {zusammenfassung}", zusammenfassung=summary))
 
 
 class AnalyseRunner(_ProcessRunner):
@@ -496,7 +502,7 @@ class AnalyseRunner(_ProcessRunner):
         workspace = Path(opts.output_dir) / slugify(opts.name)
         with self._lock:
             if self._info.get("running"):
-                raise RuntimeError("Es laeuft bereits eine Analyse.")
+                raise RuntimeError(tr("Es laeuft bereits eine Analyse."))
             self._info = {
                 "running": True,
                 "cancelled": False,
@@ -538,7 +544,7 @@ class AnalyseRunner(_ProcessRunner):
             self._info["cancelled"] = True
             proc = self._proc
         if proc and proc.poll() is None:
-            self._append("Abbruch angefordert - beende den Agenten ...")
+            self._append(tr("Abbruch angefordert - beende den Agenten ..."))
             _terminate(proc)
 
     def snapshot(self, offset: int = 0) -> dict:
@@ -597,11 +603,11 @@ class AnalyseRunner(_ProcessRunner):
             self._info.update(running=False, returncode=code, result=result)
             cancelled = self._info.get("cancelled")
         if cancelled:
-            self._append("\nAnalyse abgebrochen.")
+            self._append("\n" + tr("Analyse abgebrochen."))
         elif code == 0:
-            self._append(f"\nAnalyse fertig: {workspace}")
+            self._append("\n" + tr("Analyse fertig: {ordner}", ordner=workspace))
         else:
-            self._append(f"\nAnalyse mit Fehler beendet (Exit-Code {code}).")
+            self._append("\n" + tr("Analyse mit Fehler beendet (Exit-Code {code}).", code=code))
 
 
 class LiveRunner(_ProcessRunner):
@@ -645,7 +651,7 @@ class LiveRunner(_ProcessRunner):
         ab, statt aufzunehmen (``opts.resume_dir`` nennt den Ordner)."""
         with self._lock:
             if self._info.get("running"):
-                raise RuntimeError("Es laeuft bereits eine Live-Sitzung.")
+                raise RuntimeError(tr("Es laeuft bereits eine Live-Sitzung."))
             self._on_ende = on_ende
             self._info = {
                 "running": True,
@@ -685,7 +691,7 @@ class LiveRunner(_ProcessRunner):
                 souffleur = souffleur_factory(opts)
             except Exception as exc:  # noqa: BLE001 - der Souffleur darf die Sitzung nie verhindern
                 souffleur = None
-                self._append(f"Souffleur nicht gestartet: {exc}")
+                self._append(tr("Souffleur nicht gestartet: {fehler}", fehler=exc))
             if souffleur is not None:
                 souffleur.on_hinweis = self._on_hinweis
                 with self._lock:
@@ -697,7 +703,7 @@ class LiveRunner(_ProcessRunner):
             try:
                 souffleur.starte(Path(resume_dir))
             except Exception as exc:  # noqa: BLE001
-                self._append(f"Souffleur-Fehler: {exc}")
+                self._append(tr("Souffleur-Fehler: {fehler}", fehler=exc))
         if finalize_builder is not None and resume_dir is not None:
             argv = finalize_builder(Path(resume_dir))
         else:
@@ -732,10 +738,10 @@ class LiveRunner(_ProcessRunner):
         if proc is None or proc.poll() is not None:
             return
         if hard:
-            self._append("Abbruch - beende den Prozess ...")
+            self._append(tr("Abbruch - beende den Prozess ..."))
             _terminate(proc)
             return
-        self._append("Stopp angefordert - Sitzung wird abgeschlossen ...")
+        self._append(tr("Stopp angefordert - Sitzung wird abgeschlossen ..."))
         try:
             assert proc.stdin is not None
             proc.stdin.write("stop\n")
@@ -751,15 +757,15 @@ class LiveRunner(_ProcessRunner):
             replay = self._info.get("replay")
             proc = self._proc
         if not laeuft or proc is None or proc.poll() is not None:
-            raise RuntimeError("Es läuft gerade nichts, das sich anhalten ließe.")
+            raise RuntimeError(tr("Es läuft gerade nichts, das sich anhalten ließe."))
         if not replay:
-            raise RuntimeError("Eine Aufnahme lässt sich nicht pausieren – nur das Abspielen eines Transkripts.")
+            raise RuntimeError(tr("Eine Aufnahme lässt sich nicht pausieren – nur das Abspielen eines Transkripts."))
         try:
             assert proc.stdin is not None
             proc.stdin.write("pause\n" if an else "weiter\n")
             proc.stdin.flush()
         except (OSError, ValueError) as exc:
-            raise RuntimeError(f"Pause nicht möglich: {exc}") from exc
+            raise RuntimeError(tr("Pause nicht möglich: {fehler}", fehler=exc)) from exc
 
     def bildquelle(self, monitor: int = 0, window: int = 0) -> None:
         """Bildquelle der laufenden Aufnahme wechseln (``bild ...`` ueber stdin, FR-37).
@@ -771,15 +777,15 @@ class LiveRunner(_ProcessRunner):
             replay = self._info.get("replay")
             proc = self._proc
         if not laeuft or proc is None or proc.poll() is not None:
-            raise RuntimeError("Es läuft gerade keine Aufnahme, deren Bildquelle sich wechseln ließe.")
+            raise RuntimeError(tr("Es läuft gerade keine Aufnahme, deren Bildquelle sich wechseln ließe."))
         if replay:
-            raise RuntimeError("Im Testmodus gibt es keine Bildquelle.")
+            raise RuntimeError(tr("Im Testmodus gibt es keine Bildquelle."))
         try:
             assert proc.stdin is not None
             proc.stdin.write(bild_befehl(monitor, window) + "\n")
             proc.stdin.flush()
         except (OSError, ValueError) as exc:
-            raise RuntimeError(f"Wechsel der Bildquelle nicht möglich: {exc}") from exc
+            raise RuntimeError(tr("Wechsel der Bildquelle nicht möglich: {fehler}", fehler=exc)) from exc
 
     def reset(self, *, timeout: float = 15.0) -> Path | None:
         """Alles auf Anfang: eine laufende Sitzung wird hart beendet (ohne Nachschaerfen),
@@ -803,7 +809,7 @@ class LiveRunner(_ProcessRunner):
             if thread is not None:
                 thread.join(timeout)
                 if thread.is_alive():
-                    raise RuntimeError("Die Live-Sitzung liess sich nicht beenden.")
+                    raise RuntimeError(tr("Die Live-Sitzung liess sich nicht beenden."))
         with self._lock:
             self._info = {"running": False}
             self._events = []
@@ -856,12 +862,12 @@ class LiveRunner(_ProcessRunner):
             if code != 0 and fertig and not self._discard:
                 # Das Kind hatte die Sitzung schon gesichert ("fertig") und starb erst beim Abbau
                 # (Signal, haengender Audio-Stream): die Sitzung ist vollstaendig - kein Fehler.
-                self._append(f"Aufnahmeprozess endete nach dem Sichern mit Code {code} - die Sitzung ist vollständig.")
+                self._append(tr("Aufnahmeprozess endete nach dem Sichern mit Code {code} - die Sitzung ist vollständig.", code=code))
                 code = 0
             if code == 0 and opts.refine and session and not aborted:
                 with self._lock:
                     self._info.update(phase="nachschaerfen", stopping=False, partials={})
-                self._append(f"\nNachschaerfen mit {opts.refine_model} ...")
+                self._append("\n" + tr("Nachschaerfen mit {modell} ...", modell=opts.refine_model))
                 code = self._pump(self._spawn(refine_builder(Path(session), opts)), self._on_refine_line)
         finally:
             with self._lock:
@@ -877,7 +883,7 @@ class LiveRunner(_ProcessRunner):
                 try:
                     souffleur.abschliessen()
                 except Exception as exc:  # noqa: BLE001 - Abschluss des Souffleurs ist Zugabe
-                    self._append(f"Souffleur-Abschluss fehlgeschlagen: {exc}")
+                    self._append(tr("Souffleur-Abschluss fehlgeschlagen: {fehler}", fehler=exc))
             self._nachlauf(code)
             with self._lock:
                 self._info.update(
@@ -885,7 +891,7 @@ class LiveRunner(_ProcessRunner):
                 )
                 if code != 0:
                     self._info["error"] = self._last_line
-            self._append("\nSitzung beendet." if code == 0 else f"\nBeendet mit Exit-Code {code}.")
+            self._append("\n" + (tr("Sitzung beendet.") if code == 0 else tr("Beendet mit Exit-Code {code}.", code=code)))
 
     def _nachlauf(self, code: int) -> None:
         """Nach einem sauberen Ende: ``on_ende`` ausfuehren (z. B. Wiki-Ablage "immer"). Solange
@@ -899,7 +905,7 @@ class LiveRunner(_ProcessRunner):
         try:
             ergebnis = on_ende(Path(session))
         except Exception as exc:  # noqa: BLE001 - der Nachlauf darf das Ende nie verhindern
-            self._append(f"Nachlauf fehlgeschlagen: {exc}")
+            self._append(tr("Nachlauf fehlgeschlagen: {fehler}", fehler=exc))
             ergebnis = {"fehler": str(exc)}
         if ergebnis:
             with self._lock:
@@ -967,7 +973,7 @@ class LiveRunner(_ProcessRunner):
             elif typ == "segment":
                 souffleur.beobachte(event, empfangen_mono=empfangen)
         except Exception as exc:  # noqa: BLE001 - der Souffleur darf die Sitzung nie stoeren
-            self._append(f"Souffleur-Fehler: {exc}")
+            self._append(tr("Souffleur-Fehler: {fehler}", fehler=exc))
 
     def _note_fazit(self, event: dict) -> None:
         """Fazit eines Teils (live | nachschaerfen) ablegen; Aufruf unter ``_lock``."""

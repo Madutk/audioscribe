@@ -1,6 +1,8 @@
 // Einstieg der Oberflaeche: Kontext holen, Adresse (#/…) auf eine Ansicht abbilden, Kopf zeichnen.
 // Jede Ansicht lebt in ihrem Modul und fragt den Server nur ab, solange sie sichtbar ist.
 
+import './uebersetzen.js';  // zuerst: statischen Text der Seite in die gewaehlte Sprache
+import { tr } from './i18n.js';
 import { $, S, post, modus, projekt, cloudCompliant, reducedMotion, wireLogs, toast } from './kern.js';
 import { HOME, ladeKontext, ladeDefaults } from './kontext.js';
 import { enterStart, renderStart, enterNeu } from './start.js';
@@ -17,18 +19,18 @@ const ROUTES = {
   '#/': { view: 'start', modus: 'start', hint: '' },
   '#/neu': { view: 'neu', modus: 'start', hint: '' },
   '#/projekt/live': { view: 'live', modus: 'projekt',
-    hint: 'Monitor, System-Audio und Mikrofon mitschneiden – Transkript, Screenshots und Souffleur-Hinweise entstehen live' },
+    hint: tr('Monitor, System-Audio und Mikrofon mitschneiden – Transkript, Screenshots und Souffleur-Hinweise entstehen live') },
   '#/projekt/nachbereitung': { view: 'ana', modus: 'projekt',
-    hint: 'Sitzungen dieses Projekts ins Wiki speichern oder von der KI auswerten lassen',
-    hintCloudCompliant: 'Sitzungen dieses Projekts ins Wiki speichern' },
+    hint: tr('Sitzungen dieses Projekts ins Wiki speichern oder von der KI auswerten lassen'),
+    hintCloudCompliant: tr('Sitzungen dieses Projekts ins Wiki speichern') },
   '#/projekt/einstellungen': { view: 'projekt', modus: 'projekt',
-    hint: 'Ordner, Wiki-Ablage, KI und Sprache dieses Projekts' },
+    hint: tr('Ordner, Wiki-Ablage, KI und Sprache dieses Projekts') },
   '#/aufnahme': { view: 'live', modus: 'aufnahme',
-    hint: 'Sofort mitschneiden, ohne Projekt – nach dem Stopp einem Projekt zuordnen' },
-  '#/datei': { view: 'datei', modus: 'datei', hint: 'Aufnahme wählen, Speicherort festlegen, transkribieren' },
-  '#/datei/ki': { view: 'ana', modus: 'datei', nichtCloudCompliant: true, hint: 'Die KI wertet Transkript und Standbilder aus und legt Dokumente im Ausgabeordner ab' },
-  '#/demo': { view: 'live', modus: 'demo', hint: 'Vorführung – nichts wird aufgenommen oder gespeichert' },
-  '#/einstellungen': { view: 'einstellungen', modus: null, hint: 'Globale Einstellungen – gelten für alle Projekte, die nichts Eigenes festlegen' },
+    hint: tr('Sofort mitschneiden, ohne Projekt – nach dem Stopp einem Projekt zuordnen') },
+  '#/datei': { view: 'datei', modus: 'datei', hint: tr('Aufnahme wählen, Speicherort festlegen, transkribieren') },
+  '#/datei/ki': { view: 'ana', modus: 'datei', nichtCloudCompliant: true, hint: tr('Die KI wertet Transkript und Standbilder aus und legt Dokumente im Ausgabeordner ab') },
+  '#/demo': { view: 'live', modus: 'demo', hint: tr('Vorführung – nichts wird aufgenommen oder gespeichert') },
+  '#/einstellungen': { view: 'einstellungen', modus: null, hint: tr('Globale Einstellungen – gelten für alle Projekte, die nichts Eigenes festlegen') },
 };
 
 const VIEWS = {
@@ -46,12 +48,12 @@ let aktiv = null;   // Name der sichtbaren Ansicht
 // --- Design (hell/dunkel) ---------------------------------------------------------------
 // Serverseitig gemerkt wie alle anderen Einstellungen; 'system' folgt dem Betriebssystem.
 const THEMES = ['system', 'light', 'dark'];
-const THEME_LABEL = { system: 'System', light: 'Hell', dark: 'Dunkel' };
+const THEME_LABEL = { system: tr('System'), light: tr('Hell'), dark: tr('Dunkel') };
 function applyTheme(theme) {
   if (theme === 'system') delete document.documentElement.dataset.theme;
   else document.documentElement.dataset.theme = theme;
   $('themeToggle').dataset.theme = theme;
-  $('themeToggle').setAttribute('aria-label', `Design: ${THEME_LABEL[theme]} – klicken zum Wechseln`);
+  $('themeToggle').setAttribute('aria-label', tr('Design: {design} – klicken zum Wechseln', { design: THEME_LABEL[theme] }));
 }
 applyTheme(THEMES.includes(document.documentElement.dataset.theme) ? document.documentElement.dataset.theme : 'system');
 $('themeToggle').onclick = () => {
@@ -63,10 +65,10 @@ $('themeToggle').onclick = () => {
 // --- Kopf -------------------------------------------------------------------------------
 
 const CTX = {
-  projekt: () => ({ name: projekt().name, icon: 'book', close: 'Projekt schließen' }),
-  aufnahme: () => ({ name: 'Aufnahme ohne Projekt', icon: 'record', close: 'Zur Startseite' }),
-  datei: () => ({ name: 'Aufnahme transkribieren', icon: 'film', close: 'Zur Startseite' }),
-  demo: () => ({ name: 'Demo', icon: 'play-circle', close: 'Demo beenden' }),
+  projekt: () => ({ name: projekt().name, icon: 'book', close: tr('Projekt schließen') }),
+  aufnahme: () => ({ name: tr('Aufnahme ohne Projekt'), icon: 'record', close: tr('Zur Startseite') }),
+  datei: () => ({ name: tr('Aufnahme transkribieren'), icon: 'film', close: tr('Zur Startseite') }),
+  demo: () => ({ name: tr('Demo'), icon: 'play-circle', close: tr('Demo beenden') }),
 };
 
 function renderShell() {

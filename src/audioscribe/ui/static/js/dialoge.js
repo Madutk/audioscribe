@@ -1,6 +1,7 @@
 // Dialoge: Ordner- und Dateiauswahl (serverseitig geblaettert), Rueckfrage, Transkript-Vorschau.
 // Native <dialog>-Elemente: Fokusfalle, Esc und Hintergrund kommen vom Browser.
 
+import { tr } from './i18n.js';
 import { $, S, api, post, esc, icon, empty, sep, toast } from './kern.js';
 
 // --- Ordner / Dateien waehlen ------------------------------------------------------------
@@ -12,7 +13,7 @@ let pick = null;   // {files, resolve, path, chosen:Set}
  * Zuerst der Dialog des Betriebssystems (Finder/Explorer, vom Server geoeffnet - er laeuft auf
  * demselben Rechner); gibt es keinen (WSL, ohne Desktop), blaettert der eingebaute Dialog im Server.
  */
-export async function pickFolder({ title = 'Ordner wählen', start = '', ok = 'Diesen Ordner wählen' } = {}) {
+export async function pickFolder({ title = tr('Ordner wählen'), start = '', ok = tr('Diesen Ordner wählen') } = {}) {
   if (S.kontext && S.kontext.dialog_nativ) {
     try {
       const r = await post('/api/dialog/ordner', { start, titel: title });
@@ -26,8 +27,8 @@ export async function pickFolder({ title = 'Ordner wählen', start = '', ok = 'D
 }
 
 /** Mediendateien eines Ordners waehlen. Loest mit {dir, names} auf oder mit null. */
-export function pickFiles({ title = 'Aufnahme wählen', start = '' } = {}) {
-  return openPick({ title, start, ok: 'Auswahl übernehmen', files: true });
+export function pickFiles({ title = tr('Aufnahme wählen'), start = '' } = {}) {
+  return openPick({ title, start, ok: tr('Auswahl übernehmen'), files: true });
 }
 
 function openPick({ title, start, ok, files }) {
@@ -65,12 +66,12 @@ async function showDir(path) {
     let files = '';
     if (pick.files) {
       files = data.files.length
-        ? `<div class="group">Aufnahmen in diesem Ordner</div>` + data.files.map((f) =>
+        ? `<div class="group">${tr('Aufnahmen in diesem Ordner')}</div>` + data.files.map((f) =>
           `<div class="file"><label><input type="checkbox" value="${esc(f.name)}" ${pick.chosen.has(f.name) ? 'checked' : ''} />`
           + `${icon('film')}<span>${esc(f.name)}</span><span class="size">${f.mb} MB</span></label></div>`).join('')
-        : `<div class="group">Keine Audio- oder Videodateien in diesem Ordner</div>`;
+        : `<div class="group">${tr('Keine Audio- oder Videodateien in diesem Ordner')}</div>`;
     }
-    $('dlgList').innerHTML = up + (dirs || (pick.files ? '' : empty('folder', 'Keine Unterordner.'))) + files;
+    $('dlgList').innerHTML = up + (dirs || (pick.files ? '' : empty('folder', tr('Keine Unterordner.')))) + files;
     updatePickInfo(data);
   } catch (err) {
     $('dlgInfo').textContent = err.message;
@@ -81,10 +82,10 @@ function updatePickInfo(data) {
   if (!pick) return;
   if (pick.files) {
     const n = pick.chosen.size;
-    $('dlgInfo').textContent = n ? `${n} Datei${n === 1 ? '' : 'en'} gewählt – ${pick.path}` : `${pick.path} – Datei ankreuzen`;
+    $('dlgInfo').textContent = n === 1 ? tr('1 Datei gewählt – {pfad}', { pfad: pick.path }) : n ? tr('{n} Dateien gewählt – {pfad}', { n, pfad: pick.path }) : tr('{pfad} – Datei ankreuzen', { pfad: pick.path });
     $('dlgOk').disabled = n === 0;
   } else {
-    $('dlgInfo').textContent = data ? `${data.path} – ${data.media_count} Medien-Datei(en)` : pick.path;
+    $('dlgInfo').textContent = data ? tr('{pfad} – {n} Medien-Datei(en)', { pfad: data.path, n: data.media_count }) : pick.path;
     $('dlgOk').disabled = false;
   }
 }
@@ -146,13 +147,13 @@ $('confirm').addEventListener('click', (e) => { if (e.target === $('confirm')) c
 
 /** Fertiges Transkript eines Ergebnisordners zeigen (annotierte Fassung bevorzugt). */
 export async function showTranscript(ordner, titel) {
-  $('previewTitle').querySelector('span').textContent = titel || 'Transkript';
+  $('previewTitle').querySelector('span').textContent = titel || tr('Transkript');
   $('previewPath').textContent = '';
-  $('previewText').textContent = 'Lädt …';
+  $('previewText').textContent = tr('Lädt …');
   $('previewDlg').showModal();
   try {
     const data = await api('/api/transkript?pfad=' + encodeURIComponent(ordner));
-    $('previewPath').textContent = data.datei + (data.gekuerzt ? ' – gekürzt angezeigt' : '');
+    $('previewPath').textContent = data.datei + (data.gekuerzt ? tr(' – gekürzt angezeigt') : '');
     $('previewText').textContent = data.text;
   } catch (err) {
     $('previewText').textContent = err.message;

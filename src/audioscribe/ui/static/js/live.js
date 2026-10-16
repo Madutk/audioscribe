@@ -10,6 +10,9 @@ import { openWikiDialog } from './wiki.js';
 import { addHint, markSegment, hintBySeg, renderSouffleur, resetSouffleurView, gotoHint, setSouffleurHidden, renderHandover, zeigeWikiStatus, hinweisZahlen } from './souffleur.js';
 import { ladeVorgeschichte, demoZustand, vorspann } from './demo.js';
 import { pipStatus, umschalten as souffleurPip, einkoppeln as souffleurEinkoppeln, istAusgekoppelt, pipMoeglich } from './souffleur-pip.js';
+import { tr, englisch } from './i18n.js';
+
+const zahl = (v) => v.toLocaleString(englisch ? 'en-US' : 'de-DE');
 
 // --- Live Transcription -----------------------------------------------------
 
@@ -28,8 +31,8 @@ let liveDir = null;         // Sitzungsordner der laufenden bzw. letzten Sitzung
 let liveAblage = null;      // Wiki-Ablage dieser Sitzung (automatisch oder per Dialog)
 
 function fillDevices(sel, devices, chosen) {
-  const opts = [['default', 'Standardgerät'],
-    ...devices.map((d) => [String(d.index), d.name + (d.default ? ' (Standard)' : '')]), ['none', 'aus']];
+  const opts = [['default', tr('Standardgerät')],
+    ...devices.map((d) => [String(d.index), d.default ? tr('{name} (Standard)', { name: d.name }) : d.name]), ['none', tr('aus')]];
   sel.innerHTML = opts.map(([v, l]) => `<option value="${esc(v)}">${esc(l)}</option>`).join('');
   // Gemerkt wird der NAME: die Indizes wechseln mit jedem an- oder abgesteckten Geraet.
   const byName = devices.find((d) => d.name === chosen);
@@ -62,7 +65,7 @@ async function loadLiveDefaults() {
   $('livePermHint').hidden = !d.permission_hint;
   const mlx = S.defaults.backend === 'mlx';
   $('liveBackendHint').textContent = mlx
-    ? 'Apple Silicon: Live-Transkription über MLX (Metal-GPU), Sprecher und Nachschärfen über PyTorch/MPS.'
+    ? tr('Apple Silicon: Live-Transkription über MLX (Metal-GPU), Sprecher und Nachschärfen über PyTorch/MPS.')
     : '';
   $('liveBackendHint').hidden = !mlx;
   d.windows = d.windows || [];
@@ -137,33 +140,33 @@ function windowTileHtml(stamp, ausser = null) {
   // Nach einem Neuladen der Seite kennt die Fensterliste das Fenster der laufenden Aufnahme
   // vielleicht nicht mehr - der Aufnahmeprozess hat seinen Titel gemeldet.
   if (!chosen && liveSource.kind === 'window' && liveQuelle && liveQuelle.window === liveSource.id) {
-    chosen = { hwnd: liveSource.id, title: liveQuelle.label.replace(/^Fenster '(.*)'$/, '$1'), process: 'laufende Aufnahme' };
+    chosen = { hwnd: liveSource.id, title: liveQuelle.label.replace(/^(?:Fenster|Window) '(.*)'$/, '$1'), process: tr('laufende Aufnahme') };
   }
   if (!chosen && !liveDefaults.windows.length && liveSource.kind !== 'window') return '';  // z. B. ausserhalb von Windows/macOS
-  const attrs = 'data-winpick="window" tabindex="0" role="button" aria-haspopup="dialog" title="Anwendungsfenster wählen"';
+  const attrs = `data-winpick="window" tabindex="0" role="button" aria-haspopup="dialog" title="${tr('Anwendungsfenster wählen')}"`;
   if (!chosen) {
-    const text = ausser !== null && liveSource.kind === 'window' && liveSource.id === ausser ? 'Anderes Fenster wählen …' : 'Fenster wählen …';
-    return `<div class="monitor pick" ${attrs}><div class="none">${icon('image')}${text}</div>Anwendungsfenster</div>`;
+    const text = ausser !== null && liveSource.kind === 'window' && liveSource.id === ausser ? tr('Anderes Fenster wählen …') : tr('Fenster wählen …');
+    return `<div class="monitor pick" ${attrs}><div class="none">${icon('image')}${text}</div>${tr('Anwendungsfenster')}</div>`;
   }
   return `<div class="monitor pick active" ${attrs}><img src="/api/live/window/${chosen.hwnd}?t=${stamp}" alt="" data-fallback />`
     + `<span class="title" title="${esc(chosen.title)}">${esc(chosen.title)}</span>`
-    + `<span class="sub">${esc(chosen.process)} · ändern</span></div>`;
+    + `<span class="sub">${esc(chosen.process)} · ${tr('ändern')}</span></div>`;
 }
 
 /** Kachel "Testmodus": spielt ein gespeichertes Transkript ab statt aufzunehmen (FR-64). */
 const testTileHtml = () =>
   `<div class="monitor test ${isActive('transcript', 0) ? 'active' : ''}" id="liveTestTile" data-kind="transcript" data-id="0"`
-  + ` tabindex="0" role="button" aria-pressed="${isActive('transcript', 0)}" title="Gespeichertes Transkript abspielen – zum Prüfen des Souffleurs">`
-  + `<div class="none">${icon('fast-forward')}Transkript abspielen</div>Testmodus</div>`;
+  + ` tabindex="0" role="button" aria-pressed="${isActive('transcript', 0)}" title="${tr('Gespeichertes Transkript abspielen – zum Prüfen des Souffleurs')}">`
+  + `<div class="none">${icon('fast-forward')}${tr('Transkript abspielen')}</div>${tr('Testmodus')}</div>`;
 
 function renderSources() {
   const stamp = Date.now();  // Vorschaubild nie aus dem Browser-Cache
   const monitors = liveDefaults.monitors.map((m) =>
     sourceTile('monitor', m.index, `<img src="/api/live/monitor/${m.index}?t=${stamp}" alt="" />Monitor ${m.index} · ${m.width}×${m.height}`))
-    .join('') + sourceTile('none', 0, '<div class="none">ohne Bildschirm</div>nur Ton');
+    .join('') + sourceTile('none', 0, `<div class="none">${tr('ohne Bildschirm')}</div>${tr('nur Ton')}`);
   const prio = prioFenster();
   $('liveMonitors').innerHTML = `<div class="monitors">${monitors}${prioTileHtml(stamp)}${windowTileHtml(stamp, prio ? prio.hwnd : null)}${testTileHtml()}</div>`;
-  fallbackOnError($('liveMonitors'), 'kein Bild');
+  fallbackOnError($('liveMonitors'), tr('kein Bild'));
   updateSourceTiles();
   updateSourceHint();
 }
@@ -199,19 +202,19 @@ function renderWindowTile() {
   for (const t of $('liveMonitors').querySelectorAll('.monitor[data-kind]')) {
     t.classList.toggle('active', isActive(t.dataset.kind, Number(t.dataset.id)));
   }
-  fallbackOnError($('liveMonitors'), 'kein Bild');
+  fallbackOnError($('liveMonitors'), tr('kein Bild'));
   updateSourceTiles();
   updateSourceHint();
 }
 
 function updateSourceHint() {
   const quelle = liveSource.kind === 'window'
-    ? 'Nur das gewählte Fenster wird abgetastet – diese Oberfläche darf auf demselben Monitor liegen.'
+    ? tr('Nur das gewählte Fenster wird abgetastet – diese Oberfläche darf auf demselben Monitor liegen.')
     : liveSource.kind === 'monitor'
-      ? 'Diese Oberfläche gehört nicht auf den überwachten Monitor – neue Thumbnails würden sonst selbst Bildwechsel auslösen.'
+      ? tr('Diese Oberfläche gehört nicht auf den überwachten Monitor – neue Thumbnails würden sonst selbst Bildwechsel auslösen.')
       : '';
   const wechsel = liveRunning && !liveReplay
-    ? 'Ein Wechsel gilt sofort – das erste Bild der neuen Quelle wird gesichert.' : '';
+    ? tr('Ein Wechsel gilt sofort – das erste Bild der neuen Quelle wird gesichert.') : '';
   $('liveSourceHint').textContent = [quelle, wechsel].filter(Boolean).join(' ');
   updateTestMode();
 }
@@ -260,23 +263,23 @@ function updateTestMode() {
   $('liveTestOpts').hidden = !test;
   const tile = $('liveTestTile');
   if (tile) tile.setAttribute('aria-pressed', String(test));
-  $('liveStartLabel').textContent = test ? 'Abspielen starten' : 'Aufnahme starten';
+  $('liveStartLabel').textContent = test ? tr('Abspielen starten') : tr('Aufnahme starten');
   $('liveStartIcon').setAttribute('href', test ? '#i-play' : '#i-record');
 }
 
 function updateLiveTarget() {
-  const ziel = `${trimSep(S.folders.output_dir)}${sep()}live-JJJJ-MM-TT_hh-mm-ss`;
-  const link = projekt() && !projekt().demo ? ' <a class="goto" href="#/projekt/einstellungen">ändern</a>'
-    : modus() === 'aufnahme' ? ' <a class="goto" href="#/einstellungen">ändern</a>' : '';
-  $('liveTarget').innerHTML = `Gespeichert wird unter: <code>${esc(ziel)}</code>${link}`;
+  const ziel = `${trimSep(S.folders.output_dir)}${sep()}live-${tr('JJJJ-MM-TT')}_hh-mm-ss`;
+  const link = projekt() && !projekt().demo ? ` <a class="goto" href="#/projekt/einstellungen">${tr('ändern')}</a>`
+    : modus() === 'aufnahme' ? ` <a class="goto" href="#/einstellungen">${tr('ändern')}</a>` : '';
+  $('liveTarget').innerHTML = tr('Gespeichert wird unter: {pfad}', { pfad: `<code>${esc(ziel)}</code>` }) + link;
 }
 
 function resetLiveView() {
   liveOffset = 0; liveEvOffset = 0; liveShots = []; liveSession = null; lightboxIndex = 0;
   liveDir = null; liveAblage = null;
   $('liveNext').hidden = true; $('liveNext').innerHTML = ''; delete $('liveNext').dataset.key;
-  $('liveText').innerHTML = empty('mic', 'Noch keine Sitzung.');
-  $('liveThumbs').innerHTML = empty('image', 'Bildwechsel erscheinen hier.');
+  $('liveText').innerHTML = empty('mic', tr('Noch keine Sitzung.'));
+  $('liveThumbs').innerHTML = empty('image', tr('Bildwechsel erscheinen hier.'));
   $('liveLog').textContent = '';
   $('liveResult').innerHTML = ''; delete $('liveResult').dataset.key;
   $('liveFazit').innerHTML = ''; $('liveFazit').hidden = true;
@@ -290,15 +293,13 @@ function resetLiveView() {
 async function resetLive() {
   const restart = liveRunning;
   const ok = await askConfirm(restart ? {
-    title: 'Laufende Sitzung verwerfen?',
-    text: 'Die Aufnahme wird sofort abgebrochen, ohne Nachschärfen. Anschließend beginnt eine neue Sitzung '
-      + 'mit denselben Einstellungen. Die bisherigen Dateien bleiben im Sitzungsordner liegen.',
-    ok: 'Verwerfen und neu beginnen',
+    title: tr('Laufende Sitzung verwerfen?'),
+    text: tr('Die Aufnahme wird sofort abgebrochen, ohne Nachschärfen. Anschließend beginnt eine neue Sitzung mit denselben Einstellungen. Die bisherigen Dateien bleiben im Sitzungsordner liegen.'),
+    ok: tr('Verwerfen und neu beginnen'),
   } : {
-    title: 'Ansicht zurücksetzen?',
-    text: 'Transkript, Screenshots und Protokoll verschwinden aus der Oberfläche. '
-      + 'Der Sitzungsordner auf der Platte bleibt unverändert.',
-    ok: 'Zurücksetzen',
+    title: tr('Ansicht zurücksetzen?'),
+    text: tr('Transkript, Screenshots und Protokoll verschwinden aus der Oberfläche. Der Sitzungsordner auf der Platte bleibt unverändert.'),
+    ok: tr('Zurücksetzen'),
   });
   if (!ok) return;
   $('liveErr').textContent = '';
@@ -309,7 +310,7 @@ async function resetLive() {
     if (!restart) souffleurEinkoppeln();  // beim Neubeginnen bleibt das Mini-Fenster offen
     if (restart) await startLive();
     else await pollLive();
-    if (r.discarded) $('liveLog').textContent = `Verworfene Sitzung liegt noch unter: ${r.discarded}\n` + $('liveLog').textContent;
+    if (r.discarded) $('liveLog').textContent = tr('Verworfene Sitzung liegt noch unter: {pfad}', { pfad: r.discarded }) + '\n' + $('liveLog').textContent;
   } catch (err) {
     $('liveErr').textContent = err.message;
   } finally {
@@ -324,11 +325,11 @@ async function startLive(resume) {
   const test = liveSource.kind === 'transcript';
   const replay = test ? $('liveTestFile').value.trim() : '';
   if (test && !replay) {
-    $('liveErr').textContent = 'Testmodus: bitte einen Sitzungsordner oder eine Transkriptdatei (transkript.md, transcript.json) angeben.';
+    $('liveErr').textContent = tr('Testmodus: bitte einen Sitzungsordner oder eine Transkriptdatei (transkript.md, transcript.json) angeben.');
     return;
   }
   if (test && resume) {
-    $('liveErr').textContent = 'Zum Fortsetzen bitte links eine Bildquelle bzw. Audio wählen – der Testmodus nimmt nichts auf.';
+    $('liveErr').textContent = tr('Zum Fortsetzen bitte links eine Bildquelle bzw. Audio wählen – der Testmodus nimmt nichts auf.');
     loadUnterbrochen();
     return;
   }
@@ -385,14 +386,14 @@ function addLiveEvent(ev) {
     el.className = 'seg ' + (ev.track === 'mic' ? 'mic' : 'system');
     el.dataset.id = ev.id;  // Anker fuer die Souffleur-Markierung (hinweis.segment_id)
     el.innerHTML = `<span class="ts">[${tc(ev.start)}]</span><span class="who">${esc(ev.speaker)}:</span> `
-      + `${esc(ev.text)}<span class="lag" title="Verzögerung bis zur Anzeige">${secs(ev.delay)}</span>`;
+      + `${esc(ev.text)}<span class="lag" title="${tr('Verzögerung bis zur Anzeige')}">${secs(ev.delay)}</span>`;
     insertByTime(el, ev.start);
     // Der Hinweis kann vor seiner Zeile angekommen sein (Sortierung nach Zeit): Markierung nachziehen.
     const hint = hintBySeg.get(ev.id);
     if (hint) markSegment(hint);
   } else if (ev.type === 'shot') {
     const index = liveShots.push(ev) - 1;
-    const label = `Bild #${String(ev.id).padStart(4, '0')} – ${tc(ev.t)}`;
+    const label = tr('Bild #{nr} – {zeit}', { nr: String(ev.id).padStart(4, '0'), zeit: tc(ev.t) });
     el.className = 'shotmark';
     el.dataset.shot = index;
     el.innerHTML = icon('camera') + esc(label);
@@ -406,6 +407,7 @@ function addLiveEvent(ev) {
 
 const shotUrl = (shot) => `/api/live/frame/${encodeURIComponent(shot.file)}?s=${encodeURIComponent(liveSession || '')}`;
 
+// Deutsche Schluessel - uebersetzt erst bei der Anzeige (tr(PHASES[...]), en/module-b.js).
 const PHASES = {
   startet: 'startet …', laden: 'Modell wird geladen …', laeuft: 'Aufnahme läuft', stoppt: 'wird abgeschlossen …',
   abschluss: 'Souffleur schließt ab …', fertig: 'gespeichert', nachschaerfen: 'Nachschärfen …', beendet: 'beendet',
@@ -426,9 +428,9 @@ function renderSofort(q) {
   if (!q || !q.status) { box.hidden = true; box.textContent = ''; box.className = 'hint'; return; }
   box.hidden = false;
   box.className = q.status === 'fehler' ? 'err' : 'hint';
-  box.textContent = q.status === 'laeuft' ? 'Automatischer Start über die Verknüpfung – Geräte werden ermittelt …'
-    : q.status === 'gestartet' ? 'Automatisch gestartet (Verknüpfung „Sofort aufnehmen“) – mit den zuletzt benutzten Geräten.'
-      : `Automatischer Start fehlgeschlagen: ${q.fehler} – Geräte prüfen und „Aufnahme starten“ drücken.`;
+  box.textContent = q.status === 'laeuft' ? tr('Automatischer Start über die Verknüpfung – Geräte werden ermittelt …')
+    : q.status === 'gestartet' ? tr('Automatisch gestartet (Verknüpfung „Sofort aufnehmen“) – mit den zuletzt benutzten Geräten.')
+      : tr('Automatischer Start fehlgeschlagen: {fehler} – Geräte prüfen und „Aufnahme starten“ drücken.', { fehler: q.fehler });
 }
 
 async function pollLive() {
@@ -467,19 +469,19 @@ async function pollLive() {
   if (running && $('liveResume').firstChild) $('liveResume').innerHTML = '';
   $('liveStart').hidden = running;
   $('liveStop').hidden = !running;
-  $('liveStopLabel').textContent = s.phase === 'nachschaerfen' ? 'Nachschärfen abbrechen'
-    : s.stopping ? 'Sofort abbrechen' : 'Stoppen';
+  $('liveStopLabel').textContent = s.phase === 'nachschaerfen' ? tr('Nachschärfen abbrechen')
+    : s.stopping ? tr('Sofort abbrechen') : tr('Stoppen');
   // Erst sichtbar, wenn es etwas zurueckzusetzen gibt; waehrend der Aufnahme heisst es "Neu beginnen".
   $('liveReset').hidden = !running && !s.dir && !s.phase;
-  $('liveResetLabel').textContent = running ? 'Verwerfen und neu beginnen' : 'Zurücksetzen';
-  $('livePhase').textContent = (s.replay && s.phase === 'laeuft'
-    ? (s.pausiert ? 'angehalten' : 'Abspielen läuft') : PHASES[s.phase]) || 'bereit';
+  $('liveResetLabel').textContent = running ? tr('Verwerfen und neu beginnen') : tr('Zurücksetzen');
+  $('livePhase').textContent = s.replay && s.phase === 'laeuft'
+    ? (s.pausiert ? tr('angehalten') : tr('Abspielen läuft')) : PHASES[s.phase] ? tr(PHASES[s.phase]) : tr('bereit');
   $('livePhase').className = 'badge ' + (s.pausiert ? 'warn'
     : ({ laeuft: 'laeuft', abschluss: 'laeuft', fehler: 'fehler', beendet: 'fertig' }[s.phase] || ''));
   $('liveTestBadge').hidden = !s.replay;
   // Das Tempo gilt ab dem Start; ein Wechsel mitten im Abspielen haette keine Wirkung.
   $('liveTestSpeed').querySelectorAll('input').forEach((i) => { i.disabled = running; });
-  if (s.replay) $('liveTestBadge').textContent = `Testmodus ${s.replay_speed || replaySpeed()}×`;
+  if (s.replay) $('liveTestBadge').textContent = tr('Testmodus {tempo}×', { tempo: s.replay_speed || replaySpeed() });
 
   const st = s.stats;
   $('liveElapsed').textContent = st ? hms(st.elapsed) : '–';
@@ -488,9 +490,9 @@ async function pollLive() {
   gauge('liveBacklogBox', 'liveBacklog', st ? st.backlog : null, 3, 10);
   // Tooltip: gemessenes Tempo (Rechenzeit je Audiosekunde) und was die Sitzung gerade drosselt.
   const hints = [];
-  if (st && st.rtf !== null && st.rtf !== undefined) hints.push(`Tempo ${st.rtf.toLocaleString('de-DE')}× Echtzeit`);
-  if (st && st.catchup) hints.push('Aufholmodus: Abschnitte zusammengelegt, sparsam dekodiert');
-  if (st && st.partials_paused) hints.push('Vorschautext pausiert, bis der Rückstand abgebaut ist');
+  if (st && st.rtf !== null && st.rtf !== undefined) hints.push(tr('Tempo {x}× Echtzeit', { x: zahl(st.rtf) }));
+  if (st && st.catchup) hints.push(tr('Aufholmodus: Abschnitte zusammengelegt, sparsam dekodiert'));
+  if (st && st.partials_paused) hints.push(tr('Vorschautext pausiert, bis der Rückstand abgebaut ist'));
   $('liveBacklog').title = hints.join(' · ');
   $('liveLevelMic').style.width = Math.min(100, (st && running ? st.level_mic || 0 : 0) * 150) + '%';
   $('liveLevelSys').style.width = Math.min(100, (st && running ? st.level_sys || 0 : 0) * 150) + '%';
@@ -501,14 +503,15 @@ async function pollLive() {
   $('liveLoadBox').hidden = s.phase !== 'laden';
   $('liveLoadBarBox').classList.toggle('wait', !dl);
   $('liveLoadStep').textContent = dl
-    ? `Modell ${dl.model} wird heruntergeladen – ${mb(dl.done)} von ${mb(dl.total)} MB (${Math.floor(dl.done / dl.total * 100)} %)`
-    : `Modell ${s.model || ''} wird geladen …${s.step ? ' – ' + s.step : ''}`;
+    ? tr('Modell {modell} wird heruntergeladen – {fertig} von {gesamt} MB ({prozent} %)', {
+      modell: dl.model, fertig: mb(dl.done), gesamt: mb(dl.total), prozent: Math.floor(dl.done / dl.total * 100) })
+    : tr('Modell {modell} wird geladen …', { modell: s.model || '' }) + (s.step ? ' – ' + s.step : '');
   $('liveLoadBar').style.width = dl ? (dl.done / dl.total * 100) + '%' : '';
 
   const r = s.refine;
   $('liveRefineBox').hidden = s.phase !== 'nachschaerfen';
   if (r && r.index) {
-    $('liveRefineStep').innerHTML = `Nachschärfen – <span class="stage">Stufe ${r.index}/${r.total}: ${esc(r.name)}</span>`;
+    $('liveRefineStep').innerHTML = `${tr('Nachschärfen')} – <span class="stage">${tr('Stufe {i}/{n}: {name}', { i: r.index, n: r.total, name: esc(r.name) })}</span>`;
     $('liveRefineBar').style.width = Math.round(((r.index - 1) + (r.percent || 0) / 100) / r.total * 100) + '%';
   }
 
@@ -539,14 +542,15 @@ function renderResult(s, running) {
   const key = JSON.stringify([running, fehler, s.dir, demo, beendet, liveAblage && liveAblage.ordner, liveAblage && liveAblage.frei]);
   if (box.dataset.key === key) return;  // Poll alle 500 ms - nur bei Aenderung neu zeichnen
   box.dataset.key = key;
-  const ordner = s.dir && !demo ? `Sitzungsordner: <code>${esc(s.dir)}</code><br>
-       Die Live-Fassung liegt als <code>transkript.live.md</code> daneben.` : '';
+  const ordner = s.dir && !demo ? tr('Sitzungsordner: {pfad}', { pfad: `<code>${esc(s.dir)}</code>` }) + '<br>'
+    + tr('Die Live-Fassung liegt als {datei} daneben.', { datei: '<code>transkript.live.md</code>' }) : '';
   let ablage = '';
   if (beendet && liveAblage) {
-    ablage = `${liveAblage.frei ? 'Gespeichert' : 'Im Wiki gespeichert'}: <code>${esc(liveAblage.ordner)}</code>
-      <button class="ghost sm" type="button" data-folder="${esc(liveAblage.ordner)}">${icon('external')}Ordner öffnen</button>`;
+    const pfad = `<code>${esc(liveAblage.ordner)}</code>`;
+    ablage = `${liveAblage.frei ? tr('Gespeichert: {ordner}', { ordner: pfad }) : tr('Im Wiki gespeichert: {ordner}', { ordner: pfad })}
+      <button class="ghost sm" type="button" data-folder="${esc(liveAblage.ordner)}">${icon('external')}${tr('Ordner öffnen')}</button>`;
   } else if (beendet) {
-    ablage = `<button class="secondary sm" type="button" data-speichern-unter>${icon('book-plus')}Speichern unter …</button>`;
+    ablage = `<button class="secondary sm" type="button" data-speichern-unter>${icon('book-plus')}${tr('Speichern unter …')}</button>`;
   }
   box.innerHTML = !running && (fehler || ordner)
     ? `<div class="result ${s.phase === 'fehler' ? 'fehler' : ''}">${[fehler, ordner, ablage].filter(Boolean).join('<br>')}</div>` : '';
@@ -557,50 +561,55 @@ function renderResult(s, running) {
 function renderFazit(f) {
   const box = $('liveFazit');
   if (!f || (!f.live && !f.nachschaerfen)) { box.hidden = true; box.innerHTML = ''; return; }
-  const tempo = (v) => (v === null || v === undefined) ? '' : ` (${v.toLocaleString('de-DE')}× Echtzeit)`;
+  const tempo = (v) => (v === null || v === undefined) ? '' : ` (${tr('{x}× Echtzeit', { x: zahl(v) })})`;
+  const tempoVorschau = (v) => (v === null || v === undefined) ? '' : ` (${tr('{x}× inkl. Vorschau', { x: zahl(v) })})`;
   const rows = [];
   const l = f.live;
   if (l) {
-    rows.push(['Aufnahme', `${hms(l.aufnahme_s)} · Modelle geladen in ${secs(l.laden_s)} · Abschluss ${secs(l.abschluss_s)}`]);
+    rows.push([tr('Aufnahme'), tr('{dauer} · Modelle geladen in {laden} · Abschluss {abschluss}', {
+      dauer: hms(l.aufnahme_s), laden: secs(l.laden_s), abschluss: secs(l.abschluss_s) })]);
     // Tempo = nur Dekodieren; "inkl. Vorschau" zeigt, was die Vorschau obendrauf kostet.
-    let rechnen = `${secs(l.rechenzeit_s)}${tempo(l.tempo)} für ${l.abschnitte} Abschnitte`;
+    let rechnen = tr('{zeit}{tempo} für {n} Abschnitte', { zeit: secs(l.rechenzeit_s), tempo: tempo(l.tempo), n: l.abschnitte });
     const klammer = [];
-    if (l.zusammengelegt) klammer.push(`${l.zusammengelegt} zusammengelegt`);
-    if (l.eco_abschnitte) klammer.push(`${l.eco_abschnitte} sparsam dekodiert`);
-    if (l.uebersprechen_verworfen) klammer.push(`${l.uebersprechen_verworfen} als Übersprechen verworfen`);
+    if (l.zusammengelegt) klammer.push(tr('{n} zusammengelegt', { n: l.zusammengelegt }));
+    if (l.eco_abschnitte) klammer.push(tr('{n} sparsam dekodiert', { n: l.eco_abschnitte }));
+    if (l.uebersprechen_verworfen) klammer.push(tr('{n} als Übersprechen verworfen', { n: l.uebersprechen_verworfen }));
     if (klammer.length) rechnen += ` (${klammer.join(', ')})`;
-    if (l.sprecher_s) rechnen += ` · davon Sprecher ${secs(l.sprecher_s)}`;
-    if (l.vorschau_n) rechnen += ` · ${l.vorschau_n} Vorschauen ${secs(l.vorschau_s)}${tempo(l.tempo_inkl_vorschau).replace('× Echtzeit', '× inkl. Vorschau')}`;
-    rows.push(['Rechenzeit', rechnen]);
+    if (l.sprecher_s) rechnen += ' · ' + tr('davon Sprecher {dauer}', { dauer: secs(l.sprecher_s) });
+    if (l.vorschau_n) {
+      rechnen += ' · ' + tr('{n} Vorschauen {dauer}', { n: l.vorschau_n, dauer: secs(l.vorschau_s) }) + tempoVorschau(l.tempo_inkl_vorschau);
+    }
+    rows.push([tr('Rechenzeit'), rechnen]);
     if (l.abschnitte) {
-      let lag = `Ø ${secs(l.verzoegerung_mittel_s)} · Median ${secs(l.verzoegerung_median_s)} · max ${secs(l.verzoegerung_max_s)}`;
-      lag += ` · Rückstand max ${secs(l.rueckstand_max_s)}`;
+      let lag = tr('Ø {mittel} · Median {median} · max {max}', {
+        mittel: secs(l.verzoegerung_mittel_s), median: secs(l.verzoegerung_median_s), max: secs(l.verzoegerung_max_s) });
+      lag += ' · ' + tr('Rückstand max {dauer}', { dauer: secs(l.rueckstand_max_s) });
       if (l.aufholmodus_s) {
-        lag += ` · Aufholmodus ${secs(l.aufholmodus_s)}`;
+        lag += ' · ' + tr('Aufholmodus {dauer}', { dauer: secs(l.aufholmodus_s) });
         if (l.aufholmodus_anteil) lag += ` (${Math.round(l.aufholmodus_anteil * 100)} %)`;
       }
-      rows.push(['Verzögerung', lag]);
+      rows.push([tr('Verzögerung'), lag]);
     }
   }
   const n = f.nachschaerfen;
   if (n) {
     const stufen = (n.stufen || []).map((st) => `${st.name} ${secs(st.dauer_s)}`).join(' · ');
-    rows.push(['Nachschärfen', `${hms(n.gesamt_s)}${tempo(n.tempo)}${stufen ? ' · ' + stufen : ''}`]);
+    rows.push([tr('Nachschärfen'), `${hms(n.gesamt_s)}${tempo(n.tempo)}${stufen ? ' · ' + stufen : ''}`]);
     // Übersprechen: Mikrofon-Segmente, die nur das Lautsprecher-Echo der Gegenseite waren,
     // und der Abgleich mit den Live-Entscheidungen (zurückgeholt = live zu Unrecht verworfen).
     const u = n.uebersprechen;
     if (u && u.geprueft) {
       const abgleich = [];
-      if (u.bestaetigt) abgleich.push(`live bestätigt ${u.bestaetigt}`);
-      if (u.zurueckgeholt) abgleich.push(`zurückgeholt ${u.zurueckgeholt}`);
-      if (u.nachtraeglich_entfernt) abgleich.push(`nachträglich entfernt ${u.nachtraeglich_entfernt}`);
-      let text = `${u.verworfen} von ${u.geprueft} Mikrofon-Segmenten verworfen`;
+      if (u.bestaetigt) abgleich.push(tr('live bestätigt {n}', { n: u.bestaetigt }));
+      if (u.zurueckgeholt) abgleich.push(tr('zurückgeholt {n}', { n: u.zurueckgeholt }));
+      if (u.nachtraeglich_entfernt) abgleich.push(tr('nachträglich entfernt {n}', { n: u.nachtraeglich_entfernt }));
+      let text = tr('{verworfen} von {geprueft} Mikrofon-Segmenten verworfen', { verworfen: u.verworfen, geprueft: u.geprueft });
       if (abgleich.length) text += ` (${abgleich.join(', ')})`;
-      if (u.lag_s !== undefined && u.lag_s !== null) text += ` · Zeitversatz ${u.lag_s.toLocaleString('de-DE')} s`;
-      rows.push(['Übersprechen', text]);
+      if (u.lag_s !== undefined && u.lag_s !== null) text += ' · ' + tr('Zeitversatz {s} s', { s: zahl(u.lag_s) });
+      rows.push([tr('Übersprechen'), text]);
     }
   }
-  box.innerHTML = `<div class="result fazit"><b>Fazit</b><dl>${rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl></div>`;
+  box.innerHTML = `<div class="result fazit"><b>${tr('Fazit')}</b><dl>${rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl></div>`;
   box.hidden = false;
 }
 
@@ -609,7 +618,8 @@ function openLightbox(index) {
   lightboxIndex = (index + liveShots.length) % liveShots.length;
   const shot = liveShots[lightboxIndex];
   $('lightboxImg').src = shotUrl(shot);
-  $('lightboxCap').textContent = `Bild #${String(shot.id).padStart(4, '0')} – ${tc(shot.t)} (${lightboxIndex + 1} von ${liveShots.length})`;
+  $('lightboxCap').textContent = tr('Bild #{nr} – {zeit} ({i} von {n})', {
+    nr: String(shot.id).padStart(4, '0'), zeit: tc(shot.t), i: lightboxIndex + 1, n: liveShots.length });
   $('lightbox').classList.add('open');
 }
 
@@ -673,11 +683,11 @@ function renderWinList() {
   $('winList').innerHTML = groups.size
     ? [...groups].map(([process, ws]) =>
       `<div class="source-group${ws[0].bevorzugt ? ' prio' : ''}"><div class="source-title">${esc(process)}<span class="count">${ws.length}</span>`
-      + `${ws[0].bevorzugt ? '<span class="tag">bevorzugt</span>' : ''}</div>`
+      + `${ws[0].bevorzugt ? `<span class="tag">${tr('bevorzugt')}</span>` : ''}</div>`
       + `<div class="monitors">${ws.map((w) => winTile(w, stamp)).join('')}</div></div>`).join('')
-      + `<div class="empty" id="winNoMatch" hidden>${icon('monitor')}Kein Fenster passt zum Filter.</div>`
-    : empty('monitor', 'Keine Anwendungsfenster gefunden.');
-  fallbackOnError($('winList'), 'kein Bild');
+      + `<div class="empty" id="winNoMatch" hidden>${icon('monitor')}${tr('Kein Fenster passt zum Filter.')}</div>`
+    : empty('monitor', tr('Keine Anwendungsfenster gefunden.'));
+  fallbackOnError($('winList'), tr('kein Bild'));
   applyWinFilter();
 }
 
@@ -695,7 +705,8 @@ function applyWinFilter() {
   const noMatch = $('winNoMatch');
   if (noMatch) noMatch.hidden = shown > 0;
   $('winCount').textContent = tiles.length
-    ? (q ? `${shown} von ${tiles.length} Fenstern` : `${tiles.length} Fenster`) : '';
+    ? (q ? tr('{n} von {gesamt} Fenstern', { n: shown, gesamt: tiles.length })
+      : tiles.length === 1 ? tr('1 Fenster') : tr('{n} Fenster', { n: tiles.length })) : '';
 }
 
 function openWinPick(opener) {
@@ -842,6 +853,11 @@ export function aktualisiereLiveSprache(d) {
 
 // --- Nach der Sitzung: ins Wiki, zur KI (PRD §21) ---------------------------------------------
 
+/** "Transkript" bzw. "Transkript und n Bilder" - steht in den Karten jeweils am Satzanfang. */
+const transkriptUnd = (bilder) => (bilder ? tr('Transkript und {n} Bilder', { n: bilder }) : tr('Transkript'));
+const ordnerOeffnen = (pfad, cls) =>
+  `<button class="${cls}" type="button" data-folder="${esc(pfad)}">${icon('external')}${tr('Ordner öffnen')}</button>`;
+
 /** "Sofort aufnehmen": nach dem Stopp die Sitzung einem Projekt zuordnen. */
 function renderAblegen(s) {
   const box = $('liveNext');
@@ -853,22 +869,22 @@ function renderAblegen(s) {
   if (!zeigen) { box.innerHTML = ''; return; }
   const bilder = liveShots.length;
   const speichern = liveAblage
-    ? `<div class="next-item done"><b>${icon('check')}Gespeichert</b>
-        <span><code>${esc(liveAblage.ordner)}</code>${liveAblage.bilder ? ` · ${liveAblage.bilder} Bilder` : ''}</span>
-        <button class="ghost sm" type="button" data-folder="${esc(liveAblage.ordner)}">${icon('external')}Ordner öffnen</button></div>`
-    : `<div class="next-item"><b>${icon('book-plus')}Speichern unter …</b>
-        <span>Transkript${bilder ? ` und ${bilder} Bilder` : ''} in Ordner deiner Wahl – vorbelegt mit <code>raw/</code> des Wikis aus den Einstellungen, falls eins verknüpft ist.</span>
-        <button type="button" data-speichern-unter>${icon('book-plus')}Speichern unter …</button></div>`;
-  box.innerHTML = `<h3>Sitzung ablegen</h3>
-    <p>Die Sitzung liegt im Eingangsordner: <code>${esc(s.dir)}</code></p>
+    ? `<div class="next-item done"><b>${icon('check')}${tr('Gespeichert')}</b>
+        <span><code>${esc(liveAblage.ordner)}</code>${liveAblage.bilder ? ' · ' + tr('{n} Bilder', { n: liveAblage.bilder }) : ''}</span>
+        ${ordnerOeffnen(liveAblage.ordner, 'ghost sm')}</div>`
+    : `<div class="next-item"><b>${icon('book-plus')}${tr('Speichern unter …')}</b>
+        <span>${tr('{was} in Ordner deiner Wahl – vorbelegt mit {raw} des Wikis aus den Einstellungen, falls eins verknüpft ist.', { was: transkriptUnd(bilder), raw: '<code>raw/</code>' })}</span>
+        <button type="button" data-speichern-unter>${icon('book-plus')}${tr('Speichern unter …')}</button></div>`;
+  box.innerHTML = `<h3>${tr('Sitzung ablegen')}</h3>
+    <p>${tr('Die Sitzung liegt im Eingangsordner: {pfad}', { pfad: `<code>${esc(s.dir)}</code>` })}</p>
     <div class="next-grid">
       ${speichern}
-      <div class="next-item"><b>${icon('folder-open')}Einem Projekt zuordnen</b>
-        <span>In ein vorhandenes Projekt verschieben oder dafür ein neues anlegen – danach geht es dort ins Wiki oder zur KI.</span>
-        <button class="secondary" type="button" id="liveZuordnen">${icon('folder-open')}Projekt zuordnen …</button></div>
-      <div class="next-item"><b>${icon('history')}Später entscheiden</b>
-        <span>Die Sitzung wartet auf der Startseite unter „Aufnahmen ohne Projekt“.</span>
-        <button class="secondary" type="button" data-folder="${esc(s.dir)}">${icon('external')}Ordner öffnen</button></div>
+      <div class="next-item"><b>${icon('folder-open')}${tr('Einem Projekt zuordnen')}</b>
+        <span>${tr('In ein vorhandenes Projekt verschieben oder dafür ein neues anlegen – danach geht es dort ins Wiki oder zur KI.')}</span>
+        <button class="secondary" type="button" id="liveZuordnen">${icon('folder-open')}${tr('Projekt zuordnen …')}</button></div>
+      <div class="next-item"><b>${icon('history')}${tr('Später entscheiden')}</b>
+        <span>${tr('Die Sitzung wartet auf der Startseite unter „Aufnahmen ohne Projekt“.')}</span>
+        ${ordnerOeffnen(s.dir, 'secondary')}</div>
     </div>`;
 }
 
@@ -886,29 +902,32 @@ function renderNext(s) {
   const bilder = liveShots.length;
   let wiki = '';
   if (liveAblage) {
-    wiki = `<div class="next-item done"><b>${icon('check')}${liveAblage.frei ? 'Gespeichert' : 'Im Wiki gespeichert'}</b>
-      <span><code>${esc(liveAblage.ordner)}</code>${liveAblage.bilder ? ` · ${liveAblage.bilder} Bilder${liveAblage.frei ? '' : ' im Assets-Ordner'}` : ''}${liveAblage.markierungen ? ` · ${liveAblage.markierungen} Markierungen` : ''}</span>
-      <button class="ghost sm" type="button" data-folder="${esc(liveAblage.ordner)}">${icon('external')}Ordner öffnen</button></div>`;
+    const a = liveAblage;
+    const zusatz = (a.bilder ? ' · ' + (a.frei ? tr('{n} Bilder', { n: a.bilder }) : tr('{n} Bilder im Assets-Ordner', { n: a.bilder })) : '')
+      + (a.markierungen ? ' · ' + tr('{n} Markierungen', { n: a.markierungen }) : '');
+    wiki = `<div class="next-item done"><b>${icon('check')}${a.frei ? tr('Gespeichert') : tr('Im Wiki gespeichert')}</b>
+      <span><code>${esc(a.ordner)}</code>${zusatz}</span>
+      ${ordnerOeffnen(a.ordner, 'ghost sm')}</div>`;
   } else if (!p.hat_wiki) {
-    wiki = `<div class="next-item"><b>${icon('book-plus')}Speichern unter …</b>
-      <span>Dieses Projekt hat kein Wiki – Transkript${bilder ? ` und ${bilder} Bilder` : ''} lassen sich in Ordner deiner Wahl kopieren.
-        Mit einem Wiki ginge die Sitzung als neue Quelle hinein: <a class="goto" href="#/projekt/einstellungen">Wiki anlegen oder verknüpfen</a>.</span>
-      <button class="secondary" type="button" data-speichern-unter>${icon('book-plus')}Speichern unter …</button></div>`;
+    const link = `<a class="goto" href="#/projekt/einstellungen">${tr('Wiki anlegen oder verknüpfen')}</a>`;
+    wiki = `<div class="next-item"><b>${icon('book-plus')}${tr('Speichern unter …')}</b>
+      <span>${tr('Dieses Projekt hat kein Wiki – {was} lassen sich in Ordner deiner Wahl kopieren.', { was: transkriptUnd(bilder) })}
+        ${tr('Mit einem Wiki ginge die Sitzung als neue Quelle hinein: {link}.', { link })}</span>
+      <button class="secondary" type="button" data-speichern-unter>${icon('book-plus')}${tr('Speichern unter …')}</button></div>`;
   } else if (p.wiki_speichern !== 'nie' || fehler) {
-    wiki = `<div class="next-item"><b>${icon('book-plus')}Ins Wiki speichern</b>
-      <span>${fehler ? `<span class="err">${esc(fehler)}</span>` : ''}Transkript${bilder ? ` und ${bilder} Bilder` : ''}
-        als neue Quelle unter <code>raw/</code> ablegen – oder unter einem anderen Ort; die Markierungen des Souffleurs nur auf Wunsch.</span>
-      <button type="button" id="liveWikiSave" data-speichern-unter>${icon('book-plus')}Ins Wiki speichern …</button></div>`;
+    wiki = `<div class="next-item"><b>${icon('book-plus')}${tr('Ins Wiki speichern')}</b>
+      <span>${fehler ? `<span class="err">${esc(fehler)}</span>` : ''}${tr('{was} als neue Quelle unter {raw} ablegen – oder unter einem anderen Ort; die Markierungen des Souffleurs nur auf Wunsch.', { was: transkriptUnd(bilder), raw: '<code>raw/</code>' })}</span>
+      <button type="button" id="liveWikiSave" data-speichern-unter>${icon('book-plus')}${tr('Ins Wiki speichern …')}</button></div>`;
   } else {
-    wiki = `<div class="next-item"><b>${icon('book-plus')}Speichern unter …</b>
-      <span>Transkript${bilder ? ` und ${bilder} Bilder` : ''} ins Wiki oder in Ordner deiner Wahl kopieren.</span>
-      <button class="secondary" type="button" data-speichern-unter>${icon('book-plus')}Speichern unter …</button></div>`;
+    wiki = `<div class="next-item"><b>${icon('book-plus')}${tr('Speichern unter …')}</b>
+      <span>${tr('{was} ins Wiki oder in Ordner deiner Wahl kopieren.', { was: transkriptUnd(bilder) })}</span>
+      <button class="secondary" type="button" data-speichern-unter>${icon('book-plus')}${tr('Speichern unter …')}</button></div>`;
   }
-  const ki = cloudCompliant() ? '' : `<div class="next-item"><b>${icon('sparkles')}Mit KI nachbereiten</b>
-      <span>Die KI wertet Transkript und Bilder aus. Das Ergebnis kann danach ebenfalls ins Wiki.</span>
-      <button class="secondary" type="button" id="liveToKi">Zur Nachbereitung${icon('arrow-right')}</button></div>`;
-  box.innerHTML = `<h3>Wie geht es weiter?</h3>
-    <p>Die Sitzung ist im Sitzungsordner gesichert.${ki ? ' Beides ist möglich – in beliebiger Reihenfolge.' : ''}</p>
+  const ki = cloudCompliant() ? '' : `<div class="next-item"><b>${icon('sparkles')}${tr('Mit KI nachbereiten')}</b>
+      <span>${tr('Die KI wertet Transkript und Bilder aus. Das Ergebnis kann danach ebenfalls ins Wiki.')}</span>
+      <button class="secondary" type="button" id="liveToKi">${tr('Zur Nachbereitung')}${icon('arrow-right')}</button></div>`;
+  box.innerHTML = `<h3>${tr('Wie geht es weiter?')}</h3>
+    <p>${tr('Die Sitzung ist im Sitzungsordner gesichert.')}${ki ? ' ' + tr('Beides ist möglich – in beliebiger Reihenfolge.') : ''}</p>
     <div class="next-grid">${wiki}${ki}</div>`;
 }
 
@@ -958,13 +977,13 @@ async function loadUnterbrochen() {
   box.innerHTML = liste.map((s) => `
     <div class="banner" role="status">
       ${icon('triangle')}
-      <div class="text"><b>Unterbrochene Sitzung${s.titel ? ` „${esc(s.titel)}“` : ''}</b>
-        <small>${esc(s.gestartet ? s.gestartet.replace('T', ' ').slice(0, 16) : s.name)} · ${hms(s.dauer_s || 0)} aufgezeichnet ·
-          ${s.segmente || 0} Abschnitte gesichert. Fortsetzen nimmt mit den links gewählten Geräten weiter auf.</small></div>
+      <div class="text"><b>${s.titel ? tr('Unterbrochene Sitzung „{titel}“', { titel: esc(s.titel) }) : tr('Unterbrochene Sitzung')}</b>
+        <small>${esc(s.gestartet ? s.gestartet.replace('T', ' ').slice(0, 16) : s.name)} · ${tr('{dauer} aufgezeichnet', { dauer: hms(s.dauer_s || 0) })} ·
+          ${tr('{n} Abschnitte gesichert.', { n: s.segmente || 0 })} ${tr('Fortsetzen nimmt mit den links gewählten Geräten weiter auf.')}</small></div>
       <div class="actions">
-        <button type="button" data-resume="${esc(s.dir)}" data-titel="${esc(s.titel || '')}">${icon('record')}Fortsetzen</button>
-        <button class="secondary" type="button" data-finalize="${esc(s.dir)}">${icon('check')}Abschließen</button>
-        <button class="ghost" type="button" data-discard="${esc(s.dir)}">Verwerfen</button>
+        <button type="button" data-resume="${esc(s.dir)}" data-titel="${esc(s.titel || '')}">${icon('record')}${tr('Fortsetzen')}</button>
+        <button class="secondary" type="button" data-finalize="${esc(s.dir)}">${icon('check')}${tr('Abschließen')}</button>
+        <button class="ghost" type="button" data-discard="${esc(s.dir)}">${tr('Verwerfen')}</button>
       </div>
     </div>`).join('');
 }
@@ -986,9 +1005,9 @@ $('liveResume').addEventListener('click', async (e) => {
       pollLive();
     } else if (discard) {
       const ok = await askConfirm({
-        title: 'Unterbrochene Sitzung verwerfen?',
-        text: 'Die Sitzung wird nicht mehr zum Fortsetzen angeboten. Mitschnitt und bisheriges Transkript bleiben im Sitzungsordner liegen.',
-        ok: 'Verwerfen',
+        title: tr('Unterbrochene Sitzung verwerfen?'),
+        text: tr('Die Sitzung wird nicht mehr zum Fortsetzen angeboten. Mitschnitt und bisheriges Transkript bleiben im Sitzungsordner liegen.'),
+        ok: tr('Verwerfen'),
       });
       if (ok) { await post('/api/live/verwerfen', { sitzung: discard.dataset.discard }); loadUnterbrochen(); }
     }
@@ -1008,9 +1027,10 @@ function renderDemo(s) {
   const pausiert = !!s.pausiert;
   $('demoPause').hidden = !(s.running && s.phase === 'laeuft');
   $('demoPause').setAttribute('aria-pressed', String(pausiert));
-  $('demoPauseLabel').textContent = pausiert ? 'Weiter' : 'Pause';
+  // "Weiter" heisst im Assistenten "Next" (en/seite.js) - hier ist es Fortsetzen nach der Pause.
+  $('demoPauseLabel').textContent = englisch ? (pausiert ? tr('Fortsetzen') : tr('Pause')) : (pausiert ? 'Weiter' : 'Pause');
   $('demoPauseIcon').setAttribute('href', pausiert ? '#i-play' : '#i-pause');
-  $('demoStart').lastChild.textContent = s.phase === 'beendet' || s.phase === 'fehler' ? 'Demo erneut starten' : 'Demo starten';
+  $('demoStart').lastChild.textContent = s.phase === 'beendet' || s.phase === 'fehler' ? tr('Demo erneut starten') : tr('Demo starten');
   demoZustand(s, hinweisZahlen());
 }
 
@@ -1045,7 +1065,7 @@ $('pickLiveTestFile').onclick = async () => {
   let start = $('liveTestFile').value;
   // Im Testfeld darf eine Datei stehen (transkript.md) - der Dialog zeigt dann ihren Ordner.
   if (/\.(md|json)\s*$/i.test(start)) start = start.replace(/[\\/][^\\/]*$/, '');
-  const pfad = await pickFolder({ title: 'Sitzungsordner zum Abspielen wählen', start: start.trim() || S.folders.output_dir });
+  const pfad = await pickFolder({ title: tr('Sitzungsordner zum Abspielen wählen'), start: start.trim() || S.folders.output_dir });
   if (pfad) { $('liveTestFile').value = pfad; rememberReplay(); }
 };
 

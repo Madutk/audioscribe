@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from audioscribe.i18n import tr
 from audioscribe.live.fenster import group_by_process
 
 
@@ -21,15 +22,15 @@ def inventory() -> dict:
     except ImportError:
         from audioscribe.live.capture import INSTALL_HINT
 
-        out["problems"].append(f"mss fehlt -> {INSTALL_HINT}")
+        out["problems"].append(tr("mss fehlt -> {hinweis}", hinweis=INSTALL_HINT))
     except Exception as exc:  # noqa: BLE001
-        out["problems"].append(f"Monitore nicht lesbar: {exc}")
+        out["problems"].append(tr("Monitore nicht lesbar: {fehler}", fehler=exc))
     try:
         from audioscribe.live.fenster import list_windows
 
         out["windows"] = list_windows()  # leer außerhalb von Windows und macOS
     except Exception as exc:  # noqa: BLE001
-        out["problems"].append(f"Fenster nicht lesbar: {exc}")
+        out["problems"].append(tr("Fenster nicht lesbar: {fehler}", fehler=exc))
     return out
 
 

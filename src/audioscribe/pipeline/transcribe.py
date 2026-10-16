@@ -18,6 +18,7 @@ from audioscribe.config import (
     settings,
     torch_device,
 )
+from audioscribe.i18n import tr
 from audioscribe.progress import Reporter, emit_download
 
 
@@ -59,7 +60,7 @@ def transcribe(audio, reporter: Reporter | None = None) -> dict:
 
         whisper_model = fetch_model(whisper_model, emit_download)
     if reporter:
-        reporter.info("Modell wird geladen ...")
+        reporter.info(tr("Modell wird geladen ..."))
     model = whisperx.load_model(
         whisper_model,
         device=device,
@@ -67,7 +68,7 @@ def transcribe(audio, reporter: Reporter | None = None) -> dict:
         language=language,
     )
     if reporter:
-        reporter.info("Transkribiere ...")
+        reporter.info(tr("Transkribiere ..."))
     try:
         # print_progress: WhisperX druckt je VAD-Abschnitt (~30 s Audio) "Progress: N%..." -
         # die Fortschrittsquelle fuer die Oberflaeche. Im Terminal standardmaessig aus.
@@ -79,14 +80,18 @@ def transcribe(audio, reporter: Reporter | None = None) -> dict:
         # (stilles/sprachloses Audio) -> leeres Transkript statt Absturz.
         result = {"segments": [], "language": language or "de"}
         if reporter:
-            reporter.info("Keine aktive Sprache erkannt -> leeres Transkript")
+            reporter.info(tr("Keine aktive Sprache erkannt -> leeres Transkript"))
     finally:
         del model
         _free_vram()
 
     if reporter:
         reporter.info(
-            f"Sprache: {result.get('language', '?')}, {len(result.get('segments', []))} Segmente"
+            tr(
+                "Sprache: {sprache}, {anzahl} Segmente",
+                sprache=result.get("language", "?"),
+                anzahl=len(result.get("segments", [])),
+            )
         )
     return result
 
@@ -103,7 +108,7 @@ def align(audio, result: dict, reporter: Reporter | None = None) -> dict:
 
     if not result.get("segments"):
         if reporter:
-            reporter.info("Alignment uebersprungen (keine Segmente)")
+            reporter.info(tr("Alignment uebersprungen (keine Segmente)"))
         return result
 
     apply_torch_load_compat()
@@ -115,7 +120,7 @@ def align(audio, result: dict, reporter: Reporter | None = None) -> dict:
         align_model, metadata = whisperx.load_align_model(language_code=language, device=device)
     except Exception as exc:  # noqa: BLE001 - z.B. keine Modellgewichte fuer die Sprache
         if reporter:
-            reporter.info(f"Alignment uebersprungen (kein Modell fuer '{language}': {exc})")
+            reporter.info(tr("Alignment uebersprungen (kein Modell fuer '{sprache}': {fehler})", sprache=language, fehler=exc))
         return result
 
     try:
@@ -133,5 +138,5 @@ def align(audio, result: dict, reporter: Reporter | None = None) -> dict:
 
     aligned["language"] = language
     if reporter:
-        reporter.info("Wort-Zeitstempel ausgerichtet")
+        reporter.info(tr("Wort-Zeitstempel ausgerichtet"))
     return aligned

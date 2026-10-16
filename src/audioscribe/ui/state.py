@@ -67,9 +67,12 @@ STATE_KEYS: tuple[str, ...] = (
     "eingang_dir",
     # Darstellung der Oberflaeche: "system" folgt der Betriebssystem-Einstellung.
     "theme",
+    # Sprache der Oberflaeche (i18n): "de" oder "en" - gilt auch fuer Demo und Souffleur-Hinweise.
+    "ui_sprache",
 )
 
 THEMES: tuple[str, ...] = ("system", "light", "dark")
+UI_SPRACHEN: tuple[str, ...] = ("de", "en")
 LIVE_SOURCES: tuple[str, ...] = ("monitor", "window", "none", "transcript")
 
 _BOOL_KEYS = (
@@ -156,6 +159,10 @@ def _clean(values: Mapping[str, object]) -> dict:
         elif key == "theme":
             # Landet unescaped im HTML-Attribut - darum nur die drei bekannten Werte.
             if value in THEMES:
+                out[key] = value
+        elif key == "ui_sprache":
+            # Landet unescaped im lang-Attribut - darum nur die bekannten Sprachen.
+            if value in UI_SPRACHEN:
                 out[key] = value
         elif key == "live_source":
             if value in LIVE_SOURCES:

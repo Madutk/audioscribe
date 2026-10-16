@@ -15,6 +15,8 @@ import os
 import sys
 import threading
 
+from audioscribe.i18n import tr
+
 ERTEILT = "erteilt"
 NICHT_GEFRAGT = "nicht gefragt"
 VERWEIGERT = "verweigert"
@@ -125,47 +127,67 @@ def pyobjc_fehlt() -> bool:
     return False
 
 
-def bewerte(
+def _bewerte(
     *, bildschirm: bool | None, mikrofon: str, host: str, pyobjc_fehlt: bool = False
-) -> tuple[str, list[str]]:
-    """Deutsche Hinweise für doctor und Oberfläche (rein, testbar).
-
-    Liefert ``(status, teile)`` mit Status ``OK`` | ``WARN``.
-    """
+) -> tuple[str, list[tuple[str, bool]]]:
+    """Wie ``bewerte``, je Teil mit Kennzeichen, ob er ein Problem meldet (für ``hinweis``)."""
     if pyobjc_fehlt:
-        return "WARN", [f"PyObjC fehlt -> 'uv sync --extra cpu --extra mac --extra live'"]
-    teile: list[str] = []
+        return "WARN", [(tr("PyObjC fehlt -> 'uv sync --extra cpu --extra mac --extra live'"), True)]
+    teile: list[tuple[str, bool]] = []
     status = "OK"
     if bildschirm is True:
-        teile.append("Bildschirmaufnahme: erteilt")
+        teile.append((tr("Bildschirmaufnahme: erteilt"), False))
     elif bildschirm is False:
         status = "WARN"
         teile.append(
-            "Bildschirmaufnahme FEHLT -> Systemeinstellungen > Datenschutz & Sicherheit > "
-            f"Bildschirmaufnahme: '{host}' erlauben und die App neu starten "
-            "(System-Audio und Standbilder brauchen sie)"
+            (
+                tr(
+                    "Bildschirmaufnahme FEHLT -> Systemeinstellungen > Datenschutz & Sicherheit > "
+                    "Bildschirmaufnahme: '{host}' erlauben und die App neu starten "
+                    "(System-Audio und Standbilder brauchen sie)",
+                    host=host,
+                ),
+                True,
+            )
         )
     if mikrofon == ERTEILT:
-        teile.append("Mikrofon: erteilt")
+        teile.append((tr("Mikrofon: erteilt"), False))
     elif mikrofon == NICHT_GEFRAGT:
-        teile.append("Mikrofon: noch nicht abgefragt (Dialog beim ersten Start)")
+        teile.append((tr("Mikrofon: noch nicht abgefragt (Dialog beim ersten Start)"), False))
     elif mikrofon == VERWEIGERT:
         status = "WARN"
         teile.append(
-            "Mikrofon: verweigert -> Systemeinstellungen > Datenschutz & Sicherheit > "
-            f"Mikrofon: '{host}' erlauben"
+            (
+                tr(
+                    "Mikrofon: verweigert -> Systemeinstellungen > Datenschutz & Sicherheit > "
+                    "Mikrofon: '{host}' erlauben",
+                    host=host,
+                ),
+                True,
+            )
         )
     elif mikrofon == GESPERRT:
         status = "WARN"
-        teile.append("Mikrofon: durch Richtlinie gesperrt")
+        teile.append((tr("Mikrofon: durch Richtlinie gesperrt"), True))
     return status, teile
+
+
+def bewerte(
+    *, bildschirm: bool | None, mikrofon: str, host: str, pyobjc_fehlt: bool = False
+) -> tuple[str, list[str]]:
+    """Hinweise für doctor und Oberfläche in deren Sprache (rein, testbar).
+
+    Liefert ``(status, teile)`` mit Status ``OK`` | ``WARN``.
+    """
+    status, teile = _bewerte(bildschirm=bildschirm, mikrofon=mikrofon, host=host, pyobjc_fehlt=pyobjc_fehlt)
+    return status, [text for text, _ in teile]
 
 
 def hinweis() -> str:
     """Einzeiliger Hinweis für die Oberfläche; leer, wenn alles erteilt ist oder kein Mac."""
     if not ist_mac():
         return ""
-    status, teile = bewerte(
+    status, teile = _bewerte(
         bildschirm=bildschirm_erlaubt(), mikrofon=mikrofon_status(), host=host_app(), pyobjc_fehlt=pyobjc_fehlt()
     )
-    return "" if status == "OK" else "; ".join(t for t in teile if "FEHLT" in t or "verweigert" in t or "gesperrt" in t or "fehlt" in t)
+    return "" if status == "OK" else "; ".join(text for text, problem in teile if problem)

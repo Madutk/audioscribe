@@ -12,6 +12,7 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
 
+from audioscribe.i18n import sprache, tr
 from audioscribe.models import format_timecode
 from audioscribe.souffleur.ki import KiAntwort, KiAuftrag, KiDienst, KiFehler
 
@@ -53,7 +54,9 @@ class Essenz:
 
 
 def system_prompt() -> str:
-    return (_PROMPT_DIR / "essenz.md").read_text(encoding="utf-8").strip()
+    from audioscribe.souffleur.prompt import prompt_datei
+
+    return prompt_datei("essenz").read_text(encoding="utf-8").strip()
 
 
 def im_fenster(segmente: list[dict], *, jetzt: float, minuten: int) -> list[dict]:
@@ -63,9 +66,14 @@ def im_fenster(segmente: list[dict], *, jetzt: float, minuten: int) -> list[dict
 
 
 def prompt(segmente: list[dict], *, minuten: int, t_von: float, t_bis: float) -> str:
-    zeilen = [f"## Ausschnitt ({minuten} Minuten, {format_timecode(t_von)} bis {format_timecode(t_bis)})", ""]
+    von, bis = format_timecode(t_von), format_timecode(t_bis)
+    if sprache() == "en":
+        kopf, unbekannt = f"## Excerpt ({minuten} minutes, {von} to {bis})", "Unknown"
+    else:
+        kopf, unbekannt = f"## Ausschnitt ({minuten} Minuten, {von} bis {bis})", "Unbekannt"
+    zeilen = [kopf, ""]
     for s in segmente:
-        zeilen.append(f"[{format_timecode(float(s['start']))}] {s.get('speaker') or 'Unbekannt'}: {s['text']}")
+        zeilen.append(f"[{format_timecode(float(s['start']))}] {s.get('speaker') or unbekannt}: {s['text']}")
     return "\n".join(zeilen)
 
 
@@ -76,7 +84,7 @@ def erzeuge(ki: KiDienst, segmente: list[dict], *, jetzt: float, minuten: int, t
     auswahl = im_fenster(segmente, jetzt=jetzt, minuten=minuten)
     t_von, t_bis = max(0.0, jetzt - minuten * 60), jetzt
     if not auswahl:
-        raise KiFehler(f"In den letzten {minuten} Minuten wurde nichts transkribiert.")
+        raise KiFehler(tr("In den letzten {minuten} Minuten wurde nichts transkribiert.", minuten=minuten))
     auftrag = KiAuftrag(
         system=system_prompt(),
         prompt=prompt(auswahl, minuten=minuten, t_von=t_von, t_bis=t_bis),

@@ -8,6 +8,8 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232f6be6' stroke-width='2.4' stroke-linecap='round'%3E%3Cpath d='M2 10v3M6 6v11M10 3v18M14 8v7M18 5v13M22 10v3'/%3E%3C/svg%3E" />
 <link rel="stylesheet" href="/static/style.css" />
 <link rel="stylesheet" href="/static/css/shell.css" />
+<!-- Englische Oberflaeche: erst zeigen, wenn der statische Text uebersetzt ist (js/uebersetzen.js). -->
+<style>html[lang="en"]:not(.uebersetzt) body { visibility: hidden; }</style>
 </head>
 <body data-modus="start" data-view="start">
 <!-- Icon-Sprite (Lucide-Linien). Bewusst nicht 'hidden': [hidden] wuerde die <use>-Verweise leeren. -->
@@ -697,6 +699,9 @@
     </div>
     <div class="card">
       <h2 class="card-title"><svg class="ic" aria-hidden="true"><use href="#i-mic"/></svg>Sprache</h2>
+      <div class="field"><label for="gUiSprache">Sprache der Oberfläche</label>
+        <select id="gUiSprache" translate="no"><option value="de">Deutsch</option><option value="en">English</option></select>
+        <p class="hint">Menüs, Meldungen, Souffleur-Hinweise und Demo. Die Seite lädt dafür neu.</p></div>
       <div class="field"><label for="gSprache">Sprache der Aufnahmen</label><select id="gSprache"></select>
         <p class="hint">Vorgabe für Transkription und Live-Sitzung. „Automatisch erkennen“ kostet etwas Zeit je Lauf.</p></div>
       <div class="err" id="gErr" role="alert"></div>

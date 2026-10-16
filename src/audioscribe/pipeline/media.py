@@ -15,6 +15,7 @@ import tempfile
 from pathlib import Path
 
 from audioscribe.config import ensure_ffmpeg_on_path, settings
+from audioscribe.i18n import tr
 from audioscribe.progress import Reporter
 
 # Container, die wir als Video behandeln (Audiospur wird extrahiert).
@@ -65,12 +66,13 @@ def extract_audio(video: Path, reporter: Reporter | None = None) -> Path:
         out.unlink(missing_ok=True)
         tail = (proc.stderr or "").strip().splitlines()[-8:]
         raise RuntimeError(
-            f"Audio-Extraktion aus '{video.name}' fehlgeschlagen "
-            f"(hat die Datei eine Tonspur?).\n" + "\n".join(tail)
+            tr("Audio-Extraktion aus '{name}' fehlgeschlagen (hat die Datei eine Tonspur?).", name=video.name)
+            + "\n"
+            + "\n".join(tail)
         )
 
     if reporter:
-        reporter.info(f"Audiospur extrahiert -> work/{out.name}")
+        reporter.info(tr("Audiospur extrahiert -> work/{name}", name=out.name))
     return out
 
 

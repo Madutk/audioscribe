@@ -14,6 +14,8 @@ from __future__ import annotations
 
 from typing import Literal
 
+from audioscribe.i18n import tr
+
 TokenStatus = Literal["OK", "FEHLT", "UNGUELTIG", "UNPRUEFBAR"]
 
 TOKENS_URL = "https://huggingface.co/settings/tokens"
@@ -35,12 +37,12 @@ def token_status(token: str | None) -> tuple[TokenStatus, str]:
     Fehler des Nutzers dargestellt werden.
     """
     if not token or not token.strip():
-        return "FEHLT", "HF_TOKEN fehlt (siehe .env.example)"
+        return "FEHLT", tr("HF_TOKEN fehlt (siehe .env.example)")
 
     try:
         from huggingface_hub import HfApi
     except Exception as exc:  # noqa: BLE001
-        return "UNPRUEFBAR", f"huggingface_hub nicht nutzbar ({type(exc).__name__})"
+        return "UNPRUEFBAR", tr("huggingface_hub nicht nutzbar ({fehler})", fehler=type(exc).__name__)
 
     try:
         konto = HfApi(token=token).whoami()
@@ -48,10 +50,13 @@ def token_status(token: str | None) -> tuple[TokenStatus, str]:
         if ist_ungueltiger_token(exc):
             return (
                 "UNGUELTIG",
-                f"HF_TOKEN wird abgelehnt (widerrufen, abgelaufen oder unvollstaendig kopiert) "
-                f"-> neuen Token erstellen: {TOKENS_URL}",
+                tr(
+                    "HF_TOKEN wird abgelehnt (widerrufen, abgelaufen oder unvollstaendig kopiert) "
+                    "-> neuen Token erstellen: {url}",
+                    url=TOKENS_URL,
+                ),
             )
-        return "UNPRUEFBAR", f"Token nicht pruefbar ({type(exc).__name__})"
+        return "UNPRUEFBAR", tr("Token nicht pruefbar ({fehler})", fehler=type(exc).__name__)
 
     name = konto.get("name") if isinstance(konto, dict) else None
-    return "OK", f"gueltig (Konto: {name or '?'})"
+    return "OK", tr("gueltig (Konto: {name})", name=name or "?")

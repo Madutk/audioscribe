@@ -4,12 +4,13 @@
 
 import { $, api, hms, setPipDoc } from './kern.js';
 import { setSouffleurHidden } from './souffleur.js';
+import { tr } from './i18n.js';
 
 export const pipMoeglich = 'documentPictureInPicture' in window;
 
 let pipWin = null;
 let stopScharf = null;   // Timer der Rueckfrage "Wirklich stoppen?"
-let stopText = 'Stoppen'; // Beschriftung laut letztem Poll
+let stopText = tr('Stoppen'); // Beschriftung laut letztem Poll
 let themaAus = null;      // beendet den Abgleich des Farbschemas
 const systemDunkel = window.matchMedia('(prefers-color-scheme: dark)');
 
@@ -98,7 +99,7 @@ export function pipStatus(s, phaseText) {
   $('pipStartIcon').setAttribute('href', $('liveStartIcon').getAttribute('href'));
   $('pipStop').hidden = !running;
   if (!running) entschaerfe();
-  stopText = s.phase === 'nachschaerfen' ? 'Nachschärfen abbrechen' : s.stopping ? 'Sofort abbrechen' : 'Stoppen';
+  stopText = s.phase === 'nachschaerfen' ? tr('Nachschärfen abbrechen') : s.stopping ? tr('Sofort abbrechen') : tr('Stoppen');
   if (!stopScharf) $('pipStopLabel').textContent = stopText;
 }
 
@@ -111,7 +112,7 @@ function entschaerfe() {
 // Im kleinen Fenster ist ein Fehlklick schnell passiert: der erste Klick fragt nur nach.
 $('pipStop').onclick = () => {
   if (!stopScharf) {
-    $('pipStopLabel').textContent = 'Wirklich stoppen?';
+    $('pipStopLabel').textContent = tr('Wirklich stoppen?');
     $('pipStop').classList.add('scharf');
     stopScharf = setTimeout(entschaerfe, 3000);
     return;

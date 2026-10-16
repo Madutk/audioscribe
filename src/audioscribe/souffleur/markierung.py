@@ -27,7 +27,21 @@ ART_WIDERSPRUCH = "widerspruch"
 ART_OFFEN = "offener_punkt"
 ART_FRAGE = "frage"
 ARTEN: tuple[str, ...] = (ART_WIDERSPRUCH, ART_OFFEN, ART_FRAGE)
+# Deutsche Bezeichnungen - so stehen sie in den Begleitdateien; für die Oberfläche art_label().
 ART_LABEL = {ART_WIDERSPRUCH: "Widerspruch", ART_OFFEN: "Offener Punkt", ART_FRAGE: "Frage"}
+
+
+def art_label(art: str) -> str:
+    """Bezeichnung der Art in der Sprache der Oberfläche."""
+    from audioscribe.i18n import tr
+
+    if art == ART_WIDERSPRUCH:
+        return tr("Widerspruch")
+    if art == ART_OFFEN:
+        return tr("Offener Punkt")
+    if art == ART_FRAGE:
+        return tr("Frage")
+    return art
 
 
 @dataclass(frozen=True)
@@ -77,7 +91,7 @@ class Markierung:
 
     def als_dict(self) -> dict:
         d = asdict(self)
-        d["label"] = ART_LABEL.get(self.art, self.art)
+        d["label"] = art_label(self.art)
         d["offener_punkt"] = self.ist_offener_punkt
         d["fundstelle"] = self.fundstellen[0].kurz if self.fundstellen else None
         return d

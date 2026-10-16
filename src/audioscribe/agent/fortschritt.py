@@ -22,6 +22,8 @@ import re
 from collections.abc import Mapping
 from pathlib import Path
 
+from audioscribe.i18n import tr
+
 STATUS_PREFIX = "[Agent-Status] "
 
 _WRITE_TOOLS = {"Write": "file_path", "Edit": "file_path", "MultiEdit": "file_path"}
@@ -134,8 +136,14 @@ class Fortschritt:
         s = self.snapshot()
         if not s["total"]:
             return None
-        now = f" – jetzt: {s['current']}" if s["current"] else ""
-        return f"[Plan] {s['done']}/{s['total']} Schritte erledigt{now}"
+        if s["current"]:
+            return tr(
+                "[Plan] {erledigt}/{gesamt} Schritte erledigt – jetzt: {schritt}",
+                erledigt=s["done"],
+                gesamt=s["total"],
+                schritt=s["current"],
+            )
+        return tr("[Plan] {erledigt}/{gesamt} Schritte erledigt", erledigt=s["done"], gesamt=s["total"])
 
     def status_line(self) -> str:
         return STATUS_PREFIX + json.dumps(self.snapshot(), ensure_ascii=False)

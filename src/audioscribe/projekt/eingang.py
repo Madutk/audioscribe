@@ -14,6 +14,7 @@ import shutil
 from collections.abc import Mapping
 from pathlib import Path
 
+from audioscribe.i18n import tr
 from audioscribe.projekt.modell import Projekt, ProjektFehler
 from audioscribe.projekt.wiki_ablage import _freier_name
 
@@ -73,11 +74,11 @@ def pruefe_sitzung(sitzung: Path) -> None:
 
     status = journal.lies_status(sitzung)
     if status is None:
-        raise ProjektFehler(f"Kein Sitzungsordner: {sitzung}")
+        raise ProjektFehler(tr("Kein Sitzungsordner: {ordner}", ordner=sitzung))
     if journal.lebt(sitzung):
-        raise RuntimeError("Die Sitzung läuft noch.")
+        raise RuntimeError(tr("Die Sitzung läuft noch."))
     if status.get("status") != journal.BEENDET:
-        raise RuntimeError("Die Sitzung ist nicht beendet – bitte erst abschließen.")
+        raise RuntimeError(tr("Die Sitzung ist nicht beendet – bitte erst abschließen."))
 
 
 def verschiebe(sitzung: Path, projekt: Projekt) -> Path:
@@ -92,7 +93,7 @@ def verschiebe(sitzung: Path, projekt: Projekt) -> Path:
     ziel_basis.mkdir(parents=True, exist_ok=True)
     try:
         if sitzung.resolve().parent == ziel_basis.resolve():
-            raise ProjektFehler("Die Sitzung liegt schon im Sitzungsordner dieses Projekts.")
+            raise ProjektFehler(tr("Die Sitzung liegt schon im Sitzungsordner dieses Projekts."))
     except OSError as exc:
         raise ProjektFehler(str(exc)) from exc
     ziel = ziel_basis / _freier_name(sitzung.name, ziel_basis)

@@ -3,6 +3,7 @@
 
 import { $, S, api, post, esc, icon, empty, hms, coarse, fill, markUnavailable, appendLog, poller, dirname, sep, trimSep, toast, cloudCompliant } from './kern.js';
 import { go, ladeDefaults } from './kontext.js';
+import { tr } from './i18n.js';
 import { pickFiles, pickFolder, showTranscript } from './dialoge.js';
 
 let scanned = [];            // zuletzt gescannte Dateien des gewaehlten Ordners
@@ -10,6 +11,9 @@ let gewaehlt = new Set();    // Dateinamen, die der Nutzer im Dialog angekreuzt 
 let offset = 0;              // gelesene Log-Zeilen
 let bereit = false;          // Auswahlfelder gefuellt
 let letzterLauf = null;      // Schluessel der zuletzt gezeigten Ergebniskarten
+
+// Zustand einer Datei (ui/runner.py) -> Anzeige; der Wert selbst bleibt CSS-Klasse.
+const ZUSTAND = { wartet: tr('wartet'), laeuft: tr('läuft'), fertig: tr('fertig'), fehler: tr('fehler'), abgebrochen: tr('abgebrochen') };
 
 const pollStatus = poller(poll, 1000);
 
@@ -30,10 +34,10 @@ export async function enterDatei() {
     $('frames').checked = d.frames === true;
     toggleFrameOpts();
     $('pathHint').innerHTML = d.platform === 'windows'
-      ? 'Pfade aus dem Explorer können direkt eingefügt werden – <code>C:\\Users\\…</code>.'
+      ? tr('Pfade aus dem Explorer können direkt eingefügt werden – <code>C:\\Users\\…</code>.')
       : d.platform === 'mac'
-        ? 'Pfade aus dem Finder können direkt eingefügt werden (<kbd>⌥</kbd> + „… als Pfadname kopieren“).'
-        : 'Windows-Pfade können direkt eingefügt werden – <code>C:\\Users\\…</code> wird zu <code>/mnt/c/Users/…</code>.';
+        ? tr('Pfade aus dem Finder können direkt eingefügt werden (<kbd>⌥</kbd> + „… als Pfadname kopieren“).')
+        : tr('Windows-Pfade können direkt eingefügt werden – <code>C:\\Users\\…</code> wird zu <code>/mnt/c/Users/…</code>.');
   }
   // Die Sprache ist eine Einstellung (global) - bei jedem Betreten frisch vorbelegen.
   fill($('language'), d.languages, d.language);
@@ -45,7 +49,7 @@ export function leaveDatei() { dateiSichtbar = false; pollStatus.stop(); }
 
 export function resetDatei() {
   scanned = []; gewaehlt = new Set(); offset = 0; letzterLauf = null;
-  $('files').innerHTML = empty('film', 'Noch keine Aufnahme gewählt.');
+  $('files').innerHTML = empty('film', tr('Noch keine Aufnahme gewählt.'));
   $('log').textContent = '';
   $('summary').innerHTML = '';
   $('transResult').innerHTML = '';
@@ -74,7 +78,7 @@ const remember = () => post('/api/state', {
 // --- Dateien ------------------------------------------------------------------------------
 
 async function waehleDateien() {
-  const wahl = await pickFiles({ title: 'Aufnahme wählen', start: S.folders.input_dir });
+  const wahl = await pickFiles({ title: tr('Aufnahme wählen'), start: S.folders.input_dir });
   if (!wahl) return;
   S.folders.input_dir = wahl.dir;
   gewaehlt = new Set(wahl.names);
@@ -101,13 +105,13 @@ async function scan() {
              <span class="meta"><span class="len">${f.seconds ? hms(f.seconds) : '?'}</span><span class="size">${f.mb} MB</span></span>
              <span class="bar"><i></i></span>
            </span>
-           <span class="badge">${f.done ? 'bereits transkribiert' : 'offen'}</span></div>`).join('')
-      : empty('file-audio', 'Keine Medien-Dateien in diesem Ordner.');
-    $('transTarget').innerHTML = `Ordner: <code>${esc(data.input_dir)}</code> – weitere Dateien daraus lassen sich ankreuzen.`;
+           <span class="badge">${f.done ? tr('bereits transkribiert') : tr('offen')}</span></div>`).join('')
+      : empty('file-audio', tr('Keine Medien-Dateien in diesem Ordner.'));
+    $('transTarget').innerHTML = tr('Ordner: <code>{ordner}</code> – weitere Dateien daraus lassen sich ankreuzen.', { ordner: esc(data.input_dir) });
     updateCount();
   } catch (err) {
     $('pathErr').textContent = err.message;
-    $('files').innerHTML = empty('film', 'Aufnahme wählen …');
+    $('files').innerHTML = empty('film', tr('Aufnahme wählen …'));
     scanned = [];
     updateCount();
   }
@@ -123,7 +127,7 @@ function updateCount() {
     .filter((f) => names.includes(f.name))
     .reduce((sum, f) => sum + (f.seconds || 0), 0);
   $('fileCount').textContent = scanned.length && names.length
-    ? `– ${names.length} gewählt${seconds ? ' · ' + hms(seconds) + ' Audio' : ''}`
+    ? (seconds ? tr('– {n} gewählt · {dauer} Audio', { n: names.length, dauer: hms(seconds) }) : tr('– {n} gewählt', { n: names.length }))
     : '';
   $('start').disabled = names.length === 0;
 }
@@ -182,8 +186,8 @@ async function poll() {
 
   if (s.running && s.current) {
     const stage = s.stage
-      ? ` · <span class="stage">Stufe ${s.stage.index}/${s.stage.total}: ${esc(s.stage.name)}</span>` : '';
-    $('status').innerHTML = `Datei ${s.current.index} von ${s.total}: <b>${esc(s.current.name)}</b>${stage}`;
+      ? ` · <span class="stage">${tr('Stufe {i}/{n}: {name}', { i: s.stage.index, n: s.stage.total, name: esc(s.stage.name) })}</span>` : '';
+    $('status').innerHTML = tr('Datei {i} von {n}: <b>{name}</b>', { i: s.current.index, n: s.total, name: esc(s.current.name) }) + stage;
   } else if (!s.running) {
     $('status').textContent = '';
   }
@@ -194,7 +198,7 @@ async function poll() {
     if (!row) continue;
     const badge = row.querySelector('.badge');
     if (f.state === 'fehler' && !badge.classList.contains('fehler')) $('logBox').open = true;
-    badge.textContent = f.state;
+    badge.textContent = ZUSTAND[f.state] || f.state;
     badge.className = 'badge ' + f.state;
     row.querySelector('.bar > i').style.width = Math.round((f.fraction || 0) * 100) + '%';
   }
@@ -203,11 +207,11 @@ async function poll() {
   $('overallBar').style.width =
     (e && e.audio_total_s ? Math.round((e.audio_done_s / e.audio_total_s) * 100) : (!s.running && s.summary ? 100 : 0)) + '%';
   if (e && e.audio_total_s) {
-    const rest = e.eta_s === null ? 'Restzeit wird geschätzt …' : `noch ca. ${coarse(e.eta_s)}`;
-    const unknown = e.unknown_count ? ` (+${e.unknown_count} ohne bekannte Laenge)` : '';
-    $('eta').textContent = `${hms(e.audio_done_s)} von ${hms(e.audio_total_s)} Audio · ${rest}${unknown}`;
+    const rest = e.eta_s === null ? tr('Restzeit wird geschätzt …') : tr('noch ca. {zeit}', { zeit: coarse(e.eta_s) });
+    const unknown = e.unknown_count ? tr(' (+{n} ohne bekannte Länge)', { n: e.unknown_count }) : '';
+    $('eta').textContent = tr('{fertig} von {gesamt} Audio', { fertig: hms(e.audio_done_s), gesamt: hms(e.audio_total_s) }) + ` · ${rest}${unknown}`;
   } else {
-    $('eta').textContent = s.running ? 'läuft …' : '–';
+    $('eta').textContent = s.running ? tr('läuft …') : '–';
   }
 
   $('summary').innerHTML = s.summary ? `<div class="summary">${esc(s.summary)}</div>` : '';
@@ -232,23 +236,24 @@ function renderResults(s) {
   const ordner = (f) => `${trimSep(outDir)}${sep()}${f.name.replace(/\.[^.]+$/, '')}`;
   const karten = fertig.map((f) => `
     <div class="card result-card">
-      <h2 class="card-title">${icon('check')}<span class="name">${esc(f.name)}</span><span class="spacer"></span><span class="badge fertig">transkribiert</span></h2>
-      <p class="hint path">Gespeichert unter <code>${esc(ordner(f))}</code></p>
+      <h2 class="card-title">${icon('check')}<span class="name">${esc(f.name)}</span><span class="spacer"></span><span class="badge fertig">${tr('transkribiert')}</span></h2>
+      <p class="hint path">${tr('Gespeichert unter <code>{pfad}</code>', { pfad: esc(ordner(f)) })}</p>
       <div class="row">
-        <button class="secondary sm" type="button" data-preview="${esc(ordner(f))}" data-title="${esc(f.name)}">${icon('file-text')}Transkript ansehen</button>
-        <button class="secondary sm" type="button" data-folder="${esc(ordner(f))}">${icon('external')}Ordner öffnen</button>
+        <button class="secondary sm" type="button" data-preview="${esc(ordner(f))}" data-title="${esc(f.name)}">${icon('file-text')}${tr('Transkript ansehen')}</button>
+        <button class="secondary sm" type="button" data-folder="${esc(ordner(f))}">${icon('external')}${tr('Ordner öffnen')}</button>
       </div>
     </div>`).join('');
   // cloud-compliant: keine KI-Analyse - kein Weg dorthin anbieten.
   const weiter = s.running || cloudCompliant() ? '' : `
     <div class="next" id="transNext">
-      <h3>Wie geht es weiter?</h3>
-      <p>Das Transkript ist gespeichert. Du kannst hier aufhören – oder die KI Transkript und Bilder auswerten lassen.</p>
+      <h3>${tr('Wie geht es weiter?')}</h3>
+      <p>${tr('Das Transkript ist gespeichert. Du kannst hier aufhören – oder die KI Transkript und Bilder auswerten lassen.')}</p>
       <div class="next-grid">
-        <div class="next-item"><b>${icon('sparkles')}Mit KI weiterverarbeiten</b>
-          <span>Der Agent liest das Transkript${fertig.length > 1 ? ' einer Aufnahme' : ''} samt Standbildern und erstellt daraus
-            Dokumente, z. B. eine Prozessbeschreibung.</span>
-          <button type="button" data-ki="${esc(ordner(fertig[0]))}">Zur KI-Analyse${icon('arrow-right')}</button></div>
+        <div class="next-item"><b>${icon('sparkles')}${tr('Mit KI weiterverarbeiten')}</b>
+          <span>${fertig.length > 1
+            ? tr('Der Agent liest das Transkript einer Aufnahme samt Standbildern und erstellt daraus Dokumente, z. B. eine Prozessbeschreibung.')
+            : tr('Der Agent liest das Transkript samt Standbildern und erstellt daraus Dokumente, z. B. eine Prozessbeschreibung.')}</span>
+          <button type="button" data-ki="${esc(ordner(fertig[0]))}">${tr('Zur KI-Analyse')}${icon('arrow-right')}</button></div>
       </div>
     </div>`;
   $('transResult').innerHTML = karten + weiter;
@@ -258,7 +263,7 @@ function renderResults(s) {
 
 $('pickFiles').onclick = () => waehleDateien().catch((err) => { $('pathErr').textContent = err.message; });
 $('pickOutDir').onclick = async () => {
-  const pfad = await pickFolder({ title: 'Speicherort für Transkripte wählen', start: $('outDir').value });
+  const pfad = await pickFolder({ title: tr('Speicherort für Transkripte wählen'), start: $('outDir').value });
   if (pfad) setOutDir(pfad);
 };
 $('outDir').onchange = () => setOutDir($('outDir').value.trim());

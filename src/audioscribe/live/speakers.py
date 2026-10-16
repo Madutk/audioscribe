@@ -16,6 +16,7 @@ from pathlib import Path
 
 import numpy as np
 
+from audioscribe.i18n import tr
 from audioscribe.live.track import SAMPLE_RATE
 
 EMBEDDING_MODEL = "pyannote/wespeaker-voxceleb-resnet34-LM"
@@ -80,7 +81,7 @@ class SpeakerEmbedder:
 
         model = Model.from_pretrained(EMBEDDING_MODEL, use_auth_token=token)
         if model is None:
-            raise RuntimeError(f"{EMBEDDING_MODEL} nicht ladbar (HF_TOKEN prüfen)")
+            raise RuntimeError(tr("{modell} nicht ladbar (HF_TOKEN prüfen)", modell=EMBEDDING_MODEL))
         self._torch = torch
         self._inference = Inference(model, window="whole")
         self._inference.to(torch.device(device))
@@ -116,9 +117,9 @@ class BackgroundEmbedder:
         started = time.monotonic()
         try:
             self._embedder = self._load()
-            self._log(f"Sprecher-Modell bereit ({time.monotonic() - started:.1f} s)")
+            self._log(tr("Sprecher-Modell bereit ({sekunden} s)", sekunden=f"{time.monotonic() - started:.1f}"))
         except Exception as exc:  # noqa: BLE001 - Sprechertrennung ist Zugabe, kein Muss
-            self._log(f"Sprecher-Modell nicht ladbar ({exc}) - System-Spur heißt '{GEGENSEITE}'")
+            self._log(tr("Sprecher-Modell nicht ladbar ({fehler}) - System-Spur heißt '{name}'", fehler=exc, name=GEGENSEITE))
         finally:
             self._done.set()
 

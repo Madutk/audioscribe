@@ -18,6 +18,8 @@ import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
 
+from audioscribe.i18n import tr
+
 # Hauptdokument: das annotierte Transkript (mit Bildverweisen) hat Vorrang.
 TRANSCRIPT_CANDIDATES: tuple[str, ...] = ("transkript.annotiert.md", "transkript.md")
 # Weitere Dateien des Ergebnisordners, die mitgenommen werden (sofern vorhanden).
@@ -82,9 +84,12 @@ def find_transcript(quelle: Path) -> Path:
         if candidate.is_file():
             return candidate
     raise FileNotFoundError(
-        f"Kein Transkript in {quelle} gefunden (erwartet: transkript.md). "
-        "Zuerst transkribieren, fuer Bildschirmaufnahmen mit Standbildern: "
-        "audioscribe run <video> --frames"
+        tr(
+            "Kein Transkript in {ordner} gefunden (erwartet: transkript.md). "
+            "Zuerst transkribieren, fuer Bildschirmaufnahmen mit Standbildern: "
+            "audioscribe run <video> --frames",
+            ordner=quelle,
+        )
     )
 
 
@@ -130,7 +135,7 @@ def copy_material(auftrag: Auftrag) -> Material:
         for src in auftrag.kontext_dateien:
             src = Path(src).expanduser()
             if not src.is_file():
-                raise FileNotFoundError(f"Kontextdatei nicht gefunden: {src}")
+                raise FileNotFoundError(tr("Kontextdatei nicht gefunden: {datei}", datei=src))
             shutil.copy2(src, kdir / src.name)
             rel = f"{KONTEXT_DIR}/{src.name}"
             text = _read_inline(src)

@@ -5,10 +5,11 @@
 import { $, S, api, post, esc, modus, projekt, sep, trimSep, dirname, toast, basename } from './kern.js';
 import { setKontext } from './kontext.js';
 import { pickFolder } from './dialoge.js';
+import { tr } from './i18n.js';
 
 /** "JJJJ-MM-TT HH:MM" -> "HH:MM" (die Uhrzeit reicht; das Datum steht im Tooltip). */
 const uhrzeit = (s) => (/\d\d:\d\d$/.test(s || '') ? s.slice(-5) : (s || ''));
-const changeLink = () => ' <a class="goto" href="#/projekt/einstellungen">ändern</a>';
+const changeLink = () => ` <a class="goto" href="#/projekt/einstellungen">${tr('ändern')}</a>`;
 
 /**
  * Ein Bauteil fuer alle Orte: div.wiki-state.{none|ok|fail}. Live (compact) zeigt eine Zeile
@@ -21,30 +22,31 @@ export function renderWikiState(box, w, compact) {
   box.dataset.key = key;
   const z = (w && w.zustand) || 'keins';
   const glossar = w && w.glossar_eintraege
-    ? `Glossar: ${w.glossar_eintraege} Einträge${!compact && w.glossar_datei ? ` (<code>${esc(w.glossar_datei)}</code>)` : ''}`
-    : 'Glossar: keins im Wiki';
+    ? tr('Glossar: {n} Einträge', { n: w.glossar_eintraege }) + (!compact && w.glossar_datei ? ` (<code>${esc(w.glossar_datei)}</code>)` : '')
+    : tr('Glossar: keins im Wiki');
   const warn = !compact && w && w.warnungen && w.warnungen.length ? `<br>${esc(w.warnungen.join(' · '))}` : '';
   const link = compact && projekt() && !projekt().demo ? changeLink() : '';
-  let cls = 'none', badge = '<span class="badge">kein Wiki</span>', body;
+  let cls = 'none', badge = `<span class="badge">${tr('kein Wiki')}</span>`, body;
   if (z === 'ok') {
     cls = 'ok'; badge = '<span class="badge ok">Wiki</span>';
-    const gelesen = w.gelesen ? `, gelesen <span title="${esc(w.gelesen)}">${esc(uhrzeit(w.gelesen))}</span>` : '';
+    const gelesen = w.gelesen ? tr(', gelesen {zeit}', { zeit: `<span title="${esc(w.gelesen)}">${esc(uhrzeit(w.gelesen))}</span>` }) : '';
+    const seiten = tr('{n} Seiten', { n: w.seiten });
     body = compact
-      ? `<b>${esc(w.name || w.pfad)}</b> · ${w.seiten} Seiten${gelesen} · ${glossar}${link}`
-      : `<b>${esc(w.name || w.pfad)}</b> · <code>${esc(w.pfad)}</code><br>${w.seiten} Seiten${gelesen} · ${glossar}${warn}`;
+      ? `<b>${esc(w.name || w.pfad)}</b> · ${seiten}${gelesen} · ${glossar}${link}`
+      : `<b>${esc(w.name || w.pfad)}</b> · <code>${esc(w.pfad)}</code><br>${seiten}${gelesen} · ${glossar}${warn}`;
   } else if (z === 'fehler') {
-    cls = 'fail'; badge = '<span class="badge fail">nicht erreichbar</span>';
+    cls = 'fail'; badge = `<span class="badge fail">${tr('nicht erreichbar')}</span>`;
     body = compact
       ? `<code>${esc(w.pfad || '')}</code> · ${esc(w.meldung || '')}${link}`
-      : `<code>${esc(w.pfad || '')}</code><br>${esc(w.meldung || '')} Bis dahin arbeitet der Souffleur ohne Wiki.<br>${glossar}${warn}`;
+      : `<code>${esc(w.pfad || '')}</code><br>${esc(w.meldung || '')} ${tr('Bis dahin arbeitet der Souffleur ohne Wiki.')}<br>${glossar}${warn}`;
   } else if (z === 'laedt') {
-    cls = 'none'; badge = '<span class="badge laeuft">liest …</span>';
-    body = `${esc((w && w.meldung) || 'Wiki wird gelesen …')}${link}`;
+    cls = 'none'; badge = `<span class="badge laeuft">${tr('liest …')}</span>`;
+    body = `${esc((w && w.meldung) || tr('Wiki wird gelesen …'))}${link}`;
   } else {
-    const text = (w && w.meldung) || 'Kein Wiki verknüpft. Der Souffleur erkennt nur Fragen und liefert Essenzen.';
+    const text = (w && w.meldung) || tr('Kein Wiki verknüpft. Der Souffleur erkennt nur Fragen und liefert Essenzen.');
     body = compact
       ? `${esc(text)}${link}`
-      : `${esc(text.replace(/\.\s*$/, ''))} – ohne Belege und ohne Widersprüche.<br>${glossar}`;
+      : `${tr('{text} – ohne Belege und ohne Widersprüche.', { text: esc(text.replace(/\.\s*$/, '')) })}<br>${glossar}`;
   }
   box.className = `wiki-state ${cls}${compact ? ' compact' : ''}`;
   box.innerHTML = `${badge}<span class="body">${body}</span>`;
@@ -105,7 +107,7 @@ function zielVorschau() {
   if (!wikiSave) return;
   const p = projekt() || {};
   const name = wikiSave.sitzung.name || '';
-  const datum = (name.match(/\d{4}-\d{2}-\d{2}/) || ['JJJJ-MM-TT'])[0];
+  const datum = (name.match(/\d{4}-\d{2}-\d{2}/) || [tr('JJJJ-MM-TT')])[0];
   const titel = $('wikiDlgName').value.trim();
   const live = name.match(/^live-\d{4}-\d{2}-\d{2}_(\d{2}-\d{2}-\d{2})$/);
   const kurz = titel ? slugify(titel) : (live ? `live-${live[1]}` : slugify(name.replace(/\d{4}-\d{2}-\d{2}/, '') || name));
@@ -119,16 +121,16 @@ function zielVorschau() {
   $('wikiDlgArtRow').hidden = !meetings;
   $('wikiDlgRawHint').hidden = meetings;
   $('wikiDlgRawHintMeetings').hidden = !meetings;
-  $('wikiDlgNameLabel').textContent = meetings ? 'Thema' : 'Titel der Quelle';
+  $('wikiDlgNameLabel').textContent = meetings ? tr('Thema') : tr('Titel der Quelle');
   $('wikiDlgMarkDatei').innerHTML = meetings
-    ? '<code>&lt;Stamm&gt;.souffleur.json</code>/<code>.md</code>' : '<code>markierungen.json</code>/<code>.md</code>';
+    ? `<code>&lt;${esc(tr('Stamm'))}&gt;.souffleur.json</code>/<code>.md</code>` : '<code>markierungen.json</code>/<code>.md</code>';
   const stamm = meetings ? `${datum}_${art || '…'}_${kurz}` : `${datum}_${kurz}`;
   const ziel = meetings ? `${raw}${sep()}meetings${sep()}${stamm}.md` : `${raw}${sep()}${stamm}`;
   $('wikiDlgTarget').innerHTML = (!raw
-    ? '<span class="err">Bitte einen Ordner für das Transkript wählen.</span>'
-    : meetings && !art ? '<span class="err">Bitte die Art des Meetings wählen – sie ist Teil des Dateinamens.</span>'
-      : `${meetings ? 'Datei' : 'Ablage'}: <code>${esc(ziel)}</code>`)
-    + (bilder && assets && (!meetings || art) ? `<br>Bilder: <code>${esc(assets)}${esc(sep())}${esc(stamm)}</code>` : '');
+    ? `<span class="err">${tr('Bitte einen Ordner für das Transkript wählen.')}</span>`
+    : meetings && !art ? `<span class="err">${tr('Bitte die Art des Meetings wählen – sie ist Teil des Dateinamens.')}</span>`
+      : meetings ? tr('Datei: {pfad}', { pfad: `<code>${esc(ziel)}</code>` }) : tr('Ablage: {pfad}', { pfad: `<code>${esc(ziel)}</code>` }))
+    + (bilder && assets && (!meetings || art) ? '<br>' + tr('Bilder: {pfad}', { pfad: `<code>${esc(assets)}${esc(sep())}${esc(stamm)}</code>` }) : '');
   $('wikiDlgOk').disabled = meetings && !art;
   // "Kuenftig immer" meint die Ablage ins Projekt-Wiki - bei anderen Zielen gibt es nichts zu merken.
   $('wikiDlgImmerRow').hidden = !istStandard() || p.wiki_speichern === 'immer' || !!wikiSave.sitzung.ohneImmer;
@@ -146,9 +148,8 @@ export function openWikiDialog(sitzung) {
   const bilder = sitzung.frames || 0;
   const basen = vorgabeBasen(sitzung);
   $('wikiDlgInfo').textContent = basen.wiki
-    ? 'Das Transkript wird als neue Quelle im Wiki abgelegt, die Bilder im Assets-Ordner. '
-      + 'Bestehendes bleibt unverändert; die Wiki-Seiten werden nicht angefasst. Beide Ziele lassen sich ändern.'
-    : 'Transkript und Bilder werden in Ordner deiner Wahl kopiert; der Sitzungsordner bleibt unverändert.';
+    ? tr('Das Transkript wird als neue Quelle im Wiki abgelegt, die Bilder im Assets-Ordner. Bestehendes bleibt unverändert; die Wiki-Seiten werden nicht angefasst. Beide Ziele lassen sich ändern.')
+    : tr('Transkript und Bilder werden in Ordner deiner Wahl kopiert; der Sitzungsordner bleibt unverändert.');
   $('wikiDlgName').value = sitzung.titel || '';
   $('wikiDlgArt').value = sitzung.art || '';
   $('wikiDlgName').placeholder = sitzung.name || '';
@@ -156,7 +157,7 @@ export function openWikiDialog(sitzung) {
   $('wikiDlgAssets').value = basen.assets || '';
   $('wikiDlgBilder').disabled = bilder === 0;
   $('wikiDlgBilder').checked = bilder > 0 && p.wiki_bilder !== false;
-  $('wikiDlgBilderLabel').textContent = bilder ? `Bilder mit übertragen (${bilder})` : 'Bilder mit übertragen – diese Sitzung hat keine';
+  $('wikiDlgBilderLabel').textContent = bilder ? tr('Bilder mit übertragen ({n})', { n: bilder }) : tr('Bilder mit übertragen – diese Sitzung hat keine');
   // Markierungen sind KI-erzeugt: nur mit, wenn das Projekt es so festgelegt hat.
   $('wikiDlgMarkierungen').checked = p.wiki_markierungen === true;
   $('wikiDlgImmer').checked = false;
@@ -184,8 +185,8 @@ $('wikiDlgRaw').oninput = zielVorschau;
 $('wikiDlgAssets').oninput = zielVorschau;
 $('wikiDlgBilder').onchange = zielVorschau;
 $('wikiDlgArt').onchange = zielVorschau;
-$('pickWikiDlgRaw').onclick = () => ordnerWaehlen('wikiDlgRaw', 'Ordner für das Transkript wählen');
-$('pickWikiDlgAssets').onclick = () => ordnerWaehlen('wikiDlgAssets', 'Ordner für die Bilder wählen');
+$('pickWikiDlgRaw').onclick = () => ordnerWaehlen('wikiDlgRaw', tr('Ordner für das Transkript wählen'));
+$('pickWikiDlgAssets').onclick = () => ordnerWaehlen('wikiDlgAssets', tr('Ordner für die Bilder wählen'));
 $('wikiDlgCancel').onclick = () => closeWikiDialog(null);
 $('wikiDlg').addEventListener('close', () => closeWikiDialog(null));
 $('wikiDlg').addEventListener('click', (e) => { if (e.target === $('wikiDlg')) closeWikiDialog(null); });
@@ -208,8 +209,10 @@ $('wikiDlgOk').onclick = async () => {
     });
     if (immer) setKontext(await api('/api/kontext'));
     if (ablage.hinweis) toast(ablage.hinweis, 'fehler');
-    toast(`${ablage.frei ? 'Gespeichert' : 'Ins Wiki gespeichert'}: ${basename(ablage.ordner)}${ablage.bilder ? ` · ${ablage.bilder} Bilder` : ''}`
-      + `${ablage.markierungen ? ` · ${ablage.markierungen} Markierungen` : ''}`);
+    const ordner = basename(ablage.ordner);
+    toast((ablage.frei ? tr('Gespeichert: {ordner}', { ordner }) : tr('Ins Wiki gespeichert: {ordner}', { ordner }))
+      + (ablage.bilder ? ' · ' + tr('{n} Bilder', { n: ablage.bilder }) : '')
+      + (ablage.markierungen ? ' · ' + tr('{n} Markierungen', { n: ablage.markierungen }) : ''));
     closeWikiDialog(ablage);
   } catch (err) {
     $('wikiDlgErr').textContent = err.message;

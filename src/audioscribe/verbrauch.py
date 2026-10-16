@@ -16,6 +16,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from audioscribe.i18n import sprache, tr
+
 QUELLE_SOUFFLEUR = "souffleur"
 QUELLE_ANALYSE = "analyse"
 QUELLEN: tuple[str, ...] = (QUELLE_SOUFFLEUR, QUELLE_ANALYSE)
@@ -84,11 +86,15 @@ class Verbrauch:
 
     def text(self) -> str:
         """Eine Zeile fürs Protokoll, z. B. ``182.340 Tokens, ca. 1,24 $ (API-Gegenwert)``."""
-        tokens = f"{self.tokens:,}".replace(",", ".") + " Tokens"
+        deutsch = sprache() == "de"  # Tausender- und Dezimaltrennzeichen je Sprache
+        zahl = f"{self.tokens:,}"
+        tokens = tr("{zahl} Tokens", zahl=zahl.replace(",", ".") if deutsch else zahl)
         if self.kosten_usd is None:
             return tokens
-        preis = "unter 0,01" if 0 < self.kosten_usd < 0.01 else f"{self.kosten_usd:.2f}".replace(".", ",")
-        return f"{tokens}, ca. {preis} $ (API-Gegenwert)"
+        if 0 < self.kosten_usd < 0.01:
+            return tr("{tokens}, ca. unter 0,01 $ (API-Gegenwert)", tokens=tokens)
+        preis = f"{self.kosten_usd:.2f}"
+        return tr("{tokens}, ca. {preis} $ (API-Gegenwert)", tokens=tokens, preis=preis.replace(".", ",") if deutsch else preis)
 
 
 def aus_usage(usage: object) -> Verbrauch:

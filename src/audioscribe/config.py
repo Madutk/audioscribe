@@ -14,6 +14,8 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from audioscribe.i18n import tr
+
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -265,15 +267,21 @@ def resolve_device(
         return "mps" if mps_check() else "cpu"
     if value.startswith("cuda") and not cuda_check():
         raise RuntimeError(
-            f"Geraet '{raw}' angefordert, aber CUDA ist nicht verfuegbar. "
-            "Optionen: '--device auto' (automatischer CPU-Fallback), '--device cpu', "
-            "oder Installation pruefen mit 'audioscribe doctor' ('uv sync --extra cu124')."
+            tr(
+                "Geraet '{geraet}' angefordert, aber CUDA ist nicht verfuegbar. "
+                "Optionen: '--device auto' (automatischer CPU-Fallback), '--device cpu', "
+                "oder Installation pruefen mit 'audioscribe doctor' ('uv sync --extra cu124').",
+                geraet=raw,
+            )
         )
     if value == "mps" and not mps_check():
         raise RuntimeError(
-            f"Geraet '{raw}' angefordert, aber Metal (MPS) ist nicht verfuegbar - "
-            "nur auf Apple Silicon mit macOS >= 13 und arm64-Python. "
-            "Optionen: '--device auto' (automatischer Fallback) oder '--device cpu'."
+            tr(
+                "Geraet '{geraet}' angefordert, aber Metal (MPS) ist nicht verfuegbar - "
+                "nur auf Apple Silicon mit macOS >= 13 und arm64-Python. "
+                "Optionen: '--device auto' (automatischer Fallback) oder '--device cpu'.",
+                geraet=raw,
+            )
         )
     return value
 
@@ -331,12 +339,14 @@ def resolve_asr_backend(
         return "mlx" if mlx_check() else "faster-whisper"
     if value == "mlx" and not mlx_check():
         raise RuntimeError(
-            "Backend 'mlx' angefordert, aber mlx-whisper ist nicht installiert (nur Apple "
-            "Silicon) -> 'uv sync --extra cpu --extra mac --extra live' oder "
-            "'--backend faster-whisper'."
+            tr(
+                "Backend 'mlx' angefordert, aber mlx-whisper ist nicht installiert (nur Apple "
+                "Silicon) -> 'uv sync --extra cpu --extra mac --extra live' oder "
+                "'--backend faster-whisper'."
+            )
         )
     if value not in ASR_BACKENDS:
-        raise RuntimeError(f"Unbekanntes ASR-Backend '{raw}' (auto | faster-whisper | mlx)")
+        raise RuntimeError(tr("Unbekanntes ASR-Backend '{backend}' (auto | faster-whisper | mlx)", backend=raw))
     return value
 
 
@@ -358,8 +368,10 @@ def ensure_ffmpeg_on_path() -> str:
         binary = imageio_ffmpeg.get_ffmpeg_exe()
     except Exception as exc:  # noqa: BLE001 - klare Fehlermeldung statt Stacktrace
         raise RuntimeError(
-            "ffmpeg nicht gefunden und 'imageio-ffmpeg' nicht verfuegbar. "
-            "Installiere ffmpeg (sudo apt install ffmpeg) oder 'uv sync'."
+            tr(
+                "ffmpeg nicht gefunden und 'imageio-ffmpeg' nicht verfuegbar. "
+                "Installiere ffmpeg (sudo apt install ffmpeg) oder 'uv sync'."
+            )
         ) from exc
 
     bin_dir = settings.cache_dir / "bin"

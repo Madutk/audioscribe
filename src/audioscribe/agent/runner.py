@@ -30,6 +30,7 @@ from audioscribe.agent.manifest import Manifest, load_manifest, save_manifest
 from audioscribe.agent.material import Auftrag, Material, copy_material
 from audioscribe.agent.prompt import build_task_prompt, system_append
 from audioscribe.agent.skills import Skill, install_skills
+from audioscribe.i18n import tr
 from audioscribe.souffleur.ki import BACKEND_OLLAMA
 from audioscribe.verbrauch import Verbrauch, aus_ergebnis, aus_usage
 
@@ -45,10 +46,11 @@ _BASE_TOOLS = [
     "TaskCreate", "TaskUpdate", "TaskList", "TaskGet", "TodoWrite",
 ]
 
-INSTALL_HINT = (
-    "Die KI-Analyse benoetigt das Claude Agent SDK. Installiere es mit:\n"
-    "  uv sync --extra agent   (zusammen mit --extra cu124 bzw. --extra cpu)"
-)
+def install_hint() -> str:
+    return tr(
+        "Die KI-Analyse benoetigt das Claude Agent SDK. Installiere es mit:\n"
+        "  uv sync --extra agent   (zusammen mit --extra cu124 bzw. --extra cpu)"
+    )
 
 
 def _now() -> str:
@@ -92,14 +94,22 @@ def pruefe_lokal(modell: str) -> str:
     status = ollama_sicherstellen(settings.ollama_url, log_datei=settings.cache_dir / "ollama.log")
     if not status.erreichbar:
         raise RuntimeError(
-            f"Lokale KI nicht erreichbar unter {settings.ollama_url} ({status.fehler}; 'ollama serve' starten)"
+            tr(
+                "Lokale KI nicht erreichbar unter {url} ({fehler}; 'ollama serve' starten)",
+                url=settings.ollama_url,
+                fehler=status.fehler,
+            )
         )
     if not status.hat_modell(modell):
-        raise RuntimeError(f"Lokales Modell {modell} nicht geladen - 'ollama pull {modell}'")
-    return (
-        f"[experimentell] lokales Modell {modell} ueber Ollama {status.version or '?'} "
-        f"({settings.ollama_url}); der Dienst braucht OLLAMA_CONTEXT_LENGTH>={ANALYSE_MIN_CTX}. "
-        "Verbrauch zaehlt nicht (lokal)."
+        raise RuntimeError(tr("Lokales Modell {modell} nicht geladen - 'ollama pull {modell}'", modell=modell))
+    return tr(
+        "[experimentell] lokales Modell {modell} ueber Ollama {version} "
+        "({url}); der Dienst braucht OLLAMA_CONTEXT_LENGTH>={ctx}. "
+        "Verbrauch zaehlt nicht (lokal).",
+        modell=modell,
+        version=status.version or "?",
+        url=settings.ollama_url,
+        ctx=ANALYSE_MIN_CTX,
     )
 
 
@@ -198,11 +208,11 @@ class AnalyseSitzung:
         try:
             from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
         except ModuleNotFoundError as exc:
-            raise RuntimeError(INSTALL_HINT) from exc
+            raise RuntimeError(install_hint()) from exc
 
         self.workspace.mkdir(parents=True, exist_ok=True)
         self._logfile = (self.workspace / LOG_NAME).open("a", encoding="utf-8")
-        self.log(f"=== {_now()} Analyse '{self.auftrag.name}' -> {self.workspace}")
+        self.log(tr("=== {zeit} Analyse '{name}' -> {ordner}", zeit=_now(), name=self.auftrag.name, ordner=self.workspace))
         try:
             await self._prepare(ClaudeAgentOptions, ClaudeSDKClient)
         except BaseException as exc:
@@ -225,8 +235,12 @@ class AnalyseSitzung:
             self._material = copy_material(self.auftrag)
             self.fortschritt.frames_total = self._material.frames
             self.log(
-                f"Material: {self._material.transkript}, {self._material.frames} Standbild(er); "
-                f"Skills: {', '.join(s.name for s in self.skills) or '(keine)'}"
+                tr(
+                    "Material: {transkript}, {frames} Standbild(er); Skills: {skills}",
+                    transkript=self._material.transkript,
+                    frames=self._material.frames,
+                    skills=", ".join(s.name for s in self.skills) or tr("(keine)"),
+                )
             )
             if frueher is not None:
                 self.manifest.sitzungen = list(frueher.sitzungen)
@@ -275,7 +289,7 @@ class AnalyseSitzung:
             self.manifest.beendet = _now()
             self.manifest.dauer_s = round(time.monotonic() - self._started, 1)
             save_manifest(self.workspace, self.manifest)
-            self.log(f"=== Status: {self.manifest.status}")
+            self.log(tr("=== Status: {status}", status=self.manifest.status))
             if self._logfile is not None:
                 self._logfile.close()
                 self._logfile = None
@@ -314,7 +328,7 @@ class AnalyseSitzung:
                         self._tool_names[block.id] = block.name
                         if block.name not in PLAN_TOOLS | {"TaskList", "TaskGet"}:
                             # Plan-Pflege erscheint als [Plan]-Zeile, nicht als Werkzeug.
-                            self.log(f"[Werkzeug] {tool_summary(block.name, block.input)}")
+                            self.log(tr("[Werkzeug] {aufruf}", aufruf=tool_summary(block.name, block.input)))
                         if self.fortschritt.tool_use(block.id, block.name, block.input):
                             self._fortschritt_melden(plan_geaendert=block.name in PLAN_TOOLS)
             elif isinstance(msg, UserMessage) and isinstance(msg.content, list):
@@ -323,7 +337,7 @@ class AnalyseSitzung:
                         continue
                     if block.is_error:
                         detail = block.content if isinstance(block.content, str) else ""
-                        self.log(f"[Werkzeug-Fehler] {' '.join(detail.split())[:300]}")
+                        self.log(tr("[Werkzeug-Fehler] {detail}", detail=" ".join(detail.split())[:300]))
                     if self.fortschritt.tool_result(
                         block.tool_use_id, bool(block.is_error), block.content
                     ):
@@ -343,7 +357,7 @@ class AnalyseSitzung:
         try:
             dateien = erzeuge_bpmn(self.workspace, self.auftrag.name, log=self.log)
         except Exception as exc:  # noqa: BLE001 - Zugabe, darf die Analyse nie kippen
-            self.log(f"[BPMN] fehlgeschlagen: {type(exc).__name__}: {exc}")
+            self.log(tr("[BPMN] fehlgeschlagen: {art}: {fehler}", art=type(exc).__name__, fehler=exc))
             return
         neu = [d.name for d in dateien if d.name not in self.fortschritt.docs]
         if neu:
@@ -357,7 +371,7 @@ class AnalyseSitzung:
         try:
             bilder = erzeuge_prozessbilder(self.workspace, self.fortschritt.docs, log=self.log)
         except Exception as exc:  # noqa: BLE001 - Zugabe, darf die Analyse nie kippen
-            self.log(f"[Prozessbild] fehlgeschlagen: {type(exc).__name__}: {exc}")
+            self.log(tr("[Prozessbild] fehlgeschlagen: {art}: {fehler}", art=type(exc).__name__, fehler=exc))
             return
         neu = [b.name for b in bilder if b.name not in self.fortschritt.docs]
         if neu:
@@ -391,11 +405,18 @@ class AnalyseSitzung:
         save_manifest(self.workspace, m)
         # Der Preis ist der Gegenwert zu API-Preisen - bei Abo-Anmeldung keine Rechnung, deshalb
         # steht "API-Gegenwert" dabei. Die Summe ueber alle Laeufe steht in analyse.json.
-        self.log(f"[Ergebnis] {m.status}: {msg.num_turns} Runde(n), Session {msg.session_id}")
+        self.log(
+            tr(
+                "[Ergebnis] {status}: {runden} Runde(n), Session {sitzung}",
+                status=m.status,
+                runden=msg.num_turns,
+                sitzung=msg.session_id,
+            )
+        )
         if self._lokal:
-            self.log(f"[Verbrauch] lokal, zaehlt nicht ({gesamt.tokens} Tokens gemeldet)")
+            self.log(tr("[Verbrauch] lokal, zaehlt nicht ({tokens} Tokens gemeldet)", tokens=gesamt.tokens))
         elif dazu.tokens:
-            self.log(f"[Verbrauch] {dazu.text()}")
+            self.log(tr("[Verbrauch] {text}", text=dazu.text()))
         self._fortschritt_melden()
         return not msg.is_error
 
@@ -407,7 +428,7 @@ class AnalyseSitzung:
         )
         if decision.erlaubt:
             return PermissionResultAllow()
-        self.log(f"[Verweigert] {tool_summary(tool_name, tool_input)} - {decision.grund}")
+        self.log(tr("[Verweigert] {aufruf} - {grund}", aufruf=tool_summary(tool_name, tool_input), grund=decision.grund))
         return PermissionResultDeny(message=decision.grund)
 
 
@@ -425,7 +446,7 @@ async def _run(
 ) -> bool:
     async with AnalyseSitzung(auftrag, skills, emit=emit, status_zeilen=status_zeilen) as sitzung:
         if auftrag.resume:
-            text = auftrag.kontext_text.strip() or (
+            text = auftrag.kontext_text.strip() or tr(
                 "Setze die Analyse fort und bringe alle Dokumente sowie INDEX.md auf den "
                 "aktuellen Stand."
             )
@@ -445,7 +466,7 @@ def run_analysis(
         import anyio
         import claude_agent_sdk  # noqa: F401
     except ModuleNotFoundError:
-        emit(INSTALL_HINT)
+        emit(install_hint())
         return 1
 
     try:
@@ -454,13 +475,13 @@ def run_analysis(
         emit(str(exc))
         return 1
     except Exception as exc:  # noqa: BLE001 - SDK-/CLI-Fehler lesbar melden
-        emit(f"Analyse fehlgeschlagen: {type(exc).__name__}: {exc}")
+        emit(tr("Analyse fehlgeschlagen: {art}: {fehler}", art=type(exc).__name__, fehler=exc))
         if type(exc).__name__ == "CLINotFoundError":
-            emit("Claude Code nicht gefunden - 'audioscribe doctor' zeigt Details.")
+            emit(tr("Claude Code nicht gefunden - 'audioscribe doctor' zeigt Details."))
         return 1
     if ok:
-        emit(f"\nFertig. Ergebnisse: {auftrag.workspace}")
+        emit(tr("\nFertig. Ergebnisse: {ordner}", ordner=auftrag.workspace))
         index = auftrag.workspace / "INDEX.md"
         if index.exists():
-            emit(f"Uebersicht: {index}")
+            emit(tr("Uebersicht: {datei}", datei=index))
     return 0 if ok else 1

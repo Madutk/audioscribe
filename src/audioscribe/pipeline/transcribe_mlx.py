@@ -15,6 +15,7 @@ from collections.abc import Callable
 import numpy as np
 
 from audioscribe.config import settings
+from audioscribe.i18n import tr
 from audioscribe.live.asr_mlx import free_mlx_model, mlx_repo
 from audioscribe.pipeline.models import fetch_mlx_model
 from audioscribe.progress import Reporter, emit_download, emit_progress
@@ -114,20 +115,22 @@ def transcribe_mlx(
             import mlx_whisper as mlx_module
         except ImportError as exc:
             raise RuntimeError(
-                "mlx-whisper fehlt -> 'uv sync --extra cpu --extra mac --extra live' "
-                "(oder AUDIOSCRIBE_ASR_BACKEND=faster-whisper)"
+                tr(
+                    "mlx-whisper fehlt -> 'uv sync --extra cpu --extra mac --extra live' "
+                    "(oder AUDIOSCRIBE_ASR_BACKEND=faster-whisper)"
+                )
             ) from exc
 
     audio = np.asarray(audio, dtype=np.float32)
     if reporter:
-        reporter.info("Modell wird geladen (MLX) ...")
+        reporter.info(tr("Modell wird geladen (MLX) ..."))
     progress = on_progress or (emit_download if settings.emit_progress else None)
     path = fetch_mlx_model(mlx_repo(model, settings.mlx_repo or None), progress)
 
     spans = (vad or _vad_spans)(audio) if len(audio) else []
     windows = speech_windows(spans, len(audio), audio=audio)
     if reporter:
-        reporter.info(f"Transkribiere {len(windows)} Fenster ...")
+        reporter.info(tr("Transkribiere {anzahl} Fenster ...", anzahl=len(windows)))
     segments: list[dict] = []
     lang = language
     try:
@@ -162,6 +165,6 @@ def transcribe_mlx(
     result = {"segments": segments, "language": lang or "de"}
     if reporter:
         if not windows:
-            reporter.info("Keine aktive Sprache erkannt -> leeres Transkript")
-        reporter.info(f"Sprache: {result['language']}, {len(segments)} Segmente")
+            reporter.info(tr("Keine aktive Sprache erkannt -> leeres Transkript"))
+        reporter.info(tr("Sprache: {sprache}, {anzahl} Segmente", sprache=result["language"], anzahl=len(segments)))
     return result

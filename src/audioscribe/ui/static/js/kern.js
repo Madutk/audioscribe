@@ -1,5 +1,7 @@
 // Gemeinsame Bausteine aller Ansichten: DOM-Helfer, Server-Aufrufe, geteilter Zustand, Meldungen.
 
+import { tr, englisch } from './i18n.js';
+
 // Ist der Souffleur ausgekoppelt (souffleur-pip.js), liegt seine Karte im Dokument des Mini-Fensters.
 let pipDoc = null;
 export const setPipDoc = (d) => { pipDoc = d; neuTakten(); };
@@ -45,7 +47,7 @@ export async function api(path, opts) {
     // Der Server antwortet nicht (beendet, abgestuerzt): Hinweis zeigen; das Polling der
     // Ansichten laeuft weiter und meldet die Rueckkehr von selbst.
     setVerbunden(false);
-    throw new Error('Keine Verbindung zu AudioScribe.');
+    throw new Error(tr('Keine Verbindung zu AudioScribe.'));
   }
   setVerbunden(true);
   let data = null;
@@ -88,7 +90,7 @@ export const tc = (seconds) => {
   const s = Math.max(0, Math.round(seconds)), pad = (n) => String(n).padStart(2, '0');
   return `${pad(Math.floor(s / 3600))}:${pad(Math.floor((s % 3600) / 60))}:${pad(s % 60)}`;
 };
-export const secs = (v) => (v === null || v === undefined) ? '–' : v.toFixed(1).replace('.', ',') + ' s';
+export const secs = (v) => (v === null || v === undefined) ? '–' : (englisch ? v.toFixed(1) : v.toFixed(1).replace('.', ',')) + ' s';
 
 export const sep = () => (S.kontext && S.kontext.platform === 'windows' ? '\\' : '/');
 export const trimSep = (path) => String(path || '').replace(/[\\/]+$/, '');
@@ -103,17 +105,15 @@ export function fill(sel, values, chosen) {
 
 /** Hinweistext je KI-Dienst (Einstellungen, Projekt, Assistent). */
 const DIENST_HINWEIS = {
-  'claude-agent': 'Der Dienst hinter Souffleur und KI-Analyse. Er nutzt die Anmeldung von Claude Code auf diesem Rechner.',
-  ollama: 'Lokales Modell über Ollama auf diesem Rechner: nichts verlässt den Rechner, der Verbrauch zählt nicht. '
-    + 'Das Modell vorher mit „ollama pull“ laden („Umgebung prüfen“ zeigt den Stand). Die KI-Analyse lokal ist experimentell.',
-  attrappe: 'Regelbasierter Ersatz ohne Netz – nur für Tests.',
+  'claude-agent': tr('Der Dienst hinter Souffleur und KI-Analyse. Er nutzt die Anmeldung von Claude Code auf diesem Rechner.'),
+  ollama: tr('Lokales Modell über Ollama auf diesem Rechner: nichts verlässt den Rechner, der Verbrauch zählt nicht. Das Modell vorher mit „ollama pull“ laden („Umgebung prüfen“ zeigt den Stand). Die KI-Analyse lokal ist experimentell.'),
+  attrappe: tr('Regelbasierter Ersatz ohne Netz – nur für Tests.'),
 };
 export function dienstHinweis(dienst) {
   if (cloudCompliant() && dienst === 'ollama') {
-    return 'Lokale KI auf diesem Rechner: nichts verlässt den Rechner. In dieser Variante (cloud-compliant) '
-      + 'ist sie der einzige KI-Dienst. Das Modell vorher mit „ollama pull“ laden („Umgebung prüfen“ zeigt den Stand).';
+    return tr('Lokale KI auf diesem Rechner: nichts verlässt den Rechner. In dieser Variante (cloud-compliant) ist sie der einzige KI-Dienst. Das Modell vorher mit „ollama pull“ laden („Umgebung prüfen“ zeigt den Stand).');
   }
-  return DIENST_HINWEIS[dienst] || 'Dieser Dienst ist über die Umgebung eingestellt.';
+  return DIENST_HINWEIS[dienst] || tr('Dieser Dienst ist über die Umgebung eingestellt.');
 }
 
 /** Modelle, die zu einem Dienst gehoeren (Eintraege ohne `dienst` passen immer). */
@@ -142,7 +142,7 @@ export function markUnavailable(select) {
   for (const dev of ['cuda', 'mps']) {
     if (!S.defaults || S.defaults[dev] !== false) continue;
     const opt = [...select.options].find((o) => o.value === dev);
-    if (opt) { opt.disabled = true; opt.textContent = `${dev} (nicht verfügbar)`; }
+    if (opt) { opt.disabled = true; opt.textContent = tr('{geraet} (nicht verfügbar)', { geraet: dev }); }
     if (select.value === dev) select.value = 'auto';
   }
 }

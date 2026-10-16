@@ -36,6 +36,7 @@ from datetime import datetime
 from pathlib import Path
 from urllib.parse import quote
 
+from audioscribe.i18n import tr
 from audioscribe.projekt.modell import FORMAT_MEETINGS, MEETING_ARTEN, Projekt, gleich, ist_unter
 
 VERMERK = "wiki-ablage.json"
@@ -77,16 +78,16 @@ _ist_unter = ist_unter
 def _pruefe_ziele(projekt: Projekt) -> None:
     """Geschrieben wird nur nach raw/ und in den Assets-Ordner - nie unter die Wiki-Seiten."""
     if projekt.wiki_dir is None or projekt.raw_dir is None or projekt.assets_dir is None:
-        raise RuntimeError("Dieses Projekt hat kein Wiki – in den Projekteinstellungen anlegen oder verknüpfen.")
+        raise RuntimeError(tr("Dieses Projekt hat kein Wiki – in den Projekteinstellungen anlegen oder verknüpfen."))
     if not projekt.wiki_dir.is_dir():
-        raise RuntimeError(f"LLM-Wiki nicht erreichbar: {projekt.wiki_dir}")
+        raise RuntimeError(tr("LLM-Wiki nicht erreichbar: {ordner}", ordner=projekt.wiki_dir))
     for ziel in (projekt.raw_dir, projekt.assets_dir):
         if _ist_unter(ziel, projekt.seiten_dir):
-            raise RuntimeError(f"Ablage darf nicht unter den Wiki-Seiten liegen: {ziel}")
+            raise RuntimeError(tr("Ablage darf nicht unter den Wiki-Seiten liegen: {ziel}", ziel=ziel))
     if not _ist_unter(projekt.assets_dir, projekt.wiki_dir):
-        raise RuntimeError(f"Der Bilder-Ordner muss im LLM-Wiki liegen: {projekt.assets_dir}")
+        raise RuntimeError(tr("Der Bilder-Ordner muss im LLM-Wiki liegen: {ordner}", ordner=projekt.assets_dir))
     if projekt.assets_dir.resolve() == projekt.raw_dir.resolve():
-        raise RuntimeError("Der Bilder-Ordner darf nicht raw/ selbst sein - bitte z. B. raw/assets wählen.")
+        raise RuntimeError(tr("Der Bilder-Ordner darf nicht raw/ selbst sein - bitte z. B. raw/assets wählen."))
 
 
 def _pruefe_freie_ziele(
@@ -95,18 +96,18 @@ def _pruefe_freie_ziele(
     """Regeln für frei gewählte Ziele: nie unter die Wiki-Seiten, nicht in den Sitzungsordner
     selbst (Kopie in sich hinein), Bilder nicht in den Transkript-Ordner."""
     if raw_basis is None or str(raw_basis) in ("", "."):
-        raise RuntimeError("Bitte einen Ordner für das Transkript wählen.")
+        raise RuntimeError(tr("Bitte einen Ordner für das Transkript wählen."))
     if raw_basis.is_file() or (assets_basis is not None and assets_basis.is_file()):
-        raise RuntimeError("Das Ziel muss ein Ordner sein, keine Datei.")
+        raise RuntimeError(tr("Das Ziel muss ein Ordner sein, keine Datei."))
     for ziel in (raw_basis, assets_basis):
         if ziel is None:
             continue
         if seiten_dir is not None and _ist_unter(ziel, seiten_dir):
-            raise RuntimeError(f"Ablage darf nicht unter den Wiki-Seiten liegen: {ziel}")
+            raise RuntimeError(tr("Ablage darf nicht unter den Wiki-Seiten liegen: {ziel}", ziel=ziel))
         if _ist_unter(ziel, session_dir):
-            raise RuntimeError("Die Ablage darf nicht im Sitzungsordner selbst liegen.")
+            raise RuntimeError(tr("Die Ablage darf nicht im Sitzungsordner selbst liegen."))
     if assets_basis is not None and gleich(assets_basis, raw_basis):
-        raise RuntimeError("Der Bilder-Ordner darf nicht der Transkript-Ordner selbst sein - bitte einen Unterordner wählen.")
+        raise RuntimeError(tr("Der Bilder-Ordner darf nicht der Transkript-Ordner selbst sein - bitte einen Unterordner wählen."))
 
 
 def _datum(session_dir: Path) -> str:
@@ -268,7 +269,7 @@ def speichere_nach(
     session_dir = Path(session_dir)
     quelle = session_dir / "transkript.md"
     if not quelle.is_file():
-        raise FileNotFoundError(f"Kein Transkript in {session_dir}")
+        raise FileNotFoundError(tr("Kein Transkript in {ordner}", ordner=session_dir))
     raw = Path(raw_basis) if raw_basis is not None else None
     assets_basis = Path(assets_basis) if assets_basis is not None else None
     _pruefe_freie_ziele(session_dir, raw, assets_basis, seiten_dir)
@@ -406,11 +407,11 @@ def speichere_meeting(
     session_dir = Path(session_dir)
     quelle = session_dir / "transkript.md"
     if not quelle.is_file():
-        raise FileNotFoundError(f"Kein Transkript in {session_dir}")
+        raise FileNotFoundError(tr("Kein Transkript in {ordner}", ordner=session_dir))
     art = (art.strip().lower() or art_der_sitzung(session_dir))
     if art not in MEETING_ARTEN:
         raise RuntimeError(
-            "Bitte die Art des Meetings wählen (" + ", ".join(MEETING_ARTEN) + ") – sie ist Teil des Dateinamens im Wiki."
+            tr("Bitte die Art des Meetings wählen ({arten}) – sie ist Teil des Dateinamens im Wiki.", arten=", ".join(MEETING_ARTEN))
         )
     titel = titel.strip() or _titel_der_sitzung(session_dir)
     try:
@@ -527,7 +528,7 @@ def speichere_nachbereitung(
     """
     workspace, session_dir = Path(workspace), Path(session_dir)
     if not workspace.is_dir():
-        raise FileNotFoundError(f"Analyse-Ordner nicht gefunden: {workspace}")
+        raise FileNotFoundError(tr("Analyse-Ordner nicht gefunden: {ordner}", ordner=workspace))
     _pruefe_ziele(projekt)
 
     # Eine freie Ablage („Speichern unter …“) zählt hier nicht: die Nachbereitung gehört ins Wiki.

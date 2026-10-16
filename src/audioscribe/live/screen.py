@@ -28,12 +28,18 @@ from audioscribe.pipeline.screens import (
     changed_blocks,
     shot_filename,
 )
+from audioscribe.i18n import tr
 from audioscribe.review.marks import Mark
 
 _JPEG_QUALITY = 88  # entspricht grob ffmpegs -q:v 3 der Offline-Standbilder
 
 
+# Der deutsche Text (Tests vergleichen damit); gemeldet wird er übersetzt, siehe ``_mss_fehlt``.
 MSS_FEHLT = "mss fehlt - keine Standbilder (uv sync ... --extra live)"
+
+
+def _mss_fehlt() -> str:
+    return tr("mss fehlt - keine Standbilder (uv sync ... --extra live)")
 
 
 class SourceUnavailable(RuntimeError):
@@ -132,16 +138,16 @@ def preview_jpeg(index: int, width: int = 480) -> bytes:
         from audioscribe.live import fenster_mac
 
         if not any(m["index"] == index for m in list_monitors()):
-            raise IndexError(f"Monitor {index} gibt es nicht")
+            raise IndexError(tr("Monitor {index} gibt es nicht", index=index))
         img = fenster_mac.screencapture_image(["-D", str(index)])
         if img is None:
-            raise IndexError(f"Monitor {index} liefert kein Bild")
+            raise IndexError(tr("Monitor {index} liefert kein Bild", index=index))
     else:
         import mss
 
         with mss.mss() as sct:
             if not 0 < index < len(sct.monitors):
-                raise IndexError(f"Monitor {index} gibt es nicht")
+                raise IndexError(tr("Monitor {index} gibt es nicht", index=index))
             img = grab_image(sct, sct.monitors[index])
     img.thumbnail((width, width))
     out = io.BytesIO()
@@ -177,7 +183,7 @@ class MonitorSource:
 
     def __init__(self, index: int) -> None:
         self._index = index
-        self.label = f"Monitor {index}"
+        self.label = tr("Monitor {index}", index=index)
 
     def __enter__(self):
         import mss
@@ -185,7 +191,7 @@ class MonitorSource:
         self._sct = mss.mss()
         if not 0 < self._index < len(self._sct.monitors):
             self._sct.close()
-            raise SourceUnavailable(f"Monitor {self._index} gibt es nicht")
+            raise SourceUnavailable(tr("Monitor {index} gibt es nicht", index=self._index))
         self._monitor = self._sct.monitors[self._index]
         return self
 
@@ -202,15 +208,15 @@ class WindowSource:
 
     def __init__(self, hwnd: int) -> None:
         self._hwnd = hwnd
-        self.label = f"Fenster {hwnd}"
+        self.label = tr("Fenster {hwnd}", hwnd=hwnd)
 
     def __enter__(self):
         from audioscribe.live import fenster
 
         fenster.dpi_aware()
         if not fenster.is_window(self._hwnd):
-            raise SourceUnavailable(f"Fenster {self._hwnd} gibt es nicht")
-        self.label = f"Fenster '{fenster.window_title(self._hwnd)}'"
+            raise SourceUnavailable(tr("Fenster {hwnd} gibt es nicht", hwnd=self._hwnd))
+        self.label = tr("Fenster '{titel}'", titel=fenster.window_title(self._hwnd))
         try:
             import mss
 
@@ -314,7 +320,7 @@ class ScreenWatcher(threading.Thread):
         try:
             self._on_quelle({"monitor": monitor, "window": window, "label": label, "aktiv": aktiv})
         except Exception as exc:  # noqa: BLE001 - die Meldung darf die Bildaufnahme nie stören
-            self._log(f"Bildquelle nicht gemeldet: {exc}")
+            self._log(tr("Bildquelle nicht gemeldet: {fehler}", fehler=exc))
 
     def _source(self, monitor: int, window: int):
         if self._source_factory is not None:
@@ -335,17 +341,17 @@ class ScreenWatcher(threading.Thread):
                 continue
             try:
                 with self._source(monitor, window) as source:
-                    self._log(f"Standbilder: {source.label}")
+                    self._log(tr("Standbilder: {quelle}", quelle=source.label))
                     self._melde(monitor, window, source.label, aktiv=True)
                     # Frischer Vergleichsstand: das erste Bild der neuen Quelle ist ein Startbild.
                     self._detector = ChangeDetector(self._sensitivity, min_gap=self._min_gap)
                     self._pausiert = False
                     self._loop(source)
             except SourceUnavailable as exc:
-                self._log(f"{exc} - keine Standbilder")
+                self._log(tr("{grund} - keine Standbilder", grund=exc))
                 self._melde(monitor, window, "", aktiv=False)
             except ImportError:  # mss wird erst hier, im Thread, geladen
-                self._log(MSS_FEHLT)
+                self._log(_mss_fehlt())
                 return
             if not self._wechsel.is_set():
                 # Quelle weg oder nicht erreichbar: nur noch auf eine neue warten.
@@ -362,18 +368,18 @@ class ScreenWatcher(threading.Thread):
                 img = source.grab()
                 if img is None:
                     if not self._pausiert:
-                        self._log("Fenster minimiert oder ausgeblendet - Standbilder pausieren")
+                        self._log(tr("Fenster minimiert oder ausgeblendet - Standbilder pausieren"))
                         self._pausiert = True
                     continue
                 if self._pausiert:
-                    self._log("Fenster wieder sichtbar")
+                    self._log(tr("Fenster wieder sichtbar"))
                     self._pausiert = False
                 t = self._detector.feed(self._clock(), raster(img))
                 if t is None:
                     continue
                 if self._anzahl >= self._max_bilder:
                     if self._anzahl == self._max_bilder:
-                        self._log(f"Obergrenze von {self._max_bilder} Standbildern erreicht")
+                        self._log(tr("Obergrenze von {anzahl} Standbildern erreicht", anzahl=self._max_bilder))
                         self._anzahl += 1
                     continue
                 self._anzahl += 1
@@ -389,8 +395,8 @@ class ScreenWatcher(threading.Thread):
                     )
                 )
             except WindowGone:
-                self._log("Fenster geschlossen - keine weiteren Standbilder")
+                self._log(tr("Fenster geschlossen - keine weiteren Standbilder"))
                 self._melde(0, 0, "", aktiv=False)
                 return
             except Exception as exc:  # noqa: BLE001 - ein Bild darf die Sitzung nie kippen
-                self._log(f"Standbild fehlgeschlagen: {exc}")
+                self._log(tr("Standbild fehlgeschlagen: {fehler}", fehler=exc))

@@ -28,6 +28,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
+from audioscribe.i18n import tr
 from audioscribe.pipeline.media import AUDIO_SUFFIXES, VIDEO_SUFFIXES
 
 # Alles, was die Pipeline verdauen kann (Video -> Audiospur wird extrahiert).
@@ -86,7 +87,7 @@ def scan_media(folder: Path) -> list[Path]:
     """
     folder = Path(folder)
     if not folder.is_dir():
-        raise NotADirectoryError(f"Kein Verzeichnis: {folder}")
+        raise NotADirectoryError(tr("Kein Verzeichnis: {ordner}", ordner=folder))
 
     found: list[Path] = []
     with os.scandir(folder) as entries:
@@ -409,7 +410,7 @@ def scan_results(output_dir: Path) -> list[dict]:
     """
     folder = Path(output_dir)
     if not folder.is_dir():
-        raise NotADirectoryError(f"Kein Verzeichnis: {folder}")
+        raise NotADirectoryError(tr("Kein Verzeichnis: {ordner}", ordner=folder))
     out: list[tuple[float, dict]] = []
     with os.scandir(folder) as entries:
         for entry in entries:

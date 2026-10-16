@@ -26,6 +26,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
+from audioscribe.i18n import tr
+
 STATUS_DATEI = "sitzung.json"
 JOURNAL_DATEI = "sitzung.journal.jsonl"
 LOCK_DATEI = "sitzung.lock"
@@ -140,7 +142,7 @@ def sperre(session_dir: str | Path) -> Sperre:
     datei = (session_dir / LOCK_DATEI).open("a+b")
     if not _sperren(datei):
         datei.close()
-        raise RuntimeError(f"Die Sitzung läuft bereits in einem anderen Prozess: {session_dir}")
+        raise RuntimeError(tr("Die Sitzung läuft bereits in einem anderen Prozess: {ordner}", ordner=session_dir))
     return Sperre(datei)
 
 

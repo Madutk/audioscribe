@@ -3,6 +3,7 @@
 
 import { $, S, api, post, put, esc, icon, empty, projekt, fillOptions, toast, sep, trimSep, dienstHinweis, modelleFuer, passendesModell } from './kern.js';
 import { setKontext } from './kontext.js';
+import { sprache, tr } from './i18n.js';
 import { pickFolder, askConfirm } from './dialoge.js';
 import { renderWikiState, loadWikiStatus } from './wiki.js';
 
@@ -55,18 +56,31 @@ async function speichereEingang(pfad) {
     await post('/api/state', { eingang_dir: pfad });
     setKontext(await api('/api/kontext'));
     zeigeEingang();
-    toast('Eingangsordner gespeichert');
+    toast(tr('Eingangsordner gespeichert'));
   } catch (err) {
     $('gEingangErr').textContent = err.message;
   }
 }
 
 $('gEingangWaehlen').onclick = async () => {
-  const pfad = await pickFolder({ title: 'Eingangsordner für Aufnahmen ohne Projekt', ok: 'Diesen Ordner verwenden',
+  const pfad = await pickFolder({ title: tr('Eingangsordner für Aufnahmen ohne Projekt'), ok: tr('Diesen Ordner verwenden'),
     start: (S.kontext && S.kontext.eingang_dir) || '' });
   if (pfad) speichereEingang(pfad);
 };
 $('gEingangStandard').onclick = () => speichereEingang('');
+
+// --- Sprache der Oberflaeche ------------------------------------------------------------
+// Alle Texte stehen beim Laden fest (i18n.js) - darum nach dem Speichern neu laden.
+$('gUiSprache').value = sprache;
+$('gUiSprache').onchange = async () => {
+  $('gErr').textContent = '';
+  try {
+    await post('/api/state', { ui_sprache: $('gUiSprache').value });
+    window.location.reload();
+  } catch (err) {
+    $('gErr').textContent = err.message;
+  }
+};
 
 for (const [key, id] of Object.entries(G)) {
   $(id).onchange = async () => {
@@ -76,7 +90,7 @@ for (const [key, id] of Object.entries(G)) {
       if (key === 'ki_dienst') body = mitModellen(body, $(id).value, einst.werte);
       einst = await post('/api/einstellungen', body);
       zeigeGlobal();
-      toast('Einstellung gespeichert');
+      toast(tr('Einstellung gespeichert'));
       // Die wirksamen Werte eines geoeffneten Projekts haengen davon ab.
       setKontext(await api('/api/kontext'));
     } catch (err) {
@@ -93,16 +107,16 @@ async function loadEnvironment(refresh = false) {
   if (envLoaded && !refresh) return;
   envLoaded = true;
   $('envRefresh').disabled = true;
-  $('envChecks').innerHTML = `<p class="hint">${icon('loader')} Prüfe die Umgebung … (ein paar Sekunden)</p>`;
+  $('envChecks').innerHTML = `<p class="hint">${icon('loader')} ${tr('Prüfe die Umgebung … (ein paar Sekunden)')}</p>`;
   try {
     const data = await api('/api/environment' + (refresh ? '?refresh=1' : ''));
-    $('envStamp').textContent = data.checked_at ? `– Stand ${data.checked_at}` : '';
+    $('envStamp').textContent = data.checked_at ? tr('– Stand {zeit}', { zeit: data.checked_at }) : '';
     $('envChecks').innerHTML = data.checks
       ? data.checks.map((c) => `<div class="env ${esc(c.status.toLowerCase())}">
            <span class="badge ${esc(c.status.toLowerCase())}">${esc(c.status)}</span>
            <span class="name">${esc(c.name)}</span>
            <span class="detail">${esc(c.detail)}</span></div>`).join('')
-      : empty('alert', 'Umgebungs-Check nicht ausführbar – „audioscribe doctor“ im Terminal versuchen.');
+      : empty('alert', tr('Umgebungs-Check nicht ausführbar – „audioscribe doctor“ im Terminal versuchen.'));
   } catch (err) {
     envLoaded = false;
     $('envChecks').innerHTML = `<p class="err">${esc(err.message)}</p>`;
@@ -140,7 +154,7 @@ export function zeigeProjekt() {
   $('pWikiHintMit').hidden = !mit;
   $('pWikiHintOhne').hidden = mit;
   $('pWikiNeu').hidden = mit;
-  $('pWikiVerknuepfen').textContent = mit ? 'Anderes Wiki verknüpfen' : 'Vorhandenes Wiki verknüpfen';
+  $('pWikiVerknuepfen').textContent = mit ? tr('Anderes Wiki verknüpfen') : tr('Vorhandenes Wiki verknüpfen');
   $('pWikiVerknuepfen').prepend(iconNode('folder'));
   $('pWikiLoesen').hidden = !mit;
   $('pWikiOrdner').hidden = !mit;
@@ -148,8 +162,8 @@ export function zeigeProjekt() {
   $('pSitzungen').value = p.sitzungen_dir;
   $('pAssets').value = p.assets_dir || '';
   $('pRaw').textContent = !mit ? '–' : p.wiki_format === 'meetings'
-    ? `${trimSep(p.raw_dir)}${sep()}meetings${sep()}<Datum>_<Art>_<Thema>.md`
-    : `${trimSep(p.raw_dir)}${sep()}<Datum>_<Sitzungstitel>${sep()}`;
+    ? `${trimSep(p.raw_dir)}${sep()}meetings${sep()}${tr('<Datum>_<Art>_<Thema>.md')}`
+    : `${trimSep(p.raw_dir)}${sep()}${tr('<Datum>_<Sitzungstitel>')}${sep()}`;
   const format = document.querySelector(`input[name="pFormat"][value="${p.wiki_format}"]`);
   if (format) format.checked = true;
   const radio = document.querySelector(`input[name="pSpeichern"][value="${p.wiki_speichern}"]`);
@@ -166,7 +180,7 @@ export function zeigeProjekt() {
     const label = (liste.find((x) => x.id === global) || { label: global }).label;
     // Ein Projektwert ausserhalb der Liste (aelteres Modell) bleibt sichtbar und wirksam.
     if (eigen && !liste.some((x) => x.id === eigen)) liste = [{ id: eigen, label: eigen }, ...liste];
-    fillOptions($(id), liste, eigen, `Globale Einstellung (${label})`);
+    fillOptions($(id), liste, eigen, tr('Globale Einstellung ({wert})', { wert: label }));
   }
 }
 
@@ -177,7 +191,7 @@ function iconNode(name) {
   return tpl.content.firstElementChild;
 }
 
-async function speichere(felder, meldung = 'Projekteinstellung gespeichert') {
+async function speichere(felder, meldung = tr('Projekteinstellung gespeichert')) {
   $('pErr').textContent = '';
   try {
     setKontext(await put('/api/projekt', { felder }));
@@ -194,26 +208,26 @@ $('pName').onchange = () => { if ($('pName').value.trim()) speichere({ name: $('
 $('pSitzungen').onchange = () => speichere({ sitzungen_dir: $('pSitzungen').value.trim() });
 $('pAssets').onchange = () => speichere({ assets_dir: $('pAssets').value.trim() });
 $('pickPSitzungen').onclick = async () => {
-  const pfad = await pickFolder({ title: 'Ordner für Sitzungen wählen', start: $('pSitzungen').value });
+  const pfad = await pickFolder({ title: tr('Ordner für Sitzungen wählen'), start: $('pSitzungen').value });
   if (pfad) speichere({ sitzungen_dir: pfad });
 };
 $('pickPAssets').onclick = async () => {
-  const pfad = await pickFolder({ title: 'Ordner für Bilder im Wiki wählen', start: $('pAssets').value });
+  const pfad = await pickFolder({ title: tr('Ordner für Bilder im Wiki wählen'), start: $('pAssets').value });
   if (pfad) speichere({ assets_dir: pfad });
 };
-$('pWikiNeu').onclick = () => speichere({ wiki_art: 'neu' }, 'Wiki angelegt');
+$('pWikiNeu').onclick = () => speichere({ wiki_art: 'neu' }, tr('Wiki angelegt'));
 $('pWikiVerknuepfen').onclick = async () => {
   const p = projekt();
-  const pfad = await pickFolder({ title: 'Ordner des LLM-Wikis wählen', ok: 'Dieses Wiki verknüpfen', start: (p && (p.wiki_dir || p.wurzel)) || '' });
-  if (pfad) speichere({ wiki_art: 'vorhanden', wiki_dir: pfad }, 'Wiki verknüpft');
+  const pfad = await pickFolder({ title: tr('Ordner des LLM-Wikis wählen'), ok: tr('Dieses Wiki verknüpfen'), start: (p && (p.wiki_dir || p.wurzel)) || '' });
+  if (pfad) speichere({ wiki_art: 'vorhanden', wiki_dir: pfad }, tr('Wiki verknüpft'));
 };
 $('pWikiLoesen').onclick = async () => {
   const ok = await askConfirm({
-    title: 'Verknüpfung zum Wiki lösen?',
-    text: 'Das Projekt arbeitet danach ohne Wiki: keine Belege im Souffleur, keine Ablage ins Wiki. Die Dateien des Wikis bleiben unverändert liegen.',
-    ok: 'Verknüpfung lösen',
+    title: tr('Verknüpfung zum Wiki lösen?'),
+    text: tr('Das Projekt arbeitet danach ohne Wiki: keine Belege im Souffleur, keine Ablage ins Wiki. Die Dateien des Wikis bleiben unverändert liegen.'),
+    ok: tr('Verknüpfung lösen'),
   });
-  if (ok) speichere({ wiki_art: 'keins' }, 'Verknüpfung gelöst');
+  if (ok) speichere({ wiki_art: 'keins' }, tr('Verknüpfung gelöst'));
 };
 for (const radio of document.querySelectorAll('input[name="pFormat"]')) {
   radio.onchange = () => speichere({ wiki_format: radio.value });

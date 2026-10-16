@@ -25,6 +25,8 @@ import string
 import sys
 from pathlib import Path
 
+from audioscribe.i18n import tr
+
 IS_WINDOWS = os.name == "nt"
 IS_MAC = sys.platform == "darwin"
 # Steuert Hinweistexte und Pfad-Umsetzung der Oberflaeche.
@@ -137,7 +139,7 @@ def list_dirs(folder: Path, *, show_hidden: bool = False) -> list[Path]:
     """Unterverzeichnisse von ``folder``, alphabetisch; unlesbare Eintraege ausgelassen."""
     folder = Path(folder)
     if not folder.is_dir():
-        raise NotADirectoryError(f"Kein Verzeichnis: {folder}")
+        raise NotADirectoryError(tr("Kein Verzeichnis: {ordner}", ordner=folder))
 
     out: list[Path] = []
     # scandir statt iterdir: spart je Eintrag einen stat-Aufruf (spuerbar auf Netzlaufwerken).
@@ -215,7 +217,7 @@ def quick_links(
     mac = (IS_MAC and not windows) if mac is None else mac
     home = Path.home() if home is None else Path(home)
     candidates: list[tuple[str, Path]] = [
-        ("Projekt", Path(project_root)),
+        (tr("Projekt"), Path(project_root)),
         ("input/", Path(input_dir)),
         ("output/", Path(output_dir)),
         ("Home", home),
@@ -235,10 +237,10 @@ def quick_links(
         # Finder zeigt die Nutzerordner lokalisiert ("Schreibtisch"), auf der Platte heissen
         # sie englisch - darum deutsche Labels auf englische Pfade.
         candidates += [
-            ("Schreibtisch", home / "Desktop"),
-            ("Dokumente", home / "Documents"),
+            (tr("Schreibtisch"), home / "Desktop"),
+            (tr("Dokumente"), home / "Documents"),
             ("Downloads", home / "Downloads"),
-            ("Filme", home / "Movies"),
+            (tr("Filme"), home / "Movies"),
             ("iCloud Drive", home / "Library" / "Mobile Documents" / "com~apple~CloudDocs"),
         ]
         # Externe Platten und Sticks haengen unter /Volumes; "Macintosh HD" ist nur ein Link auf /.

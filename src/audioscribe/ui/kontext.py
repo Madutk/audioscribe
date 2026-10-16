@@ -15,6 +15,7 @@ from pathlib import Path
 
 from audioscribe import variante
 from audioscribe.config import settings
+from audioscribe.i18n import sprache, tr
 from audioscribe.projekt import eingang, einstellungen, modell
 from audioscribe.projekt.modell import Projekt
 
@@ -27,12 +28,11 @@ MODUS_AUFNAHME = "aufnahme"
 MODI: tuple[str, ...] = (MODUS_START, MODUS_PROJEKT, MODUS_DATEI, MODUS_DEMO, MODUS_AUFNAHME)
 
 # Demo (zu reinen Vorführzwecken, leicht entfernbar): Wiki und Test-Meeting aus dem Repository.
+# Je Sprache der Oberfläche ein eigenes Demo-Wiki mit Test-Meeting (englisch: llm-wiki-en).
 DEMO_ORDNER = Path("demo") / "llm-wiki"
+DEMO_ORDNER_JE_SPRACHE = {"de": DEMO_ORDNER, "en": Path("demo") / "llm-wiki-en"}
 DEMO_TRANSKRIPT = Path("live_bahn_test") / "transkript.md"
-DEMO_NAME = "Demo: Bahnbuchung"
 DEMO_TEMPO = 1.0
-# Thema des abgespielten Meetings - es folgt auf die Meetings, die schon im Demo-Wiki stehen.
-DEMO_HEUTE = "Nachschärfung"
 _QUELLE = re.compile(r"Q-\d+")
 
 
@@ -61,7 +61,7 @@ class Kontext:
 
 
 def demo_wurzel() -> Path:
-    return settings.project_root / DEMO_ORDNER
+    return settings.project_root / DEMO_ORDNER_JE_SPRACHE.get(sprache(), DEMO_ORDNER)
 
 
 def demo_verfuegbar() -> bool:
@@ -75,7 +75,7 @@ def demo_projekt() -> Projekt:
     """Das Demo-Wiki als Projekt: Sitzungen landen im Cache, ins Wiki wird nie gespeichert."""
     ablage = settings.cache_dir / "demo"
     return Projekt(
-        wurzel=demo_wurzel(), name=DEMO_NAME, sitzungen_dir=ablage, wiki_dir=demo_wurzel(),
+        wurzel=demo_wurzel(), name=tr("Demo: Bahnbuchung"), sitzungen_dir=ablage, wiki_dir=demo_wurzel(),
         assets_dir=ablage / "assets", wiki_speichern=modell.WIKI_NIE, wiki_bilder=False, demo=True,
     )
 
@@ -135,7 +135,8 @@ def demo_vorgeschichte() -> dict:
         m["nr"] = nr
     return {
         "meetings": meetings,
-        "heute": {"nr": len(meetings) + 1, "titel": DEMO_HEUTE},
+        # Thema des abgespielten Meetings - es folgt auf die Meetings, die schon im Demo-Wiki stehen.
+        "heute": {"nr": len(meetings) + 1, "titel": tr("Nachschärfung")},
         "wiki": {"anforderungen": anforderungen, "offene_punkte": offene_punkte},
         "seiten": seiten,
     }
@@ -175,8 +176,10 @@ def projekt_dict(projekt: Projekt, state: Mapping[str, object], *, mit_wiki: boo
         else:
             out["wiki"] = WikiStatus(
                 ZUSTAND_KEINS,
-                meldung="Dieses Projekt hat kein Wiki. Der Souffleur erkennt nur Fragen und liefert Essenzen; "
-                "ein Wiki lässt sich in den Projekteinstellungen anlegen oder verknüpfen.",
+                meldung=tr(
+                    "Dieses Projekt hat kein Wiki. Der Souffleur erkennt nur Fragen und liefert Essenzen; "
+                    "ein Wiki lässt sich in den Projekteinstellungen anlegen oder verknüpfen."
+                ),
             ).als_dict()
     return out
 
@@ -211,7 +214,7 @@ def unterbrochene(state: Mapping[str, object], aktiv: Projekt | None = None) -> 
         except modell.ProjektFehler:
             continue
         kandidaten.append((str(p.wurzel), p.name, p.sitzungen_dir))
-    kandidaten.append(("", "Ohne Projekt", eingang.eingang_dir(state)))
+    kandidaten.append(("", tr("Ohne Projekt"), eingang.eingang_dir(state)))
     for wurzel, name, ordner in kandidaten:
         if wurzel in gesehen:
             continue

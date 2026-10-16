@@ -26,6 +26,8 @@ import tempfile
 from collections.abc import Callable, Sequence
 from pathlib import Path
 
+from audioscribe.i18n import tr
+
 ASSETS = Path(__file__).parent / "assets"
 MMD_NAME = "prozessbild.mmd"
 _TMP_DIR = ".prozessbild-tmp"
@@ -262,15 +264,15 @@ def parse_dump(dom: str) -> dict:
     """Ergebnis-JSON aus dem abgezogenen DOM; ``{"error": ...}`` bei jedem Problem."""
     m = _OUT_RE.search(dom)
     if not m:
-        return {"error": "Browser lieferte keine Ergebnisseite."}
+        return {"error": tr("Browser lieferte keine Ergebnisseite.")}
     raw = html.unescape(m.group(1)).strip()
     if raw == "pending":
-        return {"error": "Rendern nicht rechtzeitig fertig geworden."}
+        return {"error": tr("Rendern nicht rechtzeitig fertig geworden.")}
     try:
         data = json.loads(raw)
     except ValueError:
-        return {"error": "Ergebnis nicht lesbar."}
-    return data if isinstance(data, dict) else {"error": "Ergebnis nicht lesbar."}
+        return {"error": tr("Ergebnis nicht lesbar.")}
+    return data if isinstance(data, dict) else {"error": tr("Ergebnis nicht lesbar.")}
 
 
 def run_page(page_html: str, workdir: Path, browser: Path) -> dict:
@@ -297,9 +299,9 @@ def run_page(page_html: str, workdir: Path, browser: Path) -> dict:
                 timeout=_TIMEOUT_S,
             )
         except subprocess.TimeoutExpired as exc:
-            raise RuntimeError(f"Browser antwortet nicht ({_TIMEOUT_S}s).") from exc
+            raise RuntimeError(tr("Browser antwortet nicht ({sekunden}s).", sekunden=_TIMEOUT_S)) from exc
         except OSError as exc:
-            raise RuntimeError(f"Browser nicht startbar: {exc}") from exc
+            raise RuntimeError(tr("Browser nicht startbar: {fehler}", fehler=exc)) from exc
         return parse_dump(proc.stdout)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
@@ -317,10 +319,10 @@ def render(mmd: Path, browser: Path) -> tuple[Path, Path]:
     mmd = Path(mmd)
     source = mmd.read_text(encoding="utf-8").strip()
     if not source:
-        raise RuntimeError(f"{mmd.name} ist leer.")
+        raise RuntimeError(tr("{datei} ist leer.", datei=mmd.name))
     data = run_page(build_page(source), mmd.parent, browser)
     if "error" in data:
-        raise RuntimeError(f"Mermaid-Fehler in {mmd.name}: {data['error']}")
+        raise RuntimeError(tr("Mermaid-Fehler in {datei}: {fehler}", datei=mmd.name, fehler=data["error"]))
     svg_path, png_path = mmd.with_suffix(".svg"), mmd.with_suffix(".png")
     svg_path.write_text(data["svg"], encoding="utf-8")
     _write_png(data["png"], png_path)
@@ -332,7 +334,7 @@ def svg_to_png(svg: str, png_path: Path, browser: Path) -> Path:
     png_path = Path(png_path)
     data = run_page(build_page(svg, mode="svg"), png_path.parent, browser)
     if "error" in data:
-        raise RuntimeError(f"PNG-Umwandlung fehlgeschlagen: {data['error']}")
+        raise RuntimeError(tr("PNG-Umwandlung fehlgeschlagen: {fehler}", fehler=data["error"]))
     _write_png(data["png"], png_path)
     return png_path
 
@@ -351,13 +353,15 @@ def erzeuge_prozessbilder(
     ws = Path(workspace)
     quellen = ensure_source(ws, docs)
     if not quellen:
-        log("[Prozessbild] Kein Mermaid-Diagramm gefunden - kein Prozessbild erzeugt.")
+        log(tr("[Prozessbild] Kein Mermaid-Diagramm gefunden - kein Prozessbild erzeugt."))
         return []
     browser = browser or find_browser()
     if browser is None:
         log(
-            "[Prozessbild] Kein Edge/Chrome/Chromium gefunden - nur prozessbild.mmd erzeugt. "
-            "Pfad ueber AUDIOSCRIBE_BROWSER angeben."
+            tr(
+                "[Prozessbild] Kein Edge/Chrome/Chromium gefunden - nur prozessbild.mmd erzeugt. "
+                "Pfad ueber AUDIOSCRIBE_BROWSER angeben."
+            )
         )
         return []
     erzeugt: list[Path] = []

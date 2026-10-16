@@ -15,6 +15,8 @@ from pathlib import Path
 
 import numpy as np
 
+from audioscribe.i18n import tr
+
 SAMPLE_RATE = 16_000
 
 # Erst ab dieser Lücke wird aufgefüllt; darunter liegt normale Puffer-Latenz.
@@ -106,7 +108,7 @@ class Track:
             if self.start_sample and wav_path.exists():
                 # "wb" würde den Mitschnitt der unterbrochenen Sitzung löschen - eine
                 # Fortsetzung schreibt immer in eine neue Teil-Datei.
-                raise RuntimeError(f"Mitschnitt existiert bereits und wird nicht überschrieben: {wav_path}")
+                raise RuntimeError(tr("Mitschnitt existiert bereits und wird nicht überschrieben: {pfad}", pfad=wav_path))
             self._wav = wave.open(str(wav_path), "wb")
             self._wav.setnchannels(1)
             self._wav.setsampwidth(2)

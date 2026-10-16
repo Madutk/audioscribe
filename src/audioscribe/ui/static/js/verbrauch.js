@@ -3,10 +3,12 @@
 // API-Preisen, den der KI-Dienst selbst meldet - bei Abo-Anmeldung wird nichts abgerechnet.
 
 import { $, api, esc, poller } from './kern.js';
+import { tr, englisch } from './i18n.js';
 
-const ZAHL = new Intl.NumberFormat('de-DE');
-const KURZ = new Intl.NumberFormat('de-DE', { notation: 'compact', maximumFractionDigits: 1 });
-const USD = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'USD' });
+const LOCALE = englisch ? 'en-US' : 'de-DE';
+const ZAHL = new Intl.NumberFormat(LOCALE);
+const KURZ = new Intl.NumberFormat(LOCALE, { notation: 'compact', maximumFractionDigits: 1 });
+const USD = new Intl.NumberFormat(LOCALE, { style: 'currency', currency: 'USD' });
 
 /** Preis mit "≈"; leer, wenn der Dienst keinen genannt hat. */
 export function preis(kosten) {
@@ -18,7 +20,7 @@ export function preis(kosten) {
 /** Eine Zeile, z. B. "182.340 Tokens · ≈ 1,24 $". */
 export function verbrauchText(v) {
   const p = preis(v.kosten_usd);
-  return `${ZAHL.format(v.tokens)} Tokens${p ? ` · ${p}` : ''}`;
+  return tr('{n} Tokens', { n: ZAHL.format(v.tokens) }) + (p ? ` · ${p}` : '');
 }
 
 function zeile(name, v, cls = '') {
@@ -35,19 +37,21 @@ function render(d) {
     return;
   }
   const p = preis(g.kosten_usd);
-  $('kiVerbrauchTokens').textContent = `${KURZ.format(g.tokens)} Tokens`;
+  $('kiVerbrauchTokens').textContent = tr('{n} Tokens', { n: KURZ.format(g.tokens) });
   $('kiVerbrauchPreis').textContent = p;
   $('kiVerbrauch').setAttribute('aria-label',
-    `KI-Verbrauch seit Programmstart: ${ZAHL.format(g.tokens)} Tokens${p ? `, ${p}` : ''} – Einzelheiten anzeigen`);
+    tr('KI-Verbrauch seit Programmstart: {verbrauch} – Einzelheiten anzeigen', { verbrauch: tr('{n} Tokens', { n: ZAHL.format(g.tokens) }) + (p ? `, ${p}` : '') }));
   const s = d.quellen.souffleur.aktuell;
   const a = d.quellen.analyse.aktuell;
   $('kiVerbrauchZeilen').innerHTML =
-    (s.tokens ? zeile(`Souffleur, diese Sitzung (${ZAHL.format(s.aufrufe)} ${s.aufrufe === 1 ? 'Aufruf' : 'Aufrufe'})`, s) : '')
-    + (a.tokens ? zeile('KI-Analyse, dieser Lauf', a) : '')
-    + zeile('Seit Programmstart', g, 'sum');
+    (s.tokens ? zeile(s.aufrufe === 1 ? tr('Souffleur, diese Sitzung (1 Aufruf)') : tr('Souffleur, diese Sitzung ({n} Aufrufe)', { n: ZAHL.format(s.aufrufe) }), s) : '')
+    + (a.tokens ? zeile(tr('KI-Analyse, dieser Lauf'), a) : '')
+    + zeile(tr('Seit Programmstart'), g, 'sum');
   $('kiVerbrauchTeile').textContent =
-    `Eingabe ${ZAHL.format(g.eingabe)} · Ausgabe ${ZAHL.format(g.ausgabe)} · `
-    + `Cache gelesen ${ZAHL.format(g.cache_lesen)} · Cache geschrieben ${ZAHL.format(g.cache_schreiben)}`;
+    tr('Eingabe {ein} · Ausgabe {aus} · Cache gelesen {gelesen} · Cache geschrieben {geschrieben}', {
+      ein: ZAHL.format(g.eingabe), aus: ZAHL.format(g.ausgabe),
+      gelesen: ZAHL.format(g.cache_lesen), geschrieben: ZAHL.format(g.cache_schreiben),
+    });
 }
 
 async function hole() {

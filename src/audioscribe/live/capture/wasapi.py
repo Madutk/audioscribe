@@ -10,6 +10,7 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 
+from audioscribe.i18n import tr
 from audioscribe.live.track import Track
 
 INSTALL_HINT = "uv sync --extra <cu124|cpu> --extra review --extra live"
@@ -18,12 +19,12 @@ INSTALL_HINT = "uv sync --extra <cu124|cpu> --extra review --extra live"
 def _pyaudio():
     if sys.platform != "win32":
         raise RuntimeError(
-            "Live-Aufnahme braucht natives Windows (WASAPI); unter WSL/Linux nicht verfügbar."
+            tr("Live-Aufnahme braucht natives Windows (WASAPI); unter WSL/Linux nicht verfügbar.")
         )
     try:
         import pyaudiowpatch
     except ImportError as exc:
-        raise RuntimeError(f"PyAudioWPatch fehlt -> {INSTALL_HINT}") from exc
+        raise RuntimeError(tr("PyAudioWPatch fehlt -> {hinweis}", hinweis=INSTALL_HINT)) from exc
     return pyaudiowpatch
 
 

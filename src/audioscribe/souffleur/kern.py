@@ -20,6 +20,7 @@ from collections.abc import Callable
 from dataclasses import asdict, replace
 from pathlib import Path
 
+from audioscribe.i18n import tr
 from audioscribe.souffleur import essenz as essenz_modul
 from audioscribe.souffleur import markierung as mk
 from audioscribe.souffleur import prompt as prompt_modul
@@ -121,30 +122,33 @@ class Souffleur:
             self._ki_aufrufe = int(stand.bilanz.get("ki_aufrufe") or 0)
             self._ki_fehler = int(stand.bilanz.get("ki_fehler") or 0)
             self._fenster_id = int(stand.bilanz.get("fenster") or 0)
-        self._log(f"Souffleur: {len(stand.markierungen)} Markierungen der unterbrochenen Sitzung übernommen")
+        self._log(tr("Souffleur: {anzahl} Markierungen der unterbrochenen Sitzung übernommen", anzahl=len(stand.markierungen)))
         for m in stand.markierungen:
             self.on_hinweis(m.als_dict())
 
     def _lade_wiki(self, gen: int, pfad: Path) -> None:
         """Index laden; das Ergebnis zählt nur, wenn inzwischen kein neuerer Wechsel kam."""
         t0 = time.monotonic()
-        was = "gewechselt" if gen > 1 else "geladen"
         try:
             index = wiki_modul.WikiIndex.laden(pfad)
             with self._lock:
                 if gen != self._wiki_gen:
                     return
                 self._wiki, self._wiki_status = index, index.status
-            self._log(f"Souffleur: Wiki {was} in {time.monotonic() - t0:.1f} s - {index.status.meldung}")
+            dauer = f"{time.monotonic() - t0:.1f}"
+            if gen > 1:
+                self._log(tr("Souffleur: Wiki gewechselt in {dauer} s - {meldung}", dauer=dauer, meldung=index.status.meldung))
+            else:
+                self._log(tr("Souffleur: Wiki geladen in {dauer} s - {meldung}", dauer=dauer, meldung=index.status.meldung))
             for w in index.status.warnungen:
-                self._log(f"Souffleur: Wiki-Warnung: {w}")
+                self._log(tr("Souffleur: Wiki-Warnung: {warnung}", warnung=w))
         except Exception:  # noqa: BLE001 - jeder Fehler wird zum Zustand, nie zum Absturz
             status = wiki_modul.pruefe_wiki(pfad)
             with self._lock:
                 if gen != self._wiki_gen:
                     return
                 self._wiki, self._wiki_status = None, status
-            self._log(f"Souffleur: Wiki nicht nutzbar - {status.meldung}")
+            self._log(tr("Souffleur: Wiki nicht nutzbar - {meldung}", meldung=status.meldung))
         finally:
             with self._lock:
                 if gen == self._wiki_gen:
@@ -165,7 +169,7 @@ class Souffleur:
             if pfad is None:
                 self._wiki, self._wiki_status = None, wiki_modul.status_keins()
                 self._wiki_laedt = self._wiki_wechselt = False
-                self._log("Souffleur: Wiki gelöst - weiter ohne Belege")
+                self._log(tr("Souffleur: Wiki gelöst - weiter ohne Belege"))
                 self._wecker.set()
                 return
             self._wiki_wechselt = True
@@ -226,7 +230,7 @@ class Souffleur:
             self._aktiv = bool(aktiv)
             if not aktiv:
                 self._fenster.clear()
-        self._log(f"Souffleur: {'eingeschaltet' if aktiv else 'ausgeschaltet'}")
+        self._log(tr("Souffleur: eingeschaltet") if aktiv else tr("Souffleur: ausgeschaltet"))
 
     # --- Fensterung und Abgleich ------------------------------------------------------
 
@@ -241,7 +245,7 @@ class Souffleur:
                 try:
                     self._verarbeite(fenster)
                 except Exception as exc:  # noqa: BLE001 - ein Fenster darf den Souffleur nicht beenden
-                    self._log(f"Souffleur: Fenster übersprungen: {exc}")
+                    self._log(tr("Souffleur: Fenster übersprungen: {fehler}", fehler=exc))
                     self._diagnose({"fenster_id": self._fenster_id, "fehler": str(exc)})
                 continue
             if beendet:
@@ -321,7 +325,10 @@ class Souffleur:
                 self._ki_meldung = str(exc)
                 if self._fehler_folge >= _FEHLER_FOLGE_MAX:
                     self._pause_bis = time.monotonic() + _FEHLER_PAUSE_S
-                    self._ki_meldung = f"KI-Fehler ({self._fehler_folge} in Folge), Pause {_FEHLER_PAUSE_S:.0f} s: {exc}"
+                    self._ki_meldung = tr(
+                        "KI-Fehler ({anzahl} in Folge), Pause {pause} s: {fehler}",
+                        anzahl=self._fehler_folge, pause=f"{_FEHLER_PAUSE_S:.0f}", fehler=exc,
+                    )
             self._log(f"Souffleur: {self._ki_meldung}")
             self._diagnose({**diag, "treffer": len(fundstellen), "suche_s": round(suche_s, 3), "fehler": str(exc)})
             return
@@ -350,15 +357,16 @@ class Souffleur:
                 self._letzte_verzoegerung = m.verzoegerung_s
             neue.append(m)
         for m in neue:
-            self._log(
-                f"Souffleur: {mk.ART_LABEL.get(m.art, m.art)} bei {m.t_start:.0f} s "
-                f"(Hinweis nach {m.verzoegerung_s or 0:.1f} s, KI {m.ki_antwort_s or 0:.1f} s"
-                f"{f', Start {m.ki_start_s:.1f} s' if m.ki_start_s else ''})"
-            )
+            start = tr(", Start {start} s", start=f"{m.ki_start_s:.1f}") if m.ki_start_s else ""
+            self._log(tr(
+                "Souffleur: {art} bei {t} s (Hinweis nach {verzoegerung} s, KI {ki} s{start})",
+                art=mk.art_label(m.art), t=f"{m.t_start:.0f}", verzoegerung=f"{m.verzoegerung_s or 0:.1f}",
+                ki=f"{m.ki_antwort_s or 0:.1f}", start=start,
+            ))
             try:
                 self.on_hinweis(m.als_dict())
             except Exception as exc:  # noqa: BLE001
-                self._log(f"Souffleur: Hinweis nicht zugestellt: {exc}")
+                self._log(tr("Souffleur: Hinweis nicht zugestellt: {fehler}", fehler=exc))
         self._diagnose({
             **diag, "treffer": len(fundstellen), "suche_s": round(suche_s, 3),
             "ki_start_s": round(antwort.start_s, 3), "ki_antwort_s": round(antwort.antwort_s, 3),
@@ -462,7 +470,7 @@ class Souffleur:
             ziel = self.session_dir
         if ziel is not None:
             essenz_modul.anhaengen(ziel, ergebnis)
-        self._log(f"Souffleur: Essenz {ergebnis.fenster} erzeugt ({ergebnis.ki_s:.1f} s, KI)")
+        self._log(tr("Souffleur: Essenz {fenster} erzeugt ({dauer} s, KI)", fenster=ergebnis.fenster, dauer=f"{ergebnis.ki_s:.1f}"))
         return ergebnis
 
     # --- Ergebnisse -------------------------------------------------------------------
@@ -493,7 +501,7 @@ class Souffleur:
         try:
             mk.schreibe(ziel, self.stand())
         except OSError as exc:
-            self._log(f"Souffleur: Begleitdatei nicht schreibbar: {exc}")
+            self._log(tr("Souffleur: Begleitdatei nicht schreibbar: {fehler}", fehler=exc))
 
     def _diagnose(self, zeile: dict) -> None:
         with self._lock:
@@ -525,7 +533,7 @@ class Souffleur:
                 "beendet": self._beendet,
                 "wiki": self._wiki_status.als_dict() if not (self._wiki_laedt or self._wiki_wechselt) else {
                     **self._wiki_status.als_dict(), "zustand": "laedt",
-                    "meldung": "Wiki wird gewechselt …" if self._wiki_wechselt else "Wiki wird gelesen …"},
+                    "meldung": tr("Wiki wird gewechselt …") if self._wiki_wechselt else tr("Wiki wird gelesen …")},
                 "ki": {
                     "zustand": zustand,
                     "modell": self.ki_status.modell,
@@ -545,14 +553,14 @@ class Souffleur:
     def status_text(self) -> str:
         s = self.status()
         if not s["aktiv"]:
-            return "Souffleur pausiert"
+            return tr("Souffleur pausiert")
         if s["wiki"]["zustand"] != wiki_modul.ZUSTAND_OK:
-            return "Souffleur ohne Wiki – nur Fragen und Essenz"
-        return "Souffleur läuft"
+            return tr("Souffleur ohne Wiki – nur Fragen und Essenz")
+        return tr("Souffleur läuft")
 
     def __getstate__(self):  # Sicherheit gegen versehentliches Pickling der Threads
         raise TypeError("Souffleur ist nicht serialisierbar")
 
     @staticmethod
     def markierung_als_dict(m: mk.Markierung) -> dict:
-        return {**asdict(m), "label": mk.ART_LABEL.get(m.art, m.art)}
+        return {**asdict(m), "label": mk.art_label(m.art)}

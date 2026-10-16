@@ -21,6 +21,7 @@ import sys
 import threading
 from pathlib import Path
 
+from audioscribe.i18n import tr
 from audioscribe.ui import browse
 
 PLATTFORM = browse.PLATFORM  # "mac" | "windows" | "posix" - in Tests umschaltbar
@@ -45,7 +46,7 @@ def verfuegbar() -> bool:
 
 
 def _titel(titel: str) -> str:
-    return "".join(c for c in titel if c.isprintable())[:TITEL_MAX] or "Ordner wählen"
+    return "".join(c for c in titel if c.isprintable())[:TITEL_MAX] or tr("Ordner wählen")
 
 
 def _start(start: Path | None) -> str:
@@ -102,17 +103,17 @@ def ergebnis(proc: subprocess.CompletedProcess) -> Path | None:
         if proc.returncode != 0:
             if "-128" in err or "canceled" in err.lower():
                 return None
-            raise DialogFehler(err.strip() or f"osascript endete mit Code {proc.returncode}")
+            raise DialogFehler(err.strip() or tr("osascript endete mit Code {code}", code=proc.returncode))
         out = out.rstrip("/") or "/"
         return Path(out)
     if PLATTFORM == "windows":
         if proc.returncode == 2:
             return None
         if proc.returncode != 0 or not out:
-            raise DialogFehler(err.strip() or f"PowerShell endete mit Code {proc.returncode}")
+            raise DialogFehler(err.strip() or tr("PowerShell endete mit Code {code}", code=proc.returncode))
         return Path(out)
     if proc.returncode != 0:
-        raise DialogFehler(err.strip() or f"Dialog endete mit Code {proc.returncode}")
+        raise DialogFehler(err.strip() or tr("Dialog endete mit Code {code}", code=proc.returncode))
     return Path(out) if out else None
 
 
@@ -124,7 +125,7 @@ def waehle_ordner(start: Path | None, titel: str) -> Path | None:
             kommando(start, titel), capture_output=True, text=True, timeout=TIMEOUT_S, creationflags=flags,
         )
     except subprocess.TimeoutExpired as exc:
-        raise DialogFehler("Der Ordnerdialog blieb zu lange offen.") from exc
+        raise DialogFehler(tr("Der Ordnerdialog blieb zu lange offen.")) from exc
     except OSError as exc:
-        raise DialogFehler(f"Ordnerdialog nicht startbar: {exc}") from exc
+        raise DialogFehler(tr("Ordnerdialog nicht startbar: {fehler}", fehler=exc)) from exc
     return ergebnis(proc)

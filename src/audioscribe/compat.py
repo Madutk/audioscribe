@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 from audioscribe.config import settings
+from audioscribe.i18n import tr
 
 _TORCH_LOAD_PATCHED = False
 _HF_HUB_PATCHED = False
@@ -195,7 +196,7 @@ def ensure_ctranslate2_loadable(log=None) -> None:
             return
         for so in libs_dir.glob("*.so*"):
             if clear_execstack_flag(so):
-                log(f"ctranslate2: Executable-Stack-Flag entfernt ({so.name}, glibc >= 2.41)")
+                log(tr("ctranslate2: Executable-Stack-Flag entfernt ({datei}, glibc >= 2.41)", datei=so.name))
     except Exception:  # noqa: BLE001 - best effort; der Import schlaegt sonst ohnehin fehl
         pass
 
@@ -230,13 +231,13 @@ def ensure_pkg_resources(log=None) -> None:
     def resource_filename(package: str, resource: str) -> str:
         spec = importlib.util.find_spec(package)
         if spec is None or not spec.origin:
-            raise ImportError(f"Paketverzeichnis nicht auffindbar: {package}")
+            raise ImportError(tr("Paketverzeichnis nicht auffindbar: {paket}", paket=package))
         return str(Path(spec.origin).parent / resource)
 
     module = types.ModuleType("pkg_resources")
     module.resource_filename = resource_filename  # type: ignore[attr-defined]
     sys.modules["pkg_resources"] = module
-    log("pkg_resources fehlt (setuptools >= 81) - Ersatz fuer ctranslate2 bereitgestellt")
+    log(tr("pkg_resources fehlt (setuptools >= 81) - Ersatz fuer ctranslate2 bereitgestellt"))
 
 
 # Windows legt die DLLs unter bin/, Linux die .so-Dateien unter lib/ - beide bekommen ein
@@ -277,7 +278,7 @@ def ensure_cudnn8(log=None) -> Path:
     import zipfile
 
     lib_dir.mkdir(parents=True, exist_ok=True)
-    log(f"Lade cuDNN 8 ({CUDNN8_VERSION}) fuer ctranslate2 (einmalig, ~700 MB)...")
+    log(tr("Lade cuDNN 8 ({version}) fuer ctranslate2 (einmalig, ~700 MB)...", version=CUDNN8_VERSION))
     meta_url = f"https://pypi.org/pypi/nvidia-cudnn-cu12/{CUDNN8_VERSION}/json"
     with urllib.request.urlopen(meta_url) as resp:  # noqa: S310 - PyPI ist vertrauenswuerdig
         meta = json.load(resp)
@@ -312,7 +313,7 @@ def ensure_cudnn8(log=None) -> Path:
                         (lib_dir / datei).write_bytes(z.read(name))
                 elif "/cudnn/lib/" in name and ".so" in name:
                     (lib_dir / datei).write_bytes(z.read(name))
-    log(f"cuDNN 8 entpackt nach {lib_dir}")
+    log(tr("cuDNN 8 entpackt nach {pfad}", pfad=lib_dir))
     return lib_dir
 
 
@@ -346,13 +347,13 @@ def _add_windows_dll_dirs(lib_dir: Path, log) -> None:
         try:
             _DLL_DIR_HANDLES.append(os.add_dll_directory(str(pfad)))
         except OSError as exc:  # noqa: PERF203 - defensiv, darf den Lauf nicht kippen
-            log(f"DLL-Verzeichnis nicht nutzbar ({pfad}): {exc}")
+            log(tr("DLL-Verzeichnis nicht nutzbar ({pfad}): {fehler}", pfad=pfad, fehler=exc))
 
     pfade = os.environ.get("PATH", "").split(os.pathsep)
     neu = [str(p) for p in verzeichnisse if str(p) not in pfade]
     if neu:
         os.environ["PATH"] = os.pathsep.join([*neu, *pfade])
-    log(f"cuDNN 8 bereit: {lib_dir}")
+    log(tr("cuDNN 8 bereit: {pfad}", pfad=lib_dir))
 
 
 def ensure_native_libs(log=None) -> None:

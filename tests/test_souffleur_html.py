@@ -142,7 +142,7 @@ def test_projekteinstellungen_karte_wiki(html):
 def test_wiki_zustand_und_ordnerwahl_im_skript(js):
     assert "/api/wiki/status?path=" in js
     assert "export function renderWikiState(box, w, compact)" in js
-    assert "pickFolder({ title: 'Sitzungsordner zum Abspielen wählen'" in js
+    assert "pickFolder({ title: tr('Sitzungsordner zum Abspielen wählen')" in js
     assert "'/api/projekt/pruefen'" in js and "'/api/wiki/speichern'" in js
 
 
@@ -172,9 +172,9 @@ def test_hinweisinhalt_wiki_beleg_ki_und_ohne_befund(js):
     assert body.index("Im Wiki liegt dazu nichts vor.") < body.index("kiHtml(")
     assert "kiHtml('Antwortvorschlag', h.ki_text)" in body and "kiHtml('Einschätzung', h.ki_text)" in body
     quote = js[js.index("function wikiQuoteHtml"):js.index("const kiHtml")]
-    assert '<blockquote class="wiki">' in quote and "data-copy=" in quote and 'aria-label="Fundstelle kopieren"' in quote
+    assert '<blockquote class="wiki">' in quote and "data-copy=" in quote and 'aria-label="${tr(\'Fundstelle kopieren\')}"' in quote
     assert "h.wiki_zitat" in quote
-    assert 'class="tag ki"' in js and "KI</span>" in js
+    assert 'class="tag ki"' in js and "${tr('KI')}</span>" in js
 
 
 def test_kein_produktname_in_der_oberflaeche(html, souffleur_js):
@@ -188,7 +188,7 @@ def test_kein_produktname_in_der_oberflaeche(html, souffleur_js):
 def test_liste_neueste_oben_max_drei_offen_aeltere_ab_zehn(js):
     assert "list.prepend(el)" in js
     assert "const HINT_OPEN = 3;" in js and "const HINT_DIRECT = 9;" in js
-    assert "`Ältere (${" in js
+    assert "tr('Ältere ({n})'" in js
     assert "Verzögerung Aussage → Hinweis" in js
 
 
