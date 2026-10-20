@@ -33,6 +33,7 @@ from pathlib import Path
 from audioscribe import variante
 from audioscribe.config import settings
 from audioscribe.i18n import tr
+from audioscribe.live import llm_wiki
 from audioscribe.pipeline.media import probe_duration
 from audioscribe.projekt import eingang, einstellungen, modell, wiki_ablage
 from audioscribe.projekt.modell import ProjektFehler
@@ -364,6 +365,10 @@ def create_app():
     class ZuordnenIn(BaseModel):
         sitzung: str
         projekt: str  # Projektordner
+
+    class LiveTitelIn(BaseModel):
+        sitzung: str
+        titel: str = ""
 
     class LiveStartIn(BaseModel):
         output_dir: str = ""
@@ -1511,19 +1516,28 @@ def create_app():
         return JSONResponse({**_kontext_antwort(), "sofort": ergebnis})
 
     def _nach_sitzung(session_dir: Path) -> dict | None:
-        """Nachlauf einer Sitzung: steht das Projekt auf "immer speichern", geht sie ins Wiki."""
+        """Nachlauf einer Sitzung: immer den LLM-Wiki-Ordner in der Sitzung anlegen; steht das
+        Projekt auf "immer speichern", geht sie ausserdem ins Wiki."""
+        ergebnis: dict = {}
+        try:
+            datei = llm_wiki.erzeuge(session_dir)
+            ergebnis["llm_wiki"] = str(datei.parent)
+            live._append(tr("LLM-Wiki-Ordner angelegt: {ordner}", ordner=datei.parent))
+        except (OSError, RuntimeError) as exc:
+            live._append(tr("LLM-Wiki-Ordner fehlgeschlagen: {fehler}", fehler=exc))
+            ergebnis["llm_wiki_fehler"] = str(exc)
         p = _projekt()
         if p is None or p.demo or p.wiki_dir is None or p.wiki_speichern != modell.WIKI_IMMER:
-            return None
+            return ergebnis
         try:
             ablage = wiki_ablage.speichere_sitzung(
                 session_dir, p, bilder=p.wiki_bilder, markierungen=p.wiki_markierungen
             )
         except (OSError, RuntimeError) as exc:
             live._append(tr("Wiki-Ablage fehlgeschlagen: {fehler}", fehler=exc))
-            return {"wiki_fehler": str(exc)}
+            return {**ergebnis, "wiki_fehler": str(exc)}
         live._append(tr("Ins Wiki gespeichert: {ordner}", ordner=ablage.ordner))
-        return {"wiki_ablage": ablage.als_dict()}
+        return {**ergebnis, "wiki_ablage": ablage.als_dict()}
 
     def _unterbrochene_sitzung(raw: str) -> Path:
         """Ordner einer nicht sauber beendeten Sitzung des geoeffneten Projekts."""
@@ -1565,6 +1579,28 @@ def create_app():
         except RuntimeError as exc:
             raise HTTPException(409, str(exc)) from exc
         return JSONResponse({"ok": True})
+
+    @app.post("/api/live/titel")
+    def api_live_titel(body: LiveTitelIn):
+        """Titel einer beendeten Sitzung nachtraeglich aendern: ``sitzung.json`` und der
+        LLM-Wiki-Ordner folgen sofort. Waehrend der Aufnahme schreibt das Kind ``sitzung.json`` -
+        dann nicht."""
+        from audioscribe.live import journal
+
+        ordner = _live_sitzungsordner(body.sitzung)
+        laufend = live.laeuft() and (live.session_dir() or Path()).resolve() == ordner.resolve()
+        if laufend or journal.lebt(ordner):
+            raise HTTPException(409, tr("Die Sitzung läuft noch – der Titel lässt sich nach dem Ende ändern."))
+        if journal.lies_status(ordner) is None:
+            raise HTTPException(400, tr("Keine Live-Sitzung: {ordner}", ordner=ordner))
+        titel = body.titel.strip()[:120]
+        journal.schreibe_status(ordner, titel=titel)
+        live.setze_titel(ordner, titel)
+        try:
+            datei = llm_wiki.erzeuge(ordner)
+        except (OSError, RuntimeError) as exc:
+            raise HTTPException(500, tr("LLM-Wiki-Ordner fehlgeschlagen: {fehler}", fehler=exc)) from exc
+        return JSONResponse({"ok": True, "titel": titel, "llm_wiki": str(datei.parent), "datei": str(datei)})
 
     @app.post("/api/live/verwerfen")
     def api_live_verwerfen(body: SitzungIn):

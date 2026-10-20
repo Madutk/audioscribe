@@ -490,6 +490,45 @@ def test_nachlauf_speichert_bei_immer(projekt, sitzung, tmp_path, monkeypatch):
     assert gerufen == [sitzung] and snap["nachlauf"] == {"wiki_ablage": {"ordner": "x"}} and snap["phase"] == "beendet"
 
 
+def test_nachlauf_legt_llm_wiki_an_auch_ohne_immer(client, projekt, sitzung, monkeypatch):
+    from audioscribe.ui import runner as runner_modul
+
+    _mit_sitzung(client, projekt, sitzung)
+    gestartet = {}
+    monkeypatch.setattr(runner_modul.LiveRunner, "start", lambda self, opts, **kw: gestartet.update(opts=opts, kw=kw))
+    assert client.post("/api/live/start", json={"monitor": 1, "mic": "none", "loopback": "none"}).status_code == 200
+    ergebnis = gestartet["kw"]["on_ende"](sitzung)
+    assert ergebnis == {"llm_wiki": str(sitzung / "LLM-Wiki")}
+    assert (sitzung / "LLM-Wiki" / "Workshop Reisebuchung.md").is_file()
+    assert not any(projekt.raw_dir.iterdir())  # ohne "immer" nichts ins Projekt-Wiki
+
+
+def test_titel_nachtraeglich_aendern_benennt_llm_wiki_um(client, projekt, sitzung):
+    from audioscribe.live import llm_wiki
+
+    _mit_sitzung(client, projekt, sitzung)
+    llm_wiki.erzeuge(sitzung)
+    r = client.post("/api/live/titel", json={"sitzung": str(sitzung), "titel": "  Review Freigaben  "})
+    assert r.status_code == 200, r.text
+    assert r.json()["titel"] == "Review Freigaben"
+    assert json.loads((sitzung / "sitzung.json").read_text(encoding="utf-8"))["titel"] == "Review Freigaben"
+    assert sorted(p.name for p in (sitzung / "LLM-Wiki").iterdir()) == ["Review Freigaben", "Review Freigaben.md"]
+
+
+def test_titel_aendern_nicht_waehrend_der_aufnahme_und_nur_im_projekt(client, projekt, sitzung, tmp_path, monkeypatch):
+    from audioscribe.ui import runner as runner_modul
+
+    _mit_sitzung(client, projekt, sitzung)
+    fremd = tmp_path / "fremd"
+    fremd.mkdir()
+    assert client.post("/api/live/titel", json={"sitzung": str(fremd), "titel": "x"}).status_code == 400
+    monkeypatch.setattr(runner_modul.LiveRunner, "laeuft", lambda self: True)
+    monkeypatch.setattr(runner_modul.LiveRunner, "session_dir", lambda self: sitzung)
+    r = client.post("/api/live/titel", json={"sitzung": str(sitzung), "titel": "x"})
+    assert r.status_code == 409 and "läuft noch" in r.json()["detail"]
+    assert json.loads((sitzung / "sitzung.json").read_text(encoding="utf-8"))["titel"] == "Workshop Reisebuchung"
+
+
 # --- Aufnahme transkribieren: Dateiauswahl, Vorschau -----------------------------------------
 
 

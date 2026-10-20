@@ -825,6 +825,13 @@ class LiveRunner(_ProcessRunner):
             raw = self._info.get("dir")
         return Path(raw) if raw else None
 
+    def setze_titel(self, session_dir: Path, titel: str) -> None:
+        """Nachtraeglich geaenderter Titel - nur, wenn diese Sitzung gerade angezeigt wird."""
+        with self._lock:
+            raw = self._info.get("dir")
+            if raw and Path(raw).resolve() == Path(session_dir).resolve():
+                self._info["titel"] = titel
+
     def souffleur(self):
         """Der Souffleur der laufenden bzw. letzten Sitzung (``None`` ohne Sitzung)."""
         with self._lock:

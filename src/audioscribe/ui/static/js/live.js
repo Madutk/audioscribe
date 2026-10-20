@@ -29,6 +29,7 @@ let switchPending = false;  // Wechsel der Bildquelle unterwegs - der Status sol
 let lightboxIndex = 0;
 let liveDir = null;         // Sitzungsordner der laufenden bzw. letzten Sitzung
 let liveAblage = null;      // Wiki-Ablage dieser Sitzung (automatisch oder per Dialog)
+let liveBeendet = false;    // die angezeigte Sitzung ist sauber beendet - ihr Titel laesst sich noch aendern
 
 function fillDevices(sel, devices, chosen) {
   const opts = [['default', tr('Standardgerät')],
@@ -518,6 +519,7 @@ async function pollLive() {
   renderFazit(s.fazit);
   renderSouffleur(s);
   liveDir = s.dir || null;
+  liveBeendet = !running && s.phase === 'beendet' && !!s.dir && modus() !== 'demo';
   // Automatisch gespeichert (Nachlauf) oder frueher per Dialog - der Server kennt den Vermerk.
   if (s.nachlauf && s.nachlauf.wiki_ablage) liveAblage = s.nachlauf.wiki_ablage;
   else if (s.wiki_ablage && !liveAblage) liveAblage = s.wiki_ablage;
@@ -539,11 +541,14 @@ function renderResult(s, running) {
   const demo = modus() === 'demo';
   const fehler = s.phase === 'fehler' && s.error ? `${esc(s.error)}` : '';
   const beendet = !running && s.phase === 'beendet' && !!s.dir && !demo;
-  const key = JSON.stringify([running, fehler, s.dir, demo, beendet, liveAblage && liveAblage.ordner, liveAblage && liveAblage.frei]);
+  const llmWiki = beendet && s.nachlauf ? s.nachlauf.llm_wiki || '' : '';
+  const key = JSON.stringify([running, fehler, s.dir, demo, beendet, llmWiki, liveAblage && liveAblage.ordner, liveAblage && liveAblage.frei]);
   if (box.dataset.key === key) return;  // Poll alle 500 ms - nur bei Aenderung neu zeichnen
   box.dataset.key = key;
   const ordner = s.dir && !demo ? tr('Sitzungsordner: {pfad}', { pfad: `<code>${esc(s.dir)}</code>` }) + '<br>'
     + tr('Die Live-Fassung liegt als {datei} daneben.', { datei: '<code>transkript.live.md</code>' }) : '';
+  const wiki = llmWiki ? `${tr('LLM-Wiki-Ordner: {pfad}', { pfad: `<code>${esc(llmWiki)}</code>` })}
+      <button class="ghost sm" type="button" data-folder="${esc(llmWiki)}">${icon('external')}${tr('Ordner öffnen')}</button>` : '';
   let ablage = '';
   if (beendet && liveAblage) {
     const pfad = `<code>${esc(liveAblage.ordner)}</code>`;
@@ -553,7 +558,7 @@ function renderResult(s, running) {
     ablage = `<button class="secondary sm" type="button" data-speichern-unter>${icon('book-plus')}${tr('Speichern unter …')}</button>`;
   }
   box.innerHTML = !running && (fehler || ordner)
-    ? `<div class="result ${s.phase === 'fehler' ? 'fehler' : ''}">${[fehler, ordner, ablage].filter(Boolean).join('<br>')}</div>` : '';
+    ? `<div class="result ${s.phase === 'fehler' ? 'fehler' : ''}">${[fehler, ordner, wiki, ablage].filter(Boolean).join('<br>')}</div>` : '';
 }
 
 /** Fazit (Rechendauer, Latenz) der Live-Aufnahme und des Nachschaerfens - erscheint,
@@ -634,6 +639,17 @@ $('liveTestFile').onchange = rememberReplay;
 $('liveStart').onclick = () => startLive();
 $('liveStop').onclick = () => api('/api/live/stop', { method: 'POST' }).catch(() => {});
 $('liveReset').onclick = resetLive;
+// Nach dem Ende umbenennen: sofort gespeichert (Verlassen des Felds oder Enter) - sitzung.json
+// und der LLM-Wiki-Ordner folgen. Waehrend der Aufnahme gilt der Titel erst beim Start.
+$('liveTitle').addEventListener('change', async () => {
+  if (!liveBeendet || !liveDir) return;
+  try {
+    await post('/api/live/titel', { sitzung: liveDir, titel: $('liveTitle').value.trim() });
+    toast(tr('Titel gespeichert'));
+  } catch (err) {
+    toast(tr('Titel nicht gespeichert: {fehler}', { fehler: err.message }), 'fehler');
+  }
+});
 // Erst mit den Defaults: der CUDA-Test kann auf CPU-Rechnern dauern.
 $('liveRefresh').onclick = () => ladeDefaults().then(loadLiveDefaults)
   .then(() => { $('liveErr').textContent = ''; })
