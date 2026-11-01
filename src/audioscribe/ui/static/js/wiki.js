@@ -79,25 +79,21 @@ export function slugify(text) {
 const gleicherOrdner = (a, b) => !!a && !!b && trimSep(a) === trimSep(b);
 
 /**
- * Vorbelegung der beiden Ziele: raw/ und Assets des Projekt-Wikis; bei "Sofort aufnehmen" das
- * Wiki aus den Einstellungen (ueber /api/wiki/status); sonst der Ordner neben der Sitzung.
+ * Vorbelegung des Ziels: raw/ des Projekt-Wikis; bei "Sofort aufnehmen" das des Wikis aus den
+ * Einstellungen (ueber /api/wiki/status); sonst der Ordner neben der Sitzung.
  */
-function vorgabeBasen(sitzung) {
+function vorgabeBasis(sitzung) {
   const p = projekt();
-  if (p && p.raw_dir) return { raw: p.raw_dir, assets: p.assets_dir, wiki: true };
+  if (p && p.raw_dir) return p.raw_dir;
   const a = S.wikiStatus && S.wikiStatus.ablage;
-  if (a && a.raw_basis) return { raw: a.raw_basis, assets: a.assets_basis, wiki: true };
-  const eltern = dirname(sitzung.path || '');
-  return { raw: eltern, assets: eltern ? `${eltern}${sep()}assets` : '', wiki: false };
+  if (a && a.raw_basis) return a.raw_basis;
+  return dirname(sitzung.path || '');
 }
 
-/** Sind die gewaehlten Ziele genau raw/ und Assets des Projekt-Wikis? Nur dann gilt "immer". */
+/** Ist das gewaehlte Ziel genau raw/ des Projekt-Wikis? Nur dann gilt "immer". */
 function istStandard() {
   const p = projekt();
-  if (!p || !p.raw_dir) return false;
-  const bilder = $('wikiDlgBilder').checked && !$('wikiDlgBilder').disabled;
-  return gleicherOrdner($('wikiDlgRaw').value, p.raw_dir)
-    && (!bilder || gleicherOrdner($('wikiDlgAssets').value, p.assets_dir));
+  return !!(p && p.raw_dir) && gleicherOrdner($('wikiDlgRaw').value, p.raw_dir);
 }
 
 /** Legt der Server ins Projekt-Wiki im Meetings-Format ab (raw/meetings/<Datum>_<Art>_<Thema>.md)? */
@@ -113,8 +109,6 @@ function zielVorschau() {
   const kurz = titel ? slugify(titel) : (live ? `live-${live[1]}` : slugify(name.replace(/\d{4}-\d{2}-\d{2}/, '') || name));
   const bilder = $('wikiDlgBilder').checked && !$('wikiDlgBilder').disabled;
   const raw = trimSep($('wikiDlgRaw').value.trim());
-  const assets = trimSep($('wikiDlgAssets').value.trim());
-  $('wikiDlgAssetsRow').hidden = !bilder;
   // Meetings-Format: Art und Thema bilden mit dem Datum den gemeinsamen Stamm von Datei und Bilder-Ordner.
   const meetings = meetingsFormat();
   const art = $('wikiDlgArt').value;
@@ -126,11 +120,13 @@ function zielVorschau() {
     ? `<code>&lt;${esc(tr('Stamm'))}&gt;.souffleur.json</code>/<code>.md</code>` : '<code>markierungen.json</code>/<code>.md</code>';
   const stamm = meetings ? `${datum}_${art || '…'}_${kurz}` : `${datum}_${kurz}`;
   const ziel = meetings ? `${raw}${sep()}meetings${sep()}${stamm}.md` : `${raw}${sep()}${stamm}`;
+  // Im Projekt-Wiki gilt dessen Assets-Ordner; eine freie Ablage bringt ihre Bilder selbst mit.
+  const bilderOrdner = istStandard() && p.assets_dir ? `${trimSep(p.assets_dir)}${sep()}${stamm}` : `${ziel}${sep()}assets`;
   $('wikiDlgTarget').innerHTML = (!raw
     ? `<span class="err">${tr('Bitte einen Ordner für das Transkript wählen.')}</span>`
     : meetings && !art ? `<span class="err">${tr('Bitte die Art des Meetings wählen – sie ist Teil des Dateinamens.')}</span>`
       : meetings ? tr('Datei: {pfad}', { pfad: `<code>${esc(ziel)}</code>` }) : tr('Ablage: {pfad}', { pfad: `<code>${esc(ziel)}</code>` }))
-    + (bilder && assets && (!meetings || art) ? '<br>' + tr('Bilder: {pfad}', { pfad: `<code>${esc(assets)}${esc(sep())}${esc(stamm)}</code>` }) : '');
+    + (bilder && raw && (!meetings || art) ? '<br>' + tr('Bilder: {pfad}', { pfad: `<code>${esc(bilderOrdner)}</code>` }) : '');
   $('wikiDlgOk').disabled = meetings && !art;
   // "Kuenftig immer" meint die Ablage ins Projekt-Wiki - bei anderen Zielen gibt es nichts zu merken.
   $('wikiDlgImmerRow').hidden = !istStandard() || p.wiki_speichern === 'immer' || !!wikiSave.sitzung.ohneImmer;
@@ -146,15 +142,13 @@ export function openWikiDialog(sitzung) {
   if (wikiSave) closeWikiDialog(null);
   const p = projekt() || {};
   const bilder = sitzung.frames || 0;
-  const basen = vorgabeBasen(sitzung);
-  $('wikiDlgInfo').textContent = basen.wiki
-    ? tr('Das Transkript wird als neue Quelle im Wiki abgelegt, die Bilder im Assets-Ordner. Bestehendes bleibt unverändert; die Wiki-Seiten werden nicht angefasst. Beide Ziele lassen sich ändern.')
-    : tr('Transkript und Bilder werden in Ordner deiner Wahl kopiert; der Sitzungsordner bleibt unverändert.');
+  $('wikiDlgInfo').textContent = p.raw_dir
+    ? tr('Das Transkript wird als neue Quelle im Wiki abgelegt, die Bilder im Assets-Ordner. Bestehendes bleibt unverändert; die Wiki-Seiten werden nicht angefasst. Bei einem anderen Ordner liegen die Bilder dort im Unterordner assets/.')
+    : tr('Transkript und Bilder werden in einen Ordner deiner Wahl kopiert, die Bilder in den Unterordner assets/; der Sitzungsordner bleibt unverändert.');
   $('wikiDlgName').value = sitzung.titel || '';
   $('wikiDlgArt').value = sitzung.art || '';
   $('wikiDlgName').placeholder = sitzung.name || '';
-  $('wikiDlgRaw').value = basen.raw || '';
-  $('wikiDlgAssets').value = basen.assets || '';
+  $('wikiDlgRaw').value = vorgabeBasis(sitzung) || '';
   $('wikiDlgBilder').disabled = bilder === 0;
   $('wikiDlgBilder').checked = bilder > 0 && p.wiki_bilder !== false;
   $('wikiDlgBilderLabel').textContent = bilder ? tr('Bilder mit übertragen ({n})', { n: bilder }) : tr('Bilder mit übertragen – diese Sitzung hat keine');
@@ -182,11 +176,9 @@ function closeWikiDialog(result) {
 
 $('wikiDlgName').oninput = zielVorschau;
 $('wikiDlgRaw').oninput = zielVorschau;
-$('wikiDlgAssets').oninput = zielVorschau;
 $('wikiDlgBilder').onchange = zielVorschau;
 $('wikiDlgArt').onchange = zielVorschau;
 $('pickWikiDlgRaw').onclick = () => ordnerWaehlen('wikiDlgRaw', tr('Ordner für das Transkript wählen'));
-$('pickWikiDlgAssets').onclick = () => ordnerWaehlen('wikiDlgAssets', tr('Ordner für die Bilder wählen'));
 $('wikiDlgCancel').onclick = () => closeWikiDialog(null);
 $('wikiDlg').addEventListener('close', () => closeWikiDialog(null));
 $('wikiDlg').addEventListener('click', (e) => { if (e.target === $('wikiDlg')) closeWikiDialog(null); });
@@ -205,7 +197,6 @@ $('wikiDlgOk').onclick = async () => {
       markierungen: $('wikiDlgMarkierungen').checked,
       immer,
       raw_basis: $('wikiDlgRaw').value.trim(),
-      assets_basis: bilder ? $('wikiDlgAssets').value.trim() : '',
     });
     if (immer) setKontext(await api('/api/kontext'));
     if (ablage.hinweis) toast(ablage.hinweis, 'fehler');

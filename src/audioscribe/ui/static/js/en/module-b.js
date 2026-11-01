@@ -227,10 +227,9 @@ export default {
   "Datei: {pfad}": "File: {pfad}",
   "Ablage: {pfad}": "Destination: {pfad}",
   "Bilder: {pfad}": "Images: {pfad}",
-  "Das Transkript wird als neue Quelle im Wiki abgelegt, die Bilder im Assets-Ordner. Bestehendes bleibt unverändert; die Wiki-Seiten werden nicht angefasst. Beide Ziele lassen sich ändern.": "The transcript is filed as a new source in the wiki, the images in the assets folder. Existing content stays unchanged; the wiki pages are not touched. Both destinations can be changed.",
-  "Transkript und Bilder werden in Ordner deiner Wahl kopiert; der Sitzungsordner bleibt unverändert.": "Transcript and images are copied to folders of your choice; the session folder stays unchanged.",
+  "Das Transkript wird als neue Quelle im Wiki abgelegt, die Bilder im Assets-Ordner. Bestehendes bleibt unverändert; die Wiki-Seiten werden nicht angefasst. Bei einem anderen Ordner liegen die Bilder dort im Unterordner assets/.": "The transcript is filed as a new source in the wiki, the images in the assets folder. Existing content stays unchanged; the wiki pages are not touched. With a different folder, the images go into its assets/ subfolder.",
+  "Transkript und Bilder werden in einen Ordner deiner Wahl kopiert, die Bilder in den Unterordner assets/; der Sitzungsordner bleibt unverändert.": "Transcript and images are copied to a folder of your choice, the images into its assets/ subfolder; the session folder stays unchanged.",
   "Bilder mit übertragen ({n})": "Include images ({n})",
   "Bilder mit übertragen – diese Sitzung hat keine": "Include images – this session has none",
-  "Ordner für das Transkript wählen": "Choose folder for the transcript",
-  "Ordner für die Bilder wählen": "Choose folder for the images"
+  "Ordner für das Transkript wählen": "Choose folder for the transcript"
 };

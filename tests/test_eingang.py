@@ -292,12 +292,12 @@ def test_speichern_unter_ohne_projekt(client, aufnahme, tmp_path, monkeypatch):
     assert client.get("/api/live/status").json()["wiki_ablage"] is None
     assert client.post("/api/wiki/speichern", json={"sitzung": str(aufnahme)}).status_code == 409  # kein Ziel
     r = client.post("/api/wiki/speichern", json={
-        "sitzung": str(aufnahme), "raw_basis": str(tmp_path / "t"), "assets_basis": str(tmp_path / "b"), "immer": True,
+        "sitzung": str(aufnahme), "raw_basis": str(tmp_path / "t"), "immer": True,
     })
     assert r.status_code == 200, r.text
     ziel = Path(r.json()["ordner"])
     assert ziel.parent == tmp_path / "t" and r.json()["bilder"] == 2 and r.json()["frei"] is True
-    assert (ziel / "transkript.md").is_file() and (tmp_path / "b" / ziel.name / "0001_00-00-03.jpg").is_file()
+    assert (ziel / "transkript.md").is_file() and (ziel / "assets" / "0001_00-00-03.jpg").is_file()
     assert client.get("/api/live/status").json()["wiki_ablage"]["ordner"] == str(ziel)
     # Nur Aufnahmen aus dem Eingangsordner.
     fremd = _sitzung_in(SimpleNamespace(sitzungen_dir=tmp_path / "fremd"))
@@ -309,13 +309,13 @@ def test_wiki_status_vorbelegung_ohne_projekt(client, aufnahme, wiki, tmp_path):
     assert client.get("/api/wiki/status").json()["ablage"] is None
     assert client.post("/api/state", json={"wiki_dir": str(wiki)}).status_code == 200
     a = client.get("/api/wiki/status").json()["ablage"]
-    assert a == {"raw_basis": str(wiki / "raw"), "assets_basis": str(wiki / "raw" / "assets")}
+    assert a == {"raw_basis": str(wiki / "raw")}
     # Auch ohne Projekt gilt: nie unter die Seiten des Wikis.
     r = client.post("/api/wiki/speichern", json={
-        "sitzung": str(aufnahme), "raw_basis": str(wiki / "wiki" / "quellen"), "assets_basis": str(tmp_path / "b"),
+        "sitzung": str(aufnahme), "raw_basis": str(wiki / "wiki" / "quellen"),
     })
     assert r.status_code == 400 and "Wiki-Seiten" in r.json()["detail"]
-    # Die Vorgabe selbst funktioniert: Transkript nach raw/, Bilder nach raw/assets.
+    # Die Vorgabe selbst funktioniert: Ablage unter raw/, die Bilder in ihrem assets/.
     r = client.post("/api/wiki/speichern", json={"sitzung": str(aufnahme), **a})
     assert r.status_code == 200, r.text
-    assert Path(r.json()["ordner"]).parent == wiki / "raw" and Path(r.json()["assets"]).parent == wiki / "raw" / "assets"
+    assert Path(r.json()["ordner"]).parent == wiki / "raw" and Path(r.json()["assets"]) == Path(r.json()["ordner"]) / "assets"

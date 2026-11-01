@@ -647,13 +647,13 @@ def test_speichern_unter_mit_freien_zielen_im_projekt(client, projekt, sitzung, 
     _mit_sitzung(client, projekt, sitzung)
     _beendet(monkeypatch, sitzung)
     r = client.post("/api/wiki/speichern", json={
-        "sitzung": str(sitzung), "raw_basis": str(tmp_path / "ablage"), "assets_basis": str(tmp_path / "bilder"),
+        "sitzung": str(sitzung), "raw_basis": str(tmp_path / "ablage"),
         "immer": True,
     })
     assert r.status_code == 200, r.text
     a = r.json()
     assert a["frei"] is True and Path(a["ordner"]).parent == tmp_path / "ablage" and a["bilder"] == 2
-    assert Path(a["assets"]).parent == tmp_path / "bilder"
+    assert Path(a["assets"]) == Path(a["ordner"]) / "assets"
     assert not any(projekt.raw_dir.iterdir())  # das Wiki bleibt unberuehrt
     assert client.get("/api/kontext").json()["projekt"]["wiki_speichern"] == "fragen"  # "immer" nur fuers Wiki
     assert client.get("/api/live/status").json()["wiki_ablage"]["ordner"] == a["ordner"]
@@ -662,11 +662,12 @@ def test_speichern_unter_mit_freien_zielen_im_projekt(client, projekt, sitzung, 
 def test_speichern_unter_mit_standardzielen_bleibt_wiki_ablage(client, projekt, sitzung):
     _mit_sitzung(client, projekt, sitzung)
     r = client.post("/api/wiki/speichern", json={
-        "sitzung": str(sitzung), "raw_basis": str(projekt.raw_dir), "assets_basis": str(projekt.assets_dir),
+        "sitzung": str(sitzung), "raw_basis": str(projekt.raw_dir),
         "immer": True,
     })
     assert r.status_code == 200, r.text
     assert r.json()["frei"] is False and Path(r.json()["ordner"]).parent == projekt.raw_dir
+    assert Path(r.json()["assets"]).parent == projekt.assets_dir  # im Wiki gilt dessen Assets-Ordner
     assert client.get("/api/kontext").json()["projekt"]["wiki_speichern"] == "immer"
 
 
@@ -674,7 +675,7 @@ def test_speichern_unter_im_projekt_ohne_wiki(client, projekt_ohne_wiki, sitzung
     client.post("/api/projekt/oeffnen", json={"pfad": str(projekt_ohne_wiki.wurzel)})
     assert client.post("/api/wiki/speichern", json={"sitzung": str(sitzung_ohne_wiki)}).status_code == 409
     r = client.post("/api/wiki/speichern", json={
-        "sitzung": str(sitzung_ohne_wiki), "raw_basis": str(tmp_path / "t"), "assets_basis": str(tmp_path / "b"),
+        "sitzung": str(sitzung_ohne_wiki), "raw_basis": str(tmp_path / "t"),
     })
     assert r.status_code == 200, r.text
     assert (Path(r.json()["ordner"]) / "transkript.annotiert.md").is_file()
@@ -684,7 +685,7 @@ def test_speichern_unter_im_projekt_ohne_wiki(client, projekt_ohne_wiki, sitzung
 def test_speichern_unter_nie_unter_den_wiki_seiten(client, projekt, sitzung, tmp_path):
     _mit_sitzung(client, projekt, sitzung)
     r = client.post("/api/wiki/speichern", json={
-        "sitzung": str(sitzung), "raw_basis": str(projekt.seiten_dir / "quellen"), "assets_basis": str(tmp_path / "b"),
+        "sitzung": str(sitzung), "raw_basis": str(projekt.seiten_dir / "quellen"),
     })
     assert r.status_code == 400 and "Wiki-Seiten" in r.json()["detail"]
     assert not (projekt.seiten_dir / "quellen").exists()
@@ -693,5 +694,5 @@ def test_speichern_unter_nie_unter_den_wiki_seiten(client, projekt, sitzung, tmp
 def test_wiki_status_liefert_die_vorbelegung(client, projekt, sitzung):
     _mit_sitzung(client, projekt, sitzung)
     a = client.get("/api/wiki/status").json()["ablage"]
-    assert a == {"raw_basis": str(projekt.raw_dir), "assets_basis": str(projekt.assets_dir)}
+    assert a == {"raw_basis": str(projekt.raw_dir)}
     assert "ablage" not in client.get("/api/wiki/status", params={"path": str(projekt.wiki_dir)}).json()

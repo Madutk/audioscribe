@@ -350,10 +350,9 @@ def create_app():
         bilder: bool = True
         markierungen: bool = False  # Markierungen des Souffleurs (KI-erzeugt) nur auf Wunsch
         immer: bool = False
-        # "Speichern unter ...": Basisordner fuer Transkript und Bilder. Leer = raw/ und Assets des
-        # Projekt-Wikis; abweichende Ziele sind eine freie Ablage (ohne "immer").
+        # "Speichern unter ...": Basisordner der Ablage. Leer = raw/ des Projekt-Wikis; ein anderer
+        # Ordner ist eine freie Ablage (ohne "immer"), die Bilder liegen dann in ihrem assets/.
         raw_basis: str = ""
-        assets_basis: str = ""
 
     class NachbereitungIn(BaseModel):
         workspace: str
@@ -711,17 +710,17 @@ def create_app():
         return pfad if pfad is not None and str(pfad) not in ("", ".") and pfad.is_dir() else None
 
     def _ablage_vorgabe() -> dict | None:
-        """Vorbelegung fuer "Speichern unter ...": raw/ und Assets des Projekt-Wikis, ohne
-        Projekt die des Wikis aus den Einstellungen - sonst None (der Nutzer waehlt frei)."""
+        """Vorbelegung fuer "Speichern unter ...": raw/ des Projekt-Wikis, ohne Projekt das des
+        Wikis aus den Einstellungen - sonst None (der Nutzer waehlt frei)."""
         p = _projekt()
         if p is not None:
             if p.raw_dir is None or p.demo:
                 return None
-            return {"raw_basis": str(p.raw_dir), "assets_basis": str(p.assets_dir)}
+            return {"raw_basis": str(p.raw_dir)}
         wiki = _wiki_ohne_projekt()
         if wiki is None:
             return None
-        return {"raw_basis": str(wiki / modell.RAW_ORDNER), "assets_basis": str(wiki / modell.ASSETS_VORSCHLAG)}
+        return {"raw_basis": str(wiki / modell.RAW_ORDNER)}
 
     def _seiten_dir() -> Path | None:
         """Die Wiki-Seiten, unter die nie geschrieben wird - auch bei freien Zielen."""
@@ -776,21 +775,19 @@ def create_app():
     @app.post("/api/wiki/speichern")
     def api_wiki_speichern(body: WikiSpeichernIn):
         """Sitzung als neue Quelle nach raw/ legen, Bilder in den Assets-Ordner; die Markierungen
-        des Souffleurs nur auf Wunsch (KI-erzeugt). Mit ``raw_basis``/``assets_basis`` abseits
-        des Projekt-Wikis ist es "Speichern unter ...": dieselbe Ablage an freie Ziele - auch
-        bei "Sofort aufnehmen" ohne Projekt."""
+        des Souffleurs nur auf Wunsch (KI-erzeugt). Mit ``raw_basis`` abseits des Projekt-Wikis
+        ist es "Speichern unter ...": dieselbe Ablage in einen freien Ordner, die Bilder in dessen
+        ``assets/`` - auch bei "Sofort aufnehmen" ohne Projekt."""
         ordner = _live_sitzungsordner(body.sitzung)
         p = _projekt()
         laufend = live.session_dir() if live.laeuft() else None
         if laufend is not None and laufend.resolve() == ordner.resolve():
             raise HTTPException(409, tr("Diese Sitzung läuft noch – ins Wiki geht sie nach dem Stopp."))
         raw = browse.normalize_path(body.raw_basis, default=Path("")) if body.raw_basis.strip() else None
-        assets = browse.normalize_path(body.assets_basis, default=Path("")) if body.assets_basis.strip() else None
-        # Standard = die Ziele des Projekt-Wikis (nicht angegeben oder genau diese): strenge Wiki-Ablage.
+        # Standard = das Ziel des Projekt-Wikis (nicht angegeben oder genau dieses): strenge Wiki-Ablage.
         standard = (
             p is not None and p.raw_dir is not None and not p.demo
             and (raw is None or modell.gleich(raw, p.raw_dir))
-            and (assets is None or (p.assets_dir is not None and modell.gleich(assets, p.assets_dir)))
         )
         if not standard and raw is None:
             if p is not None:
@@ -804,7 +801,7 @@ def create_app():
                 )
             else:
                 ablage = wiki_ablage.speichere_nach(
-                    ordner, raw_basis=raw, assets_basis=assets if body.bilder else None, seiten_dir=_seiten_dir(),
+                    ordner, raw_basis=raw, seiten_dir=_seiten_dir(),
                     titel=body.titel, bilder=body.bilder, markierungen=body.markierungen,
                 )
         except (OSError, RuntimeError) as exc:

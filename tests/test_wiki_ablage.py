@@ -244,21 +244,23 @@ def test_ohne_wiki_wird_nicht_abgelegt(projekt_ohne_wiki, sitzung_ohne_wiki):
 # --- Speichern unter ...: frei gewaehlte Ziele ------------------------------------------------
 
 
-def test_speichere_nach_legt_transkript_und_bilder_an_zwei_freie_ziele(projekt, sitzung, tmp_path):
-    raw, bilder = tmp_path / "transkripte", tmp_path / "bilder"
-    ablage = wiki_ablage.speichere_nach(sitzung, raw_basis=raw, assets_basis=bilder)
+def test_speichere_nach_legt_alles_in_einen_ordner_mit_assets_darin(projekt, sitzung, tmp_path):
+    raw = tmp_path / "transkripte"
+    ablage = wiki_ablage.speichere_nach(sitzung, raw_basis=raw)
     ziel = raw / "2026-10-06_workshop-reisebuchung"
-    assets = bilder / ziel.name
+    assets = ziel / "assets"
+    assert [p.name for p in raw.iterdir()] == [ziel.name]  # kein zweiter Ordner daneben
+    assert sorted(p.name for p in assets.iterdir()) == ["0001_00-00-03.jpg", "0002_00-00-12.jpg"]
     assert ablage.ordner == str(ziel) and ablage.assets == str(assets) and ablage.bilder == 2 and ablage.frei is True
     assert filecmp.cmp(sitzung / "transkript.md", ziel / "transkript.md", shallow=False)
     assert "source_path" not in json.loads((ziel / "transcript.json").read_text(encoding="utf-8"))
-    # Die Bildlinks fuehren relativ von der Ablage ueber beide Baeume zum Bild - und das existiert.
+    # Die Bildlinks bleiben im Ordner - er laesst sich als Ganzes verschieben.
     marks = json.loads((ziel / "marks.json").read_text(encoding="utf-8"))
-    assert marks[0]["png"] == "../../bilder/2026-10-06_workshop-reisebuchung/0001_00-00-03.jpg"
+    assert marks[0]["png"] == "assets/0001_00-00-03.jpg"
     assert all((ziel / m["png"]).is_file() for m in marks)
     annotiert = (ziel / "transkript.annotiert.md").read_text(encoding="utf-8")
-    assert "](../../bilder/2026-10-06_workshop-reisebuchung/0002_00-00-12.jpg)" in annotiert
-    assert "../../bilder/2026-10-06_workshop-reisebuchung/" in (ziel / "README.md").read_text(encoding="utf-8")
+    assert "](assets/0002_00-00-12.jpg)" in annotiert
+    assert "`assets/`" in (ziel / "README.md").read_text(encoding="utf-8")
     # Das Wiki des Projekts bleibt leer; der Vermerk kennt die Ablage trotzdem - mit und ohne Projekt.
     assert not any(projekt.raw_dir.iterdir())
     assert wiki_ablage.letzte_ablage(sitzung)["ordner"] == str(ziel)
@@ -266,10 +268,19 @@ def test_speichere_nach_legt_transkript_und_bilder_an_zwei_freie_ziele(projekt, 
     assert wiki_ablage.letzte_ablage(sitzung, projekt, auch_freie=False) is None
 
 
-def test_speichere_nach_ohne_bilder_ordner(sitzung, tmp_path):
-    ablage = wiki_ablage.speichere_nach(sitzung, raw_basis=tmp_path / "t", assets_basis=None)
+def test_speichere_nach_mit_eigenem_bilder_ordner(sitzung, tmp_path):
+    """Mit assets_basis (Projekt-Wiki im Ordnerformat): Bilder unter gleichem Namen dort, Links relativ."""
+    ablage = wiki_ablage.speichere_nach(sitzung, raw_basis=tmp_path / "t", assets_basis=tmp_path / "b")
     ziel = Path(ablage.ordner)
-    assert ablage.assets is None and ablage.bilder == 0
+    assert ablage.assets == str(tmp_path / "b" / ziel.name) and not (ziel / "assets").exists()
+    marks = json.loads((ziel / "marks.json").read_text(encoding="utf-8"))
+    assert marks[0]["png"] == f"../../b/{ziel.name}/0001_00-00-03.jpg" and all((ziel / m["png"]).is_file() for m in marks)
+
+
+def test_speichere_nach_ohne_bilder(sitzung, tmp_path):
+    ablage = wiki_ablage.speichere_nach(sitzung, raw_basis=tmp_path / "t", bilder=False)
+    ziel = Path(ablage.ordner)
+    assert ablage.assets is None and ablage.bilder == 0 and not (ziel / "assets").exists()
     assert (ziel / "transkript.md").is_file() and not (ziel / "marks.json").exists()
     assert not (ziel / "transkript.annotiert.md").exists()
 
@@ -303,7 +314,7 @@ def test_speichere_sitzung_ist_die_strenge_wiki_ablage(projekt, sitzung):
 def test_nachbereitung_ignoriert_eine_freie_ablage(projekt, sitzung, tmp_path):
     """Lag die Sitzung nur per "Speichern unter" irgendwo, kommt sie fuer die Nachbereitung ins Wiki."""
     ws = _analyse(projekt, sitzung)
-    freie = wiki_ablage.speichere_nach(sitzung, raw_basis=tmp_path / "anderswo", assets_basis=None)
+    freie = wiki_ablage.speichere_nach(sitzung, raw_basis=tmp_path / "anderswo")
     ablage = wiki_ablage.speichere_nachbereitung(ws, projekt, sitzung)
     basis = projekt.raw_dir / "2026-10-06_workshop-reisebuchung"
     assert ablage.ordner == str(basis / "nachbereitung-ki" / "reisebuchung")

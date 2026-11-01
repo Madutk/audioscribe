@@ -20,9 +20,10 @@ eine Datei ``raw/meetings/<JJJJ-MM-TT>_<art>_<thema>.md`` - das Transkript mit d
 daneben auf Wunsch ``<stamm>.souffleur.md``/``.json`` und die Bilder unter ``<assets>/<stamm>/``.
 Alle teilen denselben Namensstamm; so verlangt es die ``CLAUDE.md`` des Wikis.
 
-„Speichern unter …“ (``speichere_nach``) ist dieselbe Ablage an frei gewählte Ordner für
-Transkript und Bilder - auch ohne Projekt. Nie unter die Wiki-Seiten, rein anhängend, die
-Bildlinks bleiben relativ; nur die Wiki-Konventionen (``raw/``, Assets im Wiki) entfallen.
+„Speichern unter …“ (``speichere_nach`` ohne ``assets_basis``) ist dieselbe Ablage an einen frei
+gewählten Ordner - auch ohne Projekt. Darin entsteht ``<JJJJ-MM-TT>_<kurzname>/`` mit den Bildern
+unter ``assets/``: ein geschlossener Ordner, der sich als Ganzes verschieben lässt. Nie unter die
+Wiki-Seiten, rein anhängend; nur die Wiki-Konventionen (``raw/``, Assets im Wiki) entfallen.
 """
 
 from __future__ import annotations
@@ -42,6 +43,7 @@ from audioscribe.projekt.modell import FORMAT_MEETINGS, MEETING_ARTEN, Projekt, 
 VERMERK = "wiki-ablage.json"
 NACHBEREITUNG_ORDNER = "nachbereitung-ki"
 MEETINGS_ORDNER = "meetings"  # unter raw/ - Meetings-Format
+ASSETS_UNTERORDNER = "assets"  # Bilder einer freien Ablage: <ablage>/assets/
 SOUFFLEUR_ENDUNG = ".souffleur"  # Begleitdatei der Markierungen: <stamm>.souffleur.md/.json
 # Aus dem Analyse-Ordner nicht mitgenommen: Materialkopie, Kontext, Skills, Protokoll, Manifest.
 _ANALYSE_AUSGELASSEN = {"material", "kontext", "agent-log.txt", "analyse.json", VERMERK}
@@ -251,17 +253,17 @@ def speichere_nach(
     session_dir: Path,
     *,
     raw_basis: Path,
-    assets_basis: Path | None,
+    assets_basis: Path | None = None,
     seiten_dir: Path | None = None,
     titel: str = "",
     bilder: bool = True,
     markierungen: bool = False,
     frei: bool = True,
 ) -> Ablage:
-    """Die Sitzung an zwei Ziele legen: ``<raw_basis>/<JJJJ-MM-TT>_<kurzname>/`` bekommt das
-    Transkript, ``<assets_basis>/<derselbe Name>/`` die Bilder (``None`` = ohne Bilder). Die
-    Bildlinks sind relativ - beide Ordner lassen sich zusammen verschieben. ``seiten_dir`` sind
-    die Wiki-Seiten, unter die nie geschrieben wird."""
+    """Die Sitzung nach ``<raw_basis>/<JJJJ-MM-TT>_<kurzname>/`` legen. Die Bilder (nur mit
+    ``bilder``) kommen in dessen Unterordner ``assets/``; mit ``assets_basis`` stattdessen nach
+    ``<assets_basis>/<derselbe Name>/`` (Projekt-Wiki im Ordnerformat). Die Bildlinks sind
+    relativ. ``seiten_dir`` sind die Wiki-Seiten, unter die nie geschrieben wird."""
     from audioscribe.review.marks import load_marks, save_marks
     from audioscribe.review.merge import render_markdown_with_marks
     from audioscribe.souffleur import markierung, uebergabe
@@ -273,7 +275,6 @@ def speichere_nach(
     raw = Path(raw_basis) if raw_basis is not None else None
     assets_basis = Path(assets_basis) if assets_basis is not None else None
     _pruefe_freie_ziele(session_dir, raw, assets_basis, seiten_dir)
-    bilder = bilder and assets_basis is not None
     titel = titel.strip() or _titel_der_sitzung(session_dir)
 
     raw.mkdir(parents=True, exist_ok=True)
@@ -305,7 +306,7 @@ def speichere_nach(
                 marks = []
             vorhandene = [m for m in marks if (session_dir / m.png).is_file()]
             if vorhandene:
-                assets = assets_basis / name
+                assets = assets_basis / name if assets_basis is not None else ziel / ASSETS_UNTERORDNER
                 assets.mkdir(parents=True)
                 angelegt.append(assets)
                 neue = []
