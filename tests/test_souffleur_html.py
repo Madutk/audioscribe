@@ -81,18 +81,46 @@ def test_live_region_nur_auf_dem_unsichtbaren_zaehler(html):
 def test_souffleur_wiki_zeile_werkzeuge_essenz_liste_offene_punkte(html):
     assert 'id="souffleurWiki"' in html and 'class="wiki-state none compact"' in html
     assert 'id="souffleurEssenz2"' in html and 'id="souffleurEssenz5"' in html
-    assert "Essenz 2 min" in html and "Essenz 5 min" in html
-    assert '<span class="key">Alt+S</span>' in html
+    assert 'aria-label="Essenz der letzten 2 Minuten"' in html and 'aria-label="Essenz der letzten 5 Minuten"' in html
     assert 'class="ki essenz" id="souffleurEssenz"' in html
     assert 'class="hint-list" id="souffleurList"' in html
-    assert '<details class="open-box" id="souffleurOpen" open>' in html
+    # Offene Punkte doppeln die Hinweise - zugeklappt, nur der Zaehler zaehlt
+    assert '<details class="open-box" id="souffleurOpen">' in html
     assert 'class="open-list" id="souffleurOpenList"' in html
     assert 'id="souffleurHandover"' in html
     assert 'id="souffleurErr"' in html
-    # Reihenfolge innerhalb der Karte wie im Konzept
-    order = ["souffleurWiki", "souffleurEssenz2", "souffleurEssenz", "souffleurList", "souffleurOpen"]
+    # Reihenfolge innerhalb der Karte: Wiki-Chip und Essenz in einer Zeile, darunter die eine Scrollflaeche
+    order = ["souffleurWiki", "souffleurEssenz2", "souffleurBody", "souffleurEssenz", "souffleurLeitfaden",
+             "souffleurList", "souffleurOpen"]
     positions = [html.index(f'id="{i}"') for i in order]
     assert positions == sorted(positions)
+
+
+def test_souffleur_seltenes_steckt_im_menue(html, js):
+    karte = html[html.index('id="souffleur"'):html.index('id="liveShots"')]
+    assert 'id="souffleurMehr" aria-haspopup="true" aria-expanded="false" aria-controls="souffleurMenu"' in karte
+    menue = karte[karte.index('id="souffleurMenu"'):karte.index('class="souffleur-tools"')]
+    assert 'role="menu" hidden' in menue
+    for i in ("souffleurWikiWechseln", "souffleurWikiLoesen"):
+        assert f'id="{i}"' in menue
+    assert "Ausblenden:" not in karte  # der Tastenhinweis steht im Tooltip
+    assert '<symbol id="i-more"' in html
+    assert "if (e.key !== 'Escape') return;" in js and "e.stopPropagation();" in js
+
+
+def test_leitfaden_fokus_alle_und_nachhaken(html, js):
+    lf = html[html.index('id="souffleurLeitfaden"'):html.index('id="souffleurList"')]
+    for i in ("souffleurLeitfadenBar", "souffleurLeitfadenCount", "souffleurLeitfadenList", "souffleurLeitfadenAlle"):
+        assert f'id="{i}"' in lf
+    assert "souffleurLeitfadenFilter" not in html
+    assert "const LF_FOKUS = 3;" in js
+    fokus = js[js.index("function lfFokus"):js.index("function lfAlleHtml")]
+    assert "lfAnstossVon(p) ? 0 : p.prioritaet === 'muss' ? 1 : 2" in fokus and "!lfErledigt(p)" in fokus
+    # Anknuepfen: keine eigene Karte, sondern am Punkt; der Chip im Transkript fuehrt dorthin
+    assert "if (h.art === 'anknuepfen') { addAnstoss(h); return; }" in js
+    assert "data-goto-punkt=" in js and "export function gotoPunkt" in js
+    assert "gotoPunkt(punkt.dataset.gotoPunkt)" in js
+    assert "p.abschnitt" in js
 
 
 # --- Live-Reiter: Testmodus -------------------------------------------------------------------
@@ -185,9 +213,9 @@ def test_kein_produktname_in_der_oberflaeche(html, souffleur_js):
         assert not re.search(r"claude|anthropic|gpt|openai|sonnet|opus|haiku", text, re.I)
 
 
-def test_liste_neueste_oben_max_drei_offen_aeltere_ab_zehn(js):
+def test_liste_neueste_oben_nur_neuester_offen_aeltere_ab_zehn(js):
     assert "list.prepend(el)" in js
-    assert "const HINT_OPEN = 3;" in js and "const HINT_DIRECT = 9;" in js
+    assert "const HINT_OPEN = 1;" in js and "const HINT_DIRECT = 9;" in js
     assert "tr('Ältere ({n})'" in js
     assert "Verzögerung Aussage → Hinweis" in js
 

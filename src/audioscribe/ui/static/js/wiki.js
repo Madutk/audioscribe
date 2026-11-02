@@ -9,11 +9,10 @@ import { tr } from './i18n.js';
 
 /** "JJJJ-MM-TT HH:MM" -> "HH:MM" (die Uhrzeit reicht; das Datum steht im Tooltip). */
 const uhrzeit = (s) => (/\d\d:\d\d$/.test(s || '') ? s.slice(-5) : (s || ''));
-const changeLink = () => ` <a class="goto" href="#/projekt/einstellungen">${tr('ändern')}</a>`;
 
 /**
- * Ein Bauteil fuer alle Orte: div.wiki-state.{none|ok|fail}. Live (compact) zeigt eine Zeile
- * mit "ändern"-Link, Einstellungen und Assistent die lange Fassung mit Pfad und Glossar-Zeile.
+ * Ein Bauteil fuer alle Orte: div.wiki-state.{none|ok|fail}. Live (compact) zeigt einen einzeiligen
+ * Chip mit Einzelheiten im Tooltip, Einstellungen und Assistent die lange Fassung mit Pfad und Glossar-Zeile.
  */
 export function renderWikiState(box, w, compact) {
   if (!box) return;
@@ -25,29 +24,33 @@ export function renderWikiState(box, w, compact) {
     ? tr('Glossar: {n} Einträge', { n: w.glossar_eintraege }) + (!compact && w.glossar_datei ? ` (<code>${esc(w.glossar_datei)}</code>)` : '')
     : tr('Glossar: keins im Wiki');
   const warn = !compact && w && w.warnungen && w.warnungen.length ? `<br>${esc(w.warnungen.join(' · '))}` : '';
-  const link = compact && projekt() && !projekt().demo ? changeLink() : '';
   let cls = 'none', badge = `<span class="badge">${tr('kein Wiki')}</span>`, body;
+  // compact = Chip im Souffleur: eine Zeile, Einzelheiten im Tooltip; Wechseln steckt im ⋯-Menue.
+  let titel = '';
   if (z === 'ok') {
     cls = 'ok'; badge = '<span class="badge ok">Wiki</span>';
-    const gelesen = w.gelesen ? tr(', gelesen {zeit}', { zeit: `<span title="${esc(w.gelesen)}">${esc(uhrzeit(w.gelesen))}</span>` }) : '';
     const seiten = tr('{n} Seiten', { n: w.seiten });
-    body = compact
-      ? `<b>${esc(w.name || w.pfad)}</b> · ${seiten}${gelesen} · ${glossar}${link}`
-      : `<b>${esc(w.name || w.pfad)}</b> · <code>${esc(w.pfad)}</code><br>${seiten}${gelesen} · ${glossar}${warn}`;
+    if (compact) {
+      body = `<b>${esc(w.name || w.pfad)}</b> · ${seiten}`;
+      titel = `${w.name || w.pfad} · ${seiten}` + (w.gelesen ? tr(', gelesen {zeit}', { zeit: uhrzeit(w.gelesen) }) : '')
+        + ' · ' + (w.glossar_eintraege ? tr('Glossar: {n} Einträge', { n: w.glossar_eintraege }) : tr('Glossar: keins im Wiki'));
+    } else {
+      const gelesen = w.gelesen ? tr(', gelesen {zeit}', { zeit: `<span title="${esc(w.gelesen)}">${esc(uhrzeit(w.gelesen))}</span>` }) : '';
+      body = `<b>${esc(w.name || w.pfad)}</b> · <code>${esc(w.pfad)}</code><br>${seiten}${gelesen} · ${glossar}${warn}`;
+    }
   } else if (z === 'fehler') {
     cls = 'fail'; badge = `<span class="badge fail">${tr('nicht erreichbar')}</span>`;
-    body = compact
-      ? `<code>${esc(w.pfad || '')}</code> · ${esc(w.meldung || '')}${link}`
-      : `<code>${esc(w.pfad || '')}</code><br>${esc(w.meldung || '')} ${tr('Bis dahin arbeitet der Souffleur ohne Wiki.')}<br>${glossar}${warn}`;
+    if (compact) { body = esc(w.meldung || w.pfad || ''); titel = `${w.pfad || ''} · ${w.meldung || ''}`; }
+    else body = `<code>${esc(w.pfad || '')}</code><br>${esc(w.meldung || '')} ${tr('Bis dahin arbeitet der Souffleur ohne Wiki.')}<br>${glossar}${warn}`;
   } else if (z === 'laedt') {
     cls = 'none'; badge = `<span class="badge laeuft">${tr('liest …')}</span>`;
-    body = `${esc((w && w.meldung) || tr('Wiki wird gelesen …'))}${link}`;
+    body = esc((w && w.meldung) || tr('Wiki wird gelesen …'));
   } else {
     const text = (w && w.meldung) || tr('Kein Wiki verknüpft. Der Souffleur erkennt nur Fragen und liefert Essenzen.');
-    body = compact
-      ? `${esc(text)}${link}`
-      : `${tr('{text} – ohne Belege und ohne Widersprüche.', { text: esc(text.replace(/\.\s*$/, '')) })}<br>${glossar}`;
+    if (compact) { body = esc(tr('ohne Belege')); titel = text; }
+    else body = `${tr('{text} – ohne Belege und ohne Widersprüche.', { text: esc(text.replace(/\.\s*$/, '')) })}<br>${glossar}`;
   }
+  box.title = titel;
   box.className = `wiki-state ${cls}${compact ? ' compact' : ''}`;
   box.innerHTML = `${badge}<span class="body">${body}</span>`;
 }

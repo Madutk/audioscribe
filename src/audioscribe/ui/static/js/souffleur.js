@@ -20,12 +20,17 @@ const hintEls = new Map();       // hinweis.id -> details.hint-item
 let souffleurEssenzen = [];      // Ergebnisse von /api/souffleur/essenz, aelteste zuerst
 let souffleurToggling = false;   // laufender POST /api/souffleur/toggle - solange nicht vom Poll ueberschreiben
 const HINT_DIRECT = 9;           // ab dem 10. Hinweis wandern die aelteren unter "Ältere (n)"
-const HINT_OPEN = 3;             // hoechstens so viele Hinweise gleichzeitig aufgeklappt
+const HINT_OPEN = 1;             // nur der neueste Hinweis aufgeklappt - aeltere einzeilig, auf Klick
 // Leitfaden (Meeting-Vorbereitung) - siehe unten
 let lfVorschau = null;           // /api/leitfaden/vorschau der gewaehlten Datei (vor dem Start)
 let lfKey = '';                  // zuletzt gezeichneter Stand - der Poll zeichnet nur bei Aenderung
-let lfNurOffen = false;
+let lfStand = { lf: null, interaktiv: false };  // letzte Daten aus dem Poll - fuer lokales Neuzeichnen
+let lfAlle = false;              // false = Fokus (naechste offene Punkte), true = alle Punkte nach Abschnitt
+const lfAuf = new Set();         // aufgeklappte Punkte (voller Text, KI-Stand)
+const lfAnstoss = new Map();     // punkt_id -> Hinweis "anknuepfen": am Punkt markiert statt eigener Karte
+let lfNeu = null;                // punkt_id, die beim naechsten Zeichnen kurz aufleuchtet
 let lfSetzt = false;             // laufender POST - solange nicht vom Poll ueberschreiben
+const LF_FOKUS = 3;              // so viele offene Punkte zeigt der Fokus
 
 const ART = {
   widerspruch: { cls: 'widerspruch', icon: 'zap', wort: 'Widerspruch', label: 'Widerspruch' },
@@ -43,7 +48,8 @@ const hintId = (h) => `h-${h.id}`;
 const tagKi = () => `<span class="tag ki">${icon('sparkles')}${tr('KI')}</span>`;
 
 export function resetSouffleurView() {
-  lfKey = '';
+  lfKey = ''; lfAlle = false; lfAuf.clear(); lfAnstoss.clear(); lfNeu = null;
+  menuAuf(false);
   souffleurInfo = null; souffleurHints = []; souffleurEssenzen = [];
   hintBySeg.clear(); hintEls.clear();
   $('souffleurList').innerHTML = empty('lightbulb', tr('Hinweise zu Fragen, Widersprüchen und offenen Punkten erscheinen hier.'));
@@ -67,7 +73,8 @@ export function zeigeWikiStatus() {
 // --- Wiki "on the fly" wechseln (Projekt: dauerhaft in projekt.json; Sofort aufnehmen: global) ----
 
 function renderWikiActions(w) {
-  $('souffleurWikiActions').hidden = modus() === 'demo';
+  $('souffleurMehr').hidden = modus() === 'demo';
+  $('souffleurEinst').hidden = !projekt();  // ohne Projekt (Sofort aufnehmen) gibt es keine Projekteinstellungen
   $('souffleurWikiLoesen').hidden = !(w && w.zustand && w.zustand !== 'keins');
 }
 
@@ -104,16 +111,39 @@ $('souffleurWikiLoesen').onclick = async () => {
   if (ok) wikiSetzen(null);
 };
 
+// --- ⋯-Menue: selten Gebrauchtes (Wiki wechseln/loesen, Einstellungen) aus der Karte heraus ----
+
+function menuAuf(auf) {
+  const m = $('souffleurMenu');
+  if (m.hidden === !auf) return;
+  m.hidden = !auf;
+  $('souffleurMehr').setAttribute('aria-expanded', String(auf));
+  if (auf) { const erst = m.querySelector('button:not([hidden]), a'); if (erst) erst.focus(); }
+}
+$('souffleurMehr').onclick = (e) => { e.stopPropagation(); menuAuf($('souffleurMenu').hidden); };
+$('souffleurMenu').addEventListener('click', (e) => { if (e.target.closest('button, a')) menuAuf(false); });
+$('souffleurMenu').addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  e.stopPropagation();  // sonst blendet Esc den ganzen Souffleur aus (live.js)
+  menuAuf(false);
+  $('souffleurMehr').focus();
+});
+document.addEventListener('click', (e) => {
+  if (!e.target.closest || !e.target.closest('#souffleurMenu, #souffleurMehr')) menuAuf(false);
+});
+
 /** Markierung an die Transkriptzeile haengen: Klassen, Randstreifen, Chip nach .lag - der Text bleibt unberuehrt. */
 export function markSegment(h) {
   const row = $('liveText').querySelector(`.seg[data-id="${CSS.escape(String(h.segment_id))}"]`);
   if (!row || row.querySelector('.mark')) return;
   const a = artOf(h);
   row.classList.add('marked', a.cls);
+  // Anknuepfen hat keine eigene Karte - der Chip fuehrt zum Punkt im Leitfaden.
+  const ziel = h.art === 'anknuepfen'
+    ? `data-goto-punkt="${esc(String(h.punkt_id || ''))}" aria-label="${esc(tr('{art} – zum Leitfaden-Punkt {punkt}', { art: a.label, punkt: h.punkt_id || '' }))}"`
+    : `data-goto-hint="${hintId(h)}" aria-label="${esc(tr('{art} – zum Hinweis {zeit}', { art: a.label, zeit: tc(h.t_start) }))}"`;
   row.dataset.hint = hintId(h);
-  row.insertAdjacentHTML('beforeend',
-    `<button class="mark ${a.cls}" type="button" data-goto-hint="${hintId(h)}" aria-label="${esc(tr('{art} – zum Hinweis {zeit}', { art: a.label, zeit: tc(h.t_start) }))}">`
-    + `${icon(a.icon)}${esc(a.wort)}</button>`);
+  row.insertAdjacentHTML('beforeend', `<button class="mark ${a.cls}" type="button" ${ziel}>${icon(a.icon)}${esc(a.wort)}</button>`);
 }
 
 /** Wiki-Beleg: durchgezogen, hinterlegt, Fundstelle mit Kopierknopf (kopiert "datei › Überschrift"). */
@@ -142,7 +172,7 @@ function gegenHtml(h, her) {
 const kiHtml = (rolle, text) => text
   ? `<div class="ki"><div class="ki-head">${tagKi()}${esc(tr(rolle))}</div>${esc(text)}</div>` : '';
 
-/** Anstoss aus dem Leitfaden: die Stelle, an der der Punkt angesprochen wurde, der Punkt selbst
+/** Anstoss aus dem Leitfaden (aufgeklappter Punkt): die Stelle, an der er angesprochen wurde,
  *  und - KI-eingeschaetzt - was daran noch offen ist. */
 function anknuepfenHtml(h) {
   return `<p class="said">${tr('Angesprochen:')} <q>${esc(h.aussage || '')}</q></p>`
@@ -152,7 +182,6 @@ function anknuepfenHtml(h) {
 /** Inhalt je Art: Widerspruch = Gesagt + Beleg + KI-Einschaetzung; Frage = Beleg (+ Antwortvorschlag);
  *  ohne Befund = nur "Im Wiki liegt dazu nichts vor." - bewusst kein KI-Text (Entscheidung des Auftraggebers). */
 function hintBodyHtml(h) {
-  if (h.art === 'anknuepfen') return anknuepfenHtml(h);
   const said = `<p class="said">${h.sprecher ? tr('Gesagt ({sprecher}):', { sprecher: esc(h.sprecher) }) : tr('Gesagt:')} <q>${esc(h.aussage || '')}</q></p>`;
   if (!hatBeleg(h)) {
     return demoAktiv() ? `<p class="wiki none">${icon('plus')}${tr('Neu – steht noch nicht im Wiki.')}</p>`
@@ -173,7 +202,7 @@ function hintItemEl(h) {
   const lag = h.verzoegerung_s === null || h.verzoegerung_s === undefined ? '' : '+' + secs(h.verzoegerung_s);
   el.innerHTML = `<summary><span class="mark ${a.cls}">${icon(a.icon)}${esc(a.wort)}</span>`
     + `<button class="ts" type="button" data-goto-seg="${esc(String(h.segment_id))}" title="${tr('Zur Transkriptzeile')}">${tc(h.t_start)}</button>`
-    + `<span class="title">${esc(h.art === 'anknuepfen' ? tr('Leitfaden {punkt}:', { punkt: h.punkt_id || '' }) + ' ' + (h.punkt_text || '') : (h.aussage || a.label))}</span>`
+    + `<span class="title">${esc(h.aussage || a.label)}</span>`
     + `<span class="lag" title="${tr('Verzögerung Aussage → Hinweis')}">${esc(lag)}</span></summary>`
     + `<div class="hint-body">${hintBodyHtml(h)}</div>`;
   setTimeout(() => el.classList.remove('new'), 400);
@@ -182,6 +211,7 @@ function hintItemEl(h) {
 
 export function addHint(h) {
   if (hintEls.has(h.id)) return;
+  if (h.art === 'anknuepfen') { addAnstoss(h); return; }
   souffleurHints.push(h);
   hintBySeg.set(h.segment_id, h);
   markSegment(h);
@@ -198,6 +228,17 @@ export function addHint(h) {
   updateHintCount();
   $('souffleurLive').textContent = tr('{n} Hinweise, zuletzt: {art} {zeit}', { n: souffleurHints.length, art: artOf(h).label, zeit: tc(h.t_start) });
   renderOpenPoints();
+}
+
+/** Anstoss "nachhaken" an den Leitfaden-Punkt haengen: er rueckt im Fokus nach oben und leuchtet kurz. */
+function addAnstoss(h) {
+  hintEls.set(h.id, null);
+  hintBySeg.set(h.segment_id, h);
+  markSegment(h);
+  lfAnstoss.set(h.punkt_id, h);
+  lfNeu = h.punkt_id;
+  zeichneLeitfaden();
+  $('souffleurLive').textContent = tr('Leitfaden {punkt}: nachhaken', { punkt: h.punkt_id || '' });
 }
 
 /** Ab dem 10. Eintrag wandern die aeltesten unter "Ältere (n)" - die Knoten ziehen um, ihr Zustand bleibt. */
@@ -426,42 +467,109 @@ export function setLeitfadenVorschau(lf) {
   if (!souffleurInfo || !souffleurInfo.leitfaden) renderLeitfaden(null, false);
 }
 
+const lfErledigt = (p) => p.status === 'geklaert' || p.status === 'vertagt';
+// Ein Anstoss gilt, bis der Punkt geklaert oder vertagt ist.
+const lfAnstossVon = (p) => (lfErledigt(p) ? null : lfAnstoss.get(p.id) || null);
+
+/** Was beim Aufklappen erscheint: der Anstoss (angesprochen + KI "noch offen"), sonst der KI-Stand. */
+function lfDetailHtml(p, anstoss) {
+  if (anstoss) return anknuepfenHtml(anstoss);
+  if (p.stand) return `<p class="lf-stand">${tagKi()} ${esc(p.stand)}</p>`;
+  if (p.notiz) return `<p class="lf-stand">${esc(p.notiz)}</p>`;
+  return '';
+}
+
+/** Eine Zeile: Status (Klick = naechster Status) · ID + Text (Klick = aufklappen) · nachhaken · Zeit. */
 function lfPunktHtml(p, interaktiv) {
   const wort = tr(LF_WORT[p.status] || p.status);
   const naechst = tr(LF_WORT[LF_FOLGE[p.status]] || '');
   const titel = interaktiv ? tr('{status} – Klick: {naechst}', { status: wort, naechst }) : wort;
+  const anstoss = lfAnstossVon(p);
+  const detail = lfDetailHtml(p, anstoss);
+  const auf = lfAuf.has(p.id);
+  const muss = p.prioritaet === 'muss';
   const zeit = p.segment_id !== null && p.segment_id !== undefined && p.t_zuletzt !== null && p.t_zuletzt !== undefined
-    ? `<button class="ts" type="button" data-goto-seg="${esc(String(p.segment_id))}" title="${tr('Zur Transkriptzeile')}">[${tc(p.t_zuletzt)}]</button>` : '';
-  const stand = p.stand ? `<span class="lf-stand">${tagKi()} ${esc(p.stand)}</span>` : (p.notiz ? `<span class="lf-stand">${esc(p.notiz)}</span>` : '');
-  return `<li class="st-${esc(p.status)}"><button class="lf-status" type="button" data-punkt="${esc(p.id)}" data-status="${esc(p.status)}"`
+    ? `<button class="ts" type="button" data-goto-seg="${esc(String(p.segment_id))}" title="${tr('Zur Transkriptzeile')}">${tc(p.t_zuletzt)}</button>` : '';
+  const cls = [`st-${p.status}`, muss ? 'muss' : '', anstoss ? 'anstoss' : '', auf ? 'auf' : '']
+    .filter(Boolean).join(' ');
+  return `<li class="${esc(cls)}" data-punkt-li="${esc(p.id)}">`
+    + `<button class="lf-status" type="button" data-punkt="${esc(p.id)}" data-status="${esc(p.status)}"`
     + `${interaktiv ? '' : ' disabled'} title="${esc(titel)}" aria-label="${esc(`${p.id}: ${titel}`)}">${icon(LF_ICON[p.status] || 'circle')}</button>`
-    + `<span class="text"><span class="lf-text">${esc(p.text)}</span>${stand}</span>`
-    + (p.prioritaet === 'muss' ? `<span class="lf-muss">${tr('Muss')}</span>` : '') + zeit + '</li>';
+    + `<button class="lf-text" type="button" data-lf-auf="${esc(p.id)}" aria-expanded="${auf}"`
+    + ` title="${esc(auf ? tr('Zuklappen') : tr('Aufklappen'))}">`
+    + `<span class="lf-id">${esc(p.id)}</span>${muss ? `<span class="sr-only">${tr('Muss')}</span>` : ''}${esc(p.text)}</button>`
+    + (anstoss ? `<span class="mark anknuepfen" title="${esc(tr('Angesprochen, aber noch offen – nachhaken'))}">${icon('arrow-right')}${tr('nachhaken')}</span>` : '')
+    + zeit
+    + (auf && detail ? `<div class="lf-detail">${detail}</div>` : '')
+    + '</li>';
 }
 
-/** Checkliste zeichnen: lf = Stand der Sitzung, sonst die Vorschau. "Was ist noch offen?" filtert
- *  auf nicht Erledigtes - Pflicht zuerst. */
+/** Fokus: hoechstens LF_FOKUS offene Punkte - zuerst nachhaken, dann Pflicht, sonst in Reihenfolge der Datei. */
+function lfFokus(punkte) {
+  const rang = (p) => (lfAnstossVon(p) ? 0 : p.prioritaet === 'muss' ? 1 : 2);
+  return punkte.map((p, i) => [p, i]).filter(([p]) => !lfErledigt(p))
+    .sort((x, y) => rang(x[0]) - rang(y[0]) || x[1] - y[1]).slice(0, LF_FOKUS).map(([p]) => p);
+}
+
+/** Alle Punkte, nach Abschnitt der Vorbereitung gruppiert, mit "erledigt/gesamt" je Abschnitt. */
+function lfAlleHtml(punkte, interaktiv) {
+  const gruppen = [];
+  for (const p of punkte) {
+    const name = p.abschnitt || '';
+    if (!gruppen.length || gruppen[gruppen.length - 1].name !== name) gruppen.push({ name, punkte: [] });
+    gruppen[gruppen.length - 1].punkte.push(p);
+  }
+  const mitKopf = gruppen.length > 1 || (gruppen[0] && gruppen[0].name);
+  return gruppen.map((g) => (mitKopf
+    ? `<li class="lf-abschnitt"><span>${esc(g.name || tr('Punkte'))}</span>`
+      + `<span class="hint">${g.punkte.filter(lfErledigt).length}/${g.punkte.length}</span></li>` : '')
+    + g.punkte.map((p) => lfPunktHtml(p, interaktiv)).join('')).join('');
+}
+
+/** Leitfaden zeichnen: lf = Stand der Sitzung, sonst die Vorschau. Oben Fortschritt, darunter der Fokus
+ *  (oder alle Punkte). Kein eigener Scrollbereich - die Karte scrollt als Ganzes. */
 function renderLeitfaden(lf, interaktiv) {
+  lfStand = { lf, interaktiv };
   if (lfSetzt) return;
   const daten = lf || lfVorschau;
-  const key = JSON.stringify([daten, interaktiv, lfNurOffen]);
+  const key = JSON.stringify([daten, interaktiv, lfAlle, [...lfAuf], [...lfAnstoss.values()].map((h) => h.id)]);
   if (key === lfKey) return;
   lfKey = key;
   const box = $('souffleurLeitfaden');
   box.hidden = !daten;
   if (!daten) { $('souffleurLeitfadenList').innerHTML = ''; return; }
   const b = daten.bilanz || {};
-  $('souffleurLeitfadenCount').textContent = tr('({geklaert} von {n} geklärt, Pflicht offen: {muss})',
-    { geklaert: b.geklaert || 0, n: b.punkte || 0, muss: b.muss_offen || 0 });
-  $('souffleurLeitfadenFilter').setAttribute('aria-pressed', String(lfNurOffen));
-  $('souffleurLeitfadenTipp').hidden = !interaktiv;
-  let punkte = daten.punkte || [];
-  if (lfNurOffen) {
-    punkte = punkte.filter((p) => p.status === 'offen' || p.status === 'angesprochen')
-      .sort((a, c) => (a.prioritaet === 'muss' ? 0 : 1) - (c.prioritaet === 'muss' ? 0 : 1));
+  const n = b.punkte || 0, geklaert = b.geklaert || 0;
+  $('souffleurLeitfadenBar').style.width = `${n ? Math.round((100 * geklaert) / n) : 0}%`;
+  $('souffleurLeitfadenCount').innerHTML = esc(tr('{geklaert}/{n} geklärt', { geklaert, n }))
+    + (b.muss_offen ? ` · <span class="lf-muss-zahl">${esc(tr('{muss} Pflicht offen', { muss: b.muss_offen }))}</span>` : '');
+  const punkte = daten.punkte || [];
+  let html, gezeigt;
+  if (lfAlle) {
+    html = lfAlleHtml(punkte, interaktiv);
+    gezeigt = punkte.length;
+  } else {
+    const fokus = lfFokus(punkte);
+    html = fokus.map((p) => lfPunktHtml(p, interaktiv)).join('');
+    gezeigt = fokus.length;
+    if (!html && punkte.length) html = `<li class="hint">${tr('Alles geklärt oder vertagt.')}</li>`;
   }
-  $('souffleurLeitfadenList').innerHTML = punkte.map((p) => lfPunktHtml(p, interaktiv)).join('')
-    || `<li class="hint">${lfNurOffen ? tr('Alles geklärt oder vertagt.') : tr('Keine Punkte.')}</li>`;
+  $('souffleurLeitfadenList').innerHTML = html || `<li class="hint">${tr('Keine Punkte.')}</li>`;
+  if (lfNeu) {
+    flash($('souffleurLeitfadenList').querySelector(`[data-punkt-li="${CSS.escape(lfNeu)}"]`));
+    lfNeu = null;
+  }
+  const alle = $('souffleurLeitfadenAlle');
+  alle.hidden = !lfAlle && gezeigt >= punkte.length;
+  alle.setAttribute('aria-expanded', String(lfAlle));
+  alle.innerHTML = lfAlle ? `${icon('chevron-left')}${tr('Nur die nächsten offenen')}`
+    : `${icon('chevron-right')}${tr('Alle {n} Punkte anzeigen', { n: punkte.length })}`;
+}
+
+/** Mit den letzten Daten neu zeichnen (Aufklappen, Umschalten, neuer Anstoss). */
+function zeichneLeitfaden() {
+  lfKey = '';
+  renderLeitfaden(lfStand.lf, lfStand.interaktiv);
 }
 
 async function setzePunkt(btn) {
@@ -481,10 +589,21 @@ async function setzePunkt(btn) {
   }
 }
 
-$('souffleurLeitfadenFilter').onclick = () => {
-  lfNurOffen = !lfNurOffen;
-  renderLeitfaden(souffleurInfo && souffleurInfo.leitfaden, !!(souffleurInfo && liveRunning && !souffleurInfo.beendet));
-};
+/** Vom Chip im Transkript zum Leitfaden-Punkt: notfalls alle Punkte zeigen, aufklappen, ins Bild, pulsen. */
+export function gotoPunkt(id) {
+  setSouffleurHidden(false);
+  const daten = lfStand.lf || lfVorschau;
+  if (!daten) return;
+  if (!lfAlle && !lfFokus(daten.punkte || []).some((p) => p.id === id)) lfAlle = true;
+  lfAuf.add(id);
+  zeichneLeitfaden();
+  const li = $('souffleurLeitfadenList').querySelector(`[data-punkt-li="${CSS.escape(id)}"]`);
+  if (!li) return;
+  li.scrollIntoView({ block: 'nearest', behavior: reducedMotion() ? 'auto' : 'smooth' });
+  flash(li);
+}
+
+$('souffleurLeitfadenAlle').onclick = () => { lfAlle = !lfAlle; zeichneLeitfaden(); };
 
 $('souffleurHide').onclick = () => setSouffleurHidden(true);
 $('souffleurShow').onclick = () => setSouffleurHidden(false);
@@ -499,5 +618,12 @@ $('souffleur').onclick = (e) => {
   const copy = e.target.closest('[data-copy]');
   if (copy) { e.preventDefault(); copyFundstelle(copy); return; }
   const punkt = e.target.closest('button.lf-status[data-punkt]');
-  if (punkt && !punkt.disabled) { e.preventDefault(); setzePunkt(punkt); }
+  if (punkt && !punkt.disabled) { e.preventDefault(); setzePunkt(punkt); return; }
+  const auf = e.target.closest('button.lf-text[data-lf-auf]');
+  if (auf) {
+    e.preventDefault();
+    const id = auf.dataset.lfAuf;
+    if (lfAuf.has(id)) lfAuf.delete(id); else lfAuf.add(id);
+    zeichneLeitfaden();
+  }
 };
