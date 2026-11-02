@@ -193,6 +193,7 @@ _OFFEN = (
     "noch offen", "ungeklärt", "noch unklar", "muss jemand prüfen", "klären wir noch", "nicht geklärt",
     "still open", "unresolved", "still unclear", "need to clarify", "not clarified",
 )
+_GEKLAERT = ("machen wir so", "ist entschieden", "abgemacht", "einverstanden", "geklärt", "agreed", "decided", "settled")
 _STOPP = {
     "der", "die", "das", "und", "oder", "ist", "sind", "ein", "eine", "wir", "bei", "uns", "von", "im", "in",
     "mit", "für", "auf", "zu", "den", "dem", "des", "es", "sich", "auch", "nicht", "ab", "an", "wer", "wie",
@@ -281,7 +282,29 @@ class AttrappeKi:
         # Hoechstens vier je Aufruf (Schema): Widersprueche vor offenen Punkten vor Fragen.
         rang = {"widerspruch": 0, "offener_punkt": 1, "frage": 2}
         befunde.sort(key=lambda b: rang.get(b["art"], 9))
-        return {"befunde": befunde[:4], "uebergangen": uebergangen}
+        daten = {"befunde": befunde[:4], "uebergangen": uebergangen}
+        if "leitfaden" in kontext:
+            daten["punkte"] = self._punkte(kontext)
+        return daten
+
+    @staticmethod
+    def _punkte(kontext: dict) -> list[dict]:
+        """Leitfaden: ein Segment, das mindestens zwei Inhaltswörter eines Punkts nennt, spricht ihn
+        an; steht dazu ein Signalwort der Einigung darin, ist er geklärt."""
+        out: list[dict] = []
+        for seg in kontext.get("segmente", []):
+            text = str(seg.get("text", "")).strip()
+            woerter = _woerter(text)
+            for p in kontext.get("leitfaden", []):
+                if len(woerter & _woerter(str(p.get("text", "")))) < 2:
+                    continue
+                unten = text.lower()
+                geklaert = any(w in unten for w in _GEKLAERT) and not any(o in unten for o in _OFFEN)
+                out.append({"punkt_id": p["id"], "status": "geklaert" if geklaert else "angesprochen",
+                            "segment_id": seg["id"], "aussage": text,
+                            "stand": tr("Wurde besprochen.") if geklaert else tr("Noch ohne Entscheidung.")})
+                break
+        return out[:4]
 
     @staticmethod
     def _beste_fundstelle(text: str, fundstellen: list[dict]) -> dict | None:

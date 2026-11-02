@@ -7,7 +7,7 @@ import { go, ladeDefaults } from './kontext.js';
 import { zuordnenDialog } from './eingang.js';
 import { askConfirm, pickFolder } from './dialoge.js';
 import { openWikiDialog } from './wiki.js';
-import { addHint, markSegment, hintBySeg, renderSouffleur, resetSouffleurView, gotoHint, setSouffleurHidden, renderHandover, zeigeWikiStatus, hinweisZahlen } from './souffleur.js';
+import { addHint, markSegment, hintBySeg, renderSouffleur, resetSouffleurView, gotoHint, setSouffleurHidden, renderHandover, zeigeWikiStatus, hinweisZahlen, setLeitfadenVorschau } from './souffleur.js';
 import { ladeVorgeschichte, demoZustand, vorspann } from './demo.js';
 import { pipStatus, umschalten as souffleurPip, einkoppeln as souffleurEinkoppeln, istAusgekoppelt, pipMoeglich } from './souffleur-pip.js';
 import { tr, englisch } from './i18n.js';
@@ -339,6 +339,7 @@ async function startLive(resume) {
       output_dir: S.folders.output_dir,
       titel: $('liveTitle').value.trim(),
       art: $('liveArt').value,
+      leitfaden: $('liveLeitfaden').value.trim(),
       resume: resume || '',
       replay_transcript: replay,
       replay_speed: replaySpeed(),
@@ -482,6 +483,9 @@ async function pollLive() {
   $('liveTestBadge').hidden = !s.replay;
   // Das Tempo gilt ab dem Start; ein Wechsel mitten im Abspielen haette keine Wirkung.
   $('liveTestSpeed').querySelectorAll('input').forEach((i) => { i.disabled = running; });
+  // Die Vorbereitung gilt ab dem Start - waehrend der Sitzung wird sie in der Souffleur-Karte abgehakt.
+  $('liveLeitfaden').disabled = running;
+  $('liveLeitfadenLeeren').disabled = running;
   if (s.replay) $('liveTestBadge').textContent = tr('Testmodus {tempo}×', { tempo: s.replay_speed || replaySpeed() });
 
   const st = s.stats;
@@ -650,6 +654,48 @@ $('liveTitle').addEventListener('change', async () => {
     toast(tr('Titel nicht gespeichert: {fehler}', { fehler: err.message }), 'fehler');
   }
 });
+// --- Vorbereitung (Leitfaden): Markdown-Datei mit den Punkten, die im Meeting zu klaeren sind ------
+// Vorschlaege aus <wiki>/raw/vorbereitung/, jeder andere Pfad geht auch. Die Vorschau erscheint
+// sofort als Checkliste in der Souffleur-Karte; Titel und Art fuellt sie vor, wenn sie leer sind.
+
+const LF_HINT = 'Checkliste für den Souffleur: jeder Punkt beginnt mit „- [ ]“, unter einer Überschrift „Muss …“ ist er Pflicht.';
+let lfAnfrage = 0;
+
+async function leitfadenListe() {
+  try {
+    const r = await api('/api/leitfaden/liste');
+    $('liveLeitfadenListe').innerHTML = (r.dateien || []).map((d) => `<option value="${esc(d.pfad)}">${esc(d.name)}</option>`).join('');
+    if (r.ordner && !$('liveLeitfaden').value) $('liveLeitfaden').placeholder = r.ordner + sep() + '…';
+  } catch (e) { /* ohne Vorschlaege geht es auch */ }
+}
+
+async function leitfadenWaehlen(pfad) {
+  const nr = ++lfAnfrage;
+  $('liveLeitfaden').value = pfad;
+  $('liveLeitfadenLeeren').hidden = !pfad;
+  const hint = $('liveLeitfadenHint');
+  hint.classList.remove('err');
+  if (!pfad) { hint.textContent = tr(LF_HINT); setLeitfadenVorschau(null); return; }
+  try {
+    const lf = await api(`/api/leitfaden/vorschau?pfad=${encodeURIComponent(pfad)}`);
+    if (nr !== lfAnfrage) return;
+    const b = lf.bilanz || {};
+    hint.textContent = tr('{n} Punkte, davon {muss} Pflicht – der Souffleur hakt sie im Meeting ab.', { n: b.punkte || 0, muss: b.muss_offen || 0 });
+    if (lf.titel && !$('liveTitle').value.trim()) $('liveTitle').value = lf.titel;
+    if (lf.art && !$('liveArt').value && [...$('liveArt').options].some((o) => o.value === lf.art)) $('liveArt').value = lf.art;
+    setLeitfadenVorschau(lf);
+  } catch (err) {
+    if (nr !== lfAnfrage) return;
+    hint.textContent = err.message;
+    hint.classList.add('err');
+    setLeitfadenVorschau(null);
+  }
+}
+
+$('liveLeitfaden').addEventListener('focus', leitfadenListe);
+$('liveLeitfaden').addEventListener('change', () => leitfadenWaehlen($('liveLeitfaden').value.trim()));
+$('liveLeitfadenLeeren').onclick = () => leitfadenWaehlen('');
+
 // Erst mit den Defaults: der CUDA-Test kann auf CPU-Rechnern dauern.
 $('liveRefresh').onclick = () => ladeDefaults().then(loadLiveDefaults)
   .then(() => { $('liveErr').textContent = ''; })
@@ -857,6 +903,7 @@ export function leereLive() {
   renderSofort(null);
   $('liveTitle').value = '';
   $('liveArt').value = '';
+  leitfadenWaehlen('');
   $('liveResume').innerHTML = '';
   $('liveErr').textContent = '';
   $('demoErr').textContent = '';

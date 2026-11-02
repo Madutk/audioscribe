@@ -45,6 +45,9 @@ NACHBEREITUNG_ORDNER = "nachbereitung-ki"
 MEETINGS_ORDNER = "meetings"  # unter raw/ - Meetings-Format
 ASSETS_UNTERORDNER = "assets"  # Bilder einer freien Ablage: <ablage>/assets/
 SOUFFLEUR_ENDUNG = ".souffleur"  # Begleitdatei der Markierungen: <stamm>.souffleur.md/.json
+# Ergebnis der Meeting-Vorbereitung (souffleur/leitfaden.py) - geht mit den Markierungen mit.
+LEITFADEN_DATEI = "leitfaden.md"
+LEITFADEN_ENDUNG = ".leitfaden.md"
 # Aus dem Analyse-Ordner nicht mitgenommen: Materialkopie, Kontext, Skills, Protokoll, Manifest.
 _ANALYSE_AUSGELASSEN = {"material", "kontext", "agent-log.txt", "analyse.json", VERMERK}
 
@@ -330,8 +333,12 @@ def speichere_nach(
             _atomar(ziel / uebergabe.MARKIERUNGEN_JSON, json.dumps(inhalt, ensure_ascii=False, indent=2) + "\n")
             _atomar(ziel / uebergabe.MARKIERUNGEN_MD, uebergabe.render_md(sitzung, stand, fassung))
             anzahl_markierungen = len(stand.markierungen)
+        leitfaden_md = _leitfaden_ergebnis(session_dir) if markierungen else None
+        if leitfaden_md is not None:
+            _atomar(ziel / LEITFADEN_DATEI, leitfaden_md)
 
-        _atomar(ziel / "README.md", _readme(titel or session_dir.name, session_dir.name, assets, ziel, stand is not None))
+        _atomar(ziel / "README.md", _readme(titel or session_dir.name, session_dir.name, assets, ziel, stand is not None,
+                                             mit_leitfaden=leitfaden_md is not None))
         ablage = Ablage(
             ordner=str(ziel), assets=str(assets) if assets else None, bilder=anzahl_bilder,
             markierungen=anzahl_markierungen, titel=titel, zeit=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -471,6 +478,11 @@ def speichere_meeting(
                 _neu(begleit, text)
                 angelegt.append(begleit)
             anzahl_markierungen = len(stand.markierungen)
+        leitfaden_md = _leitfaden_ergebnis(session_dir) if markierungen else None
+        if leitfaden_md is not None:
+            begleit = meetings / f"{stamm}{LEITFADEN_ENDUNG}"
+            _neu(begleit, leitfaden_md)
+            angelegt.append(begleit)
 
         ablage = Ablage(
             ordner=str(datei), assets=str(assets) if assets else None, bilder=len(verlinkt),
@@ -487,7 +499,16 @@ def speichere_meeting(
         raise
 
 
-def _readme(titel: str, sitzung: str, assets: Path | None, ziel: Path, mit_markierungen: bool) -> str:
+def _leitfaden_ergebnis(session_dir: Path) -> str | None:
+    """Abgearbeiteter Leitfaden der Sitzung als Markdown - ``None`` ohne Leitfaden."""
+    from audioscribe.souffleur import leitfaden
+
+    lf = leitfaden.lade_stand(session_dir)
+    return leitfaden.render_md(lf) if lf is not None else None
+
+
+def _readme(titel: str, sitzung: str, assets: Path | None, ziel: Path, mit_markierungen: bool,
+            *, mit_leitfaden: bool = False) -> str:
     zeilen = [
         f"# Quelle aus AudioScribe: {titel}",
         "",
@@ -510,6 +531,11 @@ def _readme(titel: str, sitzung: str, assets: Path | None, ziel: Path, mit_marki
             "  `t_end`, `segment_id`), die wörtliche `aussage`, belegtes Wiki-Wissen unter `wiki`",
             "  (Fundstellen mit Datei, Überschrift, Zeile; Zitat) und getrennt davon `ki_erzeugt`.",
             "- `markierungen.md`: dieselben Markierungen lesbar.",
+        ]
+    if mit_leitfaden:
+        zeilen += [
+            "- `leitfaden.md`: die Meeting-Vorbereitung mit dem Stand je Punkt (geklärt, angesprochen,",
+            "  offen, vertagt). Ein Hinweis zum Nachgehen, kein Wissen; die Belege sind Transkriptstellen.",
         ]
     zeilen += ["", "Was aus der Quelle im Wiki wird, entscheidet der Ingest- bzw. Lint-Prozess des Wikis.", ""]
     return "\n".join(zeilen)

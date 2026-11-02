@@ -1,0 +1,22 @@
+export default {
+  "Anknüpfen": "Follow up",
+  "Angesprochen:": "Raised:",
+  "Leitfaden {punkt}:": "Agenda {punkt}:",
+  "Noch offen": "Still open",
+  "noch nicht besprochen": "not discussed yet",
+  "angesprochen": "raised",
+  "geklärt": "resolved",
+  "vertagt": "postponed",
+  "{status} – Klick: {naechst}": "{status} – click: {naechst}",
+  "Muss": "Must",
+  "({geklaert} von {n} geklärt, Pflicht offen: {muss})": "({geklaert} of {n} resolved, must-haves open: {muss})",
+  "Alles geklärt oder vertagt.": "Everything resolved or postponed.",
+  "{n} Punkte, davon {muss} Pflicht – der Souffleur hakt sie im Meeting ab.": "{n} items, {muss} of them must-haves – the Souffleur ticks them off during the meeting.",
+  "Checkliste für den Souffleur: jeder Punkt beginnt mit „- [ ]“, unter einer Überschrift „Muss …“ ist er Pflicht.": "Checklist for the Souffleur: each item starts with \"- [ ]\"; under a heading \"Must …\" it is a must-have.",
+  "Klick aufs Symbol ändert den Status.": "Click the symbol to change the status.",
+  "Leitfaden": "Agenda",
+  "Pfad zur .md, z. B. aus raw/vorbereitung/": "Path to the .md, e.g. from raw/vorbereitung/",
+  "Vorbereitung (optional)": "Preparation (optional)",
+  "Vorbereitung entfernen": "Remove preparation",
+  "Was ist noch offen?": "What is still open?"
+};

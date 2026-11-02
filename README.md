@@ -859,6 +859,42 @@ abgeglichen wird. Ohne lesbares Wiki oder ohne KI-Dienst läuft die Transkriptio
 weiter; der Souffleur meldet seinen Zustand („ohne Wiki – nur Fragen und Essenz“, „KI nicht
 verfügbar“).
 
+**Meeting vorbereiten (Leitfaden):** Was im Meeting geklärt werden muss, steht in einer
+Markdown-Datei, am besten unter `<wiki>/raw/vorbereitung/JJJJ-MM-TT_<thema>.md`. Dort liegt sie
+neben den Rohquellen, wird aber nie eingearbeitet: Der Souffleur liest `raw/` nicht als Wissen,
+die Vorbereitung belegt also nichts und erzeugt keine Widersprüche. Jeder Punkt beginnt mit
+`- [ ]`; unter einer Überschrift mit „Muss“ ist er Pflicht. Eingerückte Zeilen sind Notizen,
+Wiki-Kennungen wie `ENT-003` schärfen die Wiki-Suche. Ein Frontmatter mit `titel` und `art`
+füllt die Startfelder vor.
+
+```markdown
+---
+titel: Abstimmung Freigabeprozess
+art: abstimmung
+---
+# Ziel
+Freigabe-Verantwortung festlegen.
+
+## Muss geklärt werden
+- [ ] Wer gibt Änderungen am Stammdatenprozess frei? (Wiki: ENT-003)
+  - Laut PRO-004 bisher der Fachbereich.
+
+## Sollte angesprochen werden
+- [ ] Schnittstelle SYS-007: Wer betreibt sie?
+```
+
+In der Live-Ansicht unter *Sitzung → Vorbereitung* die Datei wählen; die Vorschläge kommen aus
+`raw/vorbereitung/` des verknüpften Wikis. Die Checkliste erscheint sofort oben in der
+Souffleur-Karte (auch im ausgekoppelten Fenster). Im Meeting setzt der Souffleur jeden Punkt auf
+*angesprochen* oder *geklärt*, nur mit wörtlichem Beleg aus dem Transkript. Ein Klick aufs
+Symbol setzt den Status von Hand (offen → angesprochen → geklärt → vertagt); was du setzt, gilt.
+Wurde ein Punkt angesprochen, aber nicht geklärt, und das Gespräch ist seit 90 s weitergezogen,
+kommt einmal der Hinweis **Anknüpfen** mit der Stelle und dem, was noch offen ist. *Was ist noch
+offen?* zeigt nur die unerledigten Punkte, Pflicht zuerst. Das Ergebnis liegt im Sitzungsordner
+(`souffleur-leitfaden.md`/`.json`); mit den Markierungen geht es bei der Wiki-Ablage als
+`leitfaden.md` bzw. `<stamm>.leitfaden.md` mit – die offenen Punkte sind der Startpunkt fürs
+Folgemeeting.
+
 **3. Transkript abspielen (Testmodus, ohne Audio):** In der Live-Ansicht die Kachel
 *Transkript abspielen* wählen, eine gespeicherte `transcript.json`, ein `transkript.md` oder
 einen ganzen Sitzungsordner angeben, Tempo 1× bis 20× wählen, *Abspielen starten*. Die

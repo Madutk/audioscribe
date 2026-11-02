@@ -22,6 +22,7 @@ from pathlib import Path
 
 from audioscribe.i18n import tr
 from audioscribe.souffleur import essenz as essenz_modul
+from audioscribe.souffleur import leitfaden as lf_modul
 from audioscribe.souffleur import markierung as mk
 from audioscribe.souffleur import prompt as prompt_modul
 from audioscribe.souffleur import wiki as wiki_modul
@@ -57,8 +58,11 @@ class Souffleur:
         ki_status: KiStatus,
         on_hinweis: Callable[[dict], None] | None = None,
         log: Log | None = None,
+        leitfaden: lf_modul.Leitfaden | None = None,
     ) -> None:
         self.konfig = konfig
+        # Vorbereitung des Moderators (leitfaden.py) - Checkliste, kein Wissen.
+        self._leitfaden = leitfaden
         self.ki = ki
         self.ki_status = ki_status
         self.on_hinweis: Callable[[dict], None] = on_hinweis or (lambda h: None)
@@ -114,6 +118,14 @@ class Souffleur:
         """Wiederaufnahme (PRD §21): liegt im Sitzungsordner schon ein Stand, werden seine
         Markierungen übernommen und erneut gemeldet. Ohne das überschriebe der Abschluss die
         Hinweise der unterbrochenen Sitzung."""
+        if self.session_dir is not None:
+            lf = lf_modul.lade_stand(self.session_dir)
+            if lf is not None:
+                with self._lock:
+                    self._leitfaden = lf
+                self._log(tr("Souffleur: Leitfaden der unterbrochenen Sitzung übernommen ({n} Punkte)", n=len(lf.punkte)))
+            elif self._leitfaden is not None:
+                self._schreibe_leitfaden()
         stand = mk.lade(self.session_dir) if self.session_dir is not None else None
         if stand is None or not stand.markierungen:
             return
@@ -240,6 +252,8 @@ class Souffleur:
             self._wecker.clear()
             with self._lock:
                 beendet = self._beendet
+            if not beendet:
+                self._pruefe_anstoesse()
             fenster = self._naechstes_fenster(final=beendet)
             if fenster:
                 try:
@@ -278,14 +292,21 @@ class Souffleur:
             fenster_id = self._fenster_id
             wiki = self._wiki
             alle = list(self._segmente)
+            lf = self._leitfaden
+            lf_text = lf_modul.prompt_abschnitt(lf, englisch=prompt_modul.sprache() == "en") if lf is not None else ""
+            lf_begriffe = lf.suchbegriffe() if lf is not None else []
+            lf_punkte = [{"id": p.id, "text": p.text, "status": p.status} for p in lf.offene()] if lf is not None else []
+        mit_lf = bool(lf_punkte)
         t_verarbeitung = self.uhr.jetzt()
         diag: dict = {
             "fenster_id": fenster_id, "t_von": float(fenster[0]["start"]), "t_bis": float(fenster[-1]["end"]),
             "segment_ids": [int(s["id"]) for s in fenster], "t_verarbeitung": t_verarbeitung,
         }
         text = " ".join(str(s["text"]) for s in fenster)
-        # Vorfilter gegen Smalltalk-Fetzen - eine Frage ist aber immer einen Aufruf wert.
-        if "?" not in text and _inhaltswoerter(text) < _MIN_INHALTSWOERTER:
+        # Vorfilter gegen Smalltalk-Fetzen - eine Frage ist aber immer einen Aufruf wert, und
+        # solange ein Leitfaden-Punkt angesprochen ist, auch eine kurze Zusage ("machen wir so").
+        schwebend = any(p["status"] == lf_modul.ANGESPROCHEN for p in lf_punkte)
+        if "?" not in text and not schwebend and _inhaltswoerter(text) < _MIN_INHALTSWOERTER:
             self._diagnose({**diag, "uebergangen": "zu_kurz"})
             return
         if self.ki is None:
@@ -302,17 +323,20 @@ class Souffleur:
         glossar: list[tuple[str, str]] = []
         if wiki is not None:
             t0 = time.monotonic()
-            fundstellen = wiki.suche(text, top_k=self.konfig.top_k)
+            # Angesprochene Leitfaden-Punkte schärfen die Suche (Wiki-Kennungen wie ENT-003).
+            fundstellen = wiki.suche(" ".join([text, *lf_begriffe]), top_k=self.konfig.top_k)
             suche_s = time.monotonic() - t0
             glossar = wiki.glossar.eintraege
         fmit = prompt_modul.fundstellen_mit_ids(fundstellen)
         auftrag = KiAuftrag(
-            system=prompt_modul.system_prompt(),
+            system=prompt_modul.system_prompt(mit_leitfaden=mit_lf),
             prompt=prompt_modul.baue_prompt(
-                fenster, kontext=kontext, fundstellen=fmit, glossar=glossar, wiki_verknuepft=wiki is not None
+                fenster, kontext=kontext, fundstellen=fmit, glossar=glossar, wiki_verknuepft=wiki is not None,
+                leitfaden=lf_text if mit_lf else "",
             ),
-            schema=prompt_modul.SCHEMA,
-            kontext={"art": "abgleich", "segmente": fenster, "fundstellen": fmit, "glossar": glossar},
+            schema=prompt_modul.schema(mit_leitfaden=mit_lf),
+            kontext={"art": "abgleich", "segmente": fenster, "fundstellen": fmit, "glossar": glossar,
+                     **({"leitfaden": lf_punkte} if mit_lf else {})},
             timeout_s=self.konfig.ki_timeout_s,
         )
         try:
@@ -356,6 +380,7 @@ class Souffleur:
                 self._markierungen.append(m)
                 self._letzte_verzoegerung = m.verzoegerung_s
             neue.append(m)
+        punkte_neu, punkte_verworfen = self._uebernehme_punkte(antwort.daten.get("punkte") or [], je_id) if mit_lf else ([], [])
         for m in neue:
             start = tr(", Start {start} s", start=f"{m.ki_start_s:.1f}") if m.ki_start_s else ""
             self._log(tr(
@@ -372,10 +397,110 @@ class Souffleur:
             "ki_start_s": round(antwort.start_s, 3), "ki_antwort_s": round(antwort.antwort_s, 3),
             "befunde": len(antwort.daten.get("befunde", [])), "markiert": [m.id for m in neue], "verworfen": verworfen,
             "uebergangen": antwort.daten.get("uebergangen", []),
+            **({"leitfaden": punkte_neu, "leitfaden_verworfen": punkte_verworfen} if mit_lf else {}),
             **({"verbrauch": antwort.verbrauch.als_dict()} if antwort.verbrauch is not None else {}),
         })
         if neue:
             self._schreibe_stand()
+        elif punkte_neu:
+            self._schreibe_leitfaden()
+
+    # --- Leitfaden (Meeting-Vorbereitung) ------------------------------------------------
+
+    def _uebernehme_punkte(self, roh: list, je_id: dict[int, dict]) -> tuple[list[dict], list[dict]]:
+        """Leitfaden-Meldungen der KI prüfen wie Befunde: der Punkt muss existieren, die Aussage
+        wörtlich im genannten Segment stehen. Erst dann ändert sich der Status."""
+        neu: list[dict] = []
+        verworfen: list[dict] = []
+        for eintrag in roh:
+            if not isinstance(eintrag, dict):
+                continue
+            pid = str(eintrag.get("punkt_id") or "")
+            status = str(eintrag.get("status") or "")
+            try:
+                segment_id = int(eintrag.get("segment_id"))
+            except (TypeError, ValueError):
+                verworfen.append({"punkt_id": pid, "grund": "ungueltig"})
+                continue
+            seg = je_id.get(segment_id)
+            aussage = str(eintrag.get("aussage") or "").strip()
+            if seg is None or not aussage or _norm(aussage) not in _norm(str(seg["text"])):
+                verworfen.append({"punkt_id": pid, "grund": "ohne_beleg"})
+                continue
+            with self._lock:
+                lf = self._leitfaden
+                if lf is None or lf.punkt(pid) is None:
+                    verworfen.append({"punkt_id": pid, "grund": "unbekannt"})
+                    continue
+                vorher = lf.punkt(pid).status
+                geaendert = lf.melde_ki(pid, status, segment_id=segment_id, aussage=aussage,
+                                        stand=str(eintrag.get("stand") or ""), t=float(seg["start"]))
+            if not geaendert:
+                verworfen.append({"punkt_id": pid, "grund": "unveraendert"})
+                continue
+            neu.append({"punkt_id": pid, "status": status, "segment_id": segment_id})
+            if status != vorher:
+                self._log(tr("Souffleur: Leitfaden {punkt} {status} bei {t} s", punkt=pid,
+                             status=tr("geklärt") if status == lf_modul.GEKLAERT else tr("angesprochen"),
+                             t=f"{float(seg['start']):.0f}"))
+        return neu, verworfen
+
+    def _pruefe_anstoesse(self) -> None:
+        """Angesprochen, aber nicht geklärt - und das Gespräch ist weitergezogen: einmal anstoßen."""
+        jetzt = self.uhr.jetzt()
+        with self._lock:
+            lf = self._leitfaden
+            if lf is None or jetzt is None or not self._aktiv:
+                return
+            faellig = lf.faellige_anstoesse(jetzt, self.konfig.leitfaden_anstoss_s)
+            if not faellig:
+                return
+            je_id = {int(s["id"]): s for s in self._segmente}
+        neue = []
+        for p in faellig:
+            seg = je_id.get(p.segment_id) if p.segment_id is not None else None
+            t = float(seg["start"]) if seg else float(p.t_zuletzt or jetzt)
+            m = mk.Markierung(
+                id=0, art=mk.ART_ANKNUEPFEN, segment_id=int(p.segment_id or 0), t_start=t,
+                t_end=float(seg["end"]) if seg else t, sprecher=seg.get("speaker") if seg else None,
+                aussage=p.aussage, ki_text=p.stand, punkt_id=p.id, punkt_text=p.text,
+                t_hinweis=round(jetzt, 2),
+            )
+            with self._lock:
+                m.id = len(self._markierungen) + 1
+                self._markierungen.append(m)
+            neue.append(m)
+        for m in neue:
+            self._log(tr("Souffleur: anknüpfen an {punkt} – angesprochen bei {t} s, nicht geklärt", punkt=m.punkt_id, t=f"{m.t_start:.0f}"))
+            try:
+                self.on_hinweis(m.als_dict())
+            except Exception as exc:  # noqa: BLE001
+                self._log(tr("Souffleur: Hinweis nicht zugestellt: {fehler}", fehler=exc))
+        self._schreibe_stand()
+
+    def leitfaden(self) -> dict | None:
+        with self._lock:
+            return self._leitfaden.als_dict() if self._leitfaden is not None else None
+
+    def setze_punkt(self, punkt_id: str, status: str) -> dict:
+        """Der Moderator setzt einen Punkt von Hand (offen | angesprochen | geklaert | vertagt)."""
+        with self._lock:
+            if self._leitfaden is None:
+                raise KeyError(punkt_id)
+            self._leitfaden.setze(punkt_id, status)
+            daten = self._leitfaden.als_dict()
+        self._schreibe_leitfaden()
+        return daten
+
+    def _schreibe_leitfaden(self) -> None:
+        with self._lock:
+            ziel, lf = self.session_dir, self._leitfaden
+            if ziel is None or lf is None:
+                return
+            try:
+                lf_modul.schreibe(ziel, lf)
+            except OSError as exc:
+                self._log(tr("Souffleur: Begleitdatei nicht schreibbar: {fehler}", fehler=exc))
 
     def _pruefe_befund(self, befund: dict, je_id: dict[int, dict], fund_je_id: dict) -> mk.Markierung | None:
         """Lokale Validierung: nichts gilt, was nicht im Segment bzw. im gelieferten Auszug steht."""
@@ -502,6 +627,7 @@ class Souffleur:
             mk.schreibe(ziel, self.stand())
         except OSError as exc:
             self._log(tr("Souffleur: Begleitdatei nicht schreibbar: {fehler}", fehler=exc))
+        self._schreibe_leitfaden()
 
     def _diagnose(self, zeile: dict) -> None:
         with self._lock:
@@ -547,6 +673,7 @@ class Souffleur:
                 "rueckstand_segmente": len(self._fenster),
                 "letzte_verzoegerung_s": self._letzte_verzoegerung,
                 "essenzen": len(self._essenzen),
+                "leitfaden": self._leitfaden.als_dict() if self._leitfaden is not None else None,
                 "uhr": self.uhr.jetzt(),
             }
 

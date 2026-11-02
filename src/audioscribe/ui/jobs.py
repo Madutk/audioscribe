@@ -479,6 +479,9 @@ class LiveJobOptions:
     titel: str = ""
     # Art des Meetings (z. B. "review") - ebenso; Teil des Dateinamens im Meetings-Format.
     art: str = ""
+    # Meeting-Vorbereitung (souffleur/leitfaden.py): Markdown-Datei mit den Punkten zum Klären.
+    # Nur der Souffleur liest sie; der Live-Prozess bekommt sie nicht.
+    leitfaden: Path | None = None
 
 
 REPLAY_SPEEDS: tuple[float, ...] = (1.0, 2.0, 5.0, 10.0, 20.0)

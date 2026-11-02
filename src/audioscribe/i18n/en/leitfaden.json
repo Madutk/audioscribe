@@ -1,0 +1,23 @@
+{
+  "Anknüpfen": "Follow up",
+  "Wurde besprochen.": "Was discussed.",
+  "Noch ohne Entscheidung.": "No decision yet.",
+  "Keine Punkte gefunden – jeder Punkt beginnt mit „- [ ]“.": "No items found – each item starts with \"- [ ]\".",
+  "Der Leitfaden muss eine Markdown-Datei sein (.md).": "The agenda must be a Markdown file (.md).",
+  "Die Datei ist zu groß für einen Leitfaden.": "The file is too large for an agenda.",
+  "Die Datei ist kein UTF-8-Text.": "The file is not UTF-8 text.",
+  "Datei nicht lesbar: {fehler}": "File not readable: {fehler}",
+  "Souffleur: anknüpfen an {punkt} – angesprochen bei {t} s, nicht geklärt": "Souffleur: follow up on {punkt} – raised at {t} s, not resolved",
+  "Souffleur: Leitfaden der unterbrochenen Sitzung übernommen ({n} Punkte)": "Souffleur: agenda of the interrupted session taken over ({n} items)",
+  "Souffleur: Leitfaden {punkt} {status} bei {t} s": "Souffleur: agenda {punkt} {status} at {t} s",
+  "geklärt": "resolved",
+  "angesprochen": "raised",
+  "Leitfaden nicht gefunden: {pfad}": "Agenda not found: {pfad}",
+  "Kein Leitfaden angegeben.": "No agenda given.",
+  "Unbekannter Status: {status}": "Unknown status: {status}",
+  "Keine Sitzung mit Leitfaden.": "No session with an agenda.",
+  "Leitfaden: {name} ({n} Punkte)": "Agenda: {name} ({n} items)",
+  "Leitfaden unbrauchbar: {fehler}": "Agenda unusable: {fehler}",
+  "Unbekannter Punkt: {punkt}": "Unknown item: {punkt}",
+  "Leitfaden nicht lesbar: {fehler}": "Agenda not readable: {fehler}"
+}

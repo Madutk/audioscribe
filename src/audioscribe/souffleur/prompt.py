@@ -11,6 +11,7 @@ Antwortschemas bleiben in beiden Sprachen gleich, der Code wertet sie aus.
 
 from __future__ import annotations
 
+import copy
 from pathlib import Path
 
 from audioscribe.i18n import sprache
@@ -61,6 +62,34 @@ SCHEMA = {
 }
 
 
+# Mit Leitfaden (leitfaden.py): zusätzlich "punkte" - welche Punkte das Fenster anspricht oder
+# klärt. Ohne Leitfaden bleibt das Schema unverändert.
+PUNKTE_SCHEMA = {
+    "type": "array",
+    "maxItems": 4,
+    "items": {
+        "type": "object",
+        "required": ["punkt_id", "status", "segment_id", "aussage", "stand"],
+        "properties": {
+            "punkt_id": {"type": "string"},
+            "status": {"type": "string", "enum": ["angesprochen", "geklaert"]},
+            "segment_id": {"type": "integer"},
+            "aussage": {"type": "string"},
+            "stand": {"type": "string", "maxLength": 200},
+        },
+    },
+}
+
+
+def schema(*, mit_leitfaden: bool = False) -> dict:
+    if not mit_leitfaden:
+        return SCHEMA
+    s = copy.deepcopy(SCHEMA)
+    s["properties"]["punkte"] = PUNKTE_SCHEMA
+    s["required"] = [*s["required"], "punkte"]
+    return s
+
+
 # Feste Teile des Nutzer-Prompts je Sprache der Oberfläche (Sprache der KI-Antworten).
 _TEXTE: dict[str, dict[str, str]] = {
     "de": {
@@ -72,6 +101,7 @@ _TEXTE: dict[str, dict[str, str]] = {
         "nichts": "Die Suche im Wiki hat zu diesem Fenster nichts gefunden. Fragen gelten dann als ohne Befund.",
         "zeile": "Zeile",
         "glossar": "## Glossar (Fehlerkennung → richtig)",
+        "leitfaden": "## Leitfaden (Vorbereitung des Moderators – kein Wissen, nur Punkte zum Klären)",
     },
     "en": {
         "unbekannt": "Unknown",
@@ -82,6 +112,7 @@ _TEXTE: dict[str, dict[str, str]] = {
         "nichts": "The wiki search found nothing for this window. Questions then count as having no finding in the wiki.",
         "zeile": "line",
         "glossar": "## Glossary (misrecognition → correct)",
+        "leitfaden": "## Agenda (the moderator's preparation – not knowledge, only items to resolve)",
     },
 }
 
@@ -97,8 +128,11 @@ def _texte() -> dict[str, str]:
     return _TEXTE["en" if sprache() == "en" else "de"]
 
 
-def system_prompt() -> str:
-    return prompt_datei("system").read_text(encoding="utf-8").strip()
+def system_prompt(*, mit_leitfaden: bool = False) -> str:
+    text = prompt_datei("system").read_text(encoding="utf-8").strip()
+    if mit_leitfaden:
+        text += "\n\n" + prompt_datei("leitfaden").read_text(encoding="utf-8").strip()
+    return text
 
 
 def _zeile(seg: dict, unbekannt: str = "Unbekannt") -> str:
@@ -121,6 +155,7 @@ def baue_prompt(
     fundstellen: list[dict],
     glossar: list[tuple[str, str]] | None = None,
     wiki_verknuepft: bool = True,
+    leitfaden: str = "",
 ) -> str:
     t = _texte()
     teile = [t["fenster"], ""]
@@ -139,4 +174,6 @@ def baue_prompt(
     if glossar:
         teile += [t["glossar"], ""]
         teile += [f"- {falsch} → {richtig}" for falsch, richtig in glossar[:GLOSSAR_MAX]]
+    if leitfaden.strip():
+        teile += ["", t["leitfaden"], "", leitfaden.strip()]
     return "\n".join(teile).rstrip() + "\n"

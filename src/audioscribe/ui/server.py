@@ -365,6 +365,10 @@ def create_app():
         sitzung: str
         projekt: str  # Projektordner
 
+    class LeitfadenPunktIn(BaseModel):
+        punkt_id: str
+        status: str
+
     class LiveTitelIn(BaseModel):
         sitzung: str
         titel: str = ""
@@ -374,6 +378,8 @@ def create_app():
         # Sitzungstitel (PRD §21): benennt die Sitzung und spaeter den Ordner im Wiki.
         titel: str = ""
         art: str = ""  # Art des Meetings (modell.MEETING_ARTEN) - optional, Pflicht erst beim Speichern
+        # Meeting-Vorbereitung (Pfad zu einer .md, ueblich <wiki>/raw/vorbereitung/) - optional.
+        leitfaden: str = ""
         # Wiederaufnahme: Ordner einer unterbrochenen Sitzung, die fortgesetzt wird.
         resume: str = ""
         monitor: int = 1
@@ -1387,12 +1393,36 @@ def create_app():
 
         speed = opts.replay_speed if opts.replay_transcript is not None else 1.0
         konfig = lade_konfig(state.load_state(), projekt=_projekt(), speed=speed)
+        leitfaden = None
+        if opts.leitfaden is not None:
+            from audioscribe.souffleur.leitfaden import LeitfadenFehler, lade_datei
+
+            try:
+                leitfaden = lade_datei(opts.leitfaden)
+                live._append(tr("Leitfaden: {name} ({n} Punkte)", name=opts.leitfaden.name, n=len(leitfaden.punkte)))
+            except LeitfadenFehler as exc:  # beim Start schon geprueft - hier nur noch melden
+                live._append(tr("Leitfaden nicht lesbar: {fehler}", fehler=exc))
         zaehler.beginne(QUELLE_SOUFFLEUR)
         ki, ki_status = make_ki(
             konfig.backend, konfig.modell, cache_dir=settings.cache_dir, log=live._append,
             on_verbrauch=lambda verbrauch: zaehler.buche(QUELLE_SOUFFLEUR, verbrauch),
         )
-        return Souffleur(konfig, ki=ki, ki_status=ki_status, log=live._append)
+        return Souffleur(konfig, ki=ki, ki_status=ki_status, log=live._append, leitfaden=leitfaden)
+
+    def _leitfaden_pfad(roh: str) -> Path | None:
+        """Pfad der Vorbereitung pruefen (400, wenn sie kein brauchbarer Leitfaden ist)."""
+        from audioscribe.souffleur.leitfaden import LeitfadenFehler, lade_datei
+
+        if not roh.strip():
+            return None
+        pfad = browse.normalize_path(roh.strip(), default=Path(""))
+        if not pfad.is_file():
+            raise HTTPException(400, tr("Leitfaden nicht gefunden: {pfad}", pfad=pfad))
+        try:
+            lade_datei(pfad)
+        except LeitfadenFehler as exc:
+            raise HTTPException(400, tr("Leitfaden unbrauchbar: {fehler}", fehler=exc)) from exc
+        return pfad
 
     @app.post("/api/live/start")
     def api_live_start(body: LiveStartIn):
@@ -1428,11 +1458,14 @@ def create_app():
         except OSError as exc:
             raise HTTPException(400, tr("Ausgangsordner nicht anlegbar: {fehler}", fehler=exc)) from exc
         resume_dir = _unterbrochene_sitzung(body.resume) if body.resume.strip() else None
+        # Beim Fortsetzen gilt der Stand im Sitzungsordner (souffleur-leitfaden.json).
+        leitfaden = _leitfaden_pfad(body.leitfaden) if resume_dir is None else None
 
         opts = jobs.LiveJobOptions(
             output_dir=out_dir,
             titel=body.titel.strip()[:120],
             art=_art(body.art),
+            leitfaden=leitfaden,
             resume_dir=resume_dir,
             monitor=0 if body.window else body.monitor,
             window=body.window,
@@ -1627,7 +1660,7 @@ def create_app():
         opts = jobs.LiveJobOptions(
             output_dir=out_dir, monitor=0, mic="none", loopback="none", refine=False,
             replay_transcript=quelle, replay_speed=body.replay_speed, titel=body.titel.strip()[:120],
-            art=_art(body.art),
+            art=_art(body.art), leitfaden=_leitfaden_pfad(body.leitfaden),
         )
         state.save_state(
             {"live_source": "transcript", "replay_transcript": str(quelle), "replay_speed": f"{body.replay_speed:g}"}
@@ -1739,6 +1772,43 @@ def create_app():
             state.save_state({"wiki_dir": str(pfad) if pfad is not None else ""})  # leer loescht den Schluessel
         _souffleur_wiki(pfad)
         return JSONResponse({**_kontext_antwort(), "wiki": status.als_dict()})
+
+    # --- Leitfaden: Meeting-Vorbereitung als Checkliste des Souffleurs ---------------------
+
+    @app.get("/api/leitfaden/liste")
+    def api_leitfaden_liste():
+        """Die Vorbereitungen unter <wiki>/raw/vorbereitung/ des aktuellen Wikis - neueste zuerst."""
+        from audioscribe.souffleur.konfig import wiki_pfad
+        from audioscribe.souffleur.leitfaden import VORBEREITUNG_ORDNER, vorbereitungen
+
+        wiki = wiki_pfad(state.load_state(), _projekt())
+        ordner = str(Path(wiki) / "raw" / VORBEREITUNG_ORDNER) if wiki is not None else None
+        return JSONResponse({"ordner": ordner, "dateien": vorbereitungen(wiki)})
+
+    @app.get("/api/leitfaden/vorschau")
+    def api_leitfaden_vorschau(pfad: str = Query("")):
+        """Vorbereitung lesen und als Checkliste zeigen - vor dem Start, ohne etwas zu schreiben."""
+        from audioscribe.souffleur.leitfaden import lade_datei
+
+        ziel = _leitfaden_pfad(pfad)
+        if ziel is None:
+            raise HTTPException(400, tr("Kein Leitfaden angegeben."))
+        return JSONResponse(lade_datei(ziel).als_dict())
+
+    @app.post("/api/leitfaden/status")
+    def api_leitfaden_status(body: LeitfadenPunktIn):
+        """Der Moderator setzt einen Punkt von Hand - das gilt vor jeder KI-Einschaetzung."""
+        from audioscribe.souffleur.leitfaden import STATUS
+
+        if body.status not in STATUS:
+            raise HTTPException(400, tr("Unbekannter Status: {status}", status=body.status))
+        souffleur = live.souffleur()
+        if souffleur is None or souffleur.leitfaden() is None:
+            raise HTTPException(409, tr("Keine Sitzung mit Leitfaden."))
+        try:
+            return JSONResponse(souffleur.setze_punkt(body.punkt_id, body.status))
+        except KeyError as exc:
+            raise HTTPException(404, tr("Unbekannter Punkt: {punkt}", punkt=body.punkt_id)) from exc
 
     @app.get("/api/souffleur/offene-punkte")
     def api_souffleur_offene_punkte():

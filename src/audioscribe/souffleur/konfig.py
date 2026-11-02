@@ -45,6 +45,9 @@ class SouffleurKonfig:
     ki_timeout_s: float = 45.0
     # Die Essenz wartet der Moderator bewusst ab; ein langsamer Aufruf darf länger dauern.
     essenz_timeout_s: float = 90.0
+    # Leitfaden: so lange (Sitzungsuhr) nach der letzten Erwähnung eines angesprochenen, aber
+    # nicht geklärten Punkts kommt der Hinweis "anknüpfen".
+    leitfaden_anstoss_s: float = 90.0
 
 
 def _pfad(raw: object) -> Path | None:

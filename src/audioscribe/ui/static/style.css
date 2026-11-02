@@ -470,6 +470,31 @@ ul.open-list li.done .text { text-decoration: line-through; }
 ul.open-list li.done .ic { color: var(--ok); width: 14px; height: 14px; }
 ul.open-list .by { font-size: 11px; color: var(--fg-faint); white-space: nowrap; }
 
+/* Leitfaden (Meeting-Vorbereitung): Checkliste oberhalb der Hinweise */
+details.open-box.leitfaden { margin: 0 0 var(--s3); border-top: 0; padding-top: 0; }
+.lf-tools { display: flex; align-items: center; gap: var(--s2); margin-top: var(--s1); }
+.lf-tools .hint { font-size: 11px; }
+#souffleurLeitfadenFilter[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent-hover); }
+ul.lf-list { max-height: 260px; overflow: auto; }
+ul.lf-list li { align-items: flex-start; }
+ul.lf-list .lf-status { background: transparent; border: 0; padding: 0; min-height: 0; cursor: pointer; color: var(--fg-faint); line-height: 1; }
+ul.lf-list .lf-status:disabled { cursor: default; }
+ul.lf-list .lf-status .ic { width: 15px; height: 15px; }
+ul.lf-list li.st-angesprochen .lf-status { color: var(--warn); }
+ul.lf-list li.st-geklaert .lf-status { color: var(--ok); }
+ul.lf-list li.st-geklaert .lf-text, ul.lf-list li.st-vertagt .lf-text { text-decoration: line-through; color: var(--fg-muted); }
+ul.lf-list .lf-stand { display: block; font-size: 12px; color: var(--fg-muted); margin-top: 2px; }
+ul.lf-list .lf-muss { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; color: var(--err);
+                      border: 1px solid var(--err); border-radius: var(--radius-pill); padding: 0 5px; white-space: nowrap; }
+.hint.err { color: var(--err); }
+.lf-pick { display: flex; gap: var(--s1); align-items: center; }
+.lf-pick input { flex: 1; min-width: 0; }
+.mark.anknuepfen { background: var(--accent-soft); color: var(--accent-hover); border-style: dotted; border-color: var(--accent); }
+button.mark.anknuepfen:hover { background: var(--accent-soft); }
+.seg.marked.anknuepfen { border-left-color: var(--accent); border-left-style: dotted; }
+.hint-item.anknuepfen { border-left-color: var(--accent); border-left-style: dotted; }
+body.pip details.open-box.leitfaden { flex: 0 1 auto; max-height: 30vh; overflow: auto; }
+
 /* Aeltere Hinweise, Screenshots darunter */
 details.older > summary, details.shots > summary { list-style: none; display: flex; align-items: center; gap: 6px; font-size: 12px;
             font-weight: 500; color: var(--fg-muted); padding: 6px 0; cursor: pointer; user-select: none; border-radius: var(--radius-sm); }

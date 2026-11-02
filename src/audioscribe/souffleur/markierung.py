@@ -26,9 +26,15 @@ STAND_VERSION = 1
 ART_WIDERSPRUCH = "widerspruch"
 ART_OFFEN = "offener_punkt"
 ART_FRAGE = "frage"
+# Was die KI melden darf (Antwortschema) ...
 ARTEN: tuple[str, ...] = (ART_WIDERSPRUCH, ART_OFFEN, ART_FRAGE)
+# ... und was der Souffleur selbst erzeugt: Anstoß zu einem Leitfaden-Punkt, der angesprochen,
+# aber nicht geklärt wurde (leitfaden.py) - regelbasiert, ohne eigenen KI-Aufruf.
+ART_ANKNUEPFEN = "anknuepfen"
+ALLE_ARTEN: tuple[str, ...] = (*ARTEN, ART_ANKNUEPFEN)
 # Deutsche Bezeichnungen - so stehen sie in den Begleitdateien; für die Oberfläche art_label().
-ART_LABEL = {ART_WIDERSPRUCH: "Widerspruch", ART_OFFEN: "Offener Punkt", ART_FRAGE: "Frage"}
+ART_LABEL = {ART_WIDERSPRUCH: "Widerspruch", ART_OFFEN: "Offener Punkt", ART_FRAGE: "Frage",
+             ART_ANKNUEPFEN: "Anknüpfen"}
 
 
 def art_label(art: str) -> str:
@@ -41,6 +47,8 @@ def art_label(art: str) -> str:
         return tr("Offener Punkt")
     if art == ART_FRAGE:
         return tr("Frage")
+    if art == ART_ANKNUEPFEN:
+        return tr("Anknüpfen")
     return art
 
 
@@ -83,6 +91,8 @@ class Markierung:
     verzoegerung_real_s: float | None = None  # Empfang des Segments -> Hinweis (Wanduhr)
     t_hinweis: float | None = None
     fenster_id: int = 0
+    punkt_id: str | None = None  # Leitfaden-Punkt (nur Art "anknuepfen")
+    punkt_text: str = ""
     erstellt: str = field(default_factory=lambda: datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 
     @property
@@ -132,7 +142,9 @@ def bilanz(markierungen: list[Markierung], *, ki_aufrufe: int = 0, ki_fehler: in
     s = [m.ki_start_s for m in hinweise if m.ki_start_s is not None]
     return {
         "hinweise": len(hinweise),
-        "je_art": {art: sum(1 for m in hinweise if m.art == art) for art in ARTEN},
+        # Anstöße aus dem Leitfaden zählen nur mit, wenn es welche gibt - sonst bleibt die Bilanz wie bisher.
+        "je_art": {art: n for art in ALLE_ARTEN
+                   if (n := sum(1 for m in hinweise if m.art == art)) or art in ARTEN},
         "offene_punkte": sum(1 for m in hinweise if m.ist_offener_punkt),
         "ki_aufrufe": ki_aufrufe,
         "ki_fehler": ki_fehler,

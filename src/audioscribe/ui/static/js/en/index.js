@@ -4,5 +4,6 @@ import allgemein from './allgemein.js';
 import seite from './seite.js';
 import moduleA from './module-a.js';
 import moduleB from './module-b.js';
+import leitfaden from './leitfaden.js';
 
-export default { ...allgemein, ...seite, ...moduleA, ...moduleB };
+export default { ...allgemein, ...seite, ...moduleA, ...moduleB, ...leitfaden };

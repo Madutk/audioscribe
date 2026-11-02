@@ -21,11 +21,17 @@ let souffleurEssenzen = [];      // Ergebnisse von /api/souffleur/essenz, aeltes
 let souffleurToggling = false;   // laufender POST /api/souffleur/toggle - solange nicht vom Poll ueberschreiben
 const HINT_DIRECT = 9;           // ab dem 10. Hinweis wandern die aelteren unter "Ältere (n)"
 const HINT_OPEN = 3;             // hoechstens so viele Hinweise gleichzeitig aufgeklappt
+// Leitfaden (Meeting-Vorbereitung) - siehe unten
+let lfVorschau = null;           // /api/leitfaden/vorschau der gewaehlten Datei (vor dem Start)
+let lfKey = '';                  // zuletzt gezeichneter Stand - der Poll zeichnet nur bei Aenderung
+let lfNurOffen = false;
+let lfSetzt = false;             // laufender POST - solange nicht vom Poll ueberschreiben
 
 const ART = {
   widerspruch: { cls: 'widerspruch', icon: 'zap', wort: 'Widerspruch', label: 'Widerspruch' },
   offener_punkt: { cls: 'offen', icon: 'circle-dashed', wort: 'Offen', label: 'Offener Punkt' },
   frage: { cls: 'frage', icon: 'help-circle', wort: 'Frage', label: 'Frage' },
+  anknuepfen: { cls: 'anknuepfen', icon: 'arrow-right', wort: 'Anknüpfen', label: 'Anknüpfen' },
 };
 // wort und label der drei Arten sind deutsche Schluessel - uebersetzt erst hier (en/module-b.js).
 const artOf = (h) => {
@@ -37,6 +43,7 @@ const hintId = (h) => `h-${h.id}`;
 const tagKi = () => `<span class="tag ki">${icon('sparkles')}${tr('KI')}</span>`;
 
 export function resetSouffleurView() {
+  lfKey = '';
   souffleurInfo = null; souffleurHints = []; souffleurEssenzen = [];
   hintBySeg.clear(); hintEls.clear();
   $('souffleurList').innerHTML = empty('lightbulb', tr('Hinweise zu Fragen, Widersprüchen und offenen Punkten erscheinen hier.'));
@@ -49,6 +56,7 @@ export function resetSouffleurView() {
   renderWikiState($('souffleurWiki'), S.wikiStatus, true);
   renderWikiActions(S.wikiStatus);
   renderHandover(null);
+  renderLeitfaden(null, false);
 }
 
 /** Wiki-Zustand des Projekts in der Karte zeigen - nur solange keine Sitzung ihren eigenen meldet. */
@@ -134,9 +142,17 @@ function gegenHtml(h, her) {
 const kiHtml = (rolle, text) => text
   ? `<div class="ki"><div class="ki-head">${tagKi()}${esc(tr(rolle))}</div>${esc(text)}</div>` : '';
 
+/** Anstoss aus dem Leitfaden: die Stelle, an der der Punkt angesprochen wurde, der Punkt selbst
+ *  und - KI-eingeschaetzt - was daran noch offen ist. */
+function anknuepfenHtml(h) {
+  return `<p class="said">${tr('Angesprochen:')} <q>${esc(h.aussage || '')}</q></p>`
+    + kiHtml('Noch offen', h.ki_text);
+}
+
 /** Inhalt je Art: Widerspruch = Gesagt + Beleg + KI-Einschaetzung; Frage = Beleg (+ Antwortvorschlag);
  *  ohne Befund = nur "Im Wiki liegt dazu nichts vor." - bewusst kein KI-Text (Entscheidung des Auftraggebers). */
 function hintBodyHtml(h) {
+  if (h.art === 'anknuepfen') return anknuepfenHtml(h);
   const said = `<p class="said">${h.sprecher ? tr('Gesagt ({sprecher}):', { sprecher: esc(h.sprecher) }) : tr('Gesagt:')} <q>${esc(h.aussage || '')}</q></p>`;
   if (!hatBeleg(h)) {
     return demoAktiv() ? `<p class="wiki none">${icon('plus')}${tr('Neu – steht noch nicht im Wiki.')}</p>`
@@ -157,7 +173,7 @@ function hintItemEl(h) {
   const lag = h.verzoegerung_s === null || h.verzoegerung_s === undefined ? '' : '+' + secs(h.verzoegerung_s);
   el.innerHTML = `<summary><span class="mark ${a.cls}">${icon(a.icon)}${esc(a.wort)}</span>`
     + `<button class="ts" type="button" data-goto-seg="${esc(String(h.segment_id))}" title="${tr('Zur Transkriptzeile')}">${tc(h.t_start)}</button>`
-    + `<span class="title">${esc(h.aussage || a.label)}</span>`
+    + `<span class="title">${esc(h.art === 'anknuepfen' ? tr('Leitfaden {punkt}:', { punkt: h.punkt_id || '' }) + ' ' + (h.punkt_text || '') : (h.aussage || a.label))}</span>`
     + `<span class="lag" title="${tr('Verzögerung Aussage → Hinweis')}">${esc(lag)}</span></summary>`
     + `<div class="hint-body">${hintBodyHtml(h)}</div>`;
   setTimeout(() => el.classList.remove('new'), 400);
@@ -218,6 +234,7 @@ function updateHintCount() {
 export function hinweisZahlen() {
   const z = { widerspruch: 0, beantwortet: 0, neu: 0 };
   for (const h of souffleurHints) {
+    if (h.art === 'anknuepfen') continue;
     if (!hatBeleg(h)) z.neu += 1;
     else if (h.art === 'widerspruch') z.widerspruch += 1;
     else if (h.art === 'frage') z.beantwortet += 1;
@@ -284,6 +301,7 @@ export function renderSouffleur(s) {
   renderSouffleurState(sf, !!s.running);
   renderWikiState($('souffleurWiki'), sf ? sf.wiki : S.wikiStatus, true);
   renderWikiActions(sf ? sf.wiki : S.wikiStatus);
+  renderLeitfaden(sf ? sf.leitfaden : null, !!(sf && s.running && !sf.beendet));
   const kannEssenz = !!sf;
   $('souffleurEssenz2').disabled = !kannEssenz;
   $('souffleurEssenz5').disabled = !kannEssenz;
@@ -394,6 +412,80 @@ export function setSouffleurHidden(hidden) {
   if (!$('tabLive').hidden) (hidden ? $('souffleurShow') : $('souffleurHide')).focus({ preventScroll: true });
 }
 
+// --- Leitfaden: Meeting-Vorbereitung als Checkliste ---------------------------------------
+// Vor dem Start zeigt die Karte die Vorschau der gewaehlten Datei, waehrend der Sitzung den
+// Stand des Souffleurs (s.souffleur.leitfaden). Klick aufs Symbol setzt den Status von Hand.
+
+const LF_FOLGE = { offen: 'angesprochen', angesprochen: 'geklaert', geklaert: 'vertagt', vertagt: 'offen' };
+const LF_ICON = { offen: 'circle', angesprochen: 'circle-dashed', geklaert: 'check', vertagt: 'pause' };
+const LF_WORT = { offen: 'noch nicht besprochen', angesprochen: 'angesprochen', geklaert: 'geklärt', vertagt: 'vertagt' };
+
+/** Vorschau der gewaehlten Vorbereitung (oder null) - gilt, solange keine Sitzung ihren Stand meldet. */
+export function setLeitfadenVorschau(lf) {
+  lfVorschau = lf;
+  if (!souffleurInfo || !souffleurInfo.leitfaden) renderLeitfaden(null, false);
+}
+
+function lfPunktHtml(p, interaktiv) {
+  const wort = tr(LF_WORT[p.status] || p.status);
+  const naechst = tr(LF_WORT[LF_FOLGE[p.status]] || '');
+  const titel = interaktiv ? tr('{status} – Klick: {naechst}', { status: wort, naechst }) : wort;
+  const zeit = p.segment_id !== null && p.segment_id !== undefined && p.t_zuletzt !== null && p.t_zuletzt !== undefined
+    ? `<button class="ts" type="button" data-goto-seg="${esc(String(p.segment_id))}" title="${tr('Zur Transkriptzeile')}">[${tc(p.t_zuletzt)}]</button>` : '';
+  const stand = p.stand ? `<span class="lf-stand">${tagKi()} ${esc(p.stand)}</span>` : (p.notiz ? `<span class="lf-stand">${esc(p.notiz)}</span>` : '');
+  return `<li class="st-${esc(p.status)}"><button class="lf-status" type="button" data-punkt="${esc(p.id)}" data-status="${esc(p.status)}"`
+    + `${interaktiv ? '' : ' disabled'} title="${esc(titel)}" aria-label="${esc(`${p.id}: ${titel}`)}">${icon(LF_ICON[p.status] || 'circle')}</button>`
+    + `<span class="text"><span class="lf-text">${esc(p.text)}</span>${stand}</span>`
+    + (p.prioritaet === 'muss' ? `<span class="lf-muss">${tr('Muss')}</span>` : '') + zeit + '</li>';
+}
+
+/** Checkliste zeichnen: lf = Stand der Sitzung, sonst die Vorschau. "Was ist noch offen?" filtert
+ *  auf nicht Erledigtes - Pflicht zuerst. */
+function renderLeitfaden(lf, interaktiv) {
+  if (lfSetzt) return;
+  const daten = lf || lfVorschau;
+  const key = JSON.stringify([daten, interaktiv, lfNurOffen]);
+  if (key === lfKey) return;
+  lfKey = key;
+  const box = $('souffleurLeitfaden');
+  box.hidden = !daten;
+  if (!daten) { $('souffleurLeitfadenList').innerHTML = ''; return; }
+  const b = daten.bilanz || {};
+  $('souffleurLeitfadenCount').textContent = tr('({geklaert} von {n} geklärt, Pflicht offen: {muss})',
+    { geklaert: b.geklaert || 0, n: b.punkte || 0, muss: b.muss_offen || 0 });
+  $('souffleurLeitfadenFilter').setAttribute('aria-pressed', String(lfNurOffen));
+  $('souffleurLeitfadenTipp').hidden = !interaktiv;
+  let punkte = daten.punkte || [];
+  if (lfNurOffen) {
+    punkte = punkte.filter((p) => p.status === 'offen' || p.status === 'angesprochen')
+      .sort((a, c) => (a.prioritaet === 'muss' ? 0 : 1) - (c.prioritaet === 'muss' ? 0 : 1));
+  }
+  $('souffleurLeitfadenList').innerHTML = punkte.map((p) => lfPunktHtml(p, interaktiv)).join('')
+    || `<li class="hint">${lfNurOffen ? tr('Alles geklärt oder vertagt.') : tr('Keine Punkte.')}</li>`;
+}
+
+async function setzePunkt(btn) {
+  const status = LF_FOLGE[btn.dataset.status] || 'offen';
+  $('souffleurErr').textContent = '';
+  btn.disabled = true;
+  lfSetzt = true;
+  try {
+    const lf = await post('/api/leitfaden/status', { punkt_id: btn.dataset.punkt, status });
+    if (souffleurInfo) souffleurInfo = { ...souffleurInfo, leitfaden: lf };
+    lfSetzt = false;
+    renderLeitfaden(lf, true);
+  } catch (err) {
+    lfSetzt = false;
+    $('souffleurErr').textContent = err.message;
+    btn.disabled = false;
+  }
+}
+
+$('souffleurLeitfadenFilter').onclick = () => {
+  lfNurOffen = !lfNurOffen;
+  renderLeitfaden(souffleurInfo && souffleurInfo.leitfaden, !!(souffleurInfo && liveRunning && !souffleurInfo.beendet));
+};
+
 $('souffleurHide').onclick = () => setSouffleurHidden(true);
 $('souffleurShow').onclick = () => setSouffleurHidden(false);
 $('souffleurOn').onchange = toggleSouffleur;
@@ -405,5 +497,7 @@ $('souffleur').onclick = (e) => {
   const seg = e.target.closest('[data-goto-seg]');
   if (seg) { e.preventDefault(); gotoSeg(seg.dataset.gotoSeg); return; }
   const copy = e.target.closest('[data-copy]');
-  if (copy) { e.preventDefault(); copyFundstelle(copy); }
+  if (copy) { e.preventDefault(); copyFundstelle(copy); return; }
+  const punkt = e.target.closest('button.lf-status[data-punkt]');
+  if (punkt && !punkt.disabled) { e.preventDefault(); setzePunkt(punkt); }
 };

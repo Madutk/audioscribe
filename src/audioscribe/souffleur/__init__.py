@@ -23,4 +23,6 @@ SOUFFLEUR_DATEIEN: tuple[str, ...] = (
     "souffleur-protokoll.md",
     "souffleur-diagnose.jsonl",
     "souffleur-essenz.jsonl",
+    "souffleur-leitfaden.json",
+    "souffleur-leitfaden.md",
 )

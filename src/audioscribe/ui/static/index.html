@@ -417,6 +417,11 @@
       <div class="field"><label for="liveArt">Art des Meetings (optional)</label>
         <select id="liveArt"><option value="">– noch offen –</option><option value="abstimmung">Abstimmung</option><option value="review">Review</option><option value="workshop">Workshop</option><option value="brainstorming">Brainstorming</option><option value="anforderung">Anforderung</option><option value="demo">Demo</option></select>
         <p class="hint">Teil des Dateinamens im Wiki, z. B. <code>2026-10-15_review_thema.md</code> – spätestens beim Speichern zu wählen.</p></div>
+      <div class="field"><label for="liveLeitfaden">Vorbereitung (optional)</label>
+        <div class="lf-pick"><input type="text" id="liveLeitfaden" list="liveLeitfadenListe" placeholder="Pfad zur .md, z. B. aus raw/vorbereitung/" autocomplete="off" />
+          <button class="icon-btn" type="button" id="liveLeitfadenLeeren" hidden aria-label="Vorbereitung entfernen" title="Vorbereitung entfernen"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button></div>
+        <datalist id="liveLeitfadenListe"></datalist>
+        <p class="hint" id="liveLeitfadenHint">Checkliste für den Souffleur: jeder Punkt beginnt mit „- [ ]“, unter einer Überschrift „Muss …“ ist er Pflicht.</p></div>
     </div>
 
     <div class="card">
@@ -565,6 +570,15 @@
       <div class="err" id="souffleurErr"></div>
 
       <div class="ki essenz" id="souffleurEssenz" hidden></div>
+
+      <details class="open-box leitfaden" id="souffleurLeitfaden" open hidden>
+        <summary><svg class="ic chev" aria-hidden="true"><use href="#i-chevron-right"/></svg>Leitfaden <span class="hint" id="souffleurLeitfadenCount"></span></summary>
+        <div class="lf-tools">
+          <button class="ghost sm" type="button" id="souffleurLeitfadenFilter" aria-pressed="false"><svg class="ic" aria-hidden="true"><use href="#i-list"/></svg>Was ist noch offen?</button>
+          <span class="hint" id="souffleurLeitfadenTipp">Klick aufs Symbol ändert den Status.</span>
+        </div>
+        <ul class="open-list lf-list" id="souffleurLeitfadenList"></ul>
+      </details>
 
       <div class="hint-list" id="souffleurList">
         <div class="empty"><svg class="ic" aria-hidden="true"><use href="#i-lightbulb"/></svg>Hinweise zu Fragen, Widersprüchen und offenen Punkten erscheinen hier.</div>
