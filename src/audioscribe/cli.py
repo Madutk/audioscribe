@@ -214,6 +214,7 @@ def _live(args: argparse.Namespace) -> int:
         zwischenablage=not replay and args.zwischenablage,
         partials=not args.no_partials,
         speakers=not args.no_speakers,
+        raum=not replay and args.vor_ort,
         hf_token=settings.hf_token,
         sentences_per_timestamp=settings.sentences_per_timestamp,
         cpu_threads=args.cpu_threads if args.cpu_threads is not None else settings.cpu_threads,
@@ -493,6 +494,11 @@ def main(argv: list[str] | None = None) -> int:
     live.add_argument("--no-partials", action="store_true", help="keinen vorlaeufigen Text ausgeben")
     live.add_argument(
         "--no-speakers", action="store_true", help="System-Spur nicht in 'Sprecher N' trennen"
+    )
+    live.add_argument(
+        "--vor-ort",
+        action="store_true",
+        help="Vor-Ort-Meeting: mehrere Personen am Mikrofon - auch diese Spur in 'Sprecher N' trennen",
     )
     live.add_argument(
         "--eco",

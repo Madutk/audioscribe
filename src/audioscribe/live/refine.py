@@ -1,7 +1,9 @@
 """Nachschärfen einer Live-Sitzung mit der Offline-Pipeline (FR-43).
 
-Je Spur Transkription und Alignment; diarisiert wird nur die System-Spur - am Mikrofon
-sitzt genau eine Person. Die Standbilder der Sitzung bleiben und werden neu eingebunden.
+Je Spur Transkription und Alignment; diarisiert wird die System-Spur - am Mikrofon sitzt
+genau eine Person. Ausnahme Vor-Ort-Modus (``raum`` in ``sitzung.json``): dann sitzen alle am
+Mikrofon, und auch diese Spur wird in "Sprecher N" getrennt. Die Standbilder der Sitzung
+bleiben und werden neu eingebunden.
 """
 
 from __future__ import annotations
@@ -11,10 +13,10 @@ from dataclasses import asdict
 from pathlib import Path
 
 from audioscribe.config import resolve_asr_backend, resolve_device, settings
-from audioscribe.live import events
+from audioscribe.live import events, journal
 from audioscribe.live.bilanz import TEIL_LIVE, TEIL_REFINE, RefineBilanz, _komma, beschreibe_refine, save_bilanz
 from audioscribe.live.diagnose import ART_UEBERSPRECHEN, DIAGNOSE_NAME, Diagnose, lies_diagnose
-from audioscribe.live.speakers import GEGENSEITE, ICH
+from audioscribe.live.speakers import GEGENSEITE, ICH, SPRECHER
 from audioscribe.live.store import MIC_WAV, SYSTEM_WAV, keep_live_copy, write_transcript
 from audioscribe.live.track import SAMPLE_RATE, load_wav
 from audioscribe.live.uebersprechen import ausschnitt, gleiche_ab, lag_samples, pruefe, schaetze_lag
@@ -38,17 +40,22 @@ def refine_session(session_dir: str | Path) -> Path:
         raise FileNotFoundError(tr("Kein Mitschnitt in {ordner} - keine Live-Sitzung?", ordner=session_dir / "audio"))
 
     do_align = settings.enable_alignment
-    do_diar = settings.enable_diarization and (session_dir / SYSTEM_WAV).is_file()
+    raum = bool((journal.lies_status(session_dir) or {}).get("raum"))
+    # Welche Spuren in "Sprecher N" getrennt werden: System immer, Mikrofon nur vor Ort.
+    zu_diarisieren = {name for name, _ in spuren if name == "System-Audio" or raum}
+    if not settings.enable_diarization:
+        zu_diarisieren = set()
     audios = {name: load_wav(wav) for name, wav in spuren}
     # Übersprechen (live/uebersprechen.py): mit beiden Spuren noch einmal über den ganzen
     # Mitschnitt prüfen, was live nur mit dem Rückblick von 40 s entschieden wurde.
     schwelle = settings.live_uebersprechen_schwelle
     mit_filter = schwelle > 0 and len(audios) == 2
     reporter = ConsoleReporter(
-        len(spuren) * (2 if do_align else 1) + (1 if do_diar else 0) + (1 if mit_filter else 0) + 1
+        len(spuren) * (2 if do_align else 1) + len(zu_diarisieren) + (1 if mit_filter else 0) + 1
     )
     step = 0
     segments: list[Segment] = []
+    diarisierte: list[Segment] = []  # aus allen Spuren - am Ende gemeinsam durchnummeriert
     dauer = 0.0
     sprache = settings.whisper_language
     t_start = time.monotonic()
@@ -112,8 +119,8 @@ def refine_session(session_dir: str | Path) -> Path:
                 )
             )
         diarisiert = False
-        if ist_system and do_diar:
-            stage(tr("Diarisierung System-Audio (pyannote)"))
+        if name in zu_diarisieren:
+            stage(tr("Diarisierung {spur} (pyannote)", spur=anzeige[name]))
             try:
                 result = diarize(audio, result, reporter)
                 diarisiert = True
@@ -123,15 +130,21 @@ def refine_session(session_dir: str | Path) -> Path:
         teil = result_to_segments(result)
         if diarisiert:
             fill_segment_speakers(teil)
-            relabel_speakers(teil)
+            # Jede Spur diarisiert für sich und beginnt bei SPEAKER_00 - ohne Präfix würden
+            # zwei verschiedene Personen beider Spuren zu "Sprecher 1".
+            for seg in teil:
+                if seg.speaker:
+                    seg.speaker = f"{name}:{seg.speaker}"
+            diarisierte += teil
         else:
-            label = GEGENSEITE if ist_system else ICH
+            label = GEGENSEITE if ist_system else SPRECHER if raum else ICH
             for seg in teil:
                 seg.speaker = label
                 for word in seg.words:
                     word.speaker = label
         segments += teil
 
+    relabel_speakers(sorted(diarisierte, key=lambda seg: seg.start))
     stage(tr("Zusammenführen & Export"))
     keep_live_copy(session_dir, overwrite=False)
     write_transcript(

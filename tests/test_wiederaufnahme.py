@@ -764,3 +764,12 @@ def test_transkript_replay_schreibt_zustand_als_replay(tmp_path, ereignisse):
     # Auch ein abgebrochenes Replay taucht nie unter den unterbrochenen Sitzungen auf.
     journal.schreibe_status(session.dir, status=journal.LAEUFT)
     assert journal.offene_sitzungen(tmp_path) == []
+
+
+def test_vor_ort_modus_gilt_beim_fortsetzen_weiter(tmp_path):
+    from audioscribe.live.session import LiveOptions, LiveSession
+
+    ordner = sitzung_von_hand(tmp_path / "vor-ort", raum=True)
+    session = LiveSession(LiveOptions(output_dir=tmp_path, model="m", device="cpu", compute_type="int8",
+                                      resume_dir=ordner))
+    assert session._raum is True

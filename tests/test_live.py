@@ -19,6 +19,7 @@ from audioscribe.live.screen import ChangeDetector
 from audioscribe.live.speakers import (
     GEGENSEITE,
     ICH,
+    SPRECHER,
     BackgroundEmbedder,
     OnlineClusterer,
     SpeakerLabeler,
@@ -897,6 +898,27 @@ def test_labeler_channels_and_short_utterances():
     assert SpeakerLabeler(None).label("system", speech(2)) == GEGENSEITE
 
 
+def test_labeler_vor_ort_trennt_auch_das_mikrofon():
+    stimmen = {2 * SR: 0, 3 * SR: 1}
+    labeler = SpeakerLabeler(lambda audio: np.eye(4)[stimmen[len(audio)]], raum=True)
+    assert [labeler.label("mic", speech(t)) for t in (2, 3, 2)] == ["Sprecher 1", "Sprecher 2", "Sprecher 1"]
+    # Ohne Sprecher-Modell ist am Mikrofon niemand sicher "Ich".
+    assert SpeakerLabeler(None, raum=True).label("mic", speech(2)) == SPRECHER
+    assert SpeakerLabeler(None, raum=True).label("system", speech(2)) == GEGENSEITE
+
+
+def test_vor_ort_laedt_sprecher_modell_auch_ohne_system_audio(tmp_path, monkeypatch):
+    from audioscribe.live import speakers
+
+    logged = []
+    monkeypatch.setattr(events, "log", logged.append)
+    monkeypatch.setattr(speakers, "BackgroundEmbedder", lambda load, log: "geladen")
+    assert make_session(tmp_path, loopback="none", hf_token="t")._load_embedder() is None
+    assert make_session(tmp_path, loopback="none", hf_token="t", raum=True)._load_embedder() == "geladen"
+    assert make_session(tmp_path, loopback="none", raum=True)._load_embedder() is None
+    assert any("Vor-Ort-Modus" in zeile for zeile in logged)
+
+
 # --- Geraetewahl -------------------------------------------------------------------
 
 DEVICES = [{"index": 5, "name": "A", "default": False}, {"index": 7, "name": "B", "default": True}]
@@ -1531,6 +1553,8 @@ def test_build_live_argv_and_refine_argv(tmp_path):
     assert "--model=large-v3-turbo" in refine_argv and "--model=small" not in refine_argv
     fenster_argv = build_live_argv(LiveJobOptions(output_dir=tmp_path, monitor=0, window=4711), prefix=["x"])
     assert {"--monitor=0", "--window=4711"} <= set(fenster_argv)
+    assert "--vor-ort" not in argv
+    assert "--vor-ort" in build_live_argv(LiveJobOptions(output_dir=tmp_path, raum=True), prefix=["x"])
 
 
 # --- Routen ------------------------------------------------------------------------
@@ -1978,3 +2002,81 @@ def test_refine_verwirft_uebersprechen_und_gleicht_mit_live_ab(tmp_path, monkeyp
     assert [z["entscheidung"] for z in offline] == ["verworfen", "verworfen", "behalten", "behalten"]
     assert offline[3]["grund"] == "zu_kurz" and offline[0]["spur"] == "Mikrofon"
     assert emitted[-1][0] == events.FAZIT and emitted[-1][1]["uebersprechen"]["verworfen"] == 2
+
+
+# --- Vor-Ort-Modus: mehrere Personen am Mikrofon --------------------------------------
+
+
+def _vor_ort_sitzung(ordner, spuren, monkeypatch, antworten, *, raum=True):
+    """Sitzungsordner mit stillen WAVs; Transkription und Diarisierung als Attrappen.
+
+    ``antworten``: je Spur (Reihenfolge Mikrofon, System) die Segmente samt rohem Sprecher."""
+    import wave
+    from dataclasses import replace
+
+    from audioscribe.live import journal, refine
+
+    (ordner / "audio").mkdir(parents=True)
+    for wav_rel in spuren:
+        with wave.open(str(ordner / wav_rel), "wb") as wav:
+            wav.setnchannels(1)
+            wav.setsampwidth(2)
+            wav.setframerate(SR)
+            wav.writeframes(np.zeros(SR * 10, dtype="<i2").tobytes())
+    journal.schreibe_status(ordner, status=journal.BEENDET, raum=raum)
+    monkeypatch.setattr(refine, "settings", replace(refine.settings, enable_alignment=False, enable_diarization=True,
+                                                    whisper_model="tiny", live_uebersprechen_schwelle=0.0))
+    folge = iter(antworten)
+    aktuell = {}
+
+    def transcribe(audio, reporter):
+        aktuell["segs"] = next(folge)
+        return {"language": "de", "segments": [{k: v for k, v in seg.items() if k != "raw"} for seg in aktuell["segs"]]}
+
+    def diarize(audio, result, reporter):
+        for seg, roh in zip(result["segments"], aktuell["segs"]):
+            seg["speaker"] = roh["raw"]
+        return result
+
+    monkeypatch.setattr("audioscribe.pipeline.transcribe.transcribe", transcribe)
+    monkeypatch.setattr("audioscribe.pipeline.diarize.diarize", diarize)
+    monkeypatch.setattr(events, "emit", lambda typ, **d: None)
+    return refine
+
+
+def _absaetze(ordner):
+    return [(p["speaker"], p["text"]) for p in json.loads((ordner / "transcript.json").read_text(encoding="utf-8"))["paragraphs"]]
+
+
+def test_refine_vor_ort_trennt_das_mikrofon_in_sprecher(tmp_path, monkeypatch):
+    from audioscribe.live.bilanz import load_bilanz
+
+    refine = _vor_ort_sitzung(tmp_path, [MIC_WAV], monkeypatch, [[
+        {"start": 0.0, "end": 2.0, "text": "Guten Morgen.", "raw": "SPEAKER_01"},
+        {"start": 2.5, "end": 4.0, "text": "Hallo zusammen.", "raw": "SPEAKER_00"},
+        {"start": 4.5, "end": 6.0, "text": "Fangen wir an.", "raw": "SPEAKER_01"},
+    ]])
+    refine.refine_session(tmp_path)
+    assert _absaetze(tmp_path) == [
+        ("Sprecher 1", "Guten Morgen."), ("Sprecher 2", "Hallo zusammen."), ("Sprecher 1", "Fangen wir an.")
+    ]
+    stufen = [st["name"] for st in load_bilanz(tmp_path)["nachschaerfen"]["stufen"]]
+    assert "Diarisierung Mikrofon (pyannote)" in stufen
+
+
+def test_refine_ohne_vor_ort_bleibt_das_mikrofon_ich(tmp_path, monkeypatch):
+    refine = _vor_ort_sitzung(tmp_path, [MIC_WAV], monkeypatch, [[
+        {"start": 0.0, "end": 2.0, "text": "Guten Morgen.", "raw": "SPEAKER_00"},
+    ]], raum=False)
+    refine.refine_session(tmp_path)
+    assert _absaetze(tmp_path) == [(ICH, "Guten Morgen.")]
+
+
+def test_refine_vor_ort_mit_system_audio_nummeriert_ueber_beide_spuren(tmp_path, monkeypatch):
+    refine = _vor_ort_sitzung(tmp_path, [MIC_WAV, SYSTEM_WAV], monkeypatch, [
+        [{"start": 3.0, "end": 4.0, "text": "Im Raum.", "raw": "SPEAKER_00"}],
+        [{"start": 0.0, "end": 2.0, "text": "Aus dem Call.", "raw": "SPEAKER_00"}],
+    ])
+    refine.refine_session(tmp_path)
+    # Beide Spuren liefern SPEAKER_00 - das sind trotzdem zwei Personen.
+    assert _absaetze(tmp_path) == [("Sprecher 1", "Aus dem Call."), ("Sprecher 2", "Im Raum.")]

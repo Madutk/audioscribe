@@ -421,6 +421,8 @@ def create_app():
         zwischenablage: bool = False  # Screenshots aus der Zwischenablage uebernehmen
         partials: bool = True
         speakers: bool = True
+        # Vor-Ort-Meeting: mehrere Personen am Mikrofon. Bewusst nicht gemerkt - gilt je Sitzung.
+        raum: bool = False
         refine: bool = True
         refine_model: str = "large-v3"
         # Testmodus (FR-64): Transkriptdatei oder Sitzungsordner; leer = echte Aufnahme.
@@ -1622,6 +1624,7 @@ def create_app():
             zwischenablage=body.zwischenablage,
             partials=body.partials,
             speakers=body.speakers,
+            raum=body.raum,
             refine=body.refine,
             refine_model=body.refine_model,
         )

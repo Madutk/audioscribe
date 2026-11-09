@@ -160,6 +160,8 @@ export default {
   "Mikrofon (Eingabe, „Ich“)": "Microphone (input, “Me”)",
   "System-Audio (Ausgabe, Gegenseite)": "System audio (output, other side)",
   "Headset empfohlen: über Lautsprecher hört das Mikrofon die Gegenseite mit.": "Headset recommended: with speakers, the microphone also picks up the other side.",
+  "Vor Ort: mehrere Personen am Mikrofon": "On site: several people at the microphone",
+  "Alle sprechen ins selbe Mikrofon – es wird in „Sprecher 1, 2, 3 …“ getrennt statt „Ich“. Gilt nur für diese Sitzung.": "Everyone speaks into the same microphone – it is split into “Speaker 1, 2, 3 …” instead of “Me”. Applies to this session only.",
   "Modell (live)": "Model (live)",
   "Bildwechsel": "Screen changes",
   "Modell (Nachschärfen)": "Model (refinement)",

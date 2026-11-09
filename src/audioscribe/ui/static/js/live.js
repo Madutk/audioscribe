@@ -267,10 +267,19 @@ function updateTestMode() {
   // Im Testmodus gibt es keine Standbilder - also auch keine aus der Zwischenablage.
   $('liveClipBox').hidden = test;
   $('liveClipHint').hidden = test;
+  $('liveRaumBox').hidden = test;
+  updateRaumHint();
   const tile = $('liveTestTile');
   if (tile) tile.setAttribute('aria-pressed', String(test));
   $('liveStartLabel').textContent = test ? tr('Abspielen starten') : tr('Aufnahme starten');
   $('liveStartIcon').setAttribute('href', test ? '#i-play' : '#i-record');
+}
+
+/** Vor-Ort-Modus: statt des Headset-Hinweises erklaeren, was mit dem Mikrofon passiert. */
+function updateRaumHint() {
+  const raum = liveSource.kind !== 'transcript' && $('liveRaum').checked;
+  $('liveRaumHint').hidden = !raum;
+  $('liveHeadsetHint').hidden = raum;
 }
 
 function updateLiveTarget() {
@@ -364,6 +373,7 @@ async function startLive(resume) {
       zwischenablage: !test && $('liveClip').checked,
       partials: $('livePartials').checked,
       speakers: $('liveSpeakers').checked,
+      raum: !test && $('liveRaum').checked,
       refine: $('liveRefine').checked,
       refine_model: $('liveRefineModel').value,
     });
@@ -656,6 +666,8 @@ $('liveClip').addEventListener('change', async () => {
     toast(err.message, 'fehler');
   }
 });
+
+$('liveRaum').addEventListener('change', updateRaumHint);
 
 $('liveShots').addEventListener('toggle', () => {
   try { localStorage.setItem('liveShotsOpen', $('liveShots').open ? '1' : '0'); } catch (e) { /* egal */ }

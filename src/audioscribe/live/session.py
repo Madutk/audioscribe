@@ -102,6 +102,9 @@ class LiveOptions:
     resume_dir: Path | None = None
     titel: str = ""
     art: str = ""  # Art des Meetings (Wiki-Ablage im Meetings-Format)
+    # Vor-Ort-Modus: mehrere Personen an einem Mikrofon - auch die Mikrofon-Spur wird in
+    # "Sprecher N" getrennt (live und beim Nachschärfen), statt pauschal "Ich" zu heißen.
+    raum: bool = False
 
 
 class LiveSession:
@@ -138,6 +141,7 @@ class LiveSession:
         self._sitzung_id = uuid.uuid4().hex
         self._titel = opts.titel.strip()
         self._art = opts.art.strip()
+        self._raum = opts.raum
         self._journal = journal.Journal(self.dir)
         self._sperre: journal.Sperre | None = None
         self._status_offen = False  # sitzung.json steht auf "laeuft" und gehört diesem Lauf
@@ -182,6 +186,7 @@ class LiveSession:
         self._sitzung_id = str(status.get("sitzung_id") or self._sitzung_id)
         self._titel = self._titel or str(status.get("titel") or "")
         self._art = self._art or str(status.get("art") or "")
+        self._raum = self._raum or bool(status.get("raum"))
         teile = _teile(status)
         self._teil_nr = max((int(t.get("nr") or 0) for t in teile), default=0) + 1
         # Reste eines gescheiterten Fortsetzungsversuchs (Spur geöffnet, dann Abbruch vor dem
@@ -260,6 +265,7 @@ class LiveSession:
             status=journal.LAEUFT,
             titel=self._titel,
             art=self._art,
+            raum=self._raum,
             sprache=self.opts.language,
             modell=self.opts.model,
             replay=False,
@@ -329,7 +335,7 @@ class LiveSession:
         events.log(tr("Whisper {modell} geladen ({dauer})", modell=o.model, dauer=_took(started)))
         # Vor dem Hintergrund-Thread: torch.set_num_threads wirkt prozessweit.
         self._limit_torch_threads()
-        self._labeler = SpeakerLabeler(self._load_embedder(), pfad=self.dir / SPRECHER_DATEI)
+        self._labeler = SpeakerLabeler(self._load_embedder(), pfad=self.dir / SPRECHER_DATEI, raum=self._raum)
         self._state("laden", step=tr("Sprachaktivität (VAD)"))
         started = time.monotonic()
         vad = self._load_vad()
@@ -785,12 +791,18 @@ class LiveSession:
             pass
 
     def _load_embedder(self):
-        """Sprecher-Modell im Hintergrund; der erste System-Abschnitt wartet darauf."""
+        """Sprecher-Modell im Hintergrund; der erste zu trennende Abschnitt wartet darauf.
+
+        Getrennt wird die System-Spur, im Vor-Ort-Modus auch das Mikrofon."""
         o = self.opts
-        if not o.speakers or o.loopback.strip().lower() == "none":
+        ohne_system = o.loopback.strip().lower() == "none"
+        if not o.speakers or (ohne_system and not self._raum):
             return None
         if not o.hf_token:
-            events.log(tr("HF_TOKEN fehlt - System-Spur heißt 'Gegenseite' statt 'Sprecher N'"))
+            if self._raum:
+                events.log(tr("HF_TOKEN fehlt - Vor-Ort-Modus ohne Sprechertrennung, Mikrofon heißt 'Sprecher'"))
+            else:
+                events.log(tr("HF_TOKEN fehlt - System-Spur heißt 'Gegenseite' statt 'Sprecher N'"))
             return None
         from audioscribe.live.speakers import BackgroundEmbedder
 

@@ -465,6 +465,8 @@ class LiveJobOptions:
     zwischenablage: bool = False  # Screenshots aus der Zwischenablage uebernehmen
     partials: bool = True
     speakers: bool = True
+    # Vor-Ort-Meeting: mehrere Personen am Mikrofon - auch diese Spur in "Sprecher N" trennen.
+    raum: bool = False
     refine: bool = True
     # Unabhaengig vom Live-Modell: live zaehlt Tempo, beim Nachschaerfen Genauigkeit.
     refine_model: str = "large-v3"
@@ -524,6 +526,8 @@ def build_live_argv(opts: LiveJobOptions, *, prefix: Sequence[str] | None = None
         argv.append("--no-partials")
     if not opts.speakers:
         argv.append("--no-speakers")
+    if opts.raum:
+        argv.append("--vor-ort")
     if opts.resume_dir is not None:
         argv.append(f"--resume={Path(opts.resume_dir)}")
     return [*argv, *benennung]

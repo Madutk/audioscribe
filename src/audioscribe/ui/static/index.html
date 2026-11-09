@@ -459,7 +459,11 @@
       <h2 class="card-title"><span class="step">2</span>Audio</h2>
       <div class="field"><label for="liveMic">Mikrofon (Eingabe, „Ich“)</label><select id="liveMic"></select></div>
       <div class="field"><label for="liveLoop" id="liveLoopLabel">System-Audio (Ausgabe, Gegenseite)</label><select id="liveLoop"></select></div>
-      <p class="hint">Headset empfohlen: über Lautsprecher hört das Mikrofon die Gegenseite mit.</p>
+      <p class="hint" id="liveHeadsetHint">Headset empfohlen: über Lautsprecher hört das Mikrofon die Gegenseite mit.</p>
+      <div class="checks" id="liveRaumBox">
+        <label><input type="checkbox" id="liveRaum" /><span>Vor Ort: mehrere Personen am Mikrofon</span></label>
+      </div>
+      <p class="hint" id="liveRaumHint" hidden>Alle sprechen ins selbe Mikrofon – es wird in „Sprecher 1, 2, 3 …“ getrennt statt „Ich“. Gilt nur für diese Sitzung.</p>
       <p class="hint" id="livePermHint" hidden></p>
       <div class="err" id="liveProblems" role="alert"></div>
     </div>

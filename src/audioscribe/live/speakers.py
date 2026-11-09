@@ -23,6 +23,8 @@ EMBEDDING_MODEL = "pyannote/wespeaker-voxceleb-resnet34-LM"
 
 ICH = "Ich"
 GEGENSEITE = "Gegenseite"
+# Vor-Ort-Modus ohne Sprecher-Modell: mehrere Personen am Mikrofon, keine davon ist sicher "Ich".
+SPRECHER = "Sprecher"
 
 # Unter dieser Länge ist ein Embedding Rauschen; der Abschnitt erbt den letzten Sprecher.
 MIN_EMBED_S = 1.5
@@ -129,12 +131,22 @@ class BackgroundEmbedder:
 
 
 class SpeakerLabeler:
-    """Sprecher-Label je Abschnitt: Mikrofon = Ich, System = Sprecher N bzw. Gegenseite."""
+    """Sprecher-Label je Abschnitt: Mikrofon = Ich, System = Sprecher N bzw. Gegenseite.
+
+    ``raum`` (Vor-Ort-Modus): am Mikrofon sitzen mehrere Personen - dann wird auch die
+    Mikrofon-Spur geclustert und heißt "Sprecher N" statt "Ich".
+    """
 
     def __init__(
-        self, embedder=None, clusterer: OnlineClusterer | None = None, *, pfad: Path | None = None
+        self,
+        embedder=None,
+        clusterer: OnlineClusterer | None = None,
+        *,
+        pfad: Path | None = None,
+        raum: bool = False,
     ) -> None:
         self._embedder = embedder
+        self._raum = raum
         self._clusterer = clusterer or OnlineClusterer()
         self._last: str | None = None
         # ``pfad``: Begleitdatei mit den Zentroiden - beim Start geladen (Wiederaufnahme),
@@ -168,18 +180,19 @@ class SpeakerLabeler:
             pass
 
     def label(self, track: str, audio: np.ndarray) -> str:
-        if track == "mic":
+        if track == "mic" and not self._raum:
             return ICH  # braucht kein Modell - wartet also auch nie auf das Laden
+        rueckfall = SPRECHER if track == "mic" else GEGENSEITE
         if isinstance(self._embedder, BackgroundEmbedder):
             self._embedder = self._embedder.wait()
         if self._embedder is None:
-            return GEGENSEITE
+            return rueckfall
         if len(audio) < MIN_EMBED_S * SAMPLE_RATE and self._last:
             return self._last
         bekannt = len(self._clusterer)
         index = self._clusterer.assign(self._embedder(audio))
         if index is None:
-            return self._last or GEGENSEITE
+            return self._last or rueckfall
         self._last = f"Sprecher {index + 1}"
         if len(self._clusterer) != bekannt:
             self.sichere()
