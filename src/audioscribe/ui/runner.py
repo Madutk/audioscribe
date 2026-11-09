@@ -787,6 +787,26 @@ class LiveRunner(_ProcessRunner):
         except (OSError, ValueError) as exc:
             raise RuntimeError(tr("Wechsel der Bildquelle nicht möglich: {fehler}", fehler=exc)) from exc
 
+    def zwischenablage(self, an: bool) -> None:
+        """Screenshots aus der Zwischenablage in der laufenden Aufnahme uebernehmen oder nicht
+        (``zwischenablage an|aus`` ueber stdin)."""
+        from audioscribe.live.events import ablage_befehl
+
+        with self._lock:
+            laeuft = self._info.get("running") and self._info.get("phase") == "laeuft"
+            replay = self._info.get("replay")
+            proc = self._proc
+        if not laeuft or proc is None or proc.poll() is not None:
+            raise RuntimeError(tr("Es läuft gerade keine Aufnahme."))
+        if replay:
+            raise RuntimeError(tr("Im Testmodus gibt es keine Standbilder."))
+        try:
+            assert proc.stdin is not None
+            proc.stdin.write(ablage_befehl(an) + "\n")
+            proc.stdin.flush()
+        except (OSError, ValueError) as exc:
+            raise RuntimeError(tr("Zwischenablage nicht umschaltbar: {fehler}", fehler=exc)) from exc
+
     def reset(self, *, timeout: float = 15.0) -> Path | None:
         """Alles auf Anfang: eine laufende Sitzung wird hart beendet (ohne Nachschaerfen),
         danach sind Zustand, Ereignisse und Protokoll leer wie vor dem ersten Start.

@@ -82,6 +82,7 @@ def aus_einstellungen(saved: Mapping[str, object], inventar: Mapping[str, object
         "device": str(saved.get("live_device") or settings.device),
         "sensitivity": str(saved.get("live_sensitivity") or settings.screen_sensitivity),
         "format": str(saved.get("live_format") or settings.screen_format),
+        "zwischenablage": bool(saved.get("live_zwischenablage", False)),
         "partials": bool(saved.get("live_partials", True)),
         "speakers": bool(saved.get("live_speakers", True)),
         "refine": bool(saved.get("live_refine", True)),

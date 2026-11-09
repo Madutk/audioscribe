@@ -311,5 +311,7 @@ export default {
   "Fenster wählen": "Choose window",
   "Fenster filtern": "Filter windows",
   "Anwendung oder Titel filtern …": "Filter by app or title …",
-  "Klick wählt das Fenster. Minimierte Fenster liefern kein Vorschaubild.": "Click to choose the window. Minimized windows show no preview."
+  "Klick wählt das Fenster. Minimierte Fenster liefern kein Vorschaubild.": "Click to choose the window. Minimized windows show no preview.",
+  "Screenshots aus der Zwischenablage übernehmen": "Take over screenshots from the clipboard",
+  "Ausschnitt in die Zwischenablage legen (macOS ⌘⇧⌃4, Windows Win+Shift+S) – er wird sofort zum Standbild der Sitzung.": "Copy a region to the clipboard (macOS ⌘⇧⌃4, Windows Win+Shift+S) – it becomes a screenshot of the session right away."
 };

@@ -395,6 +395,7 @@ def create_app():
         device: str = "auto"
         sensitivity: str = "mittel"
         format: str = "jpg-1600"
+        zwischenablage: bool = False  # Screenshots aus der Zwischenablage uebernehmen
         partials: bool = True
         speakers: bool = True
         refine: bool = True
@@ -435,6 +436,11 @@ def create_app():
 
     class PauseIn(BaseModel):
         pausiert: bool = True
+
+    class ZwischenablageIn(BaseModel):
+        """Screenshots aus der Zwischenablage waehrend der Aufnahme uebernehmen oder nicht."""
+
+        an: bool
 
     class BildquelleIn(BaseModel):
         """Bildquelle waehrend der Aufnahme wechseln (FR-37): wie beim Start, ohne alles andere."""
@@ -1338,6 +1344,7 @@ def create_app():
                 "device": saved.get("live_device", settings.device),
                 "sensitivity": saved.get("live_sensitivity", settings.screen_sensitivity),
                 "format": saved.get("live_format", settings.screen_format),
+                "zwischenablage": saved.get("live_zwischenablage", False),
                 "partials": saved.get("live_partials", True),
                 "speakers": saved.get("live_speakers", True),
                 "refine": saved.get("live_refine", True),
@@ -1476,6 +1483,7 @@ def create_app():
             device=body.device,
             frame_sensitivity=body.sensitivity,
             frame_format=body.format,
+            zwischenablage=body.zwischenablage,
             partials=body.partials,
             speakers=body.speakers,
             refine=body.refine,
@@ -1494,6 +1502,7 @@ def create_app():
                 "live_device": body.device,
                 "live_sensitivity": body.sensitivity,
                 "live_format": body.format,
+                "live_zwischenablage": body.zwischenablage,
                 "live_partials": body.partials,
                 "live_speakers": body.speakers,
                 "live_refine": body.refine,
@@ -1865,6 +1874,17 @@ def create_app():
             }
         )
         return JSONResponse({"ok": True, "monitor": monitor, "window": body.window})
+
+    @app.post("/api/live/zwischenablage")
+    def api_live_zwischenablage(body: ZwischenablageIn):
+        """Screenshots aus der Zwischenablage in der laufenden Aufnahme uebernehmen oder nicht.
+        Die Wahl wird gemerkt, damit der naechste Start sie vorschlaegt."""
+        try:
+            live.zwischenablage(body.an)
+        except RuntimeError as exc:
+            raise HTTPException(409, str(exc)) from exc
+        state.save_state({"live_zwischenablage": body.an})
+        return JSONResponse({"ok": True, "an": body.an})
 
     @app.post("/api/live/stop")
     def api_live_stop():

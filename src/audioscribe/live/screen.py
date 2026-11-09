@@ -298,6 +298,8 @@ class ScreenWatcher(threading.Thread):
         self._halt = threading.Event()
         self._wechsel = threading.Event()
         self._wunsch_lock = threading.Lock()
+        # Bild-IDs vergeben Abtastung und Zwischenablage (``einfuegen``) gemeinsam.
+        self._id_lock = threading.Lock()
 
     def stop(self) -> None:
         self._halt.set()
@@ -358,9 +360,7 @@ class ScreenWatcher(threading.Thread):
                 self._warte_auf_wechsel()
 
     def _loop(self, source) -> None:
-        frames = self._out_dir / "frames"
-        frames.mkdir(parents=True, exist_ok=True)
-        suffix = FORMATS[self._bildformat][0]
+        (self._out_dir / "frames").mkdir(parents=True, exist_ok=True)
         while not self._halt.wait(1.0 / self._fps):
             if self._wechsel.is_set():
                 return
@@ -377,26 +377,43 @@ class ScreenWatcher(threading.Thread):
                 t = self._detector.feed(self._clock(), raster(img))
                 if t is None:
                     continue
-                if self._anzahl >= self._max_bilder:
-                    if self._anzahl == self._max_bilder:
-                        self._log(tr("Obergrenze von {anzahl} Standbildern erreicht", anzahl=self._max_bilder))
-                        self._anzahl += 1
-                    continue
-                self._anzahl += 1
-                name = shot_filename(self._anzahl, t, suffix)
-                save_shot(img, frames / name, self._bildformat)
-                self._on_shot(
-                    Mark(
-                        t=round(t, 3),
-                        png=f"frames/{name}",
-                        created=datetime.now().strftime("%Y-%m-%d %H:%M"),
-                        id=self._anzahl,
-                        kind=KIND_AUTO,
-                    )
-                )
+                self._sichere(img, t, KIND_AUTO)
             except WindowGone:
                 self._log(tr("Fenster geschlossen - keine weiteren Standbilder"))
                 self._melde(0, 0, "", aktiv=False)
                 return
             except Exception as exc:  # noqa: BLE001 - ein Bild darf die Sitzung nie kippen
                 self._log(tr("Standbild fehlgeschlagen: {fehler}", fehler=exc))
+
+    def einfuegen(self, img, kind: str) -> bool:
+        """Ein Bild von außen (Zwischenablage) als Standbild des jetzigen Zeitpunkts sichern -
+        mit derselben ID-Zählung, Obergrenze und demselben Format wie die Abtastung. Läuft im
+        Thread des Aufrufers; ``True``, wenn das Bild gesichert wurde."""
+        if img.mode != "RGB":
+            # macOS-Screenshots kommen als RGBA-PNG - JPEG kennt keinen Alphakanal.
+            img = img.convert("RGB")
+        return self._sichere(img, self._clock(), kind)
+
+    def _sichere(self, img, t: float, kind: str) -> bool:
+        with self._id_lock:
+            if self._anzahl >= self._max_bilder:
+                if self._anzahl == self._max_bilder:
+                    self._log(tr("Obergrenze von {anzahl} Standbildern erreicht", anzahl=self._max_bilder))
+                    self._anzahl += 1
+                return False
+            self._anzahl += 1
+            bild_id = self._anzahl
+        frames = self._out_dir / "frames"
+        frames.mkdir(parents=True, exist_ok=True)
+        name = shot_filename(bild_id, t, FORMATS[self._bildformat][0])
+        save_shot(img, frames / name, self._bildformat)
+        self._on_shot(
+            Mark(
+                t=round(t, 3),
+                png=f"frames/{name}",
+                created=datetime.now().strftime("%Y-%m-%d %H:%M"),
+                id=bild_id,
+                kind=kind,
+            )
+        )
+        return True

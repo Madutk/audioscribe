@@ -58,6 +58,7 @@ async function loadLiveDefaults() {
   fill($('liveSens'), S.defaults.sensitivities, d.sensitivity);
   fill($('liveFmt'), S.defaults.frame_formats, d.format);
   $('livePartials').checked = d.partials !== false;
+  $('liveClip').checked = d.zwischenablage === true;
   $('liveSpeakers').checked = d.speakers !== false;
   $('liveRefine').checked = d.refine !== false;
   $('liveProblems').textContent = d.problems.join(' · ');
@@ -262,6 +263,9 @@ function syncSourceFromStatus(q) {
 function updateTestMode() {
   const test = liveSource.kind === 'transcript';
   $('liveTestOpts').hidden = !test;
+  // Im Testmodus gibt es keine Standbilder - also auch keine aus der Zwischenablage.
+  $('liveClipBox').hidden = test;
+  $('liveClipHint').hidden = test;
   const tile = $('liveTestTile');
   if (tile) tile.setAttribute('aria-pressed', String(test));
   $('liveStartLabel').textContent = test ? tr('Abspielen starten') : tr('Aufnahme starten');
@@ -356,6 +360,7 @@ async function startLive(resume) {
       device: $('liveDevice').value,
       sensitivity: $('liveSens').value,
       format: $('liveFmt').value,
+      zwischenablage: !test && $('liveClip').checked,
       partials: $('livePartials').checked,
       speakers: $('liveSpeakers').checked,
       refine: $('liveRefine').checked,
@@ -396,13 +401,17 @@ function addLiveEvent(ev) {
   } else if (ev.type === 'shot') {
     const index = liveShots.push(ev) - 1;
     const label = tr('Bild #{nr} – {zeit}', { nr: String(ev.id).padStart(4, '0'), zeit: tc(ev.t) });
-    el.className = 'shotmark';
+    const ablage = ev.kind === 'zwischenablage';
+    const titel = ablage ? ` title="${esc(tr('Aus der Zwischenablage'))}"` : '';
+    el.className = 'shotmark' + (ablage ? ' ablage' : '');
     el.dataset.shot = index;
-    el.innerHTML = icon('camera') + esc(label);
+    el.innerHTML = icon(ablage ? 'copy' : 'camera') + esc(label);
+    if (ablage) el.title = tr('Aus der Zwischenablage');
     insertByTime(el, ev.t);
     if (index === 0) $('liveThumbs').innerHTML = '';
     $('liveThumbs').insertAdjacentHTML('beforeend',
-      `<div class="thumb" data-shot="${index}"><img loading="lazy" src="${shotUrl(ev)}" alt="" />${esc(label)}</div>`);
+      `<div class="thumb${ablage ? ' ablage' : ''}" data-shot="${index}"${titel}><img loading="lazy" src="${shotUrl(ev)}" alt="" />`
+      + `${ablage ? icon('copy') : ''}${esc(label)}</div>`);
     $('liveShotCount').textContent = `– ${liveShots.length}`;
   }
 }
@@ -634,6 +643,19 @@ function openLightbox(index) {
 
 // Screenshots-Karte: zu, solange der Souffleur den Platz braucht; der Zustand bleibt im Browser.
 try { $('liveShots').open = localStorage.getItem('liveShotsOpen') === '1'; } catch (e) { /* privat / gesperrt */ }
+/** Zwischenablage an/aus - waehrend einer Aufnahme sofort an den Aufnahmeprozess. Schlaegt das
+ *  fehl, springt der Haken zurueck. Vor dem Start gilt er erst mit dem Start. */
+$('liveClip').addEventListener('change', async () => {
+  const an = $('liveClip').checked;
+  if (!liveRunning || liveReplay) return;
+  try {
+    await post('/api/live/zwischenablage', { an });
+  } catch (err) {
+    $('liveClip').checked = !an;
+    toast(err.message, 'fehler');
+  }
+});
+
 $('liveShots').addEventListener('toggle', () => {
   try { localStorage.setItem('liveShotsOpen', $('liveShots').open ? '1' : '0'); } catch (e) { /* egal */ }
 });

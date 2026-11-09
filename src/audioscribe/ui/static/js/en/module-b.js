@@ -231,5 +231,6 @@ export default {
   "Transkript und Bilder werden in einen Ordner deiner Wahl kopiert, die Bilder in den Unterordner assets/; der Sitzungsordner bleibt unverändert.": "Transcript and images are copied to a folder of your choice, the images into its assets/ subfolder; the session folder stays unchanged.",
   "Bilder mit übertragen ({n})": "Include images ({n})",
   "Bilder mit übertragen – diese Sitzung hat keine": "Include images – this session has none",
-  "Ordner für das Transkript wählen": "Choose folder for the transcript"
+  "Ordner für das Transkript wählen": "Choose folder for the transcript",
+  "Aus der Zwischenablage": "From the clipboard"
 };

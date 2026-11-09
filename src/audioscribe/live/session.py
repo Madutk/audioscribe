@@ -70,6 +70,8 @@ class LiveOptions:
     loopback: str = "default"
     sensitivity: str = "mittel"
     bildformat: str = "jpg-1600"
+    # Screenshots aus der Zwischenablage als Standbilder übernehmen (live/zwischenablage.py).
+    zwischenablage: bool = False
     partials: bool = True
     speakers: bool = True
     hf_token: str | None = None
@@ -114,6 +116,7 @@ class LiveSession:
         self._segments: list[Segment] = []
         self._marks: list[Mark] = []
         self._screen = None  # ScreenWatcher der laufenden Aufnahme (Bildquelle wechselbar, FR-37)
+        self._ablage = None  # ClipboardWatcher - Screenshots aus der Zwischenablage
         self._open: dict[str, int | None] = {}
         self._last_delay: float | None = None
         self._board = JobBoard(coalesce_s=opts.coalesce_s, catchup_s=opts.catchup_s)
@@ -230,7 +233,7 @@ class LiveSession:
             )
         for mark in self._marks:
             if mark.id is not None:
-                events.emit(events.SHOT, id=mark.id, t=mark.t, file=Path(mark.png).name, restored=True)
+                events.emit(events.SHOT, id=mark.id, t=mark.t, file=Path(mark.png).name, kind=mark.kind, restored=True)
         events.log(
             tr(
                 "Sitzung wird fortgesetzt: {abschnitte} Abschnitte, {standbilder} Standbilder, "
@@ -385,6 +388,9 @@ class LiveSession:
             aufnahme_s = self._aufnahme_s = self.clock()
             self._state("stoppt")
             audio.close()
+        if self._ablage is not None:
+            self._ablage.stop()
+            self._ablage.join(timeout=2)
         if screen is not None:
             screen.stop()
             screen.join(timeout=5)
@@ -685,6 +691,10 @@ class LiveSession:
                 quelle = events.parse_bild_befehl(line)
                 if quelle is not None:
                     self.wechsle_bildquelle(*quelle)
+                    continue
+                ablage = events.parse_ablage_befehl(line)
+                if ablage is not None:
+                    self.schalte_zwischenablage(ablage)
         except (OSError, ValueError):
             return
 
@@ -695,6 +705,13 @@ class LiveSession:
             events.log(tr("Keine Bildquelle in dieser Sitzung - Wechsel nicht möglich"))
             return
         self._screen.wechsle(monitor=monitor, window=window)
+
+    def schalte_zwischenablage(self, an: bool) -> None:
+        """Screenshots aus der Zwischenablage ab jetzt übernehmen oder nicht."""
+        if self._ablage is None:
+            events.log(tr("Keine Bildquelle in dieser Sitzung - Zwischenablage nicht beobachtet"))
+            return
+        self._ablage.schalte(an)
 
     # --- Hilfen -------------------------------------------------------------
 
@@ -808,10 +825,27 @@ class LiveSession:
             )
             watcher.start()
             self._screen = watcher
+            self._start_ablage(watcher)
             return watcher
         except ImportError:
             events.log(tr("Standbilder-Modul nicht ladbar - keine Standbilder (uv sync ... --extra live)"))
             return None
+
+    def _start_ablage(self, watcher) -> None:
+        """Zwischenablage-Beobachter; läuft immer mit, übernimmt aber nur, wenn eingeschaltet -
+        so lässt er sich während der Aufnahme an- und ausschalten."""
+        from audioscribe.live.zwischenablage import ClipboardWatcher
+        from audioscribe.pipeline.screens import KIND_ZWISCHENABLAGE
+
+        ablage = ClipboardWatcher(
+            lambda img: watcher.einfuegen(img, KIND_ZWISCHENABLAGE),
+            an=self.opts.zwischenablage,
+            log=events.log,
+        )
+        ablage.start()
+        self._ablage = ablage
+        if self.opts.zwischenablage:
+            events.log(tr("Zwischenablage: Screenshots übernehmen"))
 
     def _on_quelle(self, quelle: dict) -> None:
         """Die wirksame Bildquelle an die Oberfläche melden (nicht ins Journal: eine
@@ -823,7 +857,7 @@ class LiveSession:
             self._marks.append(mark)
             save_marks(self.dir, self._marks)
         self._journal.shot(id=mark.id, t=mark.t, png=mark.png, created=mark.created, kind=mark.kind)
-        events.emit(events.SHOT, id=mark.id, t=mark.t, file=Path(mark.png).name)
+        events.emit(events.SHOT, id=mark.id, t=mark.t, file=Path(mark.png).name, kind=mark.kind)
 
     def _persist(self) -> None:
         with self._lock:
@@ -949,7 +983,7 @@ def finalisiere_sitzung(session_dir: str | Path, *, sentences_per_timestamp: int
             )
         for mark in marks:
             if mark.id is not None:
-                events.emit(events.SHOT, id=mark.id, t=mark.t, file=Path(mark.png).name, restored=True)
+                events.emit(events.SHOT, id=mark.id, t=mark.t, file=Path(mark.png).name, kind=mark.kind, restored=True)
         verbinde_teile(session_dir)
         dauer = max(
             [bestand.ende_s]

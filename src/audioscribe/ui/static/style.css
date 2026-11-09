@@ -338,6 +338,10 @@ pre#liveLog { height: 120px; }
 .shotmark { display: inline-flex; align-items: center; gap: 5px; margin: 0 0 var(--s2); padding: 2px 9px; border-radius: var(--radius-pill);
             background: var(--surface-2); color: var(--fg-muted); font-size: 12px; cursor: pointer; transition: color var(--dur), background var(--dur); }
 .shotmark:hover { color: var(--accent); background: var(--accent-soft); }
+.shotmark.ablage { box-shadow: inset 0 0 0 1px var(--accent-soft); }
+.thumb.ablage img { border-style: dashed; }
+.thumb.ablage .ic { width: 11px; height: 11px; margin-right: 3px; vertical-align: -1px; }
+#liveClipBox { margin-top: 8px; }
 .thumbs { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: var(--s2); max-height: 560px; overflow: auto; }
 .thumb { cursor: pointer; font-size: 11px; color: var(--fg-muted); text-align: center; }
 .thumb img { width: 100%; border-radius: var(--radius-sm); display: block; border: 1px solid var(--border);

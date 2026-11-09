@@ -457,5 +457,14 @@
   "Übersprechen {verworfen} von {geprueft} verworfen": "Crosstalk {verworfen} of {geprueft} discarded",
   "Übersprechen: Zeitversatz schätzen": "Crosstalk: estimating time offset",
   "Übersprechen: {verworfen} von {geprueft} Mikrofon-Segmenten verworfen (Zeitversatz {lag} s)": "Crosstalk: {verworfen} of {geprueft} microphone segments discarded (time offset {lag} s)",
-  "übersprungen (zu groß): {datei}": "skipped (too large): {datei}"
+  "übersprungen (zu groß): {datei}": "skipped (too large): {datei}",
+  "Zwischenablage nicht lesbar - Modul fehlt: {modul}": "Clipboard not readable - module missing: {modul}",
+  "Zwischenablage wird auf diesem System nicht beobachtet": "The clipboard is not watched on this system",
+  "Zwischenablage: Screenshots übernehmen": "Clipboard: taking over screenshots",
+  "Zwischenablage: aus": "Clipboard: off",
+  "Zwischenablage nicht gelesen: {fehler}": "Clipboard not read: {fehler}",
+  "Keine Bildquelle in dieser Sitzung - Zwischenablage nicht beobachtet": "No image source in this session - clipboard not watched",
+  "Es läuft gerade keine Aufnahme.": "No recording is running right now.",
+  "Im Testmodus gibt es keine Standbilder.": "There are no screenshots in test mode.",
+  "Zwischenablage nicht umschaltbar: {fehler}": "Clipboard cannot be switched: {fehler}"
 }

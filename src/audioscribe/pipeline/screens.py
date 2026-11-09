@@ -45,6 +45,9 @@ BLOCKS_Y = 9
 # Herkunft eines Marks: automatisch erkannte werden bei jedem Lauf ersetzt, von Hand
 # gesetzte (kind=None) bleiben unberuehrt.
 KIND_AUTO = "auto"
+# Live: ein Screenshot, den jemand während der Aufnahme in die Zwischenablage gelegt hat.
+# Nicht "auto" - das Nachschärfen ersetzt ihn darum nicht.
+KIND_ZWISCHENABLAGE = "zwischenablage"
 
 # name -> (blockschwelle, mindestanzahl geaenderter Bloecke von 144)
 SENSITIVITIES: dict[str, tuple[int, int]] = {

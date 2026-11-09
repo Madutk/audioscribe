@@ -462,6 +462,7 @@ class LiveJobOptions:
     device: str = "auto"
     frame_sensitivity: str = "mittel"
     frame_format: str = "jpg-1600"
+    zwischenablage: bool = False  # Screenshots aus der Zwischenablage uebernehmen
     partials: bool = True
     speakers: bool = True
     refine: bool = True
@@ -517,6 +518,8 @@ def build_live_argv(opts: LiveJobOptions, *, prefix: Sequence[str] | None = None
     ]
     if opts.window:
         argv.append(f"--window={opts.window}")
+    if opts.zwischenablage:
+        argv.append("--zwischenablage")
     if not opts.partials:
         argv.append("--no-partials")
     if not opts.speakers:

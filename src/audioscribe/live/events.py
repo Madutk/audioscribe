@@ -110,3 +110,21 @@ def parse_event(line: str) -> dict | None:
     except ValueError:
         return None
     return data if isinstance(data, dict) and isinstance(data.get("type"), str) else None
+
+
+# ``zwischenablage an`` / ``zwischenablage aus``: Screenshots aus der Zwischenablage während
+# der Aufnahme übernehmen oder nicht.
+
+ABLAGE = "zwischenablage"
+
+
+def ablage_befehl(an: bool) -> str:
+    return f"{ABLAGE} {'an' if an else 'aus'}"
+
+
+def parse_ablage_befehl(zeile: str) -> bool | None:
+    """``True``/``False`` einer ``zwischenablage``-Zeile oder ``None``, wenn es keine ist."""
+    teile = zeile.strip().lower().split()
+    if len(teile) == 2 and teile[0] == ABLAGE and teile[1] in ("an", "aus"):
+        return teile[1] == "an"
+    return None

@@ -210,6 +210,7 @@ def _live(args: argparse.Namespace) -> int:
         speed=args.speed,
         sensitivity=args.frame_sensitivity or settings.screen_sensitivity,
         bildformat=args.frame_format or settings.screen_format,
+        zwischenablage=not replay and args.zwischenablage,
         partials=not args.no_partials,
         speakers=not args.no_speakers,
         hf_token=settings.hf_token,
@@ -467,6 +468,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     live.add_argument("--frame-sensitivity", choices=("grob", "mittel", "fein"))
     live.add_argument("--frame-format", choices=("jpg-1600", "jpg-1280", "png"))
+    live.add_argument(
+        "--zwischenablage",
+        action="store_true",
+        help="Screenshots aus der Zwischenablage als Standbilder uebernehmen (macOS, Windows)",
+    )
     live.add_argument("--no-partials", action="store_true", help="keinen vorlaeufigen Text ausgeben")
     live.add_argument(
         "--no-speakers", action="store_true", help="System-Spur nicht in 'Sprecher N' trennen"
