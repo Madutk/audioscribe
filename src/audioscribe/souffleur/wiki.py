@@ -46,6 +46,9 @@ AUSZUG_MAX = 700
 _HEADING = re.compile(r"^(#{1,3})\s+(.*?)\s*#*\s*$")
 _TABELLE_TRENNER = re.compile(r"^\s*\|?\s*:?-{2,}")
 _TOKEN = re.compile(r"[a-zäöüß0-9]+")
+# Kennungen wie ENT-003 oder ADR-12 (Großbuchstaben, Bindestrich, Ziffern) - zusätzlich als ein
+# ganzes Token, sonst zerfielen sie in "ent" und "003" und träfen jede andere "-003"-Kennung.
+KENNUNG = re.compile(r"\b[A-Z]{1,5}-\d{1,4}\b")
 _TAUSENDER = re.compile(r"(?<=\d)[.  ](?=\d{3}\b)")
 
 _STOPP = set(
@@ -77,10 +80,11 @@ _STOPP |= set(
 
 
 def tokenisiere(text: str) -> list[str]:
-    """Kleinbuchstaben, NFC, Tausenderpunkte entfernt, Stoppwörter raus, grobe Endungen gekappt."""
+    """Kleinbuchstaben, NFC, Tausenderpunkte entfernt, Stoppwörter raus, grobe Endungen gekappt.
+    Kennungen (``ENT-003``) kommen zusätzlich als ein Token (``ent-003``) hinzu."""
+    out = [k.lower() for k in KENNUNG.findall(text)]
     text = unicodedata.normalize("NFC", text.lower())
     text = _TAUSENDER.sub("", text)
-    out = []
     for tok in _TOKEN.findall(text):
         if len(tok) < 2 or tok in _STOPP:
             continue
@@ -345,6 +349,35 @@ class WikiIndex:
                 continue
             je[a.datei] += 1
             out.append(Fundstelle(a.datei, a.ueberschrift, a.zeile, a.text[:AUSZUG_MAX], round(score, 3)))
+            if len(out) >= top_k:
+                break
+        return out
+
+    def abschnitt(self, datei: str, zeile: int) -> Fundstelle | None:
+        """Der Abschnitt an genau dieser Stelle - etwa die gemerkte Fundstelle eines Leitfaden-Punkts."""
+        for a in self.abschnitte:
+            if a.datei == datei and a.zeile == zeile:
+                return Fundstelle(a.datei, a.ueberschrift, a.zeile, a.text[:AUSZUG_MAX], 0.0)
+        return None
+
+    def finde_kennung(self, kennung: str, *, top_k: int = 2) -> list[Fundstelle]:
+        """Abschnitte, die die Kennung exakt enthalten - im Dateinamen, in der Überschrift oder im
+        Text (in dieser Rangfolge), höchstens einer je Datei."""
+        muster = re.compile(rf"(?<![A-Za-z0-9-]){re.escape(kennung)}(?![0-9])")
+        bewertet: list[tuple[int, int, Abschnitt]] = []
+        for i, a in enumerate(self.abschnitte):
+            rang = 3 if muster.search(Path(a.datei).stem) else 2 if muster.search(a.ueberschrift) else 0
+            if not rang and not muster.search(a.text):
+                continue
+            bewertet.append((rang or 1, -i, a))
+        bewertet.sort(key=lambda t: (-t[0], -t[1]))
+        out: list[Fundstelle] = []
+        dateien: set[str] = set()
+        for rang, _, a in bewertet:
+            if a.datei in dateien:
+                continue
+            dateien.add(a.datei)
+            out.append(Fundstelle(a.datei, a.ueberschrift, a.zeile, a.text[:AUSZUG_MAX], float(rang)))
             if len(out) >= top_k:
                 break
         return out

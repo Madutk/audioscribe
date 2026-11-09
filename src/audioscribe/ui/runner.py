@@ -999,6 +999,8 @@ class LiveRunner(_ProcessRunner):
                 souffleur.uebernehme(event)  # Wiederaufnahme: nur Kontext, nicht neu beurteilen
             elif typ == "segment":
                 souffleur.beobachte(event, empfangen_mono=empfangen)
+            elif typ == "shot":
+                souffleur.beobachte_bild(event)  # Texterkennung als zweite Belegquelle
         except Exception as exc:  # noqa: BLE001 - der Souffleur darf die Sitzung nie stoeren
             self._append(tr("Souffleur-Fehler: {fehler}", fehler=exc))
 

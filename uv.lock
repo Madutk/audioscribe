@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = "==3.12.*"
 resolution-markers = [
     "sys_platform == 'win32' and extra != 'extra-11-audioscribe-cpu' and extra == 'extra-11-audioscribe-cu124' and extra != 'extra-11-audioscribe-mac'",
@@ -197,6 +197,7 @@ mac = [
     { name = "pyobjc-framework-libdispatch", marker = "sys_platform == 'darwin'" },
     { name = "pyobjc-framework-quartz", marker = "sys_platform == 'darwin'" },
     { name = "pyobjc-framework-screencapturekit", marker = "sys_platform == 'darwin'" },
+    { name = "pyobjc-framework-vision", marker = "sys_platform == 'darwin'" },
     { name = "sounddevice", marker = "sys_platform == 'darwin'" },
 ]
 review = [
@@ -227,6 +228,7 @@ requires-dist = [
     { name = "pyobjc-framework-libdispatch", marker = "sys_platform == 'darwin' and extra == 'mac'", specifier = ">=10.3" },
     { name = "pyobjc-framework-quartz", marker = "sys_platform == 'darwin' and extra == 'mac'", specifier = ">=10.3" },
     { name = "pyobjc-framework-screencapturekit", marker = "sys_platform == 'darwin' and extra == 'mac'", specifier = ">=10.3" },
+    { name = "pyobjc-framework-vision", marker = "sys_platform == 'darwin' and extra == 'mac'", specifier = ">=10.3" },
     { name = "scipy", marker = "extra == 'live'" },
     { name = "sounddevice", marker = "sys_platform == 'darwin' and extra == 'mac'", specifier = ">=0.5" },
     { name = "torch", marker = "extra == 'cpu'", specifier = ">=2.4,<2.7", index = "https://download.pytorch.org/whl/cpu", conflict = { package = "audioscribe", extra = "cpu" } },
@@ -1058,17 +1060,16 @@ name = "mlx-whisper"
 version = "0.4.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "huggingface-hub" },
-    { name = "mlx" },
-    { name = "more-itertools" },
-    { name = "numba" },
-    { name = "numpy" },
-    { name = "scipy" },
-    { name = "tiktoken" },
+    { name = "huggingface-hub", marker = "sys_platform == 'darwin' or (sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'extra-11-audioscribe-cpu')" },
+    { name = "mlx", marker = "sys_platform == 'darwin' or (sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'extra-11-audioscribe-cpu')" },
+    { name = "more-itertools", marker = "sys_platform == 'darwin' or (sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'extra-11-audioscribe-cpu')" },
+    { name = "numba", marker = "sys_platform == 'darwin' or (sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'extra-11-audioscribe-cpu')" },
+    { name = "numpy", marker = "sys_platform == 'darwin' or (sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'extra-11-audioscribe-cpu')" },
+    { name = "scipy", marker = "sys_platform == 'darwin' or (sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'extra-11-audioscribe-cpu')" },
+    { name = "tiktoken", marker = "sys_platform == 'darwin' or (sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'extra-11-audioscribe-cpu')" },
     { name = "torch", version = "2.6.0", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform == 'darwin' and extra == 'extra-11-audioscribe-cpu') or (extra == 'extra-11-audioscribe-cpu' and extra == 'extra-11-audioscribe-cu124') or (extra == 'extra-11-audioscribe-cu124' and extra == 'extra-11-audioscribe-mac')" },
-    { name = "torch", version = "2.6.0", source = { registry = "https://pypi.org/simple" }, marker = "(extra == 'extra-11-audioscribe-cpu' and extra == 'extra-11-audioscribe-cu124') or (extra == 'extra-11-audioscribe-cu124' and extra == 'extra-11-audioscribe-mac') or (extra != 'extra-11-audioscribe-cpu' and extra != 'extra-11-audioscribe-cu124')" },
-    { name = "torch", version = "2.6.0+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform != 'darwin' and extra == 'extra-11-audioscribe-cpu') or (extra == 'extra-11-audioscribe-cpu' and extra == 'extra-11-audioscribe-cu124') or (extra == 'extra-11-audioscribe-cu124' and extra == 'extra-11-audioscribe-mac')" },
-    { name = "tqdm" },
+    { name = "torch", version = "2.6.0", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'extra-11-audioscribe-cpu' and extra != 'extra-11-audioscribe-cu124') or (extra == 'extra-11-audioscribe-cpu' and extra == 'extra-11-audioscribe-cu124') or (extra == 'extra-11-audioscribe-cu124' and extra == 'extra-11-audioscribe-mac')" },
+    { name = "tqdm", marker = "sys_platform == 'darwin' or (sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'extra-11-audioscribe-cpu')" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/22/b7/a35232812a2ccfffcb7614ba96a91338551a660a0e9815cee668bf5743f0/mlx_whisper-0.4.3-py3-none-any.whl", hash = "sha256:6b82b6597a994643a3e5496c7bc229a672e5ca308458455bfe276e76ae024489", size = 890544, upload-time = "2025-08-29T14:56:13.815Z" },
@@ -1166,8 +1167,8 @@ name = "numba"
 version = "0.68.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "llvmlite" },
-    { name = "numpy" },
+    { name = "llvmlite", marker = "sys_platform == 'darwin' or (sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'extra-11-audioscribe-cpu')" },
+    { name = "numpy", marker = "sys_platform == 'darwin' or (sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'extra-11-audioscribe-cpu')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/4e/cd/e8280f9ffa30fea9fabc5341223701231fcc5d53a31f51419d42d4bec3a6/numba-0.68.0.tar.gz", hash = "sha256:8a781de54b980b98f43bff7f1093701b5f07c80d031c7cfa8a87493d8bf73f2d", size = 2855363, upload-time = "2026-09-30T15:05:44.721Z" }
 wheels = [
@@ -1242,7 +1243,7 @@ name = "nvidia-cudnn-cu12"
 version = "9.1.0.70"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "nvidia-cublas-cu12", marker = "(sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'extra-11-audioscribe-cpu') or (sys_platform == 'emscripten' and extra == 'extra-11-audioscribe-cu124') or (sys_platform == 'win32' and extra == 'extra-11-audioscribe-cu124') or (extra == 'extra-11-audioscribe-cpu' and extra == 'extra-11-audioscribe-cu124')" },
+    { name = "nvidia-cublas-cu12", marker = "(sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'extra-11-audioscribe-cpu') or (sys_platform == 'emscripten' and extra == 'extra-11-audioscribe-cu124' and extra == 'extra-11-audioscribe-mac') or (sys_platform == 'win32' and extra == 'extra-11-audioscribe-cu124' and extra == 'extra-11-audioscribe-mac') or (extra == 'extra-11-audioscribe-cpu' and extra == 'extra-11-audioscribe-cu124')" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/9f/fd/713452cd72343f682b1c7b9321e23829f00b842ceaedcda96e742ea0b0b3/nvidia_cudnn_cu12-9.1.0.70-py3-none-manylinux2014_x86_64.whl", hash = "sha256:165764f44ef8c61fcdfdfdbe769d687e06374059fbb388b6c89ecb0e28793a6f", size = 664752741, upload-time = "2024-04-22T15:24:15.253Z" },
@@ -1254,7 +1255,7 @@ name = "nvidia-cufft-cu12"
 version = "11.2.1.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "nvidia-nvjitlink-cu12", marker = "(sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'extra-11-audioscribe-cpu') or (sys_platform == 'emscripten' and extra == 'extra-11-audioscribe-cu124') or (sys_platform == 'win32' and extra == 'extra-11-audioscribe-cu124') or (extra == 'extra-11-audioscribe-cpu' and extra == 'extra-11-audioscribe-cu124')" },
+    { name = "nvidia-nvjitlink-cu12", marker = "(sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'extra-11-audioscribe-cpu') or (sys_platform == 'emscripten' and extra == 'extra-11-audioscribe-cu124' and extra == 'extra-11-audioscribe-mac') or (sys_platform == 'win32' and extra == 'extra-11-audioscribe-cu124' and extra == 'extra-11-audioscribe-mac') or (extra == 'extra-11-audioscribe-cpu' and extra == 'extra-11-audioscribe-cu124')" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/7a/8a/0e728f749baca3fbeffad762738276e5df60851958be7783af121a7221e7/nvidia_cufft_cu12-11.2.1.3-py3-none-manylinux2014_aarch64.whl", hash = "sha256:5dad8008fc7f92f5ddfa2101430917ce2ffacd86824914c82e28990ad7f00399", size = 211422548, upload-time = "2024-06-18T19:33:39.396Z" },
@@ -1277,9 +1278,9 @@ name = "nvidia-cusolver-cu12"
 version = "11.6.1.9"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "nvidia-cublas-cu12", marker = "(sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'extra-11-audioscribe-cpu') or (sys_platform == 'emscripten' and extra == 'extra-11-audioscribe-cu124') or (sys_platform == 'win32' and extra == 'extra-11-audioscribe-cu124') or (extra == 'extra-11-audioscribe-cpu' and extra == 'extra-11-audioscribe-cu124')" },
-    { name = "nvidia-cusparse-cu12", marker = "(sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'extra-11-audioscribe-cpu') or (sys_platform == 'emscripten' and extra == 'extra-11-audioscribe-cu124') or (sys_platform == 'win32' and extra == 'extra-11-audioscribe-cu124') or (extra == 'extra-11-audioscribe-cpu' and extra == 'extra-11-audioscribe-cu124')" },
-    { name = "nvidia-nvjitlink-cu12", marker = "(sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'extra-11-audioscribe-cpu') or (sys_platform == 'emscripten' and extra == 'extra-11-audioscribe-cu124') or (sys_platform == 'win32' and extra == 'extra-11-audioscribe-cu124') or (extra == 'extra-11-audioscribe-cpu' and extra == 'extra-11-audioscribe-cu124')" },
+    { name = "nvidia-cublas-cu12", marker = "(sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'extra-11-audioscribe-cpu') or (sys_platform == 'emscripten' and extra == 'extra-11-audioscribe-cu124' and extra == 'extra-11-audioscribe-mac') or (sys_platform == 'win32' and extra == 'extra-11-audioscribe-cu124' and extra == 'extra-11-audioscribe-mac') or (extra == 'extra-11-audioscribe-cpu' and extra == 'extra-11-audioscribe-cu124')" },
+    { name = "nvidia-cusparse-cu12", marker = "(sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'extra-11-audioscribe-cpu') or (sys_platform == 'emscripten' and extra == 'extra-11-audioscribe-cu124' and extra == 'extra-11-audioscribe-mac') or (sys_platform == 'win32' and extra == 'extra-11-audioscribe-cu124' and extra == 'extra-11-audioscribe-mac') or (extra == 'extra-11-audioscribe-cpu' and extra == 'extra-11-audioscribe-cu124')" },
+    { name = "nvidia-nvjitlink-cu12", marker = "(sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'extra-11-audioscribe-cpu') or (sys_platform == 'emscripten' and extra == 'extra-11-audioscribe-cu124' and extra == 'extra-11-audioscribe-mac') or (sys_platform == 'win32' and extra == 'extra-11-audioscribe-cu124' and extra == 'extra-11-audioscribe-mac') or (extra == 'extra-11-audioscribe-cpu' and extra == 'extra-11-audioscribe-cu124')" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/46/6b/a5c33cf16af09166845345275c34ad2190944bcc6026797a39f8e0a282e0/nvidia_cusolver_cu12-11.6.1.9-py3-none-manylinux2014_aarch64.whl", hash = "sha256:d338f155f174f90724bbde3758b7ac375a70ce8e706d70b018dd3375545fc84e", size = 127634111, upload-time = "2024-06-18T19:35:01.793Z" },
@@ -1292,7 +1293,7 @@ name = "nvidia-cusparse-cu12"
 version = "12.3.1.170"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "nvidia-nvjitlink-cu12", marker = "(sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'extra-11-audioscribe-cpu') or (sys_platform == 'emscripten' and extra == 'extra-11-audioscribe-cu124') or (sys_platform == 'win32' and extra == 'extra-11-audioscribe-cu124') or (extra == 'extra-11-audioscribe-cpu' and extra == 'extra-11-audioscribe-cu124')" },
+    { name = "nvidia-nvjitlink-cu12", marker = "(sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'extra-11-audioscribe-cpu') or (sys_platform == 'emscripten' and extra == 'extra-11-audioscribe-cu124' and extra == 'extra-11-audioscribe-mac') or (sys_platform == 'win32' and extra == 'extra-11-audioscribe-cu124' and extra == 'extra-11-audioscribe-mac') or (extra == 'extra-11-audioscribe-cpu' and extra == 'extra-11-audioscribe-cu124')" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/96/a9/c0d2f83a53d40a4a41be14cea6a0bf9e668ffcf8b004bd65633f433050c0/nvidia_cusparse_cu12-12.3.1.170-py3-none-manylinux2014_aarch64.whl", hash = "sha256:9d32f62896231ebe0480efd8a7f702e143c98cfaa0e8a76df3386c1ba2b54df3", size = 207381987, upload-time = "2024-06-18T19:35:32.989Z" },
@@ -1713,11 +1714,11 @@ name = "pyobjc-framework-avfoundation"
 version = "12.2.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "pyobjc-core" },
-    { name = "pyobjc-framework-cocoa" },
-    { name = "pyobjc-framework-coreaudio" },
-    { name = "pyobjc-framework-coremedia" },
-    { name = "pyobjc-framework-quartz" },
+    { name = "pyobjc-core", marker = "sys_platform == 'darwin' or (sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'extra-11-audioscribe-cpu')" },
+    { name = "pyobjc-framework-cocoa", marker = "sys_platform == 'darwin' or (sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'extra-11-audioscribe-cpu')" },
+    { name = "pyobjc-framework-coreaudio", marker = "sys_platform == 'darwin' or (sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'extra-11-audioscribe-cpu')" },
+    { name = "pyobjc-framework-coremedia", marker = "sys_platform == 'darwin' or (sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'extra-11-audioscribe-cpu')" },
+    { name = "pyobjc-framework-quartz", marker = "sys_platform == 'darwin' or (sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'extra-11-audioscribe-cpu')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/19/48/917494d86ea02372e922bc96ffb76a6161f847db21ae7885fe7e0c3d7755/pyobjc_framework_avfoundation-12.2.2.tar.gz", hash = "sha256:5b9f33bf382af9a84b2394c98e3603a8abf03f29b0d2036e29698806ea22851a", size = 411684, upload-time = "2026-08-11T19:43:51.652Z" }
 wheels = [
@@ -1729,7 +1730,7 @@ name = "pyobjc-framework-cocoa"
 version = "12.2.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "pyobjc-core" },
+    { name = "pyobjc-core", marker = "sys_platform == 'darwin' or (sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'extra-11-audioscribe-cpu')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/75/76/49c6da2c6a831020b4854ba20079d5a1030474bffc776b7b73c2eeff8c15/pyobjc_framework_cocoa-12.2.2.tar.gz", hash = "sha256:c96c0ef69a71afbbb0e6a7d594b455c5fe47d62e0db376ee7a2b4b828c16ace9", size = 3132831, upload-time = "2026-08-11T19:44:02.288Z" }
 wheels = [
@@ -1741,8 +1742,8 @@ name = "pyobjc-framework-coreaudio"
 version = "12.2.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "pyobjc-core" },
-    { name = "pyobjc-framework-cocoa" },
+    { name = "pyobjc-core", marker = "sys_platform == 'darwin' or (sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'extra-11-audioscribe-cpu')" },
+    { name = "pyobjc-framework-cocoa", marker = "sys_platform == 'darwin' or (sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'extra-11-audioscribe-cpu')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/0e/71/bfbf1dffe9f08f31b444685e9d194e25cc3506db9f7a9d6ffdb56cc4408e/pyobjc_framework_coreaudio-12.2.2.tar.gz", hash = "sha256:880214f7328d6502a0c60ee744fa1eabe77a0d0c9ae276009453b69474eacf38", size = 79573, upload-time = "2026-08-11T19:44:07.04Z" }
 wheels = [
@@ -1754,8 +1755,8 @@ name = "pyobjc-framework-coremedia"
 version = "12.2.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "pyobjc-core" },
-    { name = "pyobjc-framework-cocoa" },
+    { name = "pyobjc-core", marker = "sys_platform == 'darwin' or (sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'extra-11-audioscribe-cpu')" },
+    { name = "pyobjc-framework-cocoa", marker = "sys_platform == 'darwin' or (sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'extra-11-audioscribe-cpu')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/f0/12/0b3896ea04f0fbbe3f2cb37802cadce334f9aef204d911a81934013eba8c/pyobjc_framework_coremedia-12.2.2.tar.gz", hash = "sha256:fe9f972438674893e941e9db5b62f8ba99a33f94a7f1c2ce49b14416f154cd10", size = 98580, upload-time = "2026-08-11T19:44:11.651Z" }
 wheels = [
@@ -1763,12 +1764,25 @@ wheels = [
 ]
 
 [[package]]
+name = "pyobjc-framework-coreml"
+version = "12.2.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pyobjc-core", marker = "sys_platform == 'darwin' or (sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'extra-11-audioscribe-cpu')" },
+    { name = "pyobjc-framework-cocoa", marker = "sys_platform == 'darwin' or (sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'extra-11-audioscribe-cpu')" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/b7/3b/c835535e7aef41afc953e5597ea41e693b7bae80d753ab74b9721e07cba5/pyobjc_framework_coreml-12.2.2.tar.gz", hash = "sha256:3e6abe134634adbcc0c1e843826e42df86e63beb3bc7e8e4a914e93179ae1e75", size = 49750, upload-time = "2026-08-11T19:44:14.011Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/20/ab/e02409bf4e13b88812a198118e4a0e5cce35e3bd0957a2a3f879ab06ca90/pyobjc_framework_coreml-12.2.2-cp312-cp312-macosx_10_13_universal2.whl", hash = "sha256:94c129d9c1955eafc6783683ccaa08590f4cd7ef229515c8a28324032351871b", size = 11971, upload-time = "2026-08-11T19:34:12.422Z" },
+]
+
+[[package]]
 name = "pyobjc-framework-libdispatch"
 version = "12.2.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "pyobjc-core" },
-    { name = "pyobjc-framework-cocoa" },
+    { name = "pyobjc-core", marker = "sys_platform == 'darwin' or (sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'extra-11-audioscribe-cpu')" },
+    { name = "pyobjc-framework-cocoa", marker = "sys_platform == 'darwin' or (sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'extra-11-audioscribe-cpu')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/f0/76/e40db30142b551790e5ab208e74de04cfc70823177a702c8c9e3f5e73034/pyobjc_framework_libdispatch-12.2.2.tar.gz", hash = "sha256:7cb799a7c5766cc1b68b68655a02c950646adfd2a743b7cbe8e4a04a51c44ecb", size = 40625, upload-time = "2026-08-11T19:44:46.277Z" }
 wheels = [
@@ -1780,8 +1794,8 @@ name = "pyobjc-framework-quartz"
 version = "12.2.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "pyobjc-core" },
-    { name = "pyobjc-framework-cocoa" },
+    { name = "pyobjc-core", marker = "sys_platform == 'darwin' or (sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'extra-11-audioscribe-cpu')" },
+    { name = "pyobjc-framework-cocoa", marker = "sys_platform == 'darwin' or (sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'extra-11-audioscribe-cpu')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/35/b1/426a37c7ae37280b3ffca2571fb48f211946aee2f4ca31a603ed1943c4a7/pyobjc_framework_quartz-12.2.2.tar.gz", hash = "sha256:810f97b210cfd93704d240860286dfd6df09f9f1c52525fc5c2166723aea3f9e", size = 3218295, upload-time = "2026-08-11T19:45:15.189Z" }
 wheels = [
@@ -1793,13 +1807,28 @@ name = "pyobjc-framework-screencapturekit"
 version = "12.2.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "pyobjc-core" },
-    { name = "pyobjc-framework-cocoa" },
-    { name = "pyobjc-framework-coremedia" },
+    { name = "pyobjc-core", marker = "sys_platform == 'darwin' or (sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'extra-11-audioscribe-cpu')" },
+    { name = "pyobjc-framework-cocoa", marker = "sys_platform == 'darwin' or (sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'extra-11-audioscribe-cpu')" },
+    { name = "pyobjc-framework-coremedia", marker = "sys_platform == 'darwin' or (sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'extra-11-audioscribe-cpu')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/de/b6/3a5b4a1d6410a06f5eafb17f17af55b1c7641455ca64ce55a9d05b72a096/pyobjc_framework_screencapturekit-12.2.2.tar.gz", hash = "sha256:6c16b1730186a012707e69532e6a03ae7282a6661f106db2663c0f0acc76420a", size = 38008, upload-time = "2026-08-11T19:45:19.875Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/05/17/1bf74d227db0abc7ee8cd1d5affcdf8f81cdf514d14f6ce938b94f3b3d0f/pyobjc_framework_screencapturekit-12.2.2-cp312-cp312-macosx_10_13_universal2.whl", hash = "sha256:5c81c68bc0399ad7ca6ccaa978574354a4da8fbb474527664fdbf08cc8f8abd5", size = 11598, upload-time = "2026-08-11T19:41:03.83Z" },
+]
+
+[[package]]
+name = "pyobjc-framework-vision"
+version = "12.2.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pyobjc-core", marker = "sys_platform == 'darwin' or (sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'extra-11-audioscribe-cpu')" },
+    { name = "pyobjc-framework-cocoa", marker = "sys_platform == 'darwin' or (sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'extra-11-audioscribe-cpu')" },
+    { name = "pyobjc-framework-coreml", marker = "sys_platform == 'darwin' or (sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'extra-11-audioscribe-cpu')" },
+    { name = "pyobjc-framework-quartz", marker = "sys_platform == 'darwin' or (sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'extra-11-audioscribe-cpu')" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/ea/bf/31e8bcae94047b365592ab7533096a4025c0306a8a312b65bcbf57e073ec/pyobjc_framework_vision-12.2.2.tar.gz", hash = "sha256:a6bf78e8dca145c6a78fd8d5f925b6da54649a60a1464b81ff405bca4a08406b", size = 73289, upload-time = "2026-08-11T19:45:41.877Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c0/5f/7dc08bcbc802a576dafd70a838b60c369d7f1b564eb4b2fd96f328438498/pyobjc_framework_vision-12.2.2-cp312-cp312-macosx_10_13_universal2.whl", hash = "sha256:1fcb99d44ef4df33a7582467e0cd059515f1137ccecb3648ac8a59272851506a", size = 16948, upload-time = "2026-08-11T19:43:23.808Z" },
 ]
 
 [[package]]
@@ -2176,7 +2205,7 @@ name = "sounddevice"
 version = "0.5.6"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "cffi" },
+    { name = "cffi", marker = "sys_platform == 'darwin' or (sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'extra-11-audioscribe-cpu')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/ec/db/0c890e2d9aab9ba284021efc02e1d3aebfecab1b611762d7434602209bcf/sounddevice-0.5.6.tar.gz", hash = "sha256:8ec9fbfde2e32f020b167e348f3ab3bac6625a5f15af524d790108ac7147a410", size = 1120094, upload-time = "2026-08-17T07:55:05.048Z" }
 wheels = [
@@ -2332,8 +2361,8 @@ name = "tiktoken"
 version = "0.14.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "regex" },
-    { name = "requests" },
+    { name = "regex", marker = "sys_platform == 'darwin' or (sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'extra-11-audioscribe-cpu')" },
+    { name = "requests", marker = "sys_platform == 'darwin' or (sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'extra-11-audioscribe-cpu')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/66/62/167a842aa0429d45f5e797354fd4343a96f6043d67d0513c675c7b8d36e6/tiktoken-0.14.0.tar.gz", hash = "sha256:231dec90efcdccf1b565a1416107736f1e09b1a08fe736ef9d6363e626d03874", size = 38898, upload-time = "2026-08-17T19:49:49.514Z" }
 wheels = [
@@ -2402,10 +2431,10 @@ resolution-markers = [
     "sys_platform != 'emscripten' and sys_platform != 'win32'",
 ]
 dependencies = [
-    { name = "filelock", marker = "extra != 'extra-11-audioscribe-cpu'" },
-    { name = "fsspec", marker = "extra != 'extra-11-audioscribe-cpu'" },
-    { name = "jinja2", marker = "extra != 'extra-11-audioscribe-cpu'" },
-    { name = "networkx", marker = "extra != 'extra-11-audioscribe-cpu'" },
+    { name = "filelock", marker = "(extra == 'extra-11-audioscribe-cpu' and extra == 'extra-11-audioscribe-cu124') or (extra == 'extra-11-audioscribe-cu124' and extra == 'extra-11-audioscribe-mac') or (extra != 'extra-11-audioscribe-cpu' and extra != 'extra-11-audioscribe-cu124')" },
+    { name = "fsspec", marker = "(extra == 'extra-11-audioscribe-cpu' and extra == 'extra-11-audioscribe-cu124') or (extra == 'extra-11-audioscribe-cu124' and extra == 'extra-11-audioscribe-mac') or (extra != 'extra-11-audioscribe-cpu' and extra != 'extra-11-audioscribe-cu124')" },
+    { name = "jinja2", marker = "(extra == 'extra-11-audioscribe-cpu' and extra == 'extra-11-audioscribe-cu124') or (extra == 'extra-11-audioscribe-cu124' and extra == 'extra-11-audioscribe-mac') or (extra != 'extra-11-audioscribe-cpu' and extra != 'extra-11-audioscribe-cu124')" },
+    { name = "networkx", marker = "(extra == 'extra-11-audioscribe-cpu' and extra == 'extra-11-audioscribe-cu124') or (extra == 'extra-11-audioscribe-cu124' and extra == 'extra-11-audioscribe-mac') or (extra != 'extra-11-audioscribe-cpu' and extra != 'extra-11-audioscribe-cu124')" },
     { name = "nvidia-cublas-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-11-audioscribe-cpu' and extra != 'extra-11-audioscribe-cu124') or (extra == 'extra-11-audioscribe-cpu' and extra == 'extra-11-audioscribe-cu124') or (extra == 'extra-11-audioscribe-cu124' and extra == 'extra-11-audioscribe-mac')" },
     { name = "nvidia-cuda-cupti-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-11-audioscribe-cpu' and extra != 'extra-11-audioscribe-cu124') or (extra == 'extra-11-audioscribe-cpu' and extra == 'extra-11-audioscribe-cu124') or (extra == 'extra-11-audioscribe-cu124' and extra == 'extra-11-audioscribe-mac')" },
     { name = "nvidia-cuda-nvrtc-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-11-audioscribe-cpu' and extra != 'extra-11-audioscribe-cu124') or (extra == 'extra-11-audioscribe-cpu' and extra == 'extra-11-audioscribe-cu124') or (extra == 'extra-11-audioscribe-cu124' and extra == 'extra-11-audioscribe-mac')" },
@@ -2422,7 +2451,7 @@ dependencies = [
     { name = "setuptools", marker = "(extra == 'extra-11-audioscribe-cpu' and extra == 'extra-11-audioscribe-cu124') or (extra == 'extra-11-audioscribe-cu124' and extra == 'extra-11-audioscribe-mac') or (extra != 'extra-11-audioscribe-cpu' and extra != 'extra-11-audioscribe-cu124')" },
     { name = "sympy", marker = "(extra == 'extra-11-audioscribe-cpu' and extra == 'extra-11-audioscribe-cu124') or (extra == 'extra-11-audioscribe-cu124' and extra == 'extra-11-audioscribe-mac') or (extra != 'extra-11-audioscribe-cpu' and extra != 'extra-11-audioscribe-cu124')" },
     { name = "triton", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-11-audioscribe-cpu' and extra != 'extra-11-audioscribe-cu124') or (extra == 'extra-11-audioscribe-cpu' and extra == 'extra-11-audioscribe-cu124') or (extra == 'extra-11-audioscribe-cu124' and extra == 'extra-11-audioscribe-mac')" },
-    { name = "typing-extensions", marker = "extra != 'extra-11-audioscribe-cpu'" },
+    { name = "typing-extensions", marker = "(extra == 'extra-11-audioscribe-cpu' and extra == 'extra-11-audioscribe-cu124') or (extra == 'extra-11-audioscribe-cu124' and extra == 'extra-11-audioscribe-mac') or (extra != 'extra-11-audioscribe-cpu' and extra != 'extra-11-audioscribe-cu124')" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/e5/35/0c52d708144c2deb595cd22819a609f78fdd699b95ff6f0ebcd456e3c7c1/torch-2.6.0-cp312-cp312-manylinux1_x86_64.whl", hash = "sha256:2bb8987f3bb1ef2675897034402373ddfc8f5ef0e156e2d8cfc47cacafdda4a9", size = 766624563, upload-time = "2025-01-29T16:23:19.084Z" },

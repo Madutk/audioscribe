@@ -29,6 +29,10 @@ Status je Punkt: ``offen`` → ``angesprochen`` → ``geklaert``; ``vertagt`` se
 Die KI hebt den Status nur an (nie zurück), und nur mit wörtlichem Beleg aus dem Fenster
 (geprüft in ``kern``). Was der Mensch setzt, gilt.
 
+Wiki-Bezug je Punkt (``verknuepfe_wiki``): sobald das Wiki geladen ist, bekommt jeder Punkt bis zu
+zwei Fundstellen - zuerst über Kennungen wie ``ENT-003`` (exakt), sonst über die Suche mit Text und
+Notiz, nur bei deutlicher Überdeckung. So sieht der Moderator, was das Wiki zum Punkt schon festhält.
+
 Ergebnis im Sitzungsordner: ``souffleur-leitfaden.json`` (Stand, auch für die Wiederaufnahme)
 und ``souffleur-leitfaden.md`` (lesbar, mit ``[x]``/``[ ]``).
 """
@@ -43,6 +47,7 @@ from pathlib import Path
 
 from audioscribe.i18n import tr
 from audioscribe.models import format_timecode
+from audioscribe.souffleur import wiki as wiki_modul
 
 STAND_DATEI = "souffleur-leitfaden.json"
 MD_DATEI = "souffleur-leitfaden.md"
@@ -59,6 +64,7 @@ _RANG = {OFFEN: 0, ANGESPROCHEN: 1, GEKLAERT: 2}
 
 MUSS = "muss"
 SOLLTE = "sollte"
+ERGAENZT = "Im Meeting ergänzt"  # Abschnitt für Punkte, die der Moderator aus Hinweisen übernimmt
 
 MAX_PUNKTE = 40
 MAX_DATEI_BYTES = 256 * 1024
@@ -66,6 +72,11 @@ TEXT_MAX = 300
 NOTIZ_MAX = 600
 STAND_MAX = 200
 PROMPT_MAX = 1500  # Zeichen für den Leitfaden im Prompt (Ollama: num_ctx 8192)
+WIKI_JE_PUNKT = 2
+WIKI_AUSZUG_MAX = 280
+WIKI_UEBERDECKUNG = 0.5  # Suche ohne Kennung: Anteil der Suchwörter, die im Abschnitt stehen müssen
+WIKI_KENNUNG = "kennung"
+WIKI_SUCHE = "suche"
 
 _CHECKBOX = re.compile(r"^(?P<einzug>[ \t]*)[-*+]\s+\[(?P<haken>[ xX])\]\s+(?P<text>.+?)\s*$")
 _LISTE = re.compile(r"^[ \t]*(?:[-*+]|\d+[.)])\s+")
@@ -92,11 +103,17 @@ class Punkt:
     gesetzt_von: str | None = None  # None (Datei) | "ki" | "nutzer"
     stand: str = ""  # KI: was noch offen ist bzw. das Ergebnis in Kurzform
     segment_id: int | None = None  # Segment, das den Status zuletzt begründet hat
-    aussage: str = ""  # wörtlich aus diesem Segment
+    aussage: str = ""  # wörtlich aus diesem Segment (bzw. aus dem Bildtext, siehe ``bild``)
+    bild: dict | None = None  # Beleg vom Bildschirm statt Segment: {id, t, datei}
     t_angesprochen: float | None = None
     t_zuletzt: float | None = None  # letzte Erwähnung (Sitzungsuhr)
     t_geklaert: float | None = None
     angestossen: bool = False  # Hinweis "anknüpfen" schon gegeben
+    # Was das Wiki zum Punkt festhält: [{datei, ueberschrift, zeile, auszug, art}], art = "kennung" | "suche"
+    wiki: list[dict] = field(default_factory=list)
+    # Ergebnis im Meeting weicht vom Wiki ab (KI-gemeldet, Zitat lokal geprüft): {datei, ueberschrift, zeile, zitat, t}
+    abweichung: dict | None = None
+    herkunft: str = ""  # "hinweis:<id>" - im Meeting aus einem Souffleur-Hinweis übernommen
 
     @property
     def erledigt(self) -> bool:
@@ -126,7 +143,8 @@ class Leitfaden:
 
     # --- Status ---------------------------------------------------------------------
 
-    def melde_ki(self, punkt_id: str, status: str, *, segment_id: int, aussage: str, stand: str, t: float) -> bool:
+    def melde_ki(self, punkt_id: str, status: str, *, segment_id: int | None, aussage: str, stand: str, t: float,
+                 bild: dict | None = None, abweichung: dict | None = None) -> bool:
         """Befund der KI übernehmen - nur anheben, nie zurück, nichts an Vertagtem. ``True``,
         wenn sich etwas geändert hat (auch eine erneute Erwähnung zählt)."""
         p = self.punkt(punkt_id)
@@ -136,8 +154,12 @@ class Leitfaden:
             return False
         if _RANG[status] < _RANG[p.status]:
             return False
+        if p.angestossen and p.t_zuletzt is not None and t > p.t_zuletzt:
+            p.angestossen = False  # wieder aufgegriffen: versandet es erneut, kommt ein neuer Anstoß
         p.t_zuletzt = t
-        p.segment_id, p.aussage = segment_id, aussage
+        p.segment_id, p.aussage, p.bild = segment_id, aussage, bild
+        if abweichung is not None:
+            p.abweichung = {**abweichung, "t": t}
         if stand.strip():
             p.stand = stand.strip()[:STAND_MAX]
         if p.t_angesprochen is None:
@@ -146,6 +168,22 @@ class Leitfaden:
             p.t_geklaert = t
         p.status, p.gesetzt_von = status, "ki"
         return True
+
+    def ergaenze(self, text: str, *, herkunft: str, segment_id: int | None, aussage: str, t: float,
+                 notiz: str = "") -> Punkt:
+        """Ein im Meeting aufgekommener offener Punkt wird Teil des Leitfadens: angesprochen, nicht
+        geklärt - er wird ab jetzt verfolgt und landet sonst in „Für das Folgemeeting“. Je Herkunft
+        nur einmal."""
+        vorhanden = next((p for p in self.punkte if herkunft and p.herkunft == herkunft), None)
+        if vorhanden is not None:
+            return vorhanden
+        nummern = [int(p.id[1:]) for p in self.punkte if p.id[1:].isdigit()]
+        p = Punkt(id=f"P{max(nummern, default=0) + 1}", text=text.strip()[:TEXT_MAX], abschnitt=ERGAENZT,
+                  notiz=notiz[:NOTIZ_MAX], begriffe=list(dict.fromkeys(_WIKI_ID.findall(text))), status=ANGESPROCHEN,
+                  gesetzt_von="nutzer", segment_id=segment_id, aussage=aussage, t_angesprochen=t, t_zuletzt=t,
+                  angestossen=True, herkunft=herkunft)
+        self.punkte.append(p)
+        return p
 
     def setze(self, punkt_id: str, status: str) -> Punkt:
         """Der Mensch setzt den Status - jeder Wert ist erlaubt, auch zurück auf offen."""
@@ -162,7 +200,8 @@ class Leitfaden:
 
     def faellige_anstoesse(self, jetzt: float, nach_s: float) -> list[Punkt]:
         """Punkte, die angesprochen, aber seit ``nach_s`` nicht mehr erwähnt und nicht geklärt
-        wurden - je Punkt höchstens einmal. Markiert sie als angestoßen."""
+        wurden - einmal je Versanden (eine neue Erwähnung macht den Punkt wieder anstoßbar).
+        Markiert sie als angestoßen."""
         faellig = []
         for p in self.punkte:
             if p.status != ANGESPROCHEN or p.angestossen or p.t_zuletzt is None:
@@ -171,6 +210,27 @@ class Leitfaden:
                 p.angestossen = True
                 faellig.append(p)
         return faellig
+
+    def wiki_im_gespraech(self, text: str, *, max_punkte: int = 3) -> dict[str, list[dict]]:
+        """Wiki-Bezüge der Punkte, um die es im Fenster gehen dürfte: angesprochene, und offene,
+        deren Text mindestens zwei Inhaltswörter mit dem Fenster teilt. Damit kann die KI ein
+        Ergebnis gegen das Wiki halten."""
+        fenster = set(wiki_modul.tokenisiere(text))
+        out: dict[str, list[dict]] = {}
+        for p in self.offene():
+            if not p.wiki:
+                continue
+            if p.status == ANGESPROCHEN or len(fenster & set(wiki_modul.tokenisiere(f"{p.text} {' '.join(p.begriffe)}"))) >= 2:
+                out[p.id] = p.wiki
+            if len(out) >= max_punkte:
+                break
+        return out
+
+    def im_fenster(self, text: str) -> set[str]:
+        """Offene Punkte, deren Text oder Kennungen mit dem Fenster ein Inhaltswort teilen."""
+        fenster = {t for t in wiki_modul.tokenisiere(text) if len(t) >= 4}
+        return {p.id for p in self.punkte if not p.erledigt
+                and fenster & set(wiki_modul.tokenisiere(f"{p.text} {p.notiz} {' '.join(p.begriffe)}"))}
 
     def suchbegriffe(self) -> list[str]:
         """Wiki-Kennungen der gerade angesprochenen Punkte - schärfen die Wiki-Suche."""
@@ -191,6 +251,47 @@ class Leitfaden:
             "datum": self.datum, "ziel": self.ziel, "hintergrund": self.hintergrund,
             "punkte": [p.als_dict() for p in self.punkte], "bilanz": self.bilanz(),
         }
+
+
+# --- Wiki-Bezug ---------------------------------------------------------------------------
+
+
+def _wiki_eintrag(f, art: str) -> dict:
+    return {"datei": f.datei, "ueberschrift": f.ueberschrift, "zeile": f.zeile,
+            "auszug": f.auszug[:WIKI_AUSZUG_MAX], "art": art}
+
+
+def wiki_zu_punkt(p: Punkt, index: wiki_modul.WikiIndex) -> list[dict]:
+    """Bis zu ``WIKI_JE_PUNKT`` Fundstellen: Kennungen exakt, danach die Suche über Text und Notiz -
+    die nur, wenn der Abschnitt mindestens die Hälfte der Suchwörter enthält (sonst Rauschen)."""
+    out: list[dict] = []
+    gesehen: set[tuple[str, int]] = set()
+    for kennung in p.begriffe:
+        for f in index.finde_kennung(kennung, top_k=WIKI_JE_PUNKT):
+            if (f.datei, f.zeile) not in gesehen and len(out) < WIKI_JE_PUNKT:
+                gesehen.add((f.datei, f.zeile))
+                out.append(_wiki_eintrag(f, WIKI_KENNUNG))
+    if out:
+        return out
+    anfrage = f"{p.text} {p.notiz}"
+    woerter = {t for t in wiki_modul.tokenisiere(index.glossar.korrigiere(anfrage)) if not t.isdigit()}
+    if len(woerter) < 2:
+        return []
+    for f in index.suche(anfrage, top_k=3, je_datei=1):
+        treffer = woerter & set(wiki_modul.tokenisiere(f"{f.ueberschrift} {f.auszug}"))
+        if len(treffer) / len(woerter) >= WIKI_UEBERDECKUNG and (f.datei, f.zeile) not in gesehen:
+            gesehen.add((f.datei, f.zeile))
+            out.append(_wiki_eintrag(f, WIKI_SUCHE))
+            if len(out) >= WIKI_JE_PUNKT:
+                break
+    return out
+
+
+def verknuepfe_wiki(lf: Leitfaden, index: wiki_modul.WikiIndex | None) -> int:
+    """Jedem Punkt seine Wiki-Fundstellen zuordnen (ohne Wiki: alle leeren). Anzahl Punkte mit Bezug."""
+    for p in lf.punkte:
+        p.wiki = wiki_zu_punkt(p, index) if index is not None else []
+    return sum(1 for p in lf.punkte if p.wiki)
 
 
 # --- Lesen ------------------------------------------------------------------------------
@@ -315,30 +416,50 @@ def vorbereitungen(wiki_dir: Path | None) -> list[dict]:
 # --- Prompt -----------------------------------------------------------------------------
 
 
-def prompt_abschnitt(lf: Leitfaden, *, englisch: bool = False) -> str:
-    """Die nicht erledigten Punkte, kompakt und gedeckelt (``PROMPT_MAX``). Pflicht zuerst."""
+def prompt_abschnitt(lf: Leitfaden, *, englisch: bool = False, wiki_ids: dict[str, list[str]] | None = None,
+                     vorrang: set[str] | None = None) -> str:
+    return prompt_abschnitt_mit_rest(lf, englisch=englisch, wiki_ids=wiki_ids, vorrang=vorrang)[0]
+
+
+def prompt_abschnitt_mit_rest(lf: Leitfaden, *, englisch: bool = False, wiki_ids: dict[str, list[str]] | None = None,
+                              vorrang: set[str] | None = None) -> tuple[str, int]:
+    """Die nicht erledigten Punkte, kompakt und gedeckelt (``PROMPT_MAX``), dazu die Zahl der
+    Punkte, die nicht mehr hineinpassten. Reihenfolge: angesprochene, dann die ``vorrang``-Punkte
+    (worum es im Fenster gerade geht), dann Pflicht, dann der Rest - je in Dateireihenfolge. So
+    fällt bei einer langen Vorbereitung nie ausgerechnet der Punkt weg, der gerade besprochen wird.
+    ``wiki_ids``: je Punkt die IDs (F1, ...) seiner Wiki-Auszüge im Prompt."""
     w = {
         MUSS: "must" if englisch else "muss", SOLLTE: "should" if englisch else "sollte",
         OFFEN: "open" if englisch else "offen", ANGESPROCHEN: "raised" if englisch else "angesprochen",
         "notiz": "Note" if englisch else "Notiz", "stand": "Still open" if englisch else "Noch offen",
     }
+    vorrang = vorrang or set()
     zeilen: list[str] = []
     laenge = 0
     if lf.ziel:
         z = f"{'Goal' if englisch else 'Ziel'}: {lf.ziel[:200]}"
         zeilen.append(z)
         laenge += len(z)
-    for p in lf.offene():
+    offen = [p for p in lf.punkte if not p.erledigt]
+    reihenfolge = sorted(range(len(offen)), key=lambda i: (
+        0 if offen[i].status == ANGESPROCHEN else 1 if offen[i].id in vorrang else 2,
+        offen[i].prioritaet != MUSS, i))
+    ausgelassen = 0
+    for i in reihenfolge:
+        p = offen[i]
         z = f"[{p.id}] ({w[p.prioritaet]}, {w[p.status]}) {p.text[:200]}"
         if p.notiz:
             z += f" — {w['notiz']}: {p.notiz[:120]}"
         if p.status == ANGESPROCHEN and p.stand:
             z += f" — {w['stand']}: {p.stand[:120]}"
+        if wiki_ids and wiki_ids.get(p.id):
+            z += f" — Wiki: {', '.join(wiki_ids[p.id])}"
         if laenge + len(z) > PROMPT_MAX and zeilen:
-            break
+            ausgelassen += 1
+            continue
         zeilen.append(z)
         laenge += len(z) + 1
-    return "\n".join(zeilen)
+    return "\n".join(zeilen), ausgelassen
 
 
 # --- Ablage im Sitzungsordner ---------------------------------------------------------------
@@ -393,7 +514,8 @@ def render_md(lf: Leitfaden) -> str:
         f"Vorbereitung: `{lf.quelle}`" if lf.quelle else "Vorbereitung: –",
         "",
         "Status je Punkt aus dem Meeting. „KI“ = vom Souffleur eingeschätzt, „Moderator“ = von Hand gesetzt.",
-        "Belege sind wörtliche Stellen aus dem Transkript. Dies ist ein Hinweis zum Nachgehen, kein Wissen.",
+        ("Belege sind wörtliche Stellen aus dem Transkript oder - als solche gekennzeichnet - aus dem Text eines"
+         " Standbilds. Dies ist ein Hinweis zum Nachgehen, kein Wissen."),
         "",
         f"Geklärt {b[GEKLAERT]} · angesprochen {b[ANGESPROCHEN]} · offen {b[OFFEN]} · vertagt {b[VERTAGT]}"
         f" · davon Pflicht noch offen {b['muss_offen']}",
@@ -412,10 +534,20 @@ def render_md(lf: Leitfaden) -> str:
         zeilen.append(kopf + (f" · {quelle}" if quelle else ""))
         if p.stand:
             zeilen.append(f"  - {'Ergebnis' if p.status == GEKLAERT else 'Noch offen'} (KI): {p.stand}")
-        if p.aussage:
+        if p.aussage and p.bild:
+            zeilen.append(f"  - Beleg vom Bildschirm{_zeit(p.t_zuletzt)}, `frames/{p.bild.get('datei')}`: „{p.aussage}“")
+        elif p.aussage:
             zeilen.append(f"  - Beleg{_zeit(p.t_zuletzt)}: „{p.aussage}“")
         if p.notiz:
             zeilen.append(f"  - Vorbereitung: {p.notiz}")
+        if p.abweichung:
+            a = p.abweichung
+            ort = f"{a['datei']} › {a['ueberschrift']}" if a.get("ueberschrift") else a["datei"]
+            zeilen.append(f"  - **Weicht vom Wiki ab** (KI){_zeit(a.get('t'))}: `{ort}`: „{a.get('zitat')}“")
+        for w in p.wiki:
+            ort = f"{w['datei']} › {w['ueberschrift']}" if w.get("ueberschrift") else w["datei"]
+            art = "" if w.get("art") == WIKI_KENNUNG else " (per Suche, ungeprüft)"
+            zeilen.append(f"  - Im Wiki{art}: `{ort}` (Zeile {w.get('zeile')})")
     offen = [p for p in lf.punkte if not p.erledigt]
     zeilen += ["", f"## Für das Folgemeeting ({len(offen)})", ""]
     zeilen += [f"- [ ] {p.text}" + (f" — noch offen: {p.stand}" if p.stand else "") for p in offen] or ["- nichts offen"]

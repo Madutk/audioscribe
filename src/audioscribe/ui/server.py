@@ -365,6 +365,9 @@ def create_app():
         sitzung: str
         projekt: str  # Projektordner
 
+    class LeitfadenNeuIn(BaseModel):
+        hinweis_id: int
+
     class LeitfadenPunktIn(BaseModel):
         punkt_id: str
         status: str
@@ -1794,15 +1797,39 @@ def create_app():
         ordner = str(Path(wiki) / "raw" / VORBEREITUNG_ORDNER) if wiki is not None else None
         return JSONResponse({"ordner": ordner, "dateien": vorbereitungen(wiki)})
 
+    # Wiki-Index fuer die Vorschau: einmal gelesen, kurz wiederverwendet (Auswahl wechselt oft).
+    vorschau_wiki: dict[str, tuple[float, object]] = {}
+
+    def _vorschau_index(wiki: Path | None):
+        from audioscribe.souffleur.wiki import WikiIndex
+
+        if wiki is None:
+            return None
+        schluessel = str(wiki)
+        treffer = vorschau_wiki.get(schluessel)
+        if treffer is not None and time.monotonic() - treffer[0] < 120:
+            return treffer[1]
+        try:
+            index = WikiIndex.laden(wiki)
+        except Exception:  # noqa: BLE001 - ohne Wiki bleibt die Vorschau eben ohne Wiki-Bezug
+            index = None
+        vorschau_wiki.clear()
+        vorschau_wiki[schluessel] = (time.monotonic(), index)
+        return index
+
     @app.get("/api/leitfaden/vorschau")
     def api_leitfaden_vorschau(pfad: str = Query("")):
-        """Vorbereitung lesen und als Checkliste zeigen - vor dem Start, ohne etwas zu schreiben."""
-        from audioscribe.souffleur.leitfaden import lade_datei
+        """Vorbereitung lesen und als Checkliste zeigen - vor dem Start, ohne etwas zu schreiben.
+        Mit Wiki-Bezug je Punkt, sofern das Projekt ein Wiki hat."""
+        from audioscribe.souffleur.konfig import wiki_pfad
+        from audioscribe.souffleur.leitfaden import lade_datei, verknuepfe_wiki
 
         ziel = _leitfaden_pfad(pfad)
         if ziel is None:
             raise HTTPException(400, tr("Kein Leitfaden angegeben."))
-        return JSONResponse(lade_datei(ziel).als_dict())
+        lf = lade_datei(ziel)
+        verknuepfe_wiki(lf, _vorschau_index(wiki_pfad(state.load_state(), _projekt())))
+        return JSONResponse(lf.als_dict())
 
     @app.post("/api/leitfaden/status")
     def api_leitfaden_status(body: LeitfadenPunktIn):
@@ -1818,6 +1845,17 @@ def create_app():
             return JSONResponse(souffleur.setze_punkt(body.punkt_id, body.status))
         except KeyError as exc:
             raise HTTPException(404, tr("Unbekannter Punkt: {punkt}", punkt=body.punkt_id)) from exc
+
+    @app.post("/api/leitfaden/punkt")
+    def api_leitfaden_punkt(body: LeitfadenNeuIn):
+        """Einen Hinweis des Souffleurs (offener Punkt, Frage ohne Antwort) in den Leitfaden übernehmen."""
+        souffleur = live.souffleur()
+        if souffleur is None:
+            raise HTTPException(409, tr("Keine laufende Sitzung mit Souffleur."))
+        try:
+            return JSONResponse(souffleur.ergaenze_punkt(body.hinweis_id))
+        except KeyError as exc:
+            raise HTTPException(404, tr("Kein solcher Hinweis: {hinweis}", hinweis=body.hinweis_id)) from exc
 
     @app.get("/api/souffleur/offene-punkte")
     def api_souffleur_offene_punkte():

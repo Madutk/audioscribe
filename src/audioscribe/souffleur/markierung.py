@@ -93,6 +93,8 @@ class Markierung:
     fenster_id: int = 0
     punkt_id: str | None = None  # Leitfaden-Punkt (nur Art "anknuepfen")
     punkt_text: str = ""
+    # Beleg vom Bildschirm (bildtext.py): {id, t, datei, zitat} - gezeigt, nicht gesagt.
+    bild: dict | None = None
     erstellt: str = field(default_factory=lambda: datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 
     @property

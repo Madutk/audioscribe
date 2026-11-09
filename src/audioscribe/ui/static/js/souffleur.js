@@ -157,6 +157,14 @@ function wikiQuoteHtml(h) {
     + `</div>${esc(zitat)}</blockquote>`;
 }
 
+/** Beleg vom Bildschirm (Texterkennung eines Standbilds): gezeigt, nicht gesagt - mit Link aufs Bild. */
+function bildQuoteHtml(b, zitat) {
+  const url = `/api/live/frame/${encodeURIComponent(b.datei || '')}`;
+  return `<blockquote class="wiki bild"><div class="src">${icon('image')}${tr('Bildschirm')} <span class="sep">·</span>`
+    + `<a href="${esc(url)}" target="_blank" rel="noopener" title="${esc(tr('Standbild öffnen'))}">${esc(b.id || '')} · ${tc(b.t || 0)}</a></div>`
+    + `${esc(zitat || '')}<p class="hint bild-hinweis">${tr('Per Texterkennung vom Standbild gelesen – gezeigt, nicht gesagt.')}</p></blockquote>`;
+}
+
 const hatBeleg = (h) => !h.ohne_befund && !!(h.wiki_zitat || (h.fundstellen && h.fundstellen.length));
 
 /** Demo: der Beleg ist ein frueheres Gespraech - "Heute" neben "Meeting n" statt Datei im Wiki. */
@@ -183,14 +191,17 @@ function anknuepfenHtml(h) {
  *  ohne Befund = nur "Im Wiki liegt dazu nichts vor." - bewusst kein KI-Text (Entscheidung des Auftraggebers). */
 function hintBodyHtml(h) {
   const said = `<p class="said">${h.sprecher ? tr('Gesagt ({sprecher}):', { sprecher: esc(h.sprecher) }) : tr('Gesagt:')} <q>${esc(h.aussage || '')}</q></p>`;
-  if (!hatBeleg(h)) {
+  // Beleg vom Bildschirm (Frage per Standbild beantwortet) - neben oder statt des Wiki-Belegs.
+  const bild = h.bild ? bildQuoteHtml(h.bild, h.bild.zitat) : '';
+  if (!hatBeleg(h) && !bild) {
     return demoAktiv() ? `<p class="wiki none">${icon('plus')}${tr('Neu – steht noch nicht im Wiki.')}</p>`
       : `<p class="wiki none">${icon('book-x')}${tr('Im Wiki liegt dazu nichts vor.')}</p>`;
   }
   const her = herkunft(h);
   if (her) return gegenHtml(h, her) + kiHtml(h.art === 'frage' ? 'Antwortvorschlag' : 'Einschätzung', h.ki_text);
-  if (h.art === 'frage') return wikiQuoteHtml(h) + kiHtml('Antwortvorschlag', h.ki_text);
-  return said + wikiQuoteHtml(h) + kiHtml('Einschätzung', h.ki_text);
+  const wiki = hatBeleg(h) ? wikiQuoteHtml(h) : '';
+  if (h.art === 'frage') return wiki + bild + kiHtml('Antwortvorschlag', h.ki_text);
+  return said + wiki + bild + kiHtml('Einschätzung', h.ki_text);
 }
 
 function hintItemEl(h) {
@@ -283,14 +294,42 @@ export function hinweisZahlen() {
   return z;
 }
 
-/** Offene Punkte: alle Hinweise mit offener_punkt=true (offener Punkt, Frage ohne Befund), neueste oben. */
+let openKey = '';
+
+/** Offene Punkte: alle Hinweise mit offener_punkt=true (offener Punkt, Frage ohne Befund), neueste oben.
+ *  Waehrend der Sitzung laesst sich jeder in den Leitfaden uebernehmen - dann verfolgt ihn der Souffleur,
+ *  und er landet sonst in "Fuer das Folgemeeting". */
 function renderOpenPoints() {
   const offen = souffleurHints.filter((h) => h.offener_punkt).reverse();
+  const kann = !!(souffleurInfo && liveRunning && !souffleurInfo.beendet);
+  const lf = souffleurInfo && souffleurInfo.leitfaden;
+  const im = new Map((lf && lf.punkte || []).filter((p) => p.herkunft).map((p) => [p.herkunft, p.id]));
+  const key = JSON.stringify([offen.map((h) => h.id), kann, [...im]]);
+  if (key === openKey) return;
+  openKey = key;
   $('souffleurOpenCount').textContent = offen.length ? tr('({n} offen)', { n: offen.length }) : tr('(keine)');
-  $('souffleurOpenList').innerHTML = offen.map((h) =>
-    `<li><button class="ts" type="button" data-goto-seg="${esc(String(h.segment_id))}" title="${tr('Zur Transkriptzeile')}">[${tc(h.t_start)}]</button>`
-    + `<span class="text">${esc(h.aussage || '')}</span><span class="mark offen">${icon('circle-dashed')}${tr('Offen')}</span></li>`).join('')
-    || `<li class="hint">${tr('Noch keine offenen Punkte.')}</li>`;
+  $('souffleurOpenList').innerHTML = offen.map((h) => {
+    const pid = im.get(`hinweis:${h.id}`);
+    const lfTeil = pid
+      ? `<button class="ghost sm" type="button" data-goto-punkt-lf="${esc(pid)}" title="${esc(tr('Zum Leitfaden-Punkt'))}">${icon('list')}${esc(pid)}</button>`
+      : kann ? `<button class="ghost sm" type="button" data-lf-neu="${esc(String(h.id))}" title="${esc(tr('Als Punkt in den Leitfaden übernehmen – der Souffleur verfolgt ihn dann'))}">${icon('plus')}${tr('Leitfaden')}</button>` : '';
+    return `<li><button class="ts" type="button" data-goto-seg="${esc(String(h.segment_id))}" title="${tr('Zur Transkriptzeile')}">[${tc(h.t_start)}]</button>`
+      + `<span class="text">${esc(h.aussage || '')}</span><span class="mark offen">${icon('circle-dashed')}${tr('Offen')}</span>${lfTeil}</li>`;
+  }).join('') || `<li class="hint">${tr('Noch keine offenen Punkte.')}</li>`;
+}
+
+async function uebernimmPunkt(btn) {
+  $('souffleurErr').textContent = '';
+  btn.disabled = true;
+  try {
+    const lf = await post('/api/leitfaden/punkt', { hinweis_id: Number(btn.dataset.lfNeu) });
+    if (souffleurInfo) souffleurInfo = { ...souffleurInfo, leitfaden: lf };
+    renderLeitfaden(lf, true);
+    renderOpenPoints();
+  } catch (err) {
+    $('souffleurErr').textContent = err.message;
+    btn.disabled = false;
+  }
 }
 
 /** Hinweiszeile zur Wiki-Ablage: was nach dem Stopp mit der Sitzung geschieht bzw. geschehen ist. */
@@ -343,6 +382,7 @@ export function renderSouffleur(s) {
   renderWikiState($('souffleurWiki'), sf ? sf.wiki : S.wikiStatus, true);
   renderWikiActions(sf ? sf.wiki : S.wikiStatus);
   renderLeitfaden(sf ? sf.leitfaden : null, !!(sf && s.running && !sf.beendet));
+  renderOpenPoints();
   const kannEssenz = !!sf;
   $('souffleurEssenz2').disabled = !kannEssenz;
   $('souffleurEssenz5').disabled = !kannEssenz;
@@ -468,15 +508,35 @@ export function setLeitfadenVorschau(lf) {
 }
 
 const lfErledigt = (p) => p.status === 'geklaert' || p.status === 'vertagt';
-// Ein Anstoss gilt, bis der Punkt geklaert oder vertagt ist.
-const lfAnstossVon = (p) => (lfErledigt(p) ? null : lfAnstoss.get(p.id) || null);
+// Ein Anstoss gilt, bis der Punkt geklaert oder vertagt ist - oder wieder aufgegriffen wurde
+// (letzte Erwaehnung nach der Stelle, auf die der Anstoss zeigt).
+const lfAnstossVon = (p) => {
+  const h = lfErledigt(p) ? null : lfAnstoss.get(p.id) || null;
+  return h && !(p.t_zuletzt > h.t_start) ? h : null;
+};
 
-/** Was beim Aufklappen erscheint: der Anstoss (angesprochen + KI "noch offen"), sonst der KI-Stand. */
+/** Was das Wiki zum Punkt festhaelt (p.wiki) - per Kennung sicher, per Suche nur "vermutlich". */
+function lfWikiHtml(p) {
+  return (p.wiki || []).map((w) => wikiQuoteHtml({
+    fundstellen: [w], wiki_zitat: w.auszug, fundstelle: w.ueberschrift ? `${w.datei} › ${w.ueberschrift}` : w.datei,
+  }) + (w.art === 'suche' ? `<p class="hint lf-wiki-suche">${tr('Per Suche gefunden – bitte prüfen, ob es passt.')}</p>` : '')).join('');
+}
+
+/** Was beim Aufklappen erscheint: der Anstoss (angesprochen + KI "noch offen"), sonst der KI-Stand -
+ *  darunter, was das Wiki dazu festhaelt. */
 function lfDetailHtml(p, anstoss) {
-  if (anstoss) return anknuepfenHtml(anstoss);
-  if (p.stand) return `<p class="lf-stand">${tagKi()} ${esc(p.stand)}</p>`;
-  if (p.notiz) return `<p class="lf-stand">${esc(p.notiz)}</p>`;
-  return '';
+  let html = '';
+  if (anstoss) html = anknuepfenHtml(anstoss);
+  else if (p.stand) html = `<p class="lf-stand">${tagKi()} ${esc(p.stand)}</p>`;
+  else if (p.notiz) html = `<p class="lf-stand">${esc(p.notiz)}</p>`;
+  if (p.bild && p.aussage) html += bildQuoteHtml(p.bild, p.aussage);
+  if (p.abweichung) {
+    const a = p.abweichung;
+    html += `<p class="lf-abweichung">${icon('zap')}${tagKi()} ${tr('Das Ergebnis weicht vom Wiki ab:')}</p>`
+      + wikiQuoteHtml({ fundstellen: [a], wiki_zitat: a.zitat, fundstelle: a.ueberschrift ? `${a.datei} › ${a.ueberschrift}` : a.datei });
+    return html;  // der abweichende Auszug ersetzt hier die Liste der Wiki-Bezuege
+  }
+  return html + lfWikiHtml(p);
 }
 
 /** Eine Zeile: Status (Klick = naechster Status) · ID + Text (Klick = aufklappen) · nachhaken · Zeit. */
@@ -488,8 +548,10 @@ function lfPunktHtml(p, interaktiv) {
   const detail = lfDetailHtml(p, anstoss);
   const auf = lfAuf.has(p.id);
   const muss = p.prioritaet === 'muss';
-  const zeit = p.segment_id !== null && p.segment_id !== undefined && p.t_zuletzt !== null && p.t_zuletzt !== undefined
-    ? `<button class="ts" type="button" data-goto-seg="${esc(String(p.segment_id))}" title="${tr('Zur Transkriptzeile')}">${tc(p.t_zuletzt)}</button>` : '';
+  const zuletzt = p.t_zuletzt !== null && p.t_zuletzt !== undefined;
+  const zeit = p.segment_id !== null && p.segment_id !== undefined && zuletzt
+    ? `<button class="ts" type="button" data-goto-seg="${esc(String(p.segment_id))}" title="${tr('Zur Transkriptzeile')}">${tc(p.t_zuletzt)}</button>`
+    : p.bild && zuletzt ? `<span class="ts bild" title="${esc(tr('Vom Bildschirm belegt'))}">${icon('image')}${tc(p.t_zuletzt)}</span>` : '';
   const cls = [`st-${p.status}`, muss ? 'muss' : '', anstoss ? 'anstoss' : '', auf ? 'auf' : '']
     .filter(Boolean).join(' ');
   return `<li class="${esc(cls)}" data-punkt-li="${esc(p.id)}">`
@@ -498,6 +560,9 @@ function lfPunktHtml(p, interaktiv) {
     + `<button class="lf-text" type="button" data-lf-auf="${esc(p.id)}" aria-expanded="${auf}"`
     + ` title="${esc(auf ? tr('Zuklappen') : tr('Aufklappen'))}">`
     + `<span class="lf-id">${esc(p.id)}</span>${muss ? `<span class="sr-only">${tr('Muss')}</span>` : ''}${esc(p.text)}</button>`
+    + (p.wiki && p.wiki.length
+      ? `<span class="lf-wiki${p.wiki.some((w) => w.art === 'kennung') ? '' : ' vermutlich'}" title="${esc(tr('Im Wiki: {ort}', { ort: p.wiki.map((w) => w.datei).join(', ') }))}">${icon('book')}<span class="sr-only">${tr('Im Wiki')}</span></span>` : '')
+    + (p.abweichung ? `<span class="mark widerspruch" title="${esc(tr('Das Ergebnis weicht vom Wiki ab – aufklappen für die Stelle'))}">${icon('zap')}${tr('weicht ab')}</span>` : '')
     + (anstoss ? `<span class="mark anknuepfen" title="${esc(tr('Angesprochen, aber noch offen – nachhaken'))}">${icon('arrow-right')}${tr('nachhaken')}</span>` : '')
     + zeit
     + (auf && detail ? `<div class="lf-detail">${detail}</div>` : '')
@@ -617,6 +682,10 @@ $('souffleur').onclick = (e) => {
   if (seg) { e.preventDefault(); gotoSeg(seg.dataset.gotoSeg); return; }
   const copy = e.target.closest('[data-copy]');
   if (copy) { e.preventDefault(); copyFundstelle(copy); return; }
+  const neu = e.target.closest('button[data-lf-neu]');
+  if (neu && !neu.disabled) { e.preventDefault(); uebernimmPunkt(neu); return; }
+  const zumPunkt = e.target.closest('button[data-goto-punkt-lf]');
+  if (zumPunkt) { e.preventDefault(); gotoPunkt(zumPunkt.dataset.gotoPunktLf); return; }
   const punkt = e.target.closest('button.lf-status[data-punkt]');
   if (punkt && !punkt.disabled) { e.preventDefault(); setzePunkt(punkt); return; }
   const auf = e.target.closest('button.lf-text[data-lf-auf]');

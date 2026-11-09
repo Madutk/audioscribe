@@ -120,8 +120,24 @@ def test_anstoss_einmal_nach_ruhezeit():
     lf.melde_ki("P1", "angesprochen", segment_id=4, aussage="b", stand="", t=60.0)  # erneut erwähnt
     assert lf.faellige_anstoesse(120.0, 90.0) == []
     assert [p.id for p in lf.faellige_anstoesse(151.0, 90.0)] == ["P1"]
-    assert lf.faellige_anstoesse(500.0, 90.0) == []  # nur einmal
+    assert lf.faellige_anstoesse(500.0, 90.0) == []  # nur einmal je Versanden
     assert lf.suchbegriffe() == ["ENT-003", "PRO-004"]
+    # Wieder aufgegriffen und erneut versandet: ein zweiter Anstoß.
+    lf.melde_ki("P1", "angesprochen", segment_id=9, aussage="c", stand="", t=600.0)
+    assert lf.faellige_anstoesse(650.0, 90.0) == []
+    assert [p.id for p in lf.faellige_anstoesse(700.0, 90.0)] == ["P1"]
+
+
+def test_lange_vorbereitung_nimmt_den_besprochenen_punkt_mit():
+    lf = _lf()
+    lf.punkte += [lf_modul.Punkt(id=f"Q{i}", text=f"Füllpunkt Nummer {i} " + "x" * 150) for i in range(20)]
+    lf.punkte.append(lf_modul.Punkt(id="Z1", text="Wer pflegt das Lieferantenportal künftig? " + "y" * 150))
+    text, ausgelassen = lf_modul.prompt_abschnitt_mit_rest(lf)
+    assert "[Z1]" not in text and ausgelassen > 0
+    vorrang = lf.im_fenster("Das Lieferantenportal müssen wir noch besprechen.")
+    assert "Z1" in vorrang and "P1" not in vorrang
+    text, _ = lf_modul.prompt_abschnitt_mit_rest(lf, vorrang=vorrang)
+    assert "[Z1]" in text and text.index("[Z1]") < text.index("[P1]")
 
 
 def test_prompt_abschnitt_nur_offene_pflicht_zuerst_und_gedeckelt():
@@ -145,6 +161,117 @@ def test_prompt_und_schema_nur_mit_leitfaden():
     assert "Leitfaden" in prompt.system_prompt(mit_leitfaden=True)
     p = prompt.baue_prompt([{"id": 1, "start": 0.0, "text": "x"}], kontext=[], fundstellen=[], leitfaden="[P1] (muss, offen) y")
     assert "## Leitfaden" in p and "[P1] (muss, offen) y" in p
+
+
+# --- Wiki-Bezug je Punkt ------------------------------------------------------------------
+
+
+def _wiki(tmp_path) -> Path:
+    wiki = tmp_path / "projektwiki"
+    (wiki / "wiki" / "entscheidungen").mkdir(parents=True)
+    (wiki / "wiki" / "index.md").write_text("# Index\n\nSiehe ENT-003 und ANF-003.\n", encoding="utf-8")
+    (wiki / "wiki" / "entscheidungen" / "ENT-003.md").write_text(
+        "# ENT-003 Freigabegrenze\n\nRechnungen über 5.000 EUR gibt die Bereichsleitung frei.\n", encoding="utf-8")
+    (wiki / "wiki" / "anforderungen.md").write_text(
+        "# Anforderungen\n\n## ANF-003 Export\n\nDer Export läuft nachts.\n\n"
+        "## Schulung\n\nDie Schulung für das Portal übernimmt das Team Einkauf im März.\n", encoding="utf-8")
+    return wiki
+
+
+def test_kennung_ist_ein_ganzes_suchwort(tmp_path):
+    from audioscribe.souffleur.wiki import WikiIndex, tokenisiere
+
+    assert "ent-003" in tokenisiere("Laut ENT-003 gilt das")
+    index = WikiIndex.laden(_wiki(tmp_path))
+    treffer = index.finde_kennung("ENT-003")
+    assert [f.datei for f in treffer] == ["wiki/entscheidungen/ENT-003.md", "wiki/index.md"]
+    assert index.finde_kennung("ENT-00") == [] and index.finde_kennung("NT-003") == []
+    assert index.suche("ENT-003", top_k=1)[0].datei == "wiki/entscheidungen/ENT-003.md"
+
+
+def test_verknuepfe_wiki_kennung_vor_suche_und_ohne_rauschen(tmp_path):
+    from audioscribe.souffleur.wiki import WikiIndex
+
+    index = WikiIndex.laden(_wiki(tmp_path))
+    lf = _lf()
+    assert lf_modul.verknuepfe_wiki(lf, index) == 2
+    p1, p2, p3 = lf.punkte
+    assert p1.wiki[0]["datei"] == "wiki/entscheidungen/ENT-003.md" and p1.wiki[0]["art"] == "kennung"
+    assert "Bereichsleitung" in p1.wiki[0]["auszug"]
+    assert p2.wiki == []  # "Termin für den Start steht" - nichts Passendes im Wiki
+    assert p3.wiki[0]["ueberschrift"] == "Schulung" and p3.wiki[0]["art"] == "suche"
+    md = lf_modul.render_md(lf)
+    assert "Im Wiki: `wiki/entscheidungen/ENT-003.md › ENT-003 Freigabegrenze`" in md
+    assert "Im Wiki (per Suche, ungeprüft): `wiki/anforderungen.md › Schulung`" in md
+    # Wiki gelöst: Bezug weg; Stand übersteht das Speichern.
+    lf_modul.schreibe(tmp_path, lf)
+    assert lf_modul.lade_stand(tmp_path).punkte[0].wiki[0]["art"] == "kennung"
+    assert lf_modul.verknuepfe_wiki(lf, None) == 0 and all(not p.wiki for p in lf.punkte)
+
+
+def test_souffleur_verknuepft_nach_dem_laden_des_wikis(tmp_path):
+    wiki = _wiki(tmp_path)
+    konfig = SouffleurKonfig(wiki_dir=wiki, backend="attrappe", fenster_leerlauf_s=0.0)
+    s = Souffleur(konfig, ki=AttrappeKi(), ki_status=KiStatus("bereit", "attrappe", "attrappe", "Attrappe"),
+                  leitfaden=_lf())
+    sitzung = tmp_path / "sitzung"
+    s.starte(sitzung)
+    assert _warte(lambda: (s.leitfaden() or {})["punkte"][0]["wiki"])
+    gespeichert = json.loads((sitzung / lf_modul.STAND_DATEI).read_text(encoding="utf-8"))
+    assert gespeichert["punkte"][0]["wiki"][0]["art"] == "kennung"
+    s.wechsle_wiki(None)
+    assert all(not p["wiki"] for p in s.leitfaden()["punkte"])
+    s.abschliessen()
+
+
+class _Abweicher:
+    """KI-Attrappe: klärt P1 und meldet eine Abweichung vom Wiki-Auszug des Punkts."""
+
+    backend = "attrappe"
+    modell = "x"
+
+    def __init__(self, zitat):
+        self.aufrufe = []
+        self.zitat = zitat
+
+    def antworte(self, auftrag):
+        self.aufrufe.append(auftrag)
+        seg = auftrag.kontext["segmente"][0]
+        fid = next((f["id"] for f in auftrag.kontext["fundstellen"] if f["datei"].endswith("ENT-003.md")), None)
+        return KiAntwort(daten={"befunde": [], "uebergangen": [], "punkte": [
+            {"punkt_id": "P1", "status": "geklaert", "segment_id": seg["id"], "aussage": seg["text"],
+             "stand": "Teamleitung gibt frei", "abweichung_fundstelle_id": fid, "abweichung_zitat": self.zitat},
+        ]}, start_s=0.0, antwort_s=0.0, modell="x")
+
+
+@pytest.mark.parametrize("zitat, abweichend", [
+    ("Rechnungen über 5.000 EUR gibt die Bereichsleitung frei.", True),
+    ("Die Teamleitung entscheidet alles.", False),  # steht so nicht im Auszug
+])
+def test_geklaert_wird_gegen_das_wiki_gehalten(tmp_path, zitat, abweichend):
+    wiki = _wiki(tmp_path)
+    ki = _Abweicher(zitat)
+    konfig = SouffleurKonfig(wiki_dir=wiki, backend="attrappe", fenster_leerlauf_s=0.0)
+    s = Souffleur(konfig, ki=ki, ki_status=KiStatus("bereit", "attrappe", "attrappe", "Attrappe"), leitfaden=_lf())
+    sitzung = tmp_path / "sitzung"
+    s.starte(sitzung)
+    assert _warte(lambda: (s.leitfaden() or {})["punkte"][0]["wiki"])
+    s.beobachte(_seg(1, 0.0, "Rechnungen über der Freigabegrenze gibt künftig die Teamleitung frei, beschlossen."))
+    assert _warte(lambda: s.leitfaden()["punkte"][0]["status"] == "geklaert")
+    s.abschliessen()
+    auftrag = ki.aufrufe[0]
+    # Der Wiki-Auszug des Punkts ist im Prompt und am Punkt referenziert.
+    fid = next(f["id"] for f in auftrag.kontext["fundstellen"] if f["datei"].endswith("ENT-003.md"))
+    assert "[P1] (muss, offen)" in auftrag.prompt and f"— Wiki: {fid}" in auftrag.prompt
+    p1 = s.leitfaden()["punkte"][0]
+    md = (sitzung / lf_modul.MD_DATEI).read_text(encoding="utf-8")
+    if abweichend:
+        assert p1["abweichung"]["datei"] == "wiki/entscheidungen/ENT-003.md" and p1["abweichung"]["t"] == 0.0
+        assert "**Weicht vom Wiki ab** (KI) (00:00:00)" in md
+    else:
+        assert p1["abweichung"] is None and "Weicht vom Wiki ab" not in md
+        diag = [json.loads(z) for z in (sitzung / "souffleur-diagnose.jsonl").read_text(encoding="utf-8").splitlines()]
+        assert any(v.get("grund") == "abweichung_ohne_beleg" for d in diag for v in d.get("leitfaden_verworfen", []))
 
 
 # --- Souffleur mit Leitfaden ------------------------------------------------------------
@@ -271,8 +398,9 @@ def test_ergebnis_geht_mit_den_markierungen_ins_wiki(projekt, sitzung):
     from audioscribe.projekt import modell, wiki_ablage
 
     lf_modul.schreibe(sitzung, _lf())
+    # Der Leitfaden-Stand geht auch ohne den Haken „Markierungen“ mit.
     ohne = wiki_ablage.speichere_sitzung(sitzung, projekt)
-    assert not (Path(ohne.ordner) / "leitfaden.md").exists()
+    assert (Path(ohne.ordner) / "leitfaden.md").is_file()
     mit = wiki_ablage.speichere_sitzung(sitzung, projekt, markierungen=True)
     assert "- [x] **P2**" in (Path(mit.ordner) / "leitfaden.md").read_text(encoding="utf-8")
     assert "leitfaden.md" in (Path(mit.ordner) / "README.md").read_text(encoding="utf-8")
@@ -280,6 +408,42 @@ def test_ergebnis_geht_mit_den_markierungen_ins_wiki(projekt, sitzung):
     ablage = wiki_ablage.speichere_sitzung(sitzung, meetings, art="workshop", markierungen=True)
     stamm = Path(ablage.ordner).stem
     assert (Path(ablage.ordner).parent / f"{stamm}.leitfaden.md").is_file()
+
+
+class _Offen:
+    """KI-Attrappe: meldet jedes Segment als offenen Punkt."""
+
+    backend = "attrappe"
+    modell = "x"
+
+    def __init__(self):
+        self.aufrufe = []
+
+    def antworte(self, auftrag):
+        self.aufrufe.append(auftrag)
+        seg = auftrag.kontext["segmente"][0]
+        return KiAntwort(daten={"befunde": [{"segment_id": seg["id"], "art": "offener_punkt", "aussage": seg["text"],
+                                             "fundstelle_id": None, "wiki_zitat": None, "ki_text": "", "sicherheit": "hoch"}],
+                                "uebergangen": [], "punkte": []}, start_s=0.0, antwort_s=0.0, modell="x")
+
+
+@pytest.mark.parametrize("mit_vorbereitung", [True, False])
+def test_offener_punkt_wird_leitfaden_punkt(tmp_path, mit_vorbereitung):
+    s, hinweise = _souffleur(_lf() if mit_vorbereitung else None, ki=_Offen())
+    s.starte(tmp_path)
+    s.beobachte(_seg(1, 30.0, "Wer das Archiv der Altbelege übernimmt, ist noch völlig offen."))
+    assert _warte(lambda: any(h["offener_punkt"] for h in hinweise))
+    hid = next(h["id"] for h in hinweise if h["offener_punkt"])
+    daten = s.ergaenze_punkt(hid)
+    neu = daten["punkte"][-1]
+    assert neu["id"] == ("P4" if mit_vorbereitung else "P1") and neu["abschnitt"] == lf_modul.ERGAENZT
+    assert neu["status"] == "angesprochen" and neu["herkunft"] == f"hinweis:{hid}" and neu["segment_id"] == 1
+    assert len(s.ergaenze_punkt(hid)["punkte"]) == len(daten["punkte"])  # nur einmal
+    with pytest.raises(KeyError):
+        s.ergaenze_punkt(999)
+    s.abschliessen()
+    md = (tmp_path / lf_modul.MD_DATEI).read_text(encoding="utf-8")
+    assert f"## {lf_modul.ERGAENZT}" in md and "Archiv der Altbelege" in md.split("## Für das Folgemeeting")[1]
 
 
 # --- Routen ---------------------------------------------------------------------------
@@ -318,9 +482,11 @@ def test_routen_liste_vorschau_und_status(client, tmp_path):
     pfad = liste["dateien"][0]["pfad"]
     vorschau = client.get("/api/leitfaden/vorschau", params={"pfad": pfad}).json()
     assert vorschau["titel"] == "Abstimmung Freigabe" and len(vorschau["punkte"]) == 3
+    assert all(p["wiki"] == [] for p in vorschau["punkte"])  # Wiki ohne passende Seiten
     assert client.get("/api/leitfaden/vorschau", params={"pfad": str(tmp_path / "leer.md")}).status_code == 400
     assert client.get("/api/leitfaden/vorschau", params={"pfad": str(tmp_path / "nix.md")}).status_code == 400
     assert client.post("/api/leitfaden/status", json={"punkt_id": "P1", "status": "geklaert"}).status_code == 409
+    assert client.post("/api/leitfaden/punkt", json={"hinweis_id": 1}).status_code == 409
 
     meeting = Path(__file__).parent / "data" / "souffleur" / "meeting"
     body = {"output_dir": str(tmp_path / "out"), "replay_transcript": str(meeting), "replay_speed": 1, "leitfaden": pfad}
@@ -330,6 +496,7 @@ def test_routen_liste_vorschau_und_status(client, tmp_path):
         assert _warte(lambda: (client.get("/api/live/status").json().get("souffleur") or {}).get("leitfaden") is not None)
         assert client.post("/api/leitfaden/status", json={"punkt_id": "P1", "status": "kaputt"}).status_code == 400
         assert client.post("/api/leitfaden/status", json={"punkt_id": "P9", "status": "offen"}).status_code == 404
+        assert client.post("/api/leitfaden/punkt", json={"hinweis_id": 999}).status_code == 404
         r = client.post("/api/leitfaden/status", json={"punkt_id": "P3", "status": "vertagt"})
         assert r.status_code == 200 and r.json()["punkte"][2]["status"] == "vertagt"
         snap = client.get("/api/live/status").json()

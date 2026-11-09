@@ -11,7 +11,13 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
-from audioscribe.agent.material import Auftrag, Material
+from audioscribe.agent.material import (
+    BILDTEXT_DATEI,
+    LEITFADEN_DATEI,
+    MATERIAL_DIR,
+    Auftrag,
+    Material,
+)
 from audioscribe.agent.skills import Skill
 from audioscribe.i18n import sprache, tr
 
@@ -54,6 +60,24 @@ def build_task_prompt(auftrag: Auftrag, material: Material, skills: Sequence[Ski
     else:
         teile.append(tr("- Standbilder: keine (reine Audioaufnahme oder ohne --frames erzeugt)"))
     teile.append("")
+    if f"{MATERIAL_DIR}/{LEITFADEN_DATEI}" in material.dateien:
+        teile += [
+            tr("## Meeting-Vorbereitung"),
+            tr(
+                "`{datei}` ist der Leitfaden des Moderators mit dem Stand je Punkt aus dem Meeting (vom "
+                "Souffleur eingeschätzt oder von Hand gesetzt). Gleiche ihn gegen Transkript und Standbilder "
+                "ab: Welche Punkte sind laut Material geklärt (mit Beleg), welche offen, welche nur scheinbar "
+                "geklärt? Nimm das Ergebnis je Punkt in die Dokumente auf. Der Leitfaden ist kein Wissen.",
+                datei=f"{MATERIAL_DIR}/{LEITFADEN_DATEI}",
+            ),
+            "",
+        ]
+    if f"{MATERIAL_DIR}/{BILDTEXT_DATEI}" in material.dateien:
+        teile += [tr(
+            "`{datei}` enthält den per Texterkennung gelesenen Text der Standbilder (Feld `datei` = Bild unter "
+            "`material/frames/`) - zum Suchen; im Zweifel gilt das Bild selbst.",
+            datei=f"{MATERIAL_DIR}/{BILDTEXT_DATEI}",
+        ), ""]
 
     kontext = auftrag.kontext_text.strip()
     if kontext or material.kontext_inline or material.kontext_dateien:

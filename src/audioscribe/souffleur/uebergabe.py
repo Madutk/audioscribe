@@ -53,6 +53,8 @@ def daten(stand: SouffleurStand, *, sitzung: str, transkript_fassung: str) -> di
                 "aussage": m.aussage,
                 "wiki": {"fundstellen": [vars(f) for f in m.fundstellen], "zitat": m.wiki_zitat},
                 "ki_erzeugt": {"text": m.ki_text},
+                # Beleg vom Bildschirm (Texterkennung eines Standbilds) - gezeigt, nicht gesagt.
+                **({"bildschirm": {**m.bild, "datei": f"frames/{m.bild.get('datei')}"}} if m.bild else {}),
                 "ohne_befund": m.ohne_befund, "offener_punkt": m.ist_offener_punkt,
                 "verzoegerung_s": m.verzoegerung_s,
             }
@@ -79,6 +81,12 @@ def render_md(sitzung: str, stand: SouffleurStand, transkript_fassung: str) -> s
         zeilen.append(f"| {format_timecode(m.t_start)} | {ART_LABEL.get(m.art, m.art)} | {z(m.aussage)} | {z(fund)} | {z(m.wiki_zitat)} | {z(m.ki_text)} |")
     if not stand.markierungen:
         zeilen.append("| – | – | keine Markierungen | – | – | – |")
+    vom_bild = [m for m in stand.markierungen if m.bild]
+    if vom_bild:
+        zeilen += ["", f"## Vom Bildschirm belegt ({len(vom_bild)})", "",
+                   "Text eines Standbilds per Texterkennung – gezeigt, nicht gesagt; Erkennungsfehler möglich.", ""]
+        zeilen += [f"- [{format_timecode(m.t_start)}] {m.aussage} → „{m.bild.get('zitat') or ''}“"
+                   f" (`frames/{m.bild.get('datei')}`, {format_timecode(float(m.bild.get('t') or 0))})" for m in vom_bild]
     offen = stand.offene_punkte
     zeilen += ["", f"## Offene Punkte ({len(offen)})", ""] + ([f"- [{format_timecode(m.t_start)}] {m.aussage}" for m in offen] or ["- keine"])
     return "\n".join(zeilen) + "\n"

@@ -703,6 +703,8 @@ async function leitfadenWaehlen(pfad) {
     if (nr !== lfAnfrage) return;
     const b = lf.bilanz || {};
     hint.textContent = tr('{n} Punkte, davon {muss} Pflicht – der Souffleur hakt sie im Meeting ab.', { n: b.punkte || 0, muss: b.muss_offen || 0 });
+    const mitWiki = (lf.punkte || []).filter((p) => p.wiki && p.wiki.length).length;
+    if (mitWiki) hint.textContent += ' ' + tr('{n} davon mit Bezug im Wiki (Buch-Symbol).', { n: mitWiki });
     if (lf.titel && !$('liveTitle').value.trim()) $('liveTitle').value = lf.titel;
     if (lf.art && !$('liveArt').value && [...$('liveArt').options].some((o) => o.value === lf.art)) $('liveArt').value = lf.art;
     setLeitfadenVorschau(lf);

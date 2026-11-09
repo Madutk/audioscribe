@@ -76,17 +76,34 @@ PUNKTE_SCHEMA = {
             "segment_id": {"type": "integer"},
             "aussage": {"type": "string"},
             "stand": {"type": "string", "maxLength": 200},
+            # Ergebnis weicht von einem gelieferten Wiki-Auszug ab - Status bleibt davon unberührt.
+            "abweichung_fundstelle_id": {"type": ["string", "null"]},
+            "abweichung_zitat": {"type": ["string", "null"]},
         },
     },
 }
 
 
-def schema(*, mit_leitfaden: bool = False) -> dict:
-    if not mit_leitfaden:
+# Mit Bildtext (bildtext.py): Belege vom Bildschirm - eine Frage darf durch ein Standbild
+# beantwortet, ein Punkt durch ein Standbild angesprochen oder geklärt werden.
+_BILD_ID = {"type": ["string", "null"]}
+
+
+def schema(*, mit_leitfaden: bool = False, mit_bildern: bool = False) -> dict:
+    if not mit_leitfaden and not mit_bildern:
         return SCHEMA
     s = copy.deepcopy(SCHEMA)
-    s["properties"]["punkte"] = PUNKTE_SCHEMA
-    s["required"] = [*s["required"], "punkte"]
+    if mit_bildern:
+        befund = s["properties"]["befunde"]["items"]["properties"]
+        befund["bild_id"] = dict(_BILD_ID)
+        befund["bild_zitat"] = {"type": ["string", "null"]}
+    if mit_leitfaden:
+        punkte = copy.deepcopy(PUNKTE_SCHEMA)
+        if mit_bildern:
+            punkte["items"]["properties"]["segment_id"] = {"type": ["integer", "null"]}
+            punkte["items"]["properties"]["bild_id"] = dict(_BILD_ID)
+        s["properties"]["punkte"] = punkte
+        s["required"] = [*s["required"], "punkte"]
     return s
 
 
@@ -102,6 +119,8 @@ _TEXTE: dict[str, dict[str, str]] = {
         "zeile": "Zeile",
         "glossar": "## Glossar (Fehlerkennung → richtig)",
         "leitfaden": "## Leitfaden (Vorbereitung des Moderators – kein Wissen, nur Punkte zum Klären)",
+        "bildschirm": "## Bildschirm (Text von Standbildern per Texterkennung – gezeigt, nicht gesagt)",
+        "zwischenablage": "Screenshot",
     },
     "en": {
         "unbekannt": "Unknown",
@@ -113,6 +132,8 @@ _TEXTE: dict[str, dict[str, str]] = {
         "zeile": "line",
         "glossar": "## Glossary (misrecognition → correct)",
         "leitfaden": "## Agenda (the moderator's preparation – not knowledge, only items to resolve)",
+        "bildschirm": "## Screen (text of still images via text recognition – shown, not said)",
+        "zwischenablage": "screenshot",
     },
 }
 
@@ -128,10 +149,12 @@ def _texte() -> dict[str, str]:
     return _TEXTE["en" if sprache() == "en" else "de"]
 
 
-def system_prompt(*, mit_leitfaden: bool = False) -> str:
+def system_prompt(*, mit_leitfaden: bool = False, mit_bildern: bool = False) -> str:
     text = prompt_datei("system").read_text(encoding="utf-8").strip()
     if mit_leitfaden:
         text += "\n\n" + prompt_datei("leitfaden").read_text(encoding="utf-8").strip()
+    if mit_bildern:
+        text += "\n\n" + prompt_datei("bildschirm").read_text(encoding="utf-8").strip()
     return text
 
 
@@ -156,6 +179,7 @@ def baue_prompt(
     glossar: list[tuple[str, str]] | None = None,
     wiki_verknuepft: bool = True,
     leitfaden: str = "",
+    bilder: list[dict] | None = None,
 ) -> str:
     t = _texte()
     teile = [t["fenster"], ""]
@@ -176,4 +200,9 @@ def baue_prompt(
         teile += [f"- {falsch} → {richtig}" for falsch, richtig in glossar[:GLOSSAR_MAX]]
     if leitfaden.strip():
         teile += ["", t["leitfaden"], "", leitfaden.strip()]
+    if bilder:
+        teile += ["", t["bildschirm"], ""]
+        for b in bilder:
+            art = f", {t['zwischenablage']}" if b.get("kind") == "zwischenablage" else ""
+            teile += [f"[{b['id']}] ({format_timecode(float(b['t']))}{art})", str(b["text"]).strip(), ""]
     return "\n".join(teile).rstrip() + "\n"

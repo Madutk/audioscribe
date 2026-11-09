@@ -7,3 +7,4 @@ Under "punkte" you report each item that a segment of the window substantively r
 - "stand": for "angesprochen", what is still missing for the item; for "geklaert", the result in short form. At most 200 characters, in English.
 - Report only items that really occur in the window. A merely similar keyword is not enough. When in doubt, report nothing. If there is no such item, "punkte" is empty.
 - An agenda item on its own is not a finding. Report "befunde" as above, independently of the agenda.
+- If an item is followed by "Wiki: F2", that wiki excerpt belongs to the item. If what is said or decided about the item in the window clearly deviates from it (responsibility, deadline, number, rule), set "abweichung_fundstelle_id" and "abweichung_zitat" (a verbatim sentence from exactly that excerpt). Otherwise both are null. A deviation does not change the status: an item can be resolved and still deviate from the wiki.

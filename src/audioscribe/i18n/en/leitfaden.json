@@ -19,5 +19,14 @@
   "Leitfaden: {name} ({n} Punkte)": "Agenda: {name} ({n} items)",
   "Leitfaden unbrauchbar: {fehler}": "Agenda unusable: {fehler}",
   "Unbekannter Punkt: {punkt}": "Unknown item: {punkt}",
-  "Leitfaden nicht lesbar: {fehler}": "Agenda not readable: {fehler}"
+  "Leitfaden nicht lesbar: {fehler}": "Agenda not readable: {fehler}",
+  "Souffleur: Leitfaden – {n} von {gesamt} Punkten mit Wiki-Bezug": "Souffleur: agenda – {n} of {gesamt} items linked to the wiki",
+  "Souffleur: Leitfaden {punkt} {status} vom Bildschirm ({bild}, {t} s)": "Souffleur: agenda {punkt} {status} from the screen ({bild}, {t} s)",
+  "Souffleur: Bild {bild} gelesen ({n} Zeichen)": "Souffleur: image {bild} read ({n} characters)",
+  "Souffleur: Leitfaden {punkt} weicht vom Wiki ab ({fundstelle})": "Souffleur: agenda {punkt} deviates from the wiki ({fundstelle})",
+  "Souffleur: Leitfaden zu lang für ein Fenster – je Fenster gehen die passendsten offenen Punkte mit, diesmal ohne {n}": "Souffleur: agenda too long for one window – each window takes the most relevant open items, this time without {n}",
+  "Aufgekommen um {zeit} ({art})": "Came up at {zeit} ({art})",
+  "Souffleur: Hinweis als Leitfaden-Punkt {punkt} übernommen": "Souffleur: hint taken over as agenda item {punkt}",
+  "Kein solcher Hinweis: {hinweis}": "No such hint: {hinweis}",
+  "Keine laufende Sitzung mit Souffleur.": "No running session with the Souffleur."
 }

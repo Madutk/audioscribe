@@ -24,6 +24,10 @@ from audioscribe.i18n import tr
 TRANSCRIPT_CANDIDATES: tuple[str, ...] = ("transkript.annotiert.md", "transkript.md")
 # Weitere Dateien des Ergebnisordners, die mitgenommen werden (sofern vorhanden).
 EXTRA_FILES: tuple[str, ...] = ("transkript.md", "transcript.json", "marks.json")
+# Aus der Live-Sitzung (Souffleur): Stand der Meeting-Vorbereitung und Text der Standbilder.
+LEITFADEN_DATEI = "souffleur-leitfaden.md"
+BILDTEXT_DATEI = "souffleur-bildtext.json"
+SOUFFLEUR_FILES: tuple[str, ...] = (LEITFADEN_DATEI, BILDTEXT_DATEI)
 FRAMES_DIR = "frames"
 MATERIAL_DIR = "material"
 KONTEXT_DIR = "kontext"
@@ -112,7 +116,7 @@ def copy_material(auftrag: Auftrag) -> Material:
     ziel.mkdir(parents=True, exist_ok=True)
 
     dateien: list[str] = []
-    for name in dict.fromkeys((haupt.name, *EXTRA_FILES)):
+    for name in dict.fromkeys((haupt.name, *EXTRA_FILES, *SOUFFLEUR_FILES)):
         src = Path(auftrag.quelle) / name
         if src.is_file():
             shutil.copy2(src, ziel / name)

@@ -333,7 +333,9 @@ def speichere_nach(
             _atomar(ziel / uebergabe.MARKIERUNGEN_JSON, json.dumps(inhalt, ensure_ascii=False, indent=2) + "\n")
             _atomar(ziel / uebergabe.MARKIERUNGEN_MD, uebergabe.render_md(sitzung, stand, fassung))
             anzahl_markierungen = len(stand.markierungen)
-        leitfaden_md = _leitfaden_ergebnis(session_dir) if markierungen else None
+        # Der Leitfaden-Stand geht immer mit, wenn es einen gibt - er ist das Ergebnis der Vorbereitung,
+        # nicht Teil der Souffleur-Markierungen.
+        leitfaden_md = _leitfaden_ergebnis(session_dir)
         if leitfaden_md is not None:
             _atomar(ziel / LEITFADEN_DATEI, leitfaden_md)
 
@@ -478,7 +480,7 @@ def speichere_meeting(
                 _neu(begleit, text)
                 angelegt.append(begleit)
             anzahl_markierungen = len(stand.markierungen)
-        leitfaden_md = _leitfaden_ergebnis(session_dir) if markierungen else None
+        leitfaden_md = _leitfaden_ergebnis(session_dir)
         if leitfaden_md is not None:
             begleit = meetings / f"{stamm}{LEITFADEN_ENDUNG}"
             _neu(begleit, leitfaden_md)

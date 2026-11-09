@@ -48,6 +48,10 @@ class SouffleurKonfig:
     # Leitfaden: so lange (Sitzungsuhr) nach der letzten Erwähnung eines angesprochenen, aber
     # nicht geklärten Punkts kommt der Hinweis "anknüpfen".
     leitfaden_anstoss_s: float = 90.0
+    # Standbilder per Texterkennung als zweite Belegquelle (bildtext.py) - höchstens so viele
+    # Bilder je Fenster im Prompt.
+    bildtext: bool = True
+    bilder_im_prompt: int = 3
 
 
 def _pfad(raw: object) -> Path | None:

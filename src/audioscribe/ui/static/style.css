@@ -523,6 +523,18 @@ ul.lf-list li.auf .lf-text { white-space: normal; }
 ul.lf-list .lf-id { font: 11px var(--mono); color: var(--fg-faint); margin-right: 6px; }
 ul.lf-list li.st-geklaert .lf-text, ul.lf-list li.st-vertagt .lf-text { text-decoration: line-through; color: var(--fg-muted); }
 ul.lf-list .mark.anknuepfen { flex: none; }
+ul.lf-list .lf-wiki { flex: none; color: var(--accent); line-height: 1; }
+ul.lf-list .lf-wiki.vermutlich { color: var(--fg-faint); }
+ul.lf-list .lf-wiki .ic { width: 13px; height: 13px; }
+ul.lf-list .lf-detail blockquote.wiki { margin: 0; }
+ul.lf-list .lf-wiki-suche { margin: -2px 0 0; font-size: 11px; }
+blockquote.wiki.bild .src a { color: inherit; }
+blockquote.wiki.bild .bild-hinweis { margin: 4px 0 0; font-size: 11px; }
+ul.lf-list .ts.bild { display: inline-flex; align-items: center; gap: 3px; color: var(--fg-muted); }
+ul.lf-list .ts.bild .ic { width: 12px; height: 12px; }
+ul.lf-list .mark.widerspruch { flex: none; }
+ul.lf-list .lf-abweichung { margin: 0; display: flex; align-items: center; gap: 4px; color: var(--err); font-weight: 600; }
+ul.lf-list .lf-abweichung .ic { width: 13px; height: 13px; }
 ul.lf-list .lf-detail { flex: 1 1 100%; display: flex; flex-direction: column; gap: 6px; padding: 2px 0 4px 21px; font-size: 12px; line-height: 1.45; }
 ul.lf-list .lf-detail .said { color: var(--fg-muted); margin: 0; }
 ul.lf-list .lf-detail .said q { color: var(--fg); quotes: "»" "«"; }
@@ -629,3 +641,4 @@ body.pip .pip-bar { display: flex; align-items: center; gap: var(--s2); margin: 
                            transition-duration: .01ms !important; }
   .bar.wait > i { width: 100% !important; opacity: .35; margin: 0; }
 }
+

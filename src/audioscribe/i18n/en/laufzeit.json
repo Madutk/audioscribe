@@ -466,5 +466,8 @@
   "Keine Bildquelle in dieser Sitzung - Zwischenablage nicht beobachtet": "No image source in this session - clipboard not watched",
   "Es läuft gerade keine Aufnahme.": "No recording is running right now.",
   "Im Testmodus gibt es keine Standbilder.": "There are no screenshots in test mode.",
-  "Zwischenablage nicht umschaltbar: {fehler}": "Clipboard cannot be switched: {fehler}"
+  "Zwischenablage nicht umschaltbar: {fehler}": "Clipboard cannot be switched: {fehler}",
+  "## Meeting-Vorbereitung": "## Meeting preparation",
+  "`{datei}` ist der Leitfaden des Moderators mit dem Stand je Punkt aus dem Meeting (vom Souffleur eingeschätzt oder von Hand gesetzt). Gleiche ihn gegen Transkript und Standbilder ab: Welche Punkte sind laut Material geklärt (mit Beleg), welche offen, welche nur scheinbar geklärt? Nimm das Ergebnis je Punkt in die Dokumente auf. Der Leitfaden ist kein Wissen.": "`{datei}` is the moderator's agenda with the status of each item from the meeting (assessed by the Souffleur or set by hand). Check it against the transcript and the still images: which items are resolved according to the material (with evidence), which are open, which only seem resolved? Include the result per item in the documents. The agenda is not knowledge.",
+  "`{datei}` enthält den per Texterkennung gelesenen Text der Standbilder (Feld `datei` = Bild unter `material/frames/`) - zum Suchen; im Zweifel gilt das Bild selbst.": "`{datei}` contains the text of the still images read via text recognition (field `datei` = image under `material/frames/`) - for searching; when in doubt, the image itself applies."
 }

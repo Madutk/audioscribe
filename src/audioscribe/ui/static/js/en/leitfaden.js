@@ -33,5 +33,18 @@ export default {
   "5 min": "5 min",
   "Essenz der letzten 2 Minuten": "Summary of the last 2 minutes",
   "Essenz der letzten 5 Minuten": "Summary of the last 5 minutes",
-  "Essenz der letzten Minuten": "Summary of the last minutes"
+  "Essenz der letzten Minuten": "Summary of the last minutes",
+  "Per Suche gefunden – bitte prüfen, ob es passt.": "Found by search – please check whether it fits.",
+  "Im Wiki: {ort}": "In the wiki: {ort}",
+  "Im Wiki": "In the wiki",
+  "{n} davon mit Bezug im Wiki (Buch-Symbol).": "{n} of them linked to the wiki (book icon).",
+  "Bildschirm": "Screen",
+  "Standbild öffnen": "Open still image",
+  "Per Texterkennung vom Standbild gelesen – gezeigt, nicht gesagt.": "Read from the still image via text recognition – shown, not said.",
+  "Vom Bildschirm belegt": "Evidenced by the screen",
+  "Das Ergebnis weicht vom Wiki ab:": "The outcome deviates from the wiki:",
+  "Das Ergebnis weicht vom Wiki ab – aufklappen für die Stelle": "The outcome deviates from the wiki – expand for the passage",
+  "weicht ab": "deviates",
+  "Zum Leitfaden-Punkt": "To the agenda item",
+  "Als Punkt in den Leitfaden übernehmen – der Souffleur verfolgt ihn dann": "Add to the agenda as an item – the Souffleur then tracks it"
 };
