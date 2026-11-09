@@ -12,6 +12,7 @@ import { enterAna, leaveAna, resetAna } from './nachbereitung.js';
 import { enterLive, leaveLive, leereLive, aktualisiereLiveSprache } from './live.js';
 import { loadWikiStatus } from './wiki.js';
 import { starteVerbrauch } from './verbrauch.js';
+import { starteEinarbeitung } from './einarbeitung.js';
 import './eingang.js';
 
 // Adresse -> Ansicht. `modus` sagt, in welchem Kontext die Adresse gilt (null = ueberall).
@@ -163,6 +164,7 @@ async function boot() {
   }
   await show();
   starteVerbrauch();
+  starteEinarbeitung();
 }
 
 boot();

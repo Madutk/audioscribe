@@ -155,6 +155,7 @@ def projekt_dict(projekt: Projekt, state: Mapping[str, object], *, mit_wiki: boo
         "raw_dir": str(projekt.raw_dir) if projekt.raw_dir is not None else None,
         "analysen_dir": str(projekt.analysen_dir),
         "wiki_speichern": projekt.wiki_speichern,
+        "wiki_einarbeiten": projekt.wiki_einarbeiten,
         "wiki_bilder": projekt.wiki_bilder,
         "wiki_markierungen": projekt.wiki_markierungen,
         "wiki_format": projekt.wiki_format,

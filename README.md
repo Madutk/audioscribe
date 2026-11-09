@@ -357,8 +357,30 @@ Die Ablage ist **rein anhängend**: Es wird nichts überschrieben (ein zweites S
 hängt `-2` an), geschrieben wird nur nach `raw/` und in den Assets-Ordner bzw. in den gewählten
 Ordner – nie unter die Wiki-Seiten `wiki/` und nie in den Sitzungsordner selbst –, und nur,
 wenn du es auslöst oder „immer“ gewählt hast. Was aus einer Quelle im Wiki wird, entscheidet dessen
-eigener Ingest- bzw. Lint-Prozess. Die KI-Analyse arbeitet weiter auf dem Sitzungsordner,
+eigener Ingest- bzw. Lint-Prozess – den AudioScribe auf Wunsch anstößt (siehe unten). Die KI-Analyse arbeitet weiter auf dem Sitzungsordner,
 nicht auf der Kopie im Wiki.
+
+**Ins Wiki einarbeiten (Ingest):** Liegt eine Sitzung in `raw/`, kann der KI-Agent sie direkt
+aus AudioScribe in die Wiki-Seiten einarbeiten. Er arbeitet im Wiki-Ordner und richtet sich nach
+dessen `CLAUDE.md` (Pflicht) und den Skills unter `<wiki>/.claude/skills` (etwa `wiki-ingest`).
+Schreiben darf er nur unter `wiki/`; `raw/` und `CLAUDE.md` bleiben unberührt, Bash ist aus.
+Die Projekteinstellung „Ins Wiki einarbeiten“ ist *Nachfragen* (Karte „Ins Wiki einarbeiten“
+nach dem Speichern und in der Nachbereitung), *Immer einarbeiten* (jede gespeicherte Sitzung
+kommt automatisch in die Warteschlange) oder *Nicht anbieten*.
+
+- **Warteschlange:** Die Aufträge laufen nacheinander im Hintergrund. Sie hängen am Wiki, nicht
+  am geöffneten Projekt, laufen also weiter, wenn du ein anderes Projekt öffnest oder ein neues
+  anlegst. Der Knopf in der Kopfzeile („Wiki: 1 läuft · 2 wartet · 1 Rückfrage“) öffnet die Liste.
+  Mit eingeschalteten Mitteilungen meldet sich das System bei „fertig“, „Fehler“ und „Rückfrage“.
+- **Dialog:** Je Auftrag zeigt ein Fenster das Protokoll des Agenten. Stellt der Agent eine
+  Rückfrage (`AskUserQuestion`), wartet der Lauf auf deine Antwort; „Nicht beantworten“ lässt
+  ihn den Punkt als offen vermerken. Nach dem Lauf kannst du nachfassen: Eine Nachricht setzt
+  dieselbe Claude-Sitzung fort.
+- **Neustart:** Die Warteschlange liegt unter `<Konfigurationsordner>/wiki-einarbeitung/`.
+  Wird AudioScribe beendet oder der Rechner neu gestartet, setzt der nächste Start einen
+  unterbrochenen Auftrag in derselben Claude-Sitzung fort; der Agent prüft dabei zuerst halb
+  geschriebene Seiten. Eingearbeitet wird nur, solange AudioScribe läuft.
+- Von Hand: `audioscribe ingest --wiki <wiki> --rohquelle raw/meetings/<datei>.md --arbeitsordner <ordner>`.
 
 ---
 

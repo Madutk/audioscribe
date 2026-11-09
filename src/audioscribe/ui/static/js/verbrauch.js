@@ -43,9 +43,11 @@ function render(d) {
     tr('KI-Verbrauch seit Programmstart: {verbrauch} – Einzelheiten anzeigen', { verbrauch: tr('{n} Tokens', { n: ZAHL.format(g.tokens) }) + (p ? `, ${p}` : '') }));
   const s = d.quellen.souffleur.aktuell;
   const a = d.quellen.analyse.aktuell;
+  const w = d.quellen.wiki ? d.quellen.wiki.aktuell : { tokens: 0 };
   $('kiVerbrauchZeilen').innerHTML =
     (s.tokens ? zeile(s.aufrufe === 1 ? tr('Souffleur, diese Sitzung (1 Aufruf)') : tr('Souffleur, diese Sitzung ({n} Aufrufe)', { n: ZAHL.format(s.aufrufe) }), s) : '')
     + (a.tokens ? zeile(tr('KI-Analyse, dieser Lauf'), a) : '')
+    + (w.tokens ? zeile(tr('Einarbeiten ins Wiki, dieser Lauf'), w) : '')
     + zeile(tr('Seit Programmstart'), g, 'sum');
   $('kiVerbrauchTeile').textContent =
     tr('Eingabe {ein} · Ausgabe {aus} · Cache gelesen {gelesen} · Cache geschrieben {geschrieben}', {

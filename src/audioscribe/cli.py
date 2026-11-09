@@ -7,6 +7,7 @@ Befehle:
   export  - Transkript + Markierungen zu annotiertem Markdown/PDF mergen (FR-18)
   ui      - Browser-Oberflaeche: Ein-/Ausgangsordner waehlen, alle Medien darin transkribieren
   analyze - KI-Analyse eines Ergebnisordners per Claude-Agent (Kontext + Skills, PRD §16)
+  ingest  - Rohquelle per Claude-Agent ins LLM-Wiki einarbeiten (Schema: CLAUDE.md des Wikis)
   prozessbild - prozessbild.png/.svg aus prozessbild.mmd neu erzeugen (FR-35)
   bpmn    - BPMN-Modell mit Lanes aus bpmn-modell.json erzeugen/pruefen (FR-36)
   live    - Live-Transkription: Monitor + System-Audio + Mikrofon mitschneiden (PRD §17; Windows, macOS)
@@ -408,6 +409,22 @@ def main(argv: list[str] | None = None) -> int:
         "--context-text ist dann die Folgeanweisung",
     )
 
+    ing = sub.add_parser(
+        "ingest",
+        help="eine Rohquelle per Claude-Agent ins LLM-Wiki einarbeiten (nach CLAUDE.md des Wikis)",
+    )
+    ing.add_argument("--wiki", required=True, metavar="ORDNER", help="Wiki-Wurzel (mit CLAUDE.md, raw/, wiki/)")
+    ing.add_argument("--rohquelle", required=True, metavar="PFAD", help="Rohquelle relativ zum Wiki, z. B. raw/meetings/<datei>.md")
+    ing.add_argument("--arbeitsordner", required=True, metavar="ORDNER", help="Protokoll und analyse.json des Auftrags")
+    ing.add_argument("--seiten", metavar="ORDNER", help="Seitenordner des Wikis (Default: <wiki>/wiki)")
+    ing.add_argument("--assets", metavar="ORDNER", help="Bilder der Sitzung, falls außerhalb des Wikis")
+    ing.add_argument("--model", help="Modell (Default: wie die KI-Analyse)")
+    ing.add_argument("--ki-dienst", choices=("claude-agent", "ollama"), default="claude-agent")
+    ing.add_argument("--max-turns", type=int, metavar="N")
+    ing.add_argument("--fortsetzen", action="store_true", help="unterbrochenen Lauf fortsetzen (gleiche Claude-Sitzung)")
+    ing.add_argument("--nachricht", metavar="TEXT", help="Folgenachricht in die vorhandene Sitzung")
+    ing.add_argument("--fragen", action="store_true", help="Rückfragen des Agenten über stdin beantworten")
+
     pb = sub.add_parser(
         "prozessbild",
         help="prozessbild.png/.svg neu aus prozessbild.mmd erzeugen (z. B. nach Handkorrektur)",
@@ -645,6 +662,16 @@ def main(argv: list[str] | None = None) -> int:
         from audioscribe.agent.kommando import analyze
 
         return analyze(args, _resolve_out_dir)
+
+    if args.command == "ingest":
+        from audioscribe import variante
+
+        if variante.aktiv():
+            print(variante.HINWEIS_ANALYSE, file=sys.stderr)
+            return 2
+        from audioscribe.agent.einarbeitung import ingest
+
+        return ingest(args)
 
     if args.command == "bpmn":
         from audioscribe.agent.kommando import bpmn

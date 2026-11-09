@@ -338,6 +338,48 @@ dialog.dialog .card-title .icon-btn { width: 30px; height: 30px; }
 @keyframes vt-out { to { opacity: 0; } }
 @keyframes vt-in { from { opacity: 0; transform: translateY(6px); } }
 
+/* --- Einarbeiten ins Wiki: Warteschlange im Kopf, Dialog je Auftrag ------------------------ */
+button.usage.jobs.frage { border-color: var(--warn); color: var(--warn); background: var(--warn-soft); }
+button.usage.jobs.laeuft .ic { color: var(--accent); }
+.jobs-pop { width: min(460px, calc(100% - 2 * var(--s4))); max-height: min(70vh, 640px); overflow: auto; }
+.jobs-list { display: flex; flex-direction: column; gap: var(--s2); }
+.jobs-list:empty::after { content: attr(data-leer); color: var(--fg-muted); font-size: 13px; }
+.job-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px var(--s2); align-items: center; text-align: left;
+            padding: var(--s2) var(--s3); border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface);
+            color: var(--fg); font: inherit; cursor: pointer; width: 100%; }
+.job-item:hover { background: var(--surface-2); }
+.job-item .name { font-weight: 600; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.job-item .meta { grid-column: 1 / -1; color: var(--fg-muted); font-size: 12px; overflow-wrap: anywhere; }
+.badge.frage, .badge.wartet { background: var(--warn-soft); color: var(--warn); }
+.badge.wartet::before { opacity: .5; }
+dialog.dialog.wikijob { width: min(860px, 100%); height: min(88vh, 960px); }
+dialog.dialog.wikijob[open] { display: flex; flex-direction: column; }
+dialog.wikijob .card-title .badge { margin-left: var(--s2); }
+.jobplan:empty { display: none; }
+.jobplan { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: var(--s2); font-size: 12px; color: var(--fg-muted); }
+.jobchat { flex: 1; min-height: 160px; overflow: auto; display: flex; flex-direction: column; gap: 6px; padding: var(--s3);
+           background: var(--code-bg); border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.jobchat .msg { max-width: 92%; padding: 8px 12px; border-radius: var(--radius); line-height: 1.5; font-size: 13.5px;
+                white-space: pre-wrap; overflow-wrap: anywhere; }
+.jobchat .msg.agent { align-self: flex-start; background: var(--surface); border: 1px solid var(--border); }
+.jobchat .msg.du { align-self: flex-end; background: var(--accent-soft); color: var(--fg); }
+.jobchat .msg.frage { align-self: flex-start; background: var(--warn-soft); }
+.jobchat .msg.antwort { align-self: flex-end; background: var(--accent-soft); }
+.jobchat .msg b { display: block; font-size: 11px; font-weight: 600; color: var(--fg-muted); margin-bottom: 2px; }
+.jobchat .tool { align-self: stretch; font-family: var(--mono); font-size: 11.5px; color: var(--fg-faint); overflow-wrap: anywhere; }
+.jobchat .tool.fehler { color: var(--err); }
+.jobchat .sys { align-self: stretch; font-size: 12px; color: var(--fg-muted); white-space: pre-wrap; overflow-wrap: anywhere; }
+.jobfrage { margin-top: var(--s3); padding: var(--s3); border: 1px solid var(--warn); border-radius: var(--radius-sm); background: var(--warn-soft); }
+.jobfrage fieldset { border: 0; padding: 0; margin: 0 0 var(--s3); }
+.jobfrage legend { font-weight: 600; margin-bottom: var(--s2); }
+.jobfrage .hdr { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--warn); }
+.jobfrage label.option { display: flex; gap: var(--s2); align-items: flex-start; padding: 4px 0; cursor: pointer; }
+.jobfrage label.option small { display: block; color: var(--fg-muted); }
+.jobfrage textarea, .jobsend textarea { width: 100%; resize: vertical; font: inherit; }
+.jobfrage .row { display: flex; gap: var(--s2); justify-content: flex-end; flex-wrap: wrap; }
+.jobsend { display: flex; gap: var(--s2); align-items: flex-end; margin-top: var(--s3); }
+.jobsend textarea { flex: 1; min-height: 44px; }
+
 /* --- Responsiv ---------------------------------------------------------------------------- */
 @media (max-width: 1200px) {
   .launch-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }

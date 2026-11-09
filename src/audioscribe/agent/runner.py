@@ -212,7 +212,7 @@ class AnalyseSitzung:
 
         self.workspace.mkdir(parents=True, exist_ok=True)
         self._logfile = (self.workspace / LOG_NAME).open("a", encoding="utf-8")
-        self.log(tr("=== {zeit} Analyse '{name}' -> {ordner}", zeit=_now(), name=self.auftrag.name, ordner=self.workspace))
+        self.log(self._kopfzeile())
         try:
             await self._prepare(ClaudeAgentOptions, ClaudeSDKClient)
         except BaseException as exc:
@@ -221,6 +221,9 @@ class AnalyseSitzung:
             await self.__aexit__(type(exc), exc, exc.__traceback__)
             raise
         return self
+
+    def _kopfzeile(self) -> str:
+        return tr("=== {zeit} Analyse '{name}' -> {ordner}", zeit=_now(), name=self.auftrag.name, ordner=self.workspace)
 
     async def _prepare(self, ClaudeAgentOptions: Any, ClaudeSDKClient: Any) -> None:  # noqa: N803
         frueher = load_manifest(self.workspace)
@@ -307,6 +310,7 @@ class AnalyseSitzung:
         from claude_agent_sdk import (
             AssistantMessage,
             ResultMessage,
+            SystemMessage,
             TextBlock,
             ToolResultBlock,
             ToolUseBlock,
@@ -342,6 +346,8 @@ class AnalyseSitzung:
                         block.tool_use_id, bool(block.is_error), block.content
                     ):
                         self._fortschritt_melden(plan_geaendert=self._ist_plan(block.tool_use_id))
+            elif isinstance(msg, SystemMessage) and msg.subtype == "init":
+                self._sitzung_merken(msg.data.get("session_id") if isinstance(msg.data, dict) else None)
             elif isinstance(msg, ResultMessage):
                 ok = self._record_result(msg)
         if ok and self.auftrag.prozessbild:
@@ -377,6 +383,16 @@ class AnalyseSitzung:
         if neu:
             self.fortschritt.docs.extend(neu)
             self._fortschritt_melden()
+
+    def _sitzung_merken(self, session_id: object) -> None:
+        """Die Session-ID gleich beim Start festhalten, nicht erst mit dem Ergebnis: bricht der
+        Lauf ab (Absturz, Neustart des Rechners), laesst er sich trotzdem fortsetzen."""
+        if not isinstance(session_id, str) or not session_id or session_id == self.manifest.session_id:
+            return
+        self.manifest.session_id = session_id
+        if session_id not in self.manifest.sitzungen:
+            self.manifest.sitzungen.append(session_id)
+        save_manifest(self.workspace, self.manifest)
 
     def _record_result(self, msg: Any) -> bool:
         m = self.manifest

@@ -232,7 +232,7 @@ def test_route_verbrauch_beginnt_leer(tmp_path, monkeypatch):
     monkeypatch.setattr(state, "state_path", lambda cache_dir=None: tmp_path / "ui-state.json")
     daten = TestClient(server.create_app()).get("/api/verbrauch").json()
     assert daten["gesamt"]["tokens"] == 0 and daten["gesamt"]["kosten_usd"] is None
-    assert set(daten["quellen"]) == {"souffleur", "analyse"}
+    assert set(daten["quellen"]) == {"souffleur", "analyse", "wiki"}
     assert daten["quellen"]["souffleur"]["aktuell"]["aufrufe"] == 0
 
 

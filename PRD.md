@@ -497,6 +497,11 @@ Grundlage steht: `AnalyseSitzung` hält einen `ClaudeSDKClient` offen und nimmt 
 - Rückfragen des Agenten an den Nutzer (derzeit trifft er gekennzeichnete Annahmen)
 - eine Übersicht früherer Analysen aus den `analyse.json`-Dateien
 
+Für das Einarbeiten ins Wiki (`audioscribe ingest`, `ui/einarbeitung.py`) sind Rückfragen und
+Nachfassen umgesetzt: `AskUserQuestion` läuft über `can_use_tool` und eine Antwortzeile auf
+stdin, Folgenachrichten setzen die Sitzung per `resume` fort. Die KI-Analyse kann das Muster
+übernehmen.
+
 ## 17. Ausbaustufe: Live-Transkription
 
 > Status: Proof of Concept · optionales Extra `live` · natives Windows oder macOS (§19), nicht WSL.

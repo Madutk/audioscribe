@@ -7,6 +7,7 @@ import { go, ladeDefaults } from './kontext.js';
 import { zuordnenDialog } from './eingang.js';
 import { askConfirm, pickFolder } from './dialoge.js';
 import { openWikiDialog } from './wiki.js';
+import { karte as einarbeitungsKarte } from './einarbeitung.js';
 import { addHint, markSegment, hintBySeg, renderSouffleur, resetSouffleurView, gotoHint, gotoPunkt, setSouffleurHidden, renderHandover, zeigeWikiStatus, hinweisZahlen, setLeitfadenVorschau } from './souffleur.js';
 import { ladeVorgeschichte, demoZustand, vorspann } from './demo.js';
 import { pipStatus, umschalten as souffleurPip, einkoppeln as souffleurEinkoppeln, istAusgekoppelt, pipMoeglich } from './souffleur-pip.js';
@@ -983,7 +984,7 @@ function renderNext(s) {
   const p = projekt();
   const zeigen = modus() === 'projekt' && !!p && !s.running && !!s.dir && s.phase === 'beendet';
   const fehler = (s.nachlauf && (s.nachlauf.wiki_fehler || s.nachlauf.fehler)) || '';
-  const key = JSON.stringify([zeigen, s.dir, liveAblage, p && p.wiki_speichern, p && p.hat_wiki, fehler, liveShots.length]);
+  const key = JSON.stringify([zeigen, s.dir, liveAblage, p && p.wiki_speichern, p && p.wiki_einarbeiten, p && p.hat_wiki, fehler, liveShots.length]);
   if (box.dataset.key === key) return;
   box.dataset.key = key;
   box.hidden = !zeigen;
@@ -997,6 +998,8 @@ function renderNext(s) {
     wiki = `<div class="next-item done"><b>${icon('check')}${a.frei ? tr('Gespeichert') : tr('Im Wiki gespeichert')}</b>
       <span><code>${esc(a.ordner)}</code>${zusatz}</span>
       ${ordnerOeffnen(a.ordner, 'ghost sm')}</div>`;
+    // Danach: die Sitzung vom KI-Agenten ins Wiki einarbeiten lassen (Warteschlange im Kopf).
+    if (!a.frei && p.hat_wiki && !p.demo && p.wiki_einarbeiten !== 'nie' && !cloudCompliant()) wiki += einarbeitungsKarte(a, s.dir);
   } else if (!p.hat_wiki) {
     const link = `<a class="goto" href="#/projekt/einstellungen">${tr('Wiki anlegen oder verknüpfen')}</a>`;
     wiki = `<div class="next-item"><b>${icon('book-plus')}${tr('Speichern unter …')}</b>

@@ -95,3 +95,48 @@ def check_tool(
         return Entscheidung(False, tr("Lesen nur im Ergebnisordner erlaubt, nicht in {ziel}.", ziel=target))
 
     return Entscheidung(False, tr("Werkzeug '{werkzeug}' ist fuer die Analyse nicht freigegeben.", werkzeug=tool))
+
+
+# Rückfrage an den Menschen: beantwortet die Oberfläche, nicht der Guard (agent/einarbeitung.py).
+FRAGE_TOOL = "AskUserQuestion"
+
+
+def check_wiki_tool(
+    tool: str,
+    tool_input: Mapping[str, object],
+    wiki_dir: Path,
+    *,
+    seiten_dir: Path | None = None,
+    read_roots: Sequence[Path] = (),
+) -> Entscheidung:
+    """Zugriffsregeln beim Einarbeiten ins LLM-Wiki: lesen im ganzen Wiki (Rohquellen, Bilder,
+    Schema), schreiben nur unter ``wiki/`` - ``raw/`` und ``CLAUDE.md`` bleiben unberührt. Kein Bash."""
+    wurzel = Path(wiki_dir).resolve()
+    seiten = Path(seiten_dir).resolve() if seiten_dir is not None else wurzel / "wiki"
+
+    if tool in FREE_TOOLS:
+        return Entscheidung(True)
+
+    if tool in WRITE_TOOLS:
+        target = _resolve(tool_input.get(WRITE_TOOLS[tool]), wurzel)
+        if target is None:
+            return Entscheidung(False, tr("Kein Zielpfad angegeben."))
+        if not _inside(target, seiten) or _inside(target, seiten / ".claude"):
+            return Entscheidung(
+                False,
+                tr("Schreiben nur unter {ordner} erlaubt, nicht in {ziel}.", ordner=seiten, ziel=target),
+            )
+        return Entscheidung(True)
+
+    if tool in READ_TOOLS:
+        target = _resolve(tool_input.get(READ_TOOLS[tool]), wurzel)
+        if target is None:
+            return Entscheidung(True)
+        roots = [wurzel, *(Path(r).resolve() for r in read_roots)]
+        if any(_inside(target, r) for r in roots):
+            return Entscheidung(True)
+        return Entscheidung(False, tr("Lesen nur im Wiki erlaubt, nicht in {ziel}.", ziel=target))
+
+    return Entscheidung(
+        False, tr("Werkzeug '{werkzeug}' ist für das Einarbeiten nicht freigegeben.", werkzeug=tool)
+    )

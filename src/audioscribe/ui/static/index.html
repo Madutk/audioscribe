@@ -105,6 +105,15 @@
     <p class="hint">Gezählt werden nur KI-Aufrufe, die den Rechner verlassen. Der Preis ist der Gegenwert zu API-Preisen in
       US-Dollar – bei Anmeldung über ein Abo wird nichts abgerechnet.</p>
   </div>
+  <!-- Einarbeiten ins Wiki: Warteschlange im Hintergrund; erscheint mit dem ersten Auftrag -->
+  <button class="usage jobs" id="wikiJobs" data-ohne="cloud-compliant" type="button" popovertarget="wikiJobsPop" title="Einarbeiten ins Wiki" hidden>
+    <svg class="ic" aria-hidden="true"><use href="#i-book-plus"/></svg><span id="wikiJobsText"></span></button>
+  <div class="usage-pop jobs-pop" id="wikiJobsPop" popover>
+    <h2>Einarbeiten ins Wiki</h2>
+    <div class="jobs-list" id="wikiJobsList"></div>
+    <p class="hint" id="wikiJobsMitteilung" hidden><button class="ghost sm" type="button" id="wikiJobsErlauben"><svg class="ic" aria-hidden="true"><use href="#i-info"/></svg>Mitteilungen einschalten</button>
+      Dann meldet sich das System, wenn ein Auftrag fertig ist oder eine Rückfrage hat.</p>
+  </div>
   <a class="icon-btn" id="openSettings" href="#/einstellungen" aria-label="Globale Einstellungen" title="Globale Einstellungen">
     <svg class="ic" aria-hidden="true"><use href="#i-settings"/></svg></a>
   <button class="icon-btn" id="themeToggle" type="button" aria-label="Design: System – klicken zum Wechseln" title="Design wechseln">
@@ -836,6 +845,15 @@
         <label class="option"><input type="radio" name="pSpeichern" value="nie" />
           <span><b>Nicht anbieten</b><small>Nur über die Nachbereitung.</small></span></label>
       </fieldset>
+      <fieldset class="field choice" data-ohne="cloud-compliant">
+        <legend>Ins Wiki einarbeiten</legend>
+        <label class="option"><input type="radio" name="pEinarbeiten" value="fragen" />
+          <span><b>Nachfragen</b><small>Nach dem Speichern bietet AudioScribe „Ins Wiki einarbeiten“ an.</small></span></label>
+        <label class="option"><input type="radio" name="pEinarbeiten" value="immer" />
+          <span><b>Immer einarbeiten</b><small>Jede gespeicherte Sitzung kommt in die Warteschlange; der KI-Agent arbeitet sie nach <code>CLAUDE.md</code> des Wikis ein.</small></span></label>
+        <label class="option"><input type="radio" name="pEinarbeiten" value="nie" />
+          <span><b>Nicht anbieten</b><small>Eingearbeitet wird außerhalb von AudioScribe.</small></span></label>
+      </fieldset>
       <div class="checks"><label><input type="checkbox" id="pBilder" /><span>Bilder mit ins Wiki übertragen
         <small>Standbilder in den Assets-Ordner kopieren; das Transkript verweist an der passenden Stelle darauf.</small></span></label>
         <label><input type="checkbox" id="pMarkierungen" /><span>Markierungen des Souffleurs mit ins Wiki übertragen
@@ -938,6 +956,29 @@
     <span class="spacer"></span>
     <button class="secondary" type="button" id="wikiDlgCancel">Abbrechen</button>
     <button type="button" id="wikiDlgOk"><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg>Speichern</button>
+  </footer>
+</dialog>
+
+<!-- Ein Auftrag "Einarbeiten ins Wiki": Protokoll des Agenten, Rueckfragen, Nachfassen -->
+<dialog class="dialog wikijob" id="wikiJobDlg" aria-labelledby="wikiJobTitle">
+  <h2 class="card-title" id="wikiJobTitle"><svg class="ic" aria-hidden="true"><use href="#i-book-plus"/></svg><span id="wikiJobName">Einarbeiten ins Wiki</span>
+    <span class="badge" id="wikiJobStatus"></span>
+    <span class="spacer"></span><button class="icon-btn" type="button" id="wikiJobClose" aria-label="Schließen"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button></h2>
+  <p class="hint" id="wikiJobMeta"></p>
+  <div class="jobplan" id="wikiJobPlan"></div>
+  <div class="jobchat" id="wikiJobChat" tabindex="0" aria-label="Protokoll des Agenten"></div>
+  <div class="jobfrage" id="wikiJobFrage" role="region" aria-live="polite" hidden></div>
+  <form class="jobsend" id="wikiJobSend" hidden>
+    <textarea id="wikiJobText" rows="2" placeholder="Nachfassen, z. B. „Ordne die Anforderung ANF-012 dem Prozess Buchung zu“ …" aria-label="Nachricht an den Agenten"></textarea>
+    <button type="submit" id="wikiJobSendBtn"><svg class="ic" aria-hidden="true"><use href="#i-arrow-right"/></svg>Senden</button>
+  </form>
+  <div class="err" id="wikiJobErr" role="alert"></div>
+  <footer>
+    <span class="hint" id="wikiJobHint"></span>
+    <button class="ghost sm" type="button" id="wikiJobSeite" hidden><svg class="ic" aria-hidden="true"><use href="#i-external"/></svg>Quellseite zeigen</button>
+    <button class="ghost sm" type="button" id="wikiJobRemove" hidden>Aus der Liste entfernen</button>
+    <button class="secondary sm" type="button" id="wikiJobRetry" hidden><svg class="ic" aria-hidden="true"><use href="#i-rotate-ccw"/></svg>Erneut versuchen</button>
+    <button class="secondary sm" type="button" id="wikiJobCancel" hidden><svg class="ic" aria-hidden="true"><use href="#i-square"/></svg>Abbrechen</button>
   </footer>
 </dialog>
 

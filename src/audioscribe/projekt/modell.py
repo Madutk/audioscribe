@@ -80,6 +80,8 @@ class Projekt:
     agent_model: str | None = None
     sprache: str | None = None
     wiki_speichern: str = WIKI_FRAGEN
+    # Gespeicherte Sitzungen ins Wiki einarbeiten (Ingest per KI-Agent): fragen | immer | nie.
+    wiki_einarbeiten: str = WIKI_FRAGEN
     wiki_bilder: bool = True
     # Markierungen des Souffleurs mit ablegen: KI-erzeugt, deshalb nur auf Wunsch (Vorgabe: nein).
     wiki_markierungen: bool = False
@@ -259,6 +261,7 @@ def lade(pfad: Path | str) -> Projekt:
             assets = Path(ersatz["assets_dir"])
 
     speichern = data.get("wiki_speichern")
+    einarbeiten = data.get("wiki_einarbeiten")
     format_ = data.get("wiki_format")
     return Projekt(
         wurzel=wurzel,
@@ -274,6 +277,7 @@ def lade(pfad: Path | str) -> Projekt:
         agent_model=text("agent_model"),
         sprache=text("sprache"),
         wiki_speichern=speichern if speichern in WIKI_SPEICHERN else WIKI_FRAGEN,
+        wiki_einarbeiten=einarbeiten if einarbeiten in WIKI_SPEICHERN else WIKI_FRAGEN,
         wiki_bilder=bool(data.get("wiki_bilder", True)),
         wiki_markierungen=data.get("wiki_markierungen") is True,
         wiki_format=format_ if format_ in WIKI_FORMATE else FORMAT_ORDNER,
@@ -298,6 +302,7 @@ def speichere(projekt: Projekt) -> Path:
         "agent_model": projekt.agent_model,
         "sprache": projekt.sprache,
         "wiki_speichern": projekt.wiki_speichern,
+        "wiki_einarbeiten": projekt.wiki_einarbeiten,
         "wiki_bilder": projekt.wiki_bilder,
         "wiki_markierungen": projekt.wiki_markierungen,
         "wiki_format": projekt.wiki_format,
@@ -543,6 +548,10 @@ def aendere(projekt: Projekt, felder: dict) -> Projekt:
         if felder["wiki_speichern"] not in WIKI_SPEICHERN:
             raise ProjektFehler(tr("Unbekannte Wiki-Ablage: {wert}", wert=felder["wiki_speichern"]))
         neu["wiki_speichern"] = felder["wiki_speichern"]
+    if "wiki_einarbeiten" in felder:
+        if felder["wiki_einarbeiten"] not in WIKI_SPEICHERN:
+            raise ProjektFehler(tr("Unbekannte Einstellung zum Einarbeiten: {wert}", wert=felder["wiki_einarbeiten"]))
+        neu["wiki_einarbeiten"] = felder["wiki_einarbeiten"]
     if "wiki_format" in felder:
         if felder["wiki_format"] not in WIKI_FORMATE:
             raise ProjektFehler(tr("Unbekanntes Ablageformat: {wert}", wert=felder["wiki_format"]))

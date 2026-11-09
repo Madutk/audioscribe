@@ -20,7 +20,8 @@ from audioscribe.i18n import sprache, tr
 
 QUELLE_SOUFFLEUR = "souffleur"
 QUELLE_ANALYSE = "analyse"
-QUELLEN: tuple[str, ...] = (QUELLE_SOUFFLEUR, QUELLE_ANALYSE)
+QUELLE_WIKI = "wiki"  # Einarbeiten ins LLM-Wiki (ui/einarbeitung.py)
+QUELLEN: tuple[str, ...] = (QUELLE_SOUFFLEUR, QUELLE_ANALYSE, QUELLE_WIKI)
 
 _TOKEN_FELDER = ("eingabe", "ausgabe", "cache_lesen", "cache_schreiben")
 # Feldnamen des Dienstes: je Aufruf (``usage``) und je Modell (``model_usage``).

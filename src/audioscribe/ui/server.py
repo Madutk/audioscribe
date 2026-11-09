@@ -23,6 +23,7 @@ ohne zweiten Kanal aus und uebersteht ein Neuladen der Seite.
 # von create_app() definiert (damit pydantic nicht beim Import gebraucht wird) - als
 # String waeren sie unauffindbar und der Body landete faelschlich als Query-Parameter.
 
+import contextlib
 import functools
 import json
 import threading
@@ -38,6 +39,7 @@ from audioscribe.pipeline.media import probe_duration
 from audioscribe.projekt import eingang, einstellungen, modell, wiki_ablage
 from audioscribe.projekt.modell import ProjektFehler
 from audioscribe.ui import browse, dialog_nativ, jobs, kontext as kontext_modul, sofort as sofort_modul, state
+from audioscribe.ui.einarbeitung import Warteschlange
 from audioscribe.ui.runner import AnalyseRunner, BatchRunner, LiveRunner
 from audioscribe.verbrauch import QUELLE_SOUFFLEUR, Zaehler
 
@@ -209,10 +211,24 @@ def create_app():
     from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
     from pydantic import BaseModel
 
-    app = FastAPI(title="AudioScribe UI")
-    runner = BatchRunner()
     # KI-Verbrauch seit Programmstart: Souffleur bucht je Aufruf, die Analyse meldet ihren Stand.
     zaehler = Zaehler()
+    # Einarbeiten ins Wiki: Warteschlange auf der Platte, unabhaengig vom geoeffneten Projekt;
+    # nach einem Neustart setzt sie unterbrochene Laeufe fort (ui/einarbeitung.py).
+    wiki_jobs = Warteschlange(
+        state.state_path().parent / "wiki-einarbeitung", zaehler=zaehler, starten=not variante.aktiv()
+    )
+
+    @contextlib.asynccontextmanager
+    async def _lebenszyklus(_app):
+        yield
+        # Laufender Agent endet mit dem Server; der Auftrag bleibt "laeuft" und wird beim
+        # naechsten Start in derselben Claude-Sitzung fortgesetzt.
+        wiki_jobs.beende()
+
+    app = FastAPI(title="AudioScribe UI", lifespan=_lebenszyklus)
+    app.state.wiki_jobs = wiki_jobs
+    runner = BatchRunner()
     analyse = AnalyseRunner(zaehler=zaehler)
     live = LiveRunner()
     kontext = kontext_modul.Kontext()
@@ -225,7 +241,10 @@ def create_app():
         """cloud-compliant: die KI-Analyse (Claude Agent SDK) ist nicht erreichbar. Die Liste der
         Sitzungen (``sources``) bleibt - die Nachbereitung legt damit ohne KI ins Wiki ab."""
         pfad = request.url.path
-        if variante.aktiv() and pfad.startswith("/api/agent/") and pfad != "/api/agent/sources":
+        gesperrt = (pfad.startswith("/api/agent/") and pfad != "/api/agent/sources") or pfad.startswith(
+            ("/api/wiki/einarbeiten", "/api/wiki/einarbeitung")
+        )
+        if variante.aktiv() and gesperrt:
             return JSONResponse({"detail": variante.hinweis_analyse()}, status_code=404)
         return await call_next(request)
 
@@ -293,6 +312,7 @@ def create_app():
             "eingang": eingang.liste(eingang.eingang_dir(saved)),
             "eingang_dir": str(eingang.eingang_dir(saved)),
             "laeuft": {"live": live.laeuft(), "analyse": analyse.laeuft(), "stapel": runner.laeuft()},
+            # Einarbeiten ins Wiki blockiert keinen Kontextwechsel - laeuft im Hintergrund weiter.
             # Vorbelegung des Assistenten: Speicherort fuer den Projektordner und - aus einer
             # Installation von vor den Projekten - ein schon bekanntes Wiki.
             "neu": {
@@ -822,6 +842,11 @@ def create_app():
         except (OSError, RuntimeError) as exc:
             raise HTTPException(400, str(exc)) from exc
         antwort = ablage.als_dict()
+        if standard and p.wiki_einarbeiten == modell.WIKI_IMMER and not variante.aktiv():
+            try:
+                antwort["einarbeitung"] = _mit_pfad(_einreihen(p, antwort))
+            except ValueError as exc:
+                antwort["hinweis"] = str(exc)
         # "Immer" gilt nur fuer die Ablage ins Projekt-Wiki - freie Ziele merkt sich das Projekt nicht.
         if body.immer and standard:
             # Die Ablage ist geschrieben - scheitert nur das Merken von "immer", bleibt es dabei.
@@ -863,6 +888,114 @@ def create_app():
         except (OSError, RuntimeError) as exc:
             raise HTTPException(400, str(exc)) from exc
         return JSONResponse(ablage.als_dict())
+
+    # --- Einarbeiten ins Wiki (Warteschlange, ui/einarbeitung.py) --------------------------
+
+    class EinarbeitenIn(BaseModel):
+        sitzung: str = ""  # Sitzungsordner, dessen juengste Ablage eingearbeitet wird
+        rohquelle: str = ""  # oder direkt ein Eintrag unter raw/ (Pfad)
+
+    class AntwortIn(BaseModel):
+        frage_id: str
+        antworten: dict[str, str] | None = None  # None = nicht beantworten
+
+    class NachrichtIn(BaseModel):
+        text: str
+
+    def _einreihen(p, ablage: dict) -> dict:
+        """Eine Ablage des Projekt-Wikis einreihen; ``ValueError``, wenn sie nicht im Wiki liegt."""
+        from audioscribe.souffleur.ki import BACKEND_OLLAMA
+
+        if p.wiki_dir is None:
+            raise ValueError(tr("Dieses Projekt hat kein Wiki – in den Projekteinstellungen anlegen oder verknüpfen."))
+        ziel = Path(str(ablage.get("ordner") or ""))
+        try:
+            rel = ziel.resolve().relative_to(p.wiki_dir.resolve()).as_posix()
+        except (OSError, ValueError) as exc:
+            raise ValueError(tr("Die Ablage liegt nicht im Wiki des Projekts: {pfad}", pfad=ziel)) from exc
+        assets = ablage.get("assets")
+        eff = _eff()
+        return wiki_jobs.einreihen(
+            wiki_dir=p.wiki_dir,
+            rohquelle=rel,
+            seiten_dir=p.seiten_dir,
+            assets=Path(str(assets)) if assets else None,
+            projekt=p.name,
+            titel=str(ablage.get("titel") or ""),
+            modell=eff["agent_model"],
+            dienst=BACKEND_OLLAMA if eff["ki_dienst"] == BACKEND_OLLAMA else "claude-agent",
+        )
+
+    def _mit_pfad(d: dict) -> dict:
+        """Absoluter Pfad der Rohquelle - so findet die Oberflaeche den Auftrag zu einer Ablage."""
+        return {**d, "pfad": str(Path(d["wiki_dir"]) / d["rohquelle"])}
+
+    @app.post("/api/wiki/einarbeiten")
+    def api_wiki_einarbeiten(body: EinarbeitenIn):
+        """Eine Sitzung (ihre juengste Ablage im Projekt-Wiki) oder eine Rohquelle einreihen."""
+        p = _projekt()
+        if p is None or p.demo:
+            raise HTTPException(409, tr("Kein Projekt geöffnet."))
+        if p.wiki_dir is None or p.raw_dir is None:
+            raise HTTPException(409, tr("Dieses Projekt hat kein Wiki – in den Projekteinstellungen anlegen oder verknüpfen."))
+        if not (p.wiki_dir / "CLAUDE.md").is_file():
+            raise HTTPException(409, tr("Im Wiki fehlt CLAUDE.md – ohne Schema kann nicht eingearbeitet werden."))
+        if body.sitzung.strip():
+            ablage = wiki_ablage.letzte_ablage(_sitzungsordner(body.sitzung), p, auch_freie=False)
+            if ablage is None:
+                raise HTTPException(409, tr("Diese Sitzung liegt noch nicht im Wiki – bitte zuerst ins Wiki speichern."))
+        elif body.rohquelle.strip():
+            ziel = browse.normalize_path(body.rohquelle, default=Path(""))
+            if not ziel.exists() or not modell.ist_unter(ziel, p.raw_dir) or modell.gleich(ziel, p.raw_dir):
+                raise HTTPException(400, tr("Keine Rohquelle unter {ordner}: {pfad}", ordner=p.raw_dir, pfad=body.rohquelle))
+            ablage = {"ordner": str(ziel)}
+        else:
+            raise HTTPException(400, tr("Bitte eine Sitzung oder Rohquelle angeben."))
+        try:
+            auftrag = _einreihen(p, ablage)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        return JSONResponse(_mit_pfad(auftrag))
+
+    @app.get("/api/wiki/einarbeitung")
+    def api_wiki_einarbeitung():
+        d = wiki_jobs.uebersicht()
+        return JSONResponse({**d, "auftraege": [_mit_pfad(e) for e in d["auftraege"]]})
+
+    def _auftrag(auftrag_id: str, fn):
+        try:
+            return fn()
+        except KeyError as exc:
+            raise HTTPException(404, tr("Auftrag nicht gefunden.")) from exc
+        except (RuntimeError, ValueError) as exc:
+            raise HTTPException(409, str(exc)) from exc
+
+    @app.get("/api/wiki/einarbeitung/{auftrag_id}")
+    def api_wiki_einarbeitung_detail(auftrag_id: str, offset: int = Query(0, ge=0)):
+        return JSONResponse(_mit_pfad(_auftrag(auftrag_id, lambda: wiki_jobs.detail(auftrag_id, offset))))
+
+    @app.post("/api/wiki/einarbeitung/{auftrag_id}/antwort")
+    def api_wiki_einarbeitung_antwort(auftrag_id: str, body: AntwortIn):
+        _auftrag(auftrag_id, lambda: wiki_jobs.antworte(auftrag_id, body.frage_id, body.antworten))
+        return JSONResponse({"ok": True})
+
+    @app.post("/api/wiki/einarbeitung/{auftrag_id}/nachricht")
+    def api_wiki_einarbeitung_nachricht(auftrag_id: str, body: NachrichtIn):
+        return JSONResponse(_mit_pfad(_auftrag(auftrag_id, lambda: wiki_jobs.nachricht(auftrag_id, body.text))))
+
+    @app.post("/api/wiki/einarbeitung/{auftrag_id}/abbrechen")
+    def api_wiki_einarbeitung_abbrechen(auftrag_id: str):
+        _auftrag(auftrag_id, lambda: wiki_jobs.abbrechen(auftrag_id))
+        return JSONResponse({"ok": True})
+
+    @app.post("/api/wiki/einarbeitung/{auftrag_id}/wiederholen")
+    def api_wiki_einarbeitung_wiederholen(auftrag_id: str):
+        return JSONResponse(_mit_pfad(_auftrag(auftrag_id, lambda: wiki_jobs.wiederholen(auftrag_id))))
+
+    @app.delete("/api/wiki/einarbeitung/{auftrag_id}")
+    def api_wiki_einarbeitung_entfernen(auftrag_id: str):
+        _auftrag(auftrag_id, lambda: wiki_jobs.entfernen(auftrag_id))
+        return JSONResponse({"ok": True})
 
     @app.get("/api/transkript")
     def api_transkript(pfad: str = Query("")):
@@ -1579,7 +1712,16 @@ def create_app():
             live._append(tr("Wiki-Ablage fehlgeschlagen: {fehler}", fehler=exc))
             return {**ergebnis, "wiki_fehler": str(exc)}
         live._append(tr("Ins Wiki gespeichert: {ordner}", ordner=ablage.ordner))
-        return {**ergebnis, "wiki_ablage": ablage.als_dict()}
+        ergebnis = {**ergebnis, "wiki_ablage": ablage.als_dict()}
+        if p.wiki_einarbeiten == modell.WIKI_IMMER and not variante.aktiv():
+            try:
+                auftrag = _einreihen(p, ablage.als_dict())
+            except (OSError, ValueError) as exc:
+                live._append(tr("Einarbeiten nicht eingereiht: {fehler}", fehler=exc))
+            else:
+                live._append(tr("Zum Einarbeiten ins Wiki eingereiht: {quelle}", quelle=auftrag["rohquelle"]))
+                ergebnis["einarbeitung"] = auftrag
+        return ergebnis
 
     def _unterbrochene_sitzung(raw: str) -> Path:
         """Ordner einer nicht sauber beendeten Sitzung des geoeffneten Projekts."""

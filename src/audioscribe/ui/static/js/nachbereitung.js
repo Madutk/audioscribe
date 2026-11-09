@@ -6,6 +6,7 @@ import { ladeDefaults } from './kontext.js';
 import { pickFolder, showTranscript } from './dialoge.js';
 import { openWikiDialog, slugify } from './wiki.js';
 import { verbrauchText } from './verbrauch.js';
+import { auftragFuer } from './einarbeitung.js';
 import { tr } from './i18n.js';
 
 let anaOffset = 0;
@@ -129,10 +130,19 @@ function renderWiki() {
       <code title="${esc(a.ordner)}">${esc(basename(dirOf(a.ordner)))}/${esc(basename(a.ordner))}</code>
       <span class="hint">${esc((a.zeit || '').slice(0, 16))} · ${a.bilder ? tr('{n} Bilder', { n: a.bilder }) : tr('ohne Bilder')}</span>
       <button class="ghost sm" type="button" data-folder="${esc(a.ordner)}">${icon('external')}${tr('Öffnen')}</button></div>`).join('');
-  box.innerHTML = `<div class="wikistate">
+  // Einarbeiten der juengsten Ablage durch den KI-Agenten (Warteschlange im Kopf).
+  const letzte = ablagen.length ? ablagen[ablagen.length - 1] : null;
+  const auftrag = letzte ? auftragFuer(letzte.ordner) : null;
+  const einarbeiten = letzte && p.wiki_einarbeiten !== 'nie' && !cloudCompliant()
+    ? (auftrag
+      ? `<button class="secondary sm" type="button" data-auftrag="${esc(auftrag.id)}">${icon('sparkles')}${tr('Einarbeitung ansehen')}</button>`
+      : `<button class="secondary sm" type="button" data-einarbeiten>${icon('sparkles')}${tr('Ins Wiki einarbeiten')}</button>`)
+    : '';
+  box.innerHTML = `<div class="wikistate" data-einarbeitung-sitzung="${esc(q.path)}">
       ${liste || `<p class="hint">${tr('Diese Sitzung liegt noch nicht im Wiki. Gespeichert wird nach <code>{ziel}</code>, Bilder nach <code>{bilder}</code>.', { ziel: esc(trimSep(p.raw_dir)) + (p.wiki_format === 'meetings' ? esc(sep() + 'meetings') : ''), bilder: esc(trimSep(p.assets_dir)) })}</p>`}
       <div class="row">
         <button class="${ablagen.length ? 'secondary' : ''} sm" type="button" id="anaWikiSave">${icon('book-plus')}${ablagen.length ? tr('Erneut speichern') : tr('Ins Wiki speichern')}</button>
+        ${einarbeiten}
         <button class="ghost sm" type="button" data-preview="${esc(q.path)}" data-title="${esc(q.titel || q.name)}">${icon('file-text')}${tr('Transkript ansehen')}</button>
       </div></div>`;
 }

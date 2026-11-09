@@ -168,6 +168,8 @@ export function zeigeProjekt() {
   if (format) format.checked = true;
   const radio = document.querySelector(`input[name="pSpeichern"][value="${p.wiki_speichern}"]`);
   if (radio) radio.checked = true;
+  const einarbeiten = document.querySelector(`input[name="pEinarbeiten"][value="${p.wiki_einarbeiten || 'fragen'}"]`);
+  if (einarbeiten) einarbeiten.checked = true;
   $('pBilder').checked = p.wiki_bilder !== false;
   $('pMarkierungen').checked = p.wiki_markierungen === true;
   if (!einst) return;
@@ -234,6 +236,9 @@ for (const radio of document.querySelectorAll('input[name="pFormat"]')) {
 }
 for (const radio of document.querySelectorAll('input[name="pSpeichern"]')) {
   radio.onchange = () => speichere({ wiki_speichern: radio.value });
+}
+for (const radio of document.querySelectorAll('input[name="pEinarbeiten"]')) {
+  radio.onchange = () => speichere({ wiki_einarbeiten: radio.value });
 }
 $('pBilder').onchange = () => speichere({ wiki_bilder: $('pBilder').checked });
 $('pMarkierungen').onchange = () => speichere({ wiki_markierungen: $('pMarkierungen').checked });
