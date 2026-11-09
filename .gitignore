@@ -41,6 +41,7 @@ analysen/
 .idea/
 .vscode/
 Thumbs.db
+.DS_Store
 desktop.ini
 
 # lokale Diagnose-Skripte und Rauchtest-Logs
