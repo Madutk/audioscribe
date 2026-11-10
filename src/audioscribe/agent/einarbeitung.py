@@ -36,6 +36,7 @@ from audioscribe.agent.fortschritt import Fortschritt
 from audioscribe.agent.manifest import load_manifest, save_manifest
 from audioscribe.agent.material import Auftrag
 from audioscribe.agent.runner import (
+    SDK_PUFFER,
     AnalyseSitzung,
     _now,
     install_hint,
@@ -235,6 +236,7 @@ class WikiSitzung(AnalyseSitzung):
             resume=self.auftrag.resume,
             env=sdk_env(self.auftrag.dienst),
             thinking=sdk_denken(self.auftrag.dienst),
+            max_buffer_size=SDK_PUFFER,
             stderr=lambda line: self.log(f"[claude] {line.rstrip()}"),
         )
         self._client = ClaudeSDKClient(options=options)

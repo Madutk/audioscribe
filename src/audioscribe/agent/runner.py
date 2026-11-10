@@ -57,6 +57,11 @@ def _now() -> str:
     return datetime.now().astimezone().isoformat(timespec="seconds")
 
 
+# Jede Nachricht der Claude-CLI ist eine JSON-Zeile; ein gelesenes Bild steckt base64-kodiert
+# darin. Die SDK-Vorgabe von 1 MB reisst schon bei einem grossen Screenshot ab.
+SDK_PUFFER = 64 * 1024 * 1024
+
+
 def sdk_env(dienst: str) -> dict[str, str]:
     """Umgebung fuer Claude Code je KI-Dienst. Bei ``ollama`` wird die Anthropic-kompatible
     Schnittstelle des lokalen Dienstes untergeschoben (``/v1/messages``); der Token ist
@@ -273,6 +278,7 @@ class AnalyseSitzung:
             resume=self.auftrag.resume,
             env=sdk_env(self.auftrag.dienst),
             thinking=sdk_denken(self.auftrag.dienst),
+            max_buffer_size=SDK_PUFFER,
             stderr=lambda line: self.log(f"[claude] {line.rstrip()}"),
         )
         self._client = ClaudeSDKClient(options=options)
