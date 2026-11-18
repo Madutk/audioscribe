@@ -6,8 +6,8 @@ from datetime import datetime
 from pathlib import Path
 
 from audioscribe.config import settings
-from audioscribe.i18n import tr
 from audioscribe.export import write_markdown, write_pdf, write_transcript_json
+from audioscribe.i18n import tr
 from audioscribe.models import TranscriptMeta, TranscriptResult
 from audioscribe.pipeline.audio import load_audio
 from audioscribe.pipeline.diarize import diarize
@@ -48,13 +48,7 @@ def run_pipeline(
     # stillschweigend (das extrahierte 16k-WAV enthaelt keine Bilder).
     do_screens = settings.enable_screens and from_video
 
-    total = (
-        3
-        + (1 if from_video else 0)
-        + (1 if do_align else 0)
-        + (1 if do_diar else 0)
-        + (1 if do_screens else 0)
-    )
+    total = 3 + (1 if from_video else 0) + (1 if do_align else 0) + (1 if do_diar else 0) + (1 if do_screens else 0)
     reporter = reporter or ConsoleReporter(total)
     step = 0
 
@@ -71,7 +65,7 @@ def run_pipeline(
     finally:
         if audio_path != source_path:
             # Das extrahierte WAV wird danach nie wieder gelesen (~115 MB je Stunde).
-            try:
+            try:  # noqa: SIM105 - try/except/pass bleibt; contextlib.suppress waere Umschreiben
                 audio_path.unlink(missing_ok=True)
             except OSError:
                 pass
@@ -145,9 +139,9 @@ def _annotiert_aktualisieren(ziel_dir: Path, make_pdf: bool, reporter) -> None:
 
     if not load_marks(ziel_dir):
         for name in ("transkript.annotiert.md", "transkript.annotiert.pdf"):
-            try:
+            try:  # noqa: SIM105 - try/except/pass bleibt; contextlib.suppress waere Umschreiben
                 (ziel_dir / name).unlink(missing_ok=True)
-            except OSError:  # noqa: PERF203 - gesperrte Datei darf den Lauf nicht kippen
+            except OSError:  # gesperrte Datei darf den Lauf nicht kippen
                 pass
         return
 
@@ -158,7 +152,7 @@ def _annotiert_aktualisieren(ziel_dir: Path, make_pdf: bool, reporter) -> None:
     try:
         annot = export_annotated(ziel_dir, make_pdf=make_pdf)
         reporter.info(tr("Annotiertes Transkript: {pfad}", pfad=annot))
-    except (OSError, ValueError) as exc:  # noqa: BLE001 - Bilder sind da, Text ebenso
+    except (OSError, ValueError) as exc:  # Bilder sind da, Text ebenso
         reporter.info(tr("Annotiertes Transkript uebersprungen: {fehler}", fehler=exc))
 
 

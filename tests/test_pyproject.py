@@ -23,7 +23,12 @@ def test_mac_extra_traegt_plattform_marker():
         assert "sys_platform == 'darwin'" in spec, spec
     mlx = [s for s in extras["mac"] if s.startswith("mlx-whisper")]
     assert mlx and "platform_machine == 'arm64'" in mlx[0]
-    for paket in ("sounddevice", "pyobjc-framework-ScreenCaptureKit", "pyobjc-framework-Quartz", "pyobjc-framework-AVFoundation"):
+    for paket in (
+        "sounddevice",
+        "pyobjc-framework-ScreenCaptureKit",
+        "pyobjc-framework-Quartz",
+        "pyobjc-framework-AVFoundation",
+    ):
         assert any(s.startswith(paket) for s in extras["mac"]), paket
 
 

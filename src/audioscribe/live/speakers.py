@@ -90,9 +90,9 @@ class SpeakerEmbedder:
         if device != "cpu":
             # Aufwaermen (Metal-Shader bzw. CUDA-Kernel) jetzt im Hintergrund-Thread,
             # nicht erst beim ersten System-Abschnitt.
-            try:
+            try:  # noqa: SIM105 - try/except/pass bleibt; contextlib.suppress waere Umschreiben
                 self(np.zeros(int(1.5 * SAMPLE_RATE), dtype=np.float32))
-            except Exception:  # noqa: BLE001 - Aufwaermen ist Zugabe
+            except Exception:  # noqa: BLE001, S110 - Aufwaermen ist Zugabe
                 pass
 
     def __call__(self, audio: np.ndarray) -> np.ndarray:
@@ -121,7 +121,9 @@ class BackgroundEmbedder:
             self._embedder = self._load()
             self._log(tr("Sprecher-Modell bereit ({sekunden} s)", sekunden=f"{time.monotonic() - started:.1f}"))
         except Exception as exc:  # noqa: BLE001 - Sprechertrennung ist Zugabe, kein Muss
-            self._log(tr("Sprecher-Modell nicht ladbar ({fehler}) - System-Spur heißt '{name}'", fehler=exc, name=GEGENSEITE))
+            self._log(
+                tr("Sprecher-Modell nicht ladbar ({fehler}) - System-Spur heißt '{name}'", fehler=exc, name=GEGENSEITE)
+            )
         finally:
             self._done.set()
 

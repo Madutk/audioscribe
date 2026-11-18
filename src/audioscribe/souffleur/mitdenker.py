@@ -76,8 +76,17 @@ SCHEMA = {
             "maxItems": KARTEN_JE_LAUF,
             "items": {
                 "type": "object",
-                "required": ["art", "segment_id", "aussage", "titel", "ki_text", "fundstelle_id", "wiki_zitat",
-                             "allgemeinwissen", "relevanz"],
+                "required": [
+                    "art",
+                    "segment_id",
+                    "aussage",
+                    "titel",
+                    "ki_text",
+                    "fundstelle_id",
+                    "wiki_zitat",
+                    "allgemeinwissen",
+                    "relevanz",
+                ],
                 "properties": {
                     "art": {"type": "string", "enum": list(ARTEN)},
                     "segment_id": {"type": "integer"},
@@ -218,15 +227,18 @@ def baue_prompt(
         teile += [f"[{f['id']}] {ort} ({basis['zeile']} {f['zeile']})", f["auszug"], ""]
     if glossar:
         teile += [basis["glossar"], ""]
-        teile += [f"- {falsch} → {richtig}" for falsch, richtig in glossar[:prompt_modul.GLOSSAR_MAX]]
+        teile += [f"- {falsch} → {richtig}" for falsch, richtig in glossar[: prompt_modul.GLOSSAR_MAX]]
     if karten:
         teile += ["", t["gesagt"], ""]
-        teile += [f"[{k.id}] ({format_timecode(k.t_start)}) {art_label(k.art)}: {k.titel}"
-                  for k in karten[-SCHON_GESAGT_MAX:]]
+        teile += [
+            f"[{k.id}] ({format_timecode(k.t_start)}) {art_label(k.art)}: {k.titel}" for k in karten[-SCHON_GESAGT_MAX:]
+        ]
     if markierungen:
         teile += ["", t["gemeldet"], ""]
-        teile += [f"({format_timecode(float(m['t_start']))}) {m.get('label') or m['art']}: {m['aussage']}"
-                  for m in markierungen]
+        teile += [
+            f"({format_timecode(float(m['t_start']))}) {m.get('label') or m['art']}: {m['aussage']}"
+            for m in markierungen
+        ]
     if leitfaden:
         teile += ["", t["leitfaden"], ""]
         teile += [f"[{p['id']}] {p['text']}" for p in leitfaden[:LEITFADEN_MAX]]
@@ -243,8 +255,9 @@ def pruefe_karte(roh: Any, je_id: dict[int, dict], fund_je_id: dict, *, sensibel
     return pruefe_mit_grund(roh, je_id, fund_je_id, sensibel=sensibel)[0]
 
 
-def pruefe_mit_grund(roh: Any, je_id: dict[int, dict], fund_je_id: dict, *,
-                     sensibel: bool = False) -> tuple[Karte | None, str]:
+def pruefe_mit_grund(
+    roh: Any, je_id: dict[int, dict], fund_je_id: dict, *, sensibel: bool = False
+) -> tuple[Karte | None, str]:
     """Wie ``pruefe_karte``, dazu der Grund einer Ablehnung - er steht in der Diagnose, damit sich
     nach echten Sitzungen nachstellen lässt, was der Filter wegnimmt."""
     if not isinstance(roh, dict):
@@ -302,9 +315,20 @@ def pruefe_mit_grund(roh: Any, je_id: dict[int, dict], fund_je_id: dict, *,
         if sid in je_id and sid != segment_id and sid not in bezug:
             bezug.append(sid)
     return Karte(
-        id="", art=art, segment_id=segment_id, t_start=float(seg["start"]), t_end=float(seg["end"]),
-        sprecher=seg.get("speaker"), aussage=aussage, titel=titel, ki_text=ki_text, fundstellen=fundstellen,
-        wiki_zitat=zitat, bezug_segment_ids=bezug[:3], herkunft=herkunft, relevanz=relevanz,
+        id="",
+        art=art,
+        segment_id=segment_id,
+        t_start=float(seg["start"]),
+        t_end=float(seg["end"]),
+        sprecher=seg.get("speaker"),
+        aussage=aussage,
+        titel=titel,
+        ki_text=ki_text,
+        fundstellen=fundstellen,
+        wiki_zitat=zitat,
+        bezug_segment_ids=bezug[:3],
+        herkunft=herkunft,
+        relevanz=relevanz,
     ), ""
 
 
@@ -314,8 +338,13 @@ def ist_dublette(karte: Karte, alte: list[Karte], markierungen: list[dict] | Non
     woerter = set(wiki_modul.tokenisiere(f"{karte.titel} {karte.ki_text}"))
     fund = karte.fundstellen[0].kurz if karte.fundstellen else ""
     for alt in alte:
-        if fund and karte.wiki_zitat and alt.fundstellen and alt.fundstellen[0].kurz == fund \
-                and _norm(alt.wiki_zitat or "") == _norm(karte.wiki_zitat):
+        if (
+            fund
+            and karte.wiki_zitat
+            and alt.fundstellen
+            and alt.fundstellen[0].kurz == fund
+            and _norm(alt.wiki_zitat or "") == _norm(karte.wiki_zitat)
+        ):
             return True
         if alt.art != karte.art:
             continue
@@ -335,8 +364,14 @@ def ist_dublette(karte: Karte, alte: list[Karte], markierungen: list[dict] | Non
 def schreibe(session_dir: Path, karten: list[Karte], *, bilanz: dict, modell: str = "") -> Path:
     """``souffleur-mitdenker.json`` und ``.md`` schreiben (atomar). Mehr nicht."""
     session_dir = Path(session_dir)
-    daten = {"version": VERSION, "sitzung": session_dir.name, "modell": modell, "ki_erzeugt": True,
-             "karten": [k.als_dict() for k in karten], "bilanz": bilanz}
+    daten = {
+        "version": VERSION,
+        "sitzung": session_dir.name,
+        "modell": modell,
+        "ki_erzeugt": True,
+        "karten": [k.als_dict() for k in karten],
+        "bilanz": bilanz,
+    }
     mk._atomar(session_dir / STAND_DATEI, json.dumps(daten, ensure_ascii=False, indent=2) + "\n")
     mk._atomar(session_dir / MD_DATEI, render_md(session_dir.name, karten))
     return session_dir / STAND_DATEI
@@ -376,8 +411,11 @@ def render_md(sitzung: str, karten: list[Karte]) -> str:
         zeilen.append("Keine Karten.")
     for k in karten:
         herkunft = ", ".join(HERKUNFT_LABEL.get(h, h) for h in k.herkunft) or "–"
-        zeilen += [f"## [{format_timecode(k.t_start)}] {ART_LABEL.get(k.art, k.art)}: {k.titel}", "",
-                   f"- Herkunft: {herkunft}"]
+        zeilen += [
+            f"## [{format_timecode(k.t_start)}] {ART_LABEL.get(k.art, k.art)}: {k.titel}",
+            "",
+            f"- Herkunft: {herkunft}",
+        ]
         if k.aussage:
             zeilen.append(f"- Gesagt ({k.sprecher or 'Unbekannt'}): „{k.aussage}“")
         if k.fundstellen and k.wiki_zitat:
@@ -507,8 +545,11 @@ class Mitdenker:
         if seit >= self.konfig.mitdenken_takt_s and woerter >= self.konfig.mitdenken_min_woerter:
             return "takt"
         stille = jetzt - float(neu[-1]["end"])
-        if stille >= _LEERLAUF_S and seit >= min(_LEERLAUF_TAKT_S, self.konfig.mitdenken_takt_s) \
-                and woerter >= min(_LEERLAUF_WOERTER, self.konfig.mitdenken_min_woerter):
+        if (
+            stille >= _LEERLAUF_S
+            and seit >= min(_LEERLAUF_TAKT_S, self.konfig.mitdenken_takt_s)
+            and woerter >= min(_LEERLAUF_WOERTER, self.konfig.mitdenken_min_woerter)
+        ):
             return "leerlauf"
         return None
 
@@ -533,7 +574,7 @@ class Mitdenker:
             self._lauf_sperre.release()
 
     def _ein_lauf(self, snap: dict) -> list[Karte]:
-        assert self.ki is not None
+        assert self.ki is not None  # noqa: S101 - Typ-Verengung fuer Optional
         jetzt = float(snap["jetzt"])
         with self._lock:
             stand = self._stand
@@ -545,9 +586,15 @@ class Mitdenker:
             self._t_lauf = jetzt
             self._laeufe += 1
             lauf = self._laeufe
-        diag: dict = {"spur": "mitdenker", "lauf": lauf, "t_von": float(neu[0]["start"]),
-                      "t_bis": float(neu[-1]["end"]), "segmente_neu": len(neu), "segmente_kontext": len(kontext),
-                      **({"gekappt": gekappt} if gekappt else {})}
+        diag: dict = {
+            "spur": "mitdenker",
+            "lauf": lauf,
+            "t_von": float(neu[0]["start"]),
+            "t_bis": float(neu[-1]["end"]),
+            "segmente_neu": len(neu),
+            "segmente_kontext": len(kontext),
+            **({"gekappt": gekappt} if gekappt else {}),
+        }
 
         wiki: wiki_modul.WikiIndex | None = snap["wiki"]
         markierungen: list[dict] = snap["markierungen"]
@@ -569,9 +616,16 @@ class Mitdenker:
         fmit = prompt_modul.fundstellen_mit_ids(fundstellen)
         auftrag = KiAuftrag(
             system=system_prompt(),
-            prompt=baue_prompt(neu, kontext=kontext, fundstellen=fmit, glossar=glossar,
-                               wiki_verknuepft=wiki is not None, karten=alte, markierungen=markierungen,
-                               leitfaden=snap["leitfaden"]),
+            prompt=baue_prompt(
+                neu,
+                kontext=kontext,
+                fundstellen=fmit,
+                glossar=glossar,
+                wiki_verknuepft=wiki is not None,
+                karten=alte,
+                markierungen=markierungen,
+                leitfaden=snap["leitfaden"],
+            ),
             schema=SCHEMA,
             kontext={"art": EREIGNIS, "segmente": neu, "kontext": kontext, "fundstellen": fmit, "glossar": glossar},
             timeout_s=self.konfig.mitdenken_timeout_s,
@@ -587,8 +641,12 @@ class Mitdenker:
                 self._meldung = str(exc)
                 if self._fehler_folge >= _FEHLER_FOLGE_MAX:
                     self._pause_bis = time.monotonic() + _FEHLER_PAUSE_S
-                    self._meldung = tr("KI-Fehler ({anzahl} in Folge), Pause {pause} s: {fehler}",
-                                       anzahl=self._fehler_folge, pause=f"{_FEHLER_PAUSE_S:.0f}", fehler=exc)
+                    self._meldung = tr(
+                        "KI-Fehler ({anzahl} in Folge), Pause {pause} s: {fehler}",
+                        anzahl=self._fehler_folge,
+                        pause=f"{_FEHLER_PAUSE_S:.0f}",
+                        fehler=exc,
+                    )
                 meldung = self._meldung
             self._quelle._log(f"Mitdenker: {meldung}")
             self._quelle._diagnose({**diag, "fehler": str(exc)})
@@ -606,8 +664,13 @@ class Mitdenker:
             karte, grund = pruefe_mit_grund(roh, je_id, fund_je_id, sensibel=self.konfig.sensibel)
             if karte is None:
                 # Mit Titel: so lässt sich nach echten Sitzungen beurteilen, was der Filter wegnimmt.
-                verworfen.append({"art": roh.get("art") if isinstance(roh, dict) else None, "grund": grund,
-                                  **({"titel": str(roh.get("titel") or "")[:TITEL_MAX]} if isinstance(roh, dict) else {})})
+                verworfen.append(
+                    {
+                        "art": roh.get("art") if isinstance(roh, dict) else None,
+                        "grund": grund,
+                        **({"titel": str(roh.get("titel") or "")[:TITEL_MAX]} if isinstance(roh, dict) else {}),
+                    }
+                )
                 continue
             if ist_dublette(karte, [*alte, *neue], markierungen):
                 verworfen.append({"art": karte.art, "grund": "dublette"})
@@ -624,18 +687,30 @@ class Mitdenker:
             self._fehler_folge = 0
             self._meldung = ""
         for karte in neue:
-            self._quelle._log(tr("Mitdenker: {art} bei {t} s (KI {ki} s)", art=art_label(karte.art),
-                                 t=f"{karte.t_start:.0f}", ki=f"{antwort.antwort_s:.1f}"))
+            self._quelle._log(
+                tr(
+                    "Mitdenker: {art} bei {t} s (KI {ki} s)",
+                    art=art_label(karte.art),
+                    t=f"{karte.t_start:.0f}",
+                    ki=f"{antwort.antwort_s:.1f}",
+                )
+            )
             try:
                 # Frisch lesen: der Runner hängt on_hinweis erst nach dem Bau ein, stop() ersetzt es.
                 self._quelle.on_hinweis({**karte.als_dict(), "type": EREIGNIS})
             except Exception as exc:  # noqa: BLE001
                 self._quelle._log(tr("Mitdenker: Karte nicht zugestellt: {fehler}", fehler=exc))
-        self._quelle._diagnose({
-            **diag, "treffer": len(fundstellen), "ki_start_s": round(antwort.start_s, 3),
-            "ki_antwort_s": round(antwort.antwort_s, 3), "karten": [k.id for k in neue], "verworfen": verworfen,
-            **({"verbrauch": antwort.verbrauch.als_dict()} if antwort.verbrauch is not None else {}),
-        })
+        self._quelle._diagnose(
+            {
+                **diag,
+                "treffer": len(fundstellen),
+                "ki_start_s": round(antwort.start_s, 3),
+                "ki_antwort_s": round(antwort.antwort_s, 3),
+                "karten": [k.id for k in neue],
+                "verworfen": verworfen,
+                **({"verbrauch": antwort.verbrauch.als_dict()} if antwort.verbrauch is not None else {}),
+            }
+        )
         if neue:
             self._schreibe()
         return neue
@@ -650,8 +725,13 @@ class Mitdenker:
         ziel = self._quelle.session_dir
         with self._lock:
             karten = list(self._karten)
-            bilanz = {"karten": len(karten), "laeufe": self._laeufe, "fehler": self._fehler, "stand_t": self._stand,
-                      "je_art": {art: sum(1 for k in karten if k.art == art) for art in ARTEN}}
+            bilanz = {
+                "karten": len(karten),
+                "laeufe": self._laeufe,
+                "fehler": self._fehler,
+                "stand_t": self._stand,
+                "je_art": {art: sum(1 for k in karten if k.art == art) for art in ARTEN},
+            }
         if ziel is None or not (karten or bilanz["laeufe"]):
             return
         try:
@@ -672,6 +752,12 @@ class Mitdenker:
             else:
                 zustand = "wartet"
             return {
-                "aktiv": self._aktiv, "verfuegbar": self.verfuegbar, "grund": self.grund(), "zustand": zustand,
-                "meldung": self._meldung, "karten": len(self._karten), "laeufe": self._laeufe, "fehler": self._fehler,
+                "aktiv": self._aktiv,
+                "verfuegbar": self.verfuegbar,
+                "grund": self.grund(),
+                "zustand": zustand,
+                "meldung": self._meldung,
+                "karten": len(self._karten),
+                "laeufe": self._laeufe,
+                "fehler": self._fehler,
             }

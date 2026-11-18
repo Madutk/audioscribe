@@ -73,11 +73,14 @@ def build_task_prompt(auftrag: Auftrag, material: Material, skills: Sequence[Ski
             "",
         ]
     if f"{MATERIAL_DIR}/{BILDTEXT_DATEI}" in material.dateien:
-        teile += [tr(
-            "`{datei}` enthält den per Texterkennung gelesenen Text der Standbilder (Feld `datei` = Bild unter "
-            "`material/frames/`) - zum Suchen; im Zweifel gilt das Bild selbst.",
-            datei=f"{MATERIAL_DIR}/{BILDTEXT_DATEI}",
-        ), ""]
+        teile += [
+            tr(
+                "`{datei}` enthält den per Texterkennung gelesenen Text der Standbilder (Feld `datei` = Bild unter "
+                "`material/frames/`) - zum Suchen; im Zweifel gilt das Bild selbst.",
+                datei=f"{MATERIAL_DIR}/{BILDTEXT_DATEI}",
+            ),
+            "",
+        ]
 
     kontext = auftrag.kontext_text.strip()
     if kontext or material.kontext_inline or material.kontext_dateien:
@@ -109,8 +112,7 @@ def build_task_prompt(auftrag: Auftrag, material: Material, skills: Sequence[Ski
     teile += [
         tr("## Ergebnis"),
         tr(
-            "Erstelle alle Dokumente zum Prozess „{name}“ im aktuellen Arbeitsordner "
-            "und schließe mit `INDEX.md` ab.",
+            "Erstelle alle Dokumente zum Prozess „{name}“ im aktuellen Arbeitsordner und schließe mit `INDEX.md` ab.",
             name=auftrag.name,
         ),
     ]

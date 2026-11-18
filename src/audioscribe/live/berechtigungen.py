@@ -172,9 +172,7 @@ def _bewerte(
     return status, teile
 
 
-def bewerte(
-    *, bildschirm: bool | None, mikrofon: str, host: str, pyobjc_fehlt: bool = False
-) -> tuple[str, list[str]]:
+def bewerte(*, bildschirm: bool | None, mikrofon: str, host: str, pyobjc_fehlt: bool = False) -> tuple[str, list[str]]:
     """Hinweise für doctor und Oberfläche in deren Sprache (rein, testbar).
 
     Liefert ``(status, teile)`` mit Status ``OK`` | ``WARN``.

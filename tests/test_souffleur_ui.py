@@ -184,11 +184,12 @@ def test_mitdenken_route_merkt_zustand_und_vorgabe_ist_aus(client):
 def test_mitdenk_karten_kommen_als_eigenes_ereignis(tmp_path):
     """Der Mitdenker meldet über denselben Weg wie die Hinweise, aber mit eigenem Typ - die
     Oberfläche hält beide Listen getrennt."""
-    konfig = SouffleurKonfig(wiki_dir=None, backend="attrappe", mitdenken=True, mitdenken_takt_s=0.0,
-                             mitdenken_min_woerter=1)
-    kind = CHILD.replace("Guten Morgen zusammen, schön dass alle da sind.",
-                         "Man könnte die Rechnungen vielleicht automatisch vorprüfen.").replace(
-        "time.sleep(0.2)", "time.sleep(2.5)")
+    konfig = SouffleurKonfig(
+        wiki_dir=None, backend="attrappe", mitdenken=True, mitdenken_takt_s=0.0, mitdenken_min_woerter=1
+    )
+    kind = CHILD.replace(
+        "Guten Morgen zusammen, schön dass alle da sind.", "Man könnte die Rechnungen vielleicht automatisch vorprüfen."
+    ).replace("time.sleep(0.2)", "time.sleep(2.5)")
     (tmp_path / "live-x").mkdir()
     runner = LiveRunner()
     runner.start(

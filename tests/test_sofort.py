@@ -55,9 +55,9 @@ def test_abgezogenes_geraet_wird_default_behaelt_aber_den_namen():
 @pytest.mark.parametrize(
     ("gemerkt", "erwartet"),
     [
-        ("Excel – Angebot.xlsx", (0, 4711, "Excel – Angebot.xlsx")),   # genau
+        ("Excel – Angebot.xlsx", (0, 4711, "Excel – Angebot.xlsx")),  # genau
         ("Excel – Anderes Blatt.xlsx", (0, 4711, "Excel – Angebot.xlsx")),  # nur der Prozess
-        ("Word – Weg", (1, 0, "")),                                      # Fenster weg -> Monitor
+        ("Word – Weg", (1, 0, "")),  # Fenster weg -> Monitor
     ],
 )
 def test_fenster_quelle(gemerkt, erwartet):
@@ -78,11 +78,25 @@ def test_monitor_quelle_und_rueckfaelle():
 
 def test_skalare_aus_dem_stand():
     p = _start(
-        {"live_model": "small", "live_device": "cpu", "live_sensitivity": "hoch", "live_format": "png",
-         "live_partials": False, "live_speakers": False, "live_refine": False, "live_refine_model": "medium"},
+        {
+            "live_model": "small",
+            "live_device": "cpu",
+            "live_sensitivity": "hoch",
+            "live_format": "png",
+            "live_partials": False,
+            "live_speakers": False,
+            "live_refine": False,
+            "live_refine_model": "medium",
+        },
         sprache="en",
     )
-    assert (p["model"], p["language"], p["device"], p["sensitivity"], p["format"]) == ("small", "en", "cpu", "hoch", "png")
+    assert (p["model"], p["language"], p["device"], p["sensitivity"], p["format"]) == (
+        "small",
+        "en",
+        "cpu",
+        "hoch",
+        "png",
+    )
     assert (p["partials"], p["speakers"], p["refine"], p["refine_model"]) == (False, False, False, "medium")
 
 
@@ -105,7 +119,9 @@ def test_server_antwortet_nur_bei_audioscribe(monkeypatch):
     assert sofort.server_antwortet("127.0.0.1", 8766) is False
     monkeypatch.setattr(sofort.urllib.request, "urlopen", lambda *a, **k: _Antwort(b"<html>"))
     assert sofort.server_antwortet("127.0.0.1", 8766) is False
-    monkeypatch.setattr(sofort.urllib.request, "urlopen", lambda *a, **k: _Antwort(json.dumps({"modus": "start"}).encode()))
+    monkeypatch.setattr(
+        sofort.urllib.request, "urlopen", lambda *a, **k: _Antwort(json.dumps({"modus": "start"}).encode())
+    )
     assert sofort.server_antwortet("127.0.0.1", 8766) is True
 
 
@@ -138,7 +154,11 @@ def test_an_laufenden_server_meldet_409_und_oeffnet_trotzdem(monkeypatch, capsys
         if isinstance(anfrage, str):
             return _Antwort(json.dumps({"modus": "projekt"}).encode())
         raise urllib.error.HTTPError(
-            anfrage.full_url, 409, "Conflict", {}, io.BytesIO(json.dumps({"detail": "Es läuft noch eine Live-Sitzung."}).encode())
+            anfrage.full_url,
+            409,
+            "Conflict",
+            {},
+            io.BytesIO(json.dumps({"detail": "Es läuft noch eine Live-Sitzung."}).encode()),
         )
 
     geoeffnet = []
@@ -177,7 +197,9 @@ def test_cli_ui_aufnahme_bei_laufendem_server_startet_keinen_zweiten(monkeypatch
 
     gefragt = {}
     monkeypatch.setattr(server, "serve", lambda **kw: pytest.fail("serve darf nicht laufen"))
-    monkeypatch.setattr(sofort, "an_laufenden_server", lambda host, port, **kw: gefragt.update(host=host, port=port, **kw) or True)
+    monkeypatch.setattr(
+        sofort, "an_laufenden_server", lambda host, port, **kw: gefragt.update(host=host, port=port, **kw) or True
+    )
     assert cli.main(["ui", "--aufnahme", "--port", "9000"]) == 0
     assert gefragt == {"host": "127.0.0.1", "port": 9000, "open_browser": True}
     # Ohne --aufnahme wird nicht nachgefragt.

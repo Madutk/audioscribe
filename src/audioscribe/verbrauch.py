@@ -53,7 +53,8 @@ class Verbrauch:
             kosten = (self.kosten_usd or 0.0) + (other.kosten_usd or 0.0)
         return Verbrauch(
             *(getattr(self, f) + getattr(other, f) for f in _TOKEN_FELDER),
-            kosten_usd=kosten, aufrufe=self.aufrufe + other.aufrufe,
+            kosten_usd=kosten,
+            aufrufe=self.aufrufe + other.aufrufe,
         )
 
     def minus(self, frueher: Verbrauch) -> Verbrauch:
@@ -64,7 +65,8 @@ class Verbrauch:
             kosten = max(0.0, kosten - frueher.kosten_usd)
         return Verbrauch(
             *(max(0, getattr(self, f) - getattr(frueher, f)) for f in _TOKEN_FELDER),
-            kosten_usd=kosten, aufrufe=self.aufrufe,
+            kosten_usd=kosten,
+            aufrufe=self.aufrufe,
         )
 
     def als_dict(self) -> dict:
@@ -96,7 +98,11 @@ class Verbrauch:
         if 0 < self.kosten_usd < 0.01:
             return tr("{tokens}, ca. unter 0,01 $ (API-Gegenwert)", tokens=tokens)
         preis = f"{self.kosten_usd:.2f}"
-        return tr("{tokens}, ca. {preis} $ (API-Gegenwert)", tokens=tokens, preis=preis.replace(".", ",") if deutsch else preis)
+        return tr(
+            "{tokens}, ca. {preis} $ (API-Gegenwert)",
+            tokens=tokens,
+            preis=preis.replace(".", ",") if deutsch else preis,
+        )
 
 
 def aus_usage(usage: object) -> Verbrauch:
@@ -115,9 +121,7 @@ def aus_ergebnis(msg: Any) -> Verbrauch:
     """
     je_modell = getattr(msg, "model_usage", None)
     if isinstance(je_modell, Mapping) and je_modell:
-        werte = [
-            sum(_zahl(m.get(k)) for m in je_modell.values() if isinstance(m, Mapping)) for k in _MODEL_USAGE
-        ]
+        werte = [sum(_zahl(m.get(k)) for m in je_modell.values() if isinstance(m, Mapping)) for k in _MODEL_USAGE]
         tokens = Verbrauch(*werte)
     else:
         tokens = aus_usage(getattr(msg, "usage", None))

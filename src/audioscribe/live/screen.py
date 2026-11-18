@@ -12,6 +12,7 @@ from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 
+from audioscribe.i18n import tr
 from audioscribe.live.fenster import WindowGone
 from audioscribe.pipeline.screens import (
     _RUHE_ABTASTUNGEN,
@@ -28,7 +29,6 @@ from audioscribe.pipeline.screens import (
     changed_blocks,
     shot_filename,
 )
-from audioscribe.i18n import tr
 from audioscribe.review.marks import Mark
 
 _JPEG_QUALITY = 88  # entspricht grob ffmpegs -q:v 3 der Offline-Standbilder
@@ -42,7 +42,7 @@ def _mss_fehlt() -> str:
     return tr("mss fehlt - keine Standbilder (uv sync ... --extra live)")
 
 
-class SourceUnavailable(RuntimeError):
+class SourceUnavailable(RuntimeError):  # noqa: N818 - Bestand, ungeprüft (REQ-11)
     """Die gewählte Bildquelle gibt es nicht (Monitor-Index, geschlossenes Fenster)."""
 
 
@@ -62,9 +62,7 @@ class ChangeDetector:
         min_gap: float = 4.0,
         dauerbewegung_s: float = DEFAULT_DAUERBEWEGUNG_S,
     ) -> None:
-        self._schwelle, self._min_bloecke = SENSITIVITIES.get(
-            sensitivity, SENSITIVITIES[DEFAULT_SENSITIVITY]
-        )
+        self._schwelle, self._min_bloecke = SENSITIVITIES.get(sensitivity, SENSITIVITIES[DEFAULT_SENSITIVITY])
         self._min_gap = min_gap
         self._dauer = dauerbewegung_s
         self._vorher = None
@@ -244,9 +242,7 @@ class WindowSource:
         bottom = min(rect[3], alles["top"] + alles["height"])
         if right <= left or bottom <= top:
             return None
-        return grab_image(
-            self._sct, {"left": left, "top": top, "width": right - left, "height": bottom - top}
-        )
+        return grab_image(self._sct, {"left": left, "top": top, "width": right - left, "height": bottom - top})
 
 
 class ScreenWatcher(threading.Thread):

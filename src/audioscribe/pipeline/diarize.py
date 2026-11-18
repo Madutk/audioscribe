@@ -67,8 +67,8 @@ def make_progress_hook(
 
     def hook(
         step_name: str,
-        step_artifact=None,
-        file=None,
+        step_artifact=None,  # noqa: ARG001 - Signatur des pyannote-Hooks
+        file=None,  # noqa: ARG001 - Signatur des pyannote-Hooks
         total: int | None = None,
         completed: int | None = None,
     ) -> None:
@@ -197,7 +197,11 @@ def diarize(audio, result: dict, reporter: Reporter | None = None) -> dict:
     else:
         load_exc = None
     if pipeline is None:
-        hint = "\n" + tr("(Ursache: {typ}: {meldung})", typ=type(load_exc).__name__, meldung=str(load_exc)[:200]) if load_exc else ""
+        hint = (
+            "\n" + tr("(Ursache: {typ}: {meldung})", typ=type(load_exc).__name__, meldung=str(load_exc)[:200])
+            if load_exc
+            else ""
+        )
         # Ein abgelehnter Token sieht fuer Hugging Face aus wie ein anonymer Zugriff, das
         # gesperrte Repo meldet dann ebenfalls "gated". Erst nachfragen, dann anleiten -
         # sonst klickt der Nutzer 'Agree', obwohl sein Token widerrufen ist.

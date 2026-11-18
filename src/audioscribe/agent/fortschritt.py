@@ -189,9 +189,7 @@ def _text(content: object) -> str:
     if isinstance(content, str):
         return content
     if isinstance(content, list):
-        return " ".join(
-            str(b.get("text", "")) for b in content if isinstance(b, Mapping)
-        )
+        return " ".join(str(b.get("text", "")) for b in content if isinstance(b, Mapping))
     return ""
 
 
@@ -228,7 +226,7 @@ def parse_status_line(line: str) -> dict | None:
     if not line.startswith(STATUS_PREFIX):
         return None
     try:
-        data = json.loads(line[len(STATUS_PREFIX):])
+        data = json.loads(line[len(STATUS_PREFIX) :])
     except ValueError:
         return None
     return data if isinstance(data, dict) else None

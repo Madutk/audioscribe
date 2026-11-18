@@ -130,7 +130,7 @@ def test_fenster_ueberlappen_nicht():
     # zweiten darf nicht in das erste Fenster zurueckreichen.
     spans = [(0, 29 * R), (int(29.3 * R), 35 * R)]
     win = speech_windows(spans, 60 * R, pad_s=0.3, rate=R)
-    for (_, ende), (anfang, _) in zip(win, win[1:]):
+    for (_, ende), (anfang, _) in zip(win, win[1:]):  # noqa: B905 - Nachbarpaare, zweite Folge absichtlich kuerzer
         assert anfang >= ende
 
 

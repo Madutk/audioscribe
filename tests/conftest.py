@@ -62,8 +62,12 @@ def projekt(wiki, tmp_path):
     from audioscribe.projekt import modell
 
     return modell.lege_an(
-        name="Bahnbuchung", wurzel=tmp_path / "bahn-projekt", sitzungen_dir=tmp_path / "sitzungen",
-        wiki_art=modell.WIKI_VORHANDEN, wiki_dir=wiki, assets_dir=wiki / "raw" / "assets",
+        name="Bahnbuchung",
+        wurzel=tmp_path / "bahn-projekt",
+        sitzungen_dir=tmp_path / "sitzungen",
+        wiki_art=modell.WIKI_VORHANDEN,
+        wiki_dir=wiki,
+        assets_dir=wiki / "raw" / "assets",
         wiki_format=modell.FORMAT_ORDNER,  # die Meetings-Datei prüfen eigene Tests (projekt_meetings)
     )
 
@@ -112,10 +116,18 @@ def _sitzung_in(projekt):
             Segment(0.0, 5.0, "Wir buchen immer zweite Klasse.", "Ich"),
             Segment(10.0, 15.0, "Ab welchem Betrag braucht es eine Freigabe?", "Sprecher 1"),
         ],
-        duration_s=20, language="de", model="t", mode="live",
+        duration_s=20,
+        language="de",
+        model="t",
+        mode="live",
     )
     m = markierung.Markierung(
-        id=1, art="frage", segment_id=2, t_start=10.0, t_end=15.0, sprecher="Sprecher 1",
+        id=1,
+        art="frage",
+        segment_id=2,
+        t_start=10.0,
+        t_end=15.0,
+        sprecher="Sprecher 1",
         aussage="Ab welchem Betrag braucht es eine Freigabe?",
         fundstellen=[markierung.Fundstelle("wiki/freigaben.md", "Grenzen", 3, "Buchungen ab 250 Euro …")],
         wiki_zitat="Buchungen ab 250 Euro gibt die Teamleitung frei.",

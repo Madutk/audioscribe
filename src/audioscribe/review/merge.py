@@ -84,9 +84,7 @@ def render_markdown_with_marks(data: dict, marks: list[Mark]) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
-def write_annotated_pdf(
-    data: dict, marks: list[Mark], out_path: str | Path, *, base_dir: str | Path
-) -> Path:
+def write_annotated_pdf(data: dict, marks: list[Mark], out_path: str | Path, *, base_dir: str | Path) -> Path:
     """Rendert das annotierte Transkript als PDF mit eingebetteten Standbildern (FR-18).
 
     ``base_dir`` ist der Ausgabeordner, relativ zu dem die PNG-Pfade aufgeloest werden.

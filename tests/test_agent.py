@@ -150,9 +150,7 @@ def test_copy_material_kopiert_transkript_frames_und_kontext(tmp_path):
     glossar.write_text("SAP = System", encoding="utf-8")
     folien = tmp_path / "folien.pdf"
     folien.write_bytes(b"%PDF")
-    auftrag = Auftrag(
-        name="Test", quelle=q, ausgabe=tmp_path / "ana", kontext_dateien=(glossar, folien)
-    )
+    auftrag = Auftrag(name="Test", quelle=q, ausgabe=tmp_path / "ana", kontext_dateien=(glossar, folien))
 
     m = copy_material(auftrag)
 
@@ -166,13 +164,18 @@ def test_copy_material_kopiert_transkript_frames_und_kontext(tmp_path):
     assert m.kontext_dateien == ("kontext/folien.pdf",)
     # Die Quelle bleibt unangetastet (NFR-12).
     assert sorted(p.name for p in q.iterdir()) == [
-        "frames", "transcript.json", "transkript.annotiert.md", "transkript.md"
+        "frames",
+        "transcript.json",
+        "transkript.annotiert.md",
+        "transkript.md",
     ]
 
 
 def test_copy_material_fehlende_kontextdatei(tmp_path):
     auftrag = Auftrag(
-        name="x", quelle=_quelle(tmp_path), ausgabe=tmp_path / "a",
+        name="x",
+        quelle=_quelle(tmp_path),
+        ausgabe=tmp_path / "a",
         kontext_dateien=(tmp_path / "fehlt.md",),
     )
     with pytest.raises(FileNotFoundError, match="fehlt.md"):
@@ -187,8 +190,11 @@ def test_task_prompt_enthaelt_material_kontext_und_skills(tmp_path):
     ctx = tmp_path / "ctx.txt"
     ctx.write_text("Zielgruppe: Buchhaltung", encoding="utf-8")
     auftrag = Auftrag(
-        name="Rechnungsfreigabe", quelle=q, ausgabe=tmp_path / "a",
-        kontext_text="Bitte knapp.", kontext_dateien=(ctx,),
+        name="Rechnungsfreigabe",
+        quelle=q,
+        ausgabe=tmp_path / "a",
+        kontext_text="Bitte knapp.",
+        kontext_dateien=(ctx,),
     )
     _skill(tmp_path / "sk", "prozessrekonstruktion", desc="Rekonstruiert Prozesse.")
     text = build_task_prompt(auftrag, copy_material(auftrag), discover_skills(tmp_path / "sk"))
@@ -251,11 +257,13 @@ def test_fortschritt_plan_aus_taskcreate_und_taskupdate(tmp_path):
     assert fs.tool_result("c1", False, "Task #1 created successfully: Bilder ansehen")
     assert fs.tool_result("c2", False, [{"type": "text", "text": "Task #2 created successfully"}])
     assert not fs.tool_result("c3", True, "Fehler")
-    for i, upd in enumerate([
-        {"taskId": "1", "status": "completed"},
-        {"taskId": "2", "status": "in_progress"},
-        {"taskId": "9", "status": "completed"},  # unbekannt
-    ]):
+    for i, upd in enumerate(
+        [
+            {"taskId": "1", "status": "completed"},
+            {"taskId": "2", "status": "in_progress"},
+            {"taskId": "9", "status": "completed"},  # unbekannt
+        ]
+    ):
         fs.tool_use(f"u{i}", "TaskUpdate", upd)
         fs.tool_result(f"u{i}", False, "Updated task status")
     snap = fs.snapshot()
@@ -293,15 +301,17 @@ def test_fortschritt_skill_und_bilder(tmp_path):
 
 def test_fortschritt_dokumente(tmp_path):
     fs = _fs(tmp_path)
-    for i, (name, path) in enumerate([
-        ("Write", "prozess.md"),
-        ("Edit", "prozess.md"),                   # schon gezaehlt
-        ("Write", "unter/arbeitsanweisung.md"),
-        ("Write", "material/x.normalisiert.md"),  # Zwischenstand, kein Dokument
-        ("Write", ".claude/skills/a/SKILL.md"),
-        ("Write", "analyse.json"),
-        ("Write", str(tmp_path / "draussen.md")),
-    ]):
+    for i, (name, path) in enumerate(
+        [
+            ("Write", "prozess.md"),
+            ("Edit", "prozess.md"),  # schon gezaehlt
+            ("Write", "unter/arbeitsanweisung.md"),
+            ("Write", "material/x.normalisiert.md"),  # Zwischenstand, kein Dokument
+            ("Write", ".claude/skills/a/SKILL.md"),
+            ("Write", "analyse.json"),
+            ("Write", str(tmp_path / "draussen.md")),
+        ]
+    ):
         fs.tool_use(f"w{i}", name, {"file_path": path})
         fs.tool_result(f"w{i}", is_error=False)
     fs.tool_use("wx", "Write", {"file_path": "abgelehnt.md"})
@@ -401,7 +411,7 @@ def test_cli_analyze_list_skills(tmp_path, capsys, monkeypatch):
 def test_cli_analyze_ohne_transkript(tmp_path, capsys, monkeypatch):
     from audioscribe.cli import main
 
-    monkeypatch.setattr("sys.stdin", open(__file__))  # kein TTY -> keine Rueckfragen
+    monkeypatch.setattr("sys.stdin", open(__file__))  # kein TTY -> keine Rueckfragen  # noqa: SIM115 - offene Datei als stdin-Ersatz
     code = main(["analyze", str(tmp_path), "--name", "x", "--out", str(tmp_path / "o")])
     assert code == 1
     assert "Kein Transkript" in capsys.readouterr().out
@@ -411,12 +421,22 @@ def test_cli_analyze_ohne_transkript(tmp_path, capsys, monkeypatch):
 def test_cli_analyze_unbekannter_skill(tmp_path, capsys, monkeypatch):
     from audioscribe.cli import main
 
-    monkeypatch.setattr("sys.stdin", open(__file__))
+    monkeypatch.setattr("sys.stdin", open(__file__))  # noqa: SIM115 - offene Datei als stdin-Ersatz
     q = _quelle(tmp_path)
-    code = main([
-        "analyze", str(q), "--name", "x", "--out", str(tmp_path / "o"),
-        "--skills-dir", str(tmp_path / "keine"), "--skill", "nope",
-    ])
+    code = main(
+        [
+            "analyze",
+            str(q),
+            "--name",
+            "x",
+            "--out",
+            str(tmp_path / "o"),
+            "--skills-dir",
+            str(tmp_path / "keine"),
+            "--skill",
+            "nope",
+        ]
+    )
     assert code == 2
     assert "nicht gefunden: nope" in capsys.readouterr().out
 
@@ -425,7 +445,7 @@ def test_cli_analyze_unbekannter_skill(tmp_path, capsys, monkeypatch):
 def test_cli_analyze_resume_ohne_sitzung(tmp_path, capsys, monkeypatch):
     from audioscribe.cli import main
 
-    monkeypatch.setattr("sys.stdin", open(__file__))
+    monkeypatch.setattr("sys.stdin", open(__file__))  # noqa: SIM115 - offene Datei als stdin-Ersatz
     code = main(["analyze", str(_quelle(tmp_path)), "--name", "x", "--out", str(tmp_path), "--resume"])
     assert code == 1
     assert "Keine fortsetzbare Sitzung" in capsys.readouterr().out
@@ -450,7 +470,7 @@ def test_build_analyze_argv_alle_optionen(tmp_path):
     assert argv[:3] == ["as", "analyze", str(tmp_path / "q")]
     assert "--name=-Test" in argv and "--context-text=--kein-flag" in argv
     assert f"--context={tmp_path / 'k.md'}" in argv
-    assert ["--skill=a", "--skill=b"] == [a for a in argv if a.startswith("--skill=")]
+    assert [a for a in argv if a.startswith("--skill=")] == ["--skill=a", "--skill=b"]
     assert "--model=claude-sonnet-5" in argv and "--no-bash" in argv
     assert "--no-skills" not in argv
 
@@ -514,10 +534,7 @@ def test_analyse_runner_log_manifest_und_doppelstart(tmp_path):
     save_manifest(ws, Manifest(name="x", quelle="q", status="fertig", kosten_usd=0.5, session_id="s"))
     (ws / "INDEX.md").write_text("x", encoding="utf-8")
     status = '[Agent-Status] {"todos": [], "done": 1, "total": 3}'
-    script = (
-        "import time; print('[Agent] hallo', flush=True); "
-        f"print({status!r}, flush=True); time.sleep(0.3)"
-    )
+    script = f"import time; print('[Agent] hallo', flush=True); print({status!r}, flush=True); time.sleep(0.3)"
     runner = AnalyseRunner()
     assert runner.start(opts, argv_builder=lambda o: [sys.executable, "-c", script]) == ws
     with pytest.raises(RuntimeError):
@@ -562,7 +579,6 @@ def client(tmp_path, monkeypatch):
 
     from fastapi.testclient import TestClient
 
-    from audioscribe.config import settings
     from audioscribe.ui import server
 
     _skill(tmp_path / "skills", "prozessrekonstruktion")
@@ -624,9 +640,7 @@ def test_ensure_source_mmd_hat_vorrang_und_reihenfolge(tmp_path):
 
 def test_ensure_source_rueckfall_prozessdoku_zuerst(tmp_path):
     (tmp_path / "a-index.md").write_text("```mermaid\nflowchart TD\n  X --> Y\n```\n", encoding="utf-8")
-    (tmp_path / "prozessdokumentation.md").write_text(
-        f"# Doku\n```mermaid\n{_MERMAID}\n```\n", encoding="utf-8"
-    )
+    (tmp_path / "prozessdokumentation.md").write_text(f"# Doku\n```mermaid\n{_MERMAID}\n```\n", encoding="utf-8")
     quellen = pb.ensure_source(tmp_path, ["a-index.md", "prozessdokumentation.md", "fehlt.md"])
     assert [q.name for q in quellen] == ["prozessbild.mmd"]
     assert (tmp_path / "prozessbild.mmd").read_text(encoding="utf-8").strip() == _MERMAID
@@ -656,11 +670,13 @@ def test_find_browser_reihenfolge():
     assert pb.find_browser(env={}, platform="linux", wsl=True, exists=lambda p: p == edge_wsl, **kw) == edge_wsl
     assert pb.find_browser(env={}, platform="win32", exists=lambda p: p == chrome_win, **kw) == chrome_win
     assert pb.find_browser(env={}, platform="win32", exists=lambda p: False, **kw) is None
-    assert (
-        pb.find_browser(env={}, platform="linux", wsl=False, exists=lambda p: True,
-                        which=lambda n: "/usr/bin/chromium" if n == "chromium" else None)
-        == Path("/usr/bin/chromium")
-    )
+    assert pb.find_browser(
+        env={},
+        platform="linux",
+        wsl=False,
+        exists=lambda p: True,
+        which=lambda n: "/usr/bin/chromium" if n == "chromium" else None,
+    ) == Path("/usr/bin/chromium")
     assert pb.find_browser(env={}, platform="linux", wsl=False, **kw) is None
 
 
@@ -671,11 +687,13 @@ def test_find_browser_macos():
     assert pb.find_browser(env={}, platform="darwin", exists=lambda p: p == chrome, **kw) == chrome
     assert pb.find_browser(env={}, platform="darwin", exists=lambda p: p == edge_home, **kw) == edge_home
     assert pb.find_browser(env={}, platform="darwin", exists=lambda p: False, **kw) is None
-    assert (
-        pb.find_browser(env={}, platform="darwin", exists=lambda p: False, home=Path("/Users/x"),
-                        which=lambda n: "/opt/homebrew/bin/chromium" if n == "chromium" else None)
-        == Path("/opt/homebrew/bin/chromium")
-    )
+    assert pb.find_browser(
+        env={},
+        platform="darwin",
+        exists=lambda p: False,
+        home=Path("/Users/x"),
+        which=lambda n: "/opt/homebrew/bin/chromium" if n == "chromium" else None,
+    ) == Path("/opt/homebrew/bin/chromium")
 
 
 def test_browser_argv_und_seite():
@@ -724,7 +742,8 @@ def test_render_fehler_wird_runtimeerror(tmp_path, monkeypatch):
     mmd = tmp_path / "prozessbild.mmd"
     mmd.write_text(_MERMAID, encoding="utf-8")
     monkeypatch.setattr(
-        pb.subprocess, "run",
+        pb.subprocess,
+        "run",
         lambda argv, **kw: subprocess.CompletedProcess(argv, 0, '<pre id="out">{"error": "Parse error"}</pre>', ""),
     )
     with pytest.raises(RuntimeError, match="Mermaid-Fehler in prozessbild.mmd: Parse error"):
@@ -861,7 +880,7 @@ def test_bpmn_layout_stapelt_zweige_in_derselben_lane():
 def test_bpmn_xml_vollstaendig():
     m = bpmn.parse_modell(_bpmn_daten())
     xml = bpmn.to_bpmn_xml(m, bpmn.layout(m), "Rechnungsprüfung")
-    root = ET.fromstring(xml)
+    root = ET.fromstring(xml)  # noqa: S314 - XML aus eigenem Export im Test
     assert root.get("exporter") == "audioscribe"
     proc = root.find("bpmn:process", _BPMN_NS)
     assert proc.find("bpmn:userTask[@id='S1']", _BPMN_NS).get("name") == "S1: Rechnung prüfen"
@@ -889,7 +908,7 @@ def test_bpmn_svg():
     assert f'width="{lay.width}"' in svg and f'height="{lay.height}"' in svg
     for text in ("S1: Rechnung", "Sachbearbeitung", "Fachbereich", "Rechnungsprüfung", "Korrektur"):
         assert text in svg
-    ET.fromstring(svg)  # wohlgeformt
+    ET.fromstring(svg)  # wohlgeformt  # noqa: S314 - XML aus eigenem Export im Test
 
 
 def test_bpmn_wrap():
@@ -906,7 +925,10 @@ def test_erzeuge_bpmn_und_schutz_bearbeiteter_datei(tmp_path, monkeypatch):
     assert any("PNG fehlt" in z for z in log)
     # In Camunda gespeichert -> fremder exporter -> nicht ueberschreiben (ausser --neu)
     ziel = tmp_path / bpmn.BPMN_NAME
-    ziel.write_text(ziel.read_text(encoding="utf-8").replace('exporter="audioscribe"', 'exporter="Camunda Modeler"'), encoding="utf-8")
+    ziel.write_text(
+        ziel.read_text(encoding="utf-8").replace('exporter="audioscribe"', 'exporter="Camunda Modeler"'),
+        encoding="utf-8",
+    )
     log.clear()
     assert bpmn.erzeuge_bpmn(tmp_path, "Test", log=log.append) == []
     assert "bearbeitet" in log[0]

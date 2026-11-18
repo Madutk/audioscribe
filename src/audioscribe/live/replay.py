@@ -63,15 +63,13 @@ class ReplayCapture:
             self._files[name] = Path(path)
             liste.append({"index": 0, "name": f"Replay {Path(path).name}", "default": True, **info})
 
-    def open(self, name: str, device: dict, wav_path: Path) -> Track:  # noqa: ARG002 - wie AudioCapture
+    def open(self, name: str, device: dict, wav_path: Path) -> Track:  # wie AudioCapture
         path = self._files[name]
         track = Track(name, device["rate"], device["channels"], wav_path, start_sample=self._start_sample)
         with self._lock:
             self._offen += 1
             self._dauer_max = max(self._dauer_max, device["dauer_s"])
-        thread = threading.Thread(
-            target=self._feed, args=(track, path, device), name=f"replay-{name}", daemon=True
-        )
+        thread = threading.Thread(target=self._feed, args=(track, path, device), name=f"replay-{name}", daemon=True)
         self._threads.append(thread)
         self._tracks.append(track)
         thread.start()

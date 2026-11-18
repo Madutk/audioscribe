@@ -8,7 +8,6 @@ Downmix und 16 kHz macht ``Track``.
 from __future__ import annotations
 
 from collections.abc import Callable
-from pathlib import Path
 
 from audioscribe.i18n import tr
 from audioscribe.live.track import Track
@@ -87,7 +86,9 @@ def default_input_index(default) -> int | None:
 class MicStream:
     """Ein offener Eingabestream; ``callback`` füttert den Track mit int16-Blöcken."""
 
-    def __init__(self, track: Track, device: dict, clock: Callable[[], float], log: Callable[[str], None] | None = None) -> None:
+    def __init__(
+        self, track: Track, device: dict, clock: Callable[[], float], log: Callable[[str], None] | None = None
+    ) -> None:
         sd = _sounddevice()
         self._track = track
         self._stream = None
@@ -115,23 +116,25 @@ class MicStream:
             except Exception as exc:  # noqa: BLE001 - z. B. PortAudioError bei fremder Rate
                 letzter = exc
                 if stream is not None:  # geöffnet, aber start() scheiterte
-                    try:
+                    try:  # noqa: SIM105 - try/except/pass bleibt; contextlib.suppress waere Umschreiben
                         stream.close()
-                    except Exception:  # noqa: BLE001
+                    except Exception:  # noqa: BLE001, S110 - Aufraeumen nach gescheitertem Start
                         pass
                 continue
-            if rate != int(device["rate"]):
+            if rate != int(device["rate"]):  # noqa: SIM102 - geschachteltes if bleibt; Zusammenziehen waere Umschreiben
                 if log:
                     log(tr("Mikrofon: {soll} Hz nicht möglich, nehme {rate} Hz", soll=device["rate"], rate=rate))
             self._stream = stream
             return
-        raise RuntimeError(tr("Mikrofon '{name}' lässt sich nicht öffnen ({fehler})", name=device["name"], fehler=letzter))
+        raise RuntimeError(
+            tr("Mikrofon '{name}' lässt sich nicht öffnen ({fehler})", name=device["name"], fehler=letzter)
+        )
 
     def close(self) -> None:
         if self._stream is not None:
             try:
                 self._stream.stop()
                 self._stream.close()
-            except Exception:  # noqa: BLE001 - beim Aufräumen nie scheitern
+            except Exception:  # noqa: BLE001, S110 - beim Aufräumen nie scheitern
                 pass
             self._stream = None

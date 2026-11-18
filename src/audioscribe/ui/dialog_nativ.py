@@ -31,7 +31,7 @@ TITEL_MAX = 120
 sperre = threading.Lock()
 
 
-class DialogFehler(RuntimeError):
+class DialogFehler(RuntimeError):  # noqa: N818 - deutsche Benennung: Fehler statt Error
     """Dialog nicht startbar, abgelaufen oder mit unerwarteter Antwort beendet."""
 
 
@@ -77,8 +77,19 @@ def kommando(start: Path | None, titel: str) -> list[str]:
         if anfang:
             wahl += f' default location (POSIX file "{_applescript(anfang)}")'
         # "activate" holt den Dialog vor den Browser.
-        return ["osascript", "-e", 'tell application "System Events"', "-e", "activate", "-e", wahl,
-                "-e", "POSIX path of f", "-e", "end tell"]
+        return [
+            "osascript",
+            "-e",
+            'tell application "System Events"',
+            "-e",
+            "activate",
+            "-e",
+            wahl,
+            "-e",
+            "POSIX path of f",
+            "-e",
+            "end tell",
+        ]
     if PLATTFORM == "windows":
         ps = (
             "Add-Type -AssemblyName System.Windows.Forms; "
@@ -121,8 +132,12 @@ def waehle_ordner(start: Path | None, titel: str) -> Path | None:
     """Ordnerdialog zeigen und warten. ``None`` = abgebrochen."""
     flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if PLATTFORM == "windows" else 0
     try:
-        proc = subprocess.run(
-            kommando(start, titel), capture_output=True, text=True, timeout=TIMEOUT_S, creationflags=flags,
+        proc = subprocess.run(  # noqa: S603 - Bestand, ungeprüft (REQ-11)
+            kommando(start, titel),
+            capture_output=True,
+            text=True,
+            timeout=TIMEOUT_S,
+            creationflags=flags,
         )
     except subprocess.TimeoutExpired as exc:
         raise DialogFehler(tr("Der Ordnerdialog blieb zu lange offen.")) from exc

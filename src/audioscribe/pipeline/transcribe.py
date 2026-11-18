@@ -21,7 +21,6 @@ from audioscribe.config import (
 from audioscribe.i18n import tr
 from audioscribe.progress import Reporter, emit_download
 
-
 # Auf der CPU bringt Batching kaum Durchsatz, WhisperX meldet Fortschritt aber nur je
 # fertigem Stapel: mit 8 Abschnitten (~4 min Audio) stuende der Balken minutenlang still.
 _CPU_BATCH_SIZE = 2
@@ -72,9 +71,7 @@ def transcribe(audio, reporter: Reporter | None = None) -> dict:
     try:
         # print_progress: WhisperX druckt je VAD-Abschnitt (~30 s Audio) "Progress: N%..." -
         # die Fortschrittsquelle fuer die Oberflaeche. Im Terminal standardmaessig aus.
-        result = model.transcribe(
-            audio, batch_size=_batch_size(device), print_progress=settings.emit_progress
-        )
+        result = model.transcribe(audio, batch_size=_batch_size(device), print_progress=settings.emit_progress)
     except IndexError:
         # WhisperX/transformers wirft IndexError, wenn die VAD keine Sprache findet
         # (stilles/sprachloses Audio) -> leeres Transkript statt Absturz.
@@ -120,7 +117,9 @@ def align(audio, result: dict, reporter: Reporter | None = None) -> dict:
         align_model, metadata = whisperx.load_align_model(language_code=language, device=device)
     except Exception as exc:  # noqa: BLE001 - z.B. keine Modellgewichte fuer die Sprache
         if reporter:
-            reporter.info(tr("Alignment uebersprungen (kein Modell fuer '{sprache}': {fehler})", sprache=language, fehler=exc))
+            reporter.info(
+                tr("Alignment uebersprungen (kein Modell fuer '{sprache}': {fehler})", sprache=language, fehler=exc)
+            )
         return result
 
     try:

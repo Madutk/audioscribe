@@ -13,10 +13,11 @@ from audioscribe.models import TranscriptResult, format_timecode
 
 # Unicode-faehige TTF-Fonts (fuer deutsche Umlaute im PDF). (regular, bold); erster Treffer gewinnt.
 _FONT_CANDIDATES = (
-    ("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-     "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"),
-    ("/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
-     "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"),
+    ("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"),
+    (
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+    ),
     ("C:/Windows/Fonts/arial.ttf", "C:/Windows/Fonts/arialbd.ttf"),
 )
 
@@ -115,7 +116,7 @@ def _unicode_fonts() -> tuple[str, str] | None:
         reg, bold = ttf / "DejaVuSans.ttf", ttf / "DejaVuSans-Bold.ttf"
         if reg.exists():
             return str(reg), str(bold if bold.exists() else reg)
-    except Exception:  # noqa: BLE001
+    except Exception:  # noqa: BLE001, S110 - kein Unicode-Font gefunden -> None
         pass
     return None
 

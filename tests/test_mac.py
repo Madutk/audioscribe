@@ -8,17 +8,14 @@ from __future__ import annotations
 
 import sys
 import types
-from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
 import pytest
 
 from audioscribe.live import berechtigungen
-from audioscribe.live.capture import ensure_permissions, list_devices, open_capture, pick
-from audioscribe.live.capture import coreaudio, sck
+from audioscribe.live.capture import coreaudio, ensure_permissions, list_devices, open_capture, pick, sck
 from audioscribe.live.track import SAMPLE_RATE, Track
-
 
 # --- capture: Fabrik, pick, Geraete ---------------------------------------------------
 
@@ -103,7 +100,7 @@ def _fake_screencapture(monkeypatch, *, rc=0, write=True, seen=None):
 
     from PIL import Image
 
-    def run(argv, **kw):  # noqa: ARG001
+    def run(argv, **kw):
         if seen is not None:
             seen.append(argv)
         if write:
@@ -275,15 +272,15 @@ def test_sck_stream_braucht_pyobjc(monkeypatch):
 
 
 def test_bewerte_berechtigungen_texte():
-    status, teile = berechtigungen.bewerte(
-        bildschirm=False, mikrofon=berechtigungen.NICHT_GEFRAGT, host="Terminal"
-    )
+    status, teile = berechtigungen.bewerte(bildschirm=False, mikrofon=berechtigungen.NICHT_GEFRAGT, host="Terminal")
     assert status == "WARN"
     assert any("Bildschirmaufnahme FEHLT" in t and "'Terminal'" in t for t in teile)
     assert any("noch nicht abgefragt" in t for t in teile)
     status, teile = berechtigungen.bewerte(bildschirm=True, mikrofon=berechtigungen.ERTEILT, host="iTerm")
     assert status == "OK" and teile == ["Bildschirmaufnahme: erteilt", "Mikrofon: erteilt"]
-    status, teile = berechtigungen.bewerte(bildschirm=None, mikrofon=berechtigungen.UNBEKANNT, host="x", pyobjc_fehlt=True)
+    status, teile = berechtigungen.bewerte(
+        bildschirm=None, mikrofon=berechtigungen.UNBEKANNT, host="x", pyobjc_fehlt=True
+    )
     assert status == "WARN" and "--extra mac" in teile[0]
     status, _ = berechtigungen.bewerte(bildschirm=True, mikrofon=berechtigungen.VERWEIGERT, host="x")
     assert status == "WARN"
@@ -392,9 +389,33 @@ def _fake_mlx(calls: list, language="de"):
             "text": " Hallo Welt ",
             "language": language,
             "segments": [
-                {"text": " Hallo", "start": 0.0, "end": 0.5, "avg_logprob": -0.21234, "compression_ratio": 1.1, "no_speech_prob": 0.02, "temperature": 0.0},
-                {"text": " Welt ", "start": 0.5, "end": 1.0, "avg_logprob": -0.3, "compression_ratio": 1.2, "no_speech_prob": 0.01, "temperature": 0.2},
-                {"text": "   ", "start": 1.0, "end": 1.1, "avg_logprob": -1.0, "compression_ratio": 9.0, "no_speech_prob": 0.9, "temperature": 1.0},
+                {
+                    "text": " Hallo",
+                    "start": 0.0,
+                    "end": 0.5,
+                    "avg_logprob": -0.21234,
+                    "compression_ratio": 1.1,
+                    "no_speech_prob": 0.02,
+                    "temperature": 0.0,
+                },
+                {
+                    "text": " Welt ",
+                    "start": 0.5,
+                    "end": 1.0,
+                    "avg_logprob": -0.3,
+                    "compression_ratio": 1.2,
+                    "no_speech_prob": 0.01,
+                    "temperature": 0.2,
+                },
+                {
+                    "text": "   ",
+                    "start": 1.0,
+                    "end": 1.1,
+                    "avg_logprob": -1.0,
+                    "compression_ratio": 9.0,
+                    "no_speech_prob": 0.9,
+                    "temperature": 1.0,
+                },
             ],
         }
 
@@ -407,7 +428,9 @@ def test_mlx_transcriber_waermt_vor_und_mappt_das_ergebnis(monkeypatch, tmp_path
 
     calls: list = []
     monkeypatch.setitem(sys.modules, "mlx_whisper", _fake_mlx(calls))
-    monkeypatch.setattr(asr_mlx, "fetch_mlx_model", lambda repo, on_progress=None: str(tmp_path / repo.replace("/", "_")))
+    monkeypatch.setattr(
+        asr_mlx, "fetch_mlx_model", lambda repo, on_progress=None: str(tmp_path / repo.replace("/", "_"))
+    )
     asr = make_transcriber("mlx", "large-v3-turbo", "mps", "int8", "auto", on_progress=lambda a, b: None)
     assert isinstance(asr, asr_mlx.MlxTranscriber)
     assert len(calls) == 1 and calls[0]["n"] == SAMPLE_RATE  # Aufwaermen mit 1 s Nullen
@@ -502,9 +525,7 @@ def test_fetch_mlx_model_meldet_fehlende_gewichte_klar(monkeypatch, tmp_path):
 
     snap = tmp_path / "snap"
     snap.mkdir()
-    monkeypatch.setitem(
-        sys.modules, "huggingface_hub", SimpleNamespace(snapshot_download=lambda repo, **kw: str(snap))
-    )
+    monkeypatch.setitem(sys.modules, "huggingface_hub", SimpleNamespace(snapshot_download=lambda repo, **kw: str(snap)))
     with pytest.raises(RuntimeError, match="unvollständig"):
         models.fetch_mlx_model("mlx-community/x")
 
@@ -553,7 +574,11 @@ def test_transcribe_dispatcht_auf_mlx(monkeypatch):
     monkeypatch.setattr(t, "resolve_device", lambda raw: "mps")
     monkeypatch.setattr(t, "resolve_asr_backend", lambda raw, device: "mlx")
     fake = types.ModuleType("audioscribe.pipeline.transcribe_mlx")
-    fake.transcribe_mlx = lambda audio, reporter, *, model, language: {"segments": [], "language": language or "x", "model": model}
+    fake.transcribe_mlx = lambda audio, reporter, *, model, language: {
+        "segments": [],
+        "language": language or "x",
+        "model": model,
+    }
     monkeypatch.setitem(sys.modules, "audioscribe.pipeline.transcribe_mlx", fake)
     out = t.transcribe(np.zeros(10, dtype=np.float32))
     assert out["model"] == t.settings.whisper_model
@@ -566,10 +591,38 @@ def test_fenster_mac_eintraege_filtern_shell_und_eigenes():
     from audioscribe.live import fenster_mac
 
     infos = [
-        {"kCGWindowNumber": 1, "kCGWindowName": "Teams", "kCGWindowOwnerName": "Microsoft Teams", "kCGWindowOwnerPID": 10, "kCGWindowLayer": 0, "kCGWindowBounds": {"X": 0, "Y": 0, "Width": 800, "Height": 600}},
-        {"kCGWindowNumber": 2, "kCGWindowName": "", "kCGWindowOwnerName": "Finder", "kCGWindowOwnerPID": 11, "kCGWindowLayer": 0, "kCGWindowBounds": {"Width": 800, "Height": 600}},
-        {"kCGWindowNumber": 3, "kCGWindowName": "Dock", "kCGWindowOwnerName": "Dock", "kCGWindowOwnerPID": 12, "kCGWindowLayer": 20, "kCGWindowBounds": {"Width": 800, "Height": 60}},
-        {"kCGWindowNumber": 4, "kCGWindowName": "Ich", "kCGWindowOwnerName": "Terminal", "kCGWindowOwnerPID": 99, "kCGWindowLayer": 0, "kCGWindowBounds": {"Width": 10, "Height": 10}},
+        {
+            "kCGWindowNumber": 1,
+            "kCGWindowName": "Teams",
+            "kCGWindowOwnerName": "Microsoft Teams",
+            "kCGWindowOwnerPID": 10,
+            "kCGWindowLayer": 0,
+            "kCGWindowBounds": {"X": 0, "Y": 0, "Width": 800, "Height": 600},
+        },
+        {
+            "kCGWindowNumber": 2,
+            "kCGWindowName": "",
+            "kCGWindowOwnerName": "Finder",
+            "kCGWindowOwnerPID": 11,
+            "kCGWindowLayer": 0,
+            "kCGWindowBounds": {"Width": 800, "Height": 600},
+        },
+        {
+            "kCGWindowNumber": 3,
+            "kCGWindowName": "Dock",
+            "kCGWindowOwnerName": "Dock",
+            "kCGWindowOwnerPID": 12,
+            "kCGWindowLayer": 20,
+            "kCGWindowBounds": {"Width": 800, "Height": 60},
+        },
+        {
+            "kCGWindowNumber": 4,
+            "kCGWindowName": "Ich",
+            "kCGWindowOwnerName": "Terminal",
+            "kCGWindowOwnerPID": 99,
+            "kCGWindowLayer": 0,
+            "kCGWindowBounds": {"Width": 10, "Height": 10},
+        },
     ]
     out = fenster_mac.eintraege(infos, eigene_pid=99)
     assert out == [{"hwnd": 1, "title": "Teams", "process": "Microsoft Teams", "pid": 10, "width": 800, "height": 600}]
@@ -588,16 +641,17 @@ def test_fenster_delegiert_unter_macos(monkeypatch):
     monkeypatch.setitem(sys.modules, "audioscribe.live.fenster_mac", fake)
     monkeypatch.setattr(audioscribe.live, "fenster_mac", fake, raising=False)
     # Teams vorangestellt und markiert (fenster.sortiere_bevorzugt)
-    assert fenster.list_windows() == [{"hwnd": 6, "process": "Microsoft Teams", "bevorzugt": True}, {"hwnd": 5, "bevorzugt": False}]
+    assert fenster.list_windows() == [
+        {"hwnd": 6, "process": "Microsoft Teams", "bevorzugt": True},
+        {"hwnd": 5, "bevorzugt": False},
+    ]
     assert fenster.is_window(5) and not fenster.is_window(6)
     assert fenster.window_title(5) == "T"
 
 
 def test_fenster_liste_leer_ohne_pyobjc_unter_macos(monkeypatch):
-    from audioscribe.live import fenster
-
     import audioscribe.live
-    from audioscribe.live import fenster_mac
+    from audioscribe.live import fenster, fenster_mac
 
     monkeypatch.setattr(fenster.sys, "platform", "darwin")
     monkeypatch.setitem(sys.modules, "Quartz", None)
@@ -615,7 +669,9 @@ def test_session_bilanz_traegt_backend_und_geraet(tmp_path, monkeypatch):
 
     monkeypatch.setattr(sess.events, "emit", lambda *a, **k: None)
     monkeypatch.setattr(sess.events, "log", lambda *a, **k: None)
-    s = LiveSession(LiveOptions(output_dir=tmp_path, model="large-v3-turbo", device="mps", compute_type="int8", backend="mlx"))
+    s = LiveSession(
+        LiveOptions(output_dir=tmp_path, model="large-v3-turbo", device="mps", compute_type="int8", backend="mlx")
+    )
     s._asr = SimpleNamespace(detected="de")
     s.dir.mkdir(parents=True)
     s._finish(laden_s=1.0, aufnahme_s=2.0, abschluss_s=0.1, gesamt_s=3.2)
@@ -628,7 +684,11 @@ def test_session_laedt_asr_ueber_die_fabrik(monkeypatch, tmp_path):
     from audioscribe.live.session import LiveOptions, LiveSession
 
     seen = {}
-    monkeypatch.setattr(asr, "make_transcriber", lambda backend, model, device, ct, lang, **kw: seen.update(backend=backend, device=device) or "ASR")
+    monkeypatch.setattr(
+        asr,
+        "make_transcriber",
+        lambda backend, model, device, ct, lang, **kw: seen.update(backend=backend, device=device) or "ASR",
+    )
     s = LiveSession(LiveOptions(output_dir=tmp_path, model="small", device="mps", compute_type="int8", backend="mlx"))
     assert s._load_asr() == "ASR"
     assert seen == {"backend": "mlx", "device": "mps"}
@@ -637,5 +697,7 @@ def test_session_laedt_asr_ueber_die_fabrik(monkeypatch, tmp_path):
 def test_beschreibe_live_nennt_backend():
     from audioscribe.live.bilanz import LiveBilanz, beschreibe_live
 
-    b = LiveBilanz(laden_s=1, aufnahme_s=10, abschluss_s=0.1, gesamt_s=11, backend="mlx", geraet="mps", modell="large-v3-turbo")
+    b = LiveBilanz(
+        laden_s=1, aufnahme_s=10, abschluss_s=0.1, gesamt_s=11, backend="mlx", geraet="mps", modell="large-v3-turbo"
+    )
     assert beschreibe_live(b).endswith("large-v3-turbo/mlx/mps")

@@ -27,8 +27,7 @@ def _load_transcript(out_dir: Path) -> dict:
     tj = out_dir / "transcript.json"
     if not tj.exists():
         raise FileNotFoundError(
-            f"transcript.json nicht gefunden in {out_dir}. "
-            "Zuerst 'audioscribe run <video>' ausfuehren."
+            f"transcript.json nicht gefunden in {out_dir}. Zuerst 'audioscribe run <video>' ausfuehren."
         )
     return json.loads(tj.read_text(encoding="utf-8"))
 
@@ -97,7 +96,7 @@ def create_app(out_dir: str | Path):
         abs_png, rel_png = _unique_frame_path(frames_dir, t)
         try:
             extract_frame(video_path, t, abs_png)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             raise HTTPException(500, f"Frame-Extraktion fehlgeschlagen: {exc}") from exc
         mark = Mark(
             t=t,
@@ -118,7 +117,7 @@ def create_app(out_dir: str | Path):
         png = (out_dir / body.png).resolve()
         # Pfad-Traversal absichern: nur Dateien innerhalb von frames/ loeschen.
         if frames_dir in png.parents and png.exists():
-            try:
+            try:  # noqa: SIM105 - try/except/pass bleibt; contextlib.suppress waere Umschreiben
                 png.unlink()
             except OSError:
                 pass
@@ -141,9 +140,9 @@ def serve(
     app = create_app(out_dir)
     url = f"http://{host}:{port}/"
     if open_browser:
-        try:
+        try:  # noqa: SIM105 - try/except/pass bleibt; contextlib.suppress waere Umschreiben
             webbrowser.open(url)
-        except Exception:  # noqa: BLE001
+        except Exception:  # noqa: BLE001, S110 - Browser oeffnen ist Zugabe
             pass
     print(f"AudioScribe Review laeuft auf {url}  (Strg+C zum Beenden)")
     uvicorn.run(app, host=host, port=port, log_level="warning")

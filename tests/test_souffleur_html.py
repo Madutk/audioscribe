@@ -42,7 +42,18 @@ def souffleur_js() -> str:
 
 
 def test_sprite_hat_die_neuen_symbole(html):
-    for name in ("book", "book-x", "zap", "circle-dashed", "help-circle", "eye", "eye-off", "copy", "lightbulb", "fast-forward"):
+    for name in (
+        "book",
+        "book-x",
+        "zap",
+        "circle-dashed",
+        "help-circle",
+        "eye",
+        "eye-off",
+        "copy",
+        "lightbulb",
+        "fast-forward",
+    ):
         assert f'<symbol id="i-{name}"' in html, name
 
 
@@ -73,7 +84,7 @@ def test_souffleur_kopf_hat_zaehler_schalter_zustand_und_ausblenden(html):
 
 def test_live_region_nur_auf_dem_unsichtbaren_zaehler(html):
     assert 'class="sr-only" id="souffleurLive" aria-live="polite"' in html
-    aside = html[html.index('id="liveAside"'):html.index('id="lightbox"')]
+    aside = html[html.index('id="liveAside"') : html.index('id="lightbox"')]
     assert aside.count("aria-live") == 1
     assert 'role="alert"' not in aside
 
@@ -90,16 +101,23 @@ def test_souffleur_wiki_zeile_werkzeuge_essenz_liste_offene_punkte(html):
     assert 'id="souffleurHandover"' in html
     assert 'id="souffleurErr"' in html
     # Reihenfolge innerhalb der Karte: Wiki-Chip und Essenz in einer Zeile, darunter die eine Scrollflaeche
-    order = ["souffleurWiki", "souffleurEssenz2", "souffleurBody", "souffleurEssenz", "souffleurLeitfaden",
-             "souffleurList", "souffleurOpen"]
+    order = [
+        "souffleurWiki",
+        "souffleurEssenz2",
+        "souffleurBody",
+        "souffleurEssenz",
+        "souffleurLeitfaden",
+        "souffleurList",
+        "souffleurOpen",
+    ]
     positions = [html.index(f'id="{i}"') for i in order]
     assert positions == sorted(positions)
 
 
 def test_souffleur_seltenes_steckt_im_menue(html, js):
-    karte = html[html.index('id="souffleur"'):html.index('id="liveShots"')]
+    karte = html[html.index('id="souffleur"') : html.index('id="liveShots"')]
     assert 'id="souffleurMehr" aria-haspopup="true" aria-expanded="false" aria-controls="souffleurMenu"' in karte
-    menue = karte[karte.index('id="souffleurMenu"'):karte.index('class="souffleur-tools"')]
+    menue = karte[karte.index('id="souffleurMenu"') : karte.index('class="souffleur-tools"')]
     assert 'role="menu" hidden' in menue
     for i in ("souffleurWikiWechseln", "souffleurWikiLoesen"):
         assert f'id="{i}"' in menue
@@ -109,12 +127,12 @@ def test_souffleur_seltenes_steckt_im_menue(html, js):
 
 
 def test_leitfaden_fokus_alle_und_nachhaken(html, js):
-    lf = html[html.index('id="souffleurLeitfaden"'):html.index('id="souffleurList"')]
+    lf = html[html.index('id="souffleurLeitfaden"') : html.index('id="souffleurList"')]
     for i in ("souffleurLeitfadenBar", "souffleurLeitfadenCount", "souffleurLeitfadenList", "souffleurLeitfadenAlle"):
         assert f'id="{i}"' in lf
     assert "souffleurLeitfadenFilter" not in html
     assert "const LF_FOKUS = 3;" in js
-    fokus = js[js.index("function lfFokus"):js.index("function lfAlleHtml")]
+    fokus = js[js.index("function lfFokus") : js.index("function lfAlleHtml")]
     assert "lfAnstossVon(p) ? 0 : p.prioritaet === 'muss' ? 1 : 2" in fokus and "!lfErledigt(p)" in fokus
     # Anknuepfen: keine eigene Karte, sondern am Punkt; der Chip im Transkript fuehrt dorthin
     assert "if (h.art === 'anknuepfen') { addAnstoss(h); return; }" in js
@@ -140,7 +158,7 @@ def test_testmodus_unteroptionen_und_badge(html, js):
 
 
 def test_startlive_sendet_replay_felder_und_keine_geraete_im_testmodus(js):
-    start = js[js.index("async function startLive(resume)"):js.index("function insertByTime")]
+    start = js[js.index("async function startLive(resume)") : js.index("function insertByTime")]
     assert "replay_transcript: replay" in start and "replay_speed: replaySpeed()" in start
     assert "mic: test ? 'none'" in start and "loopback: test ? 'none'" in start
     # PRD §21: Sitzungstitel und - bei einer Wiederaufnahme - der Ordner der unterbrochenen Sitzung
@@ -157,7 +175,7 @@ def test_live_defaults_belegen_testmodus_vor(js):
 
 def test_projekteinstellungen_karte_wiki(html):
     """K1 seit PRD §21: das Wiki gehoert zum Projekt - Zustand in den Projekteinstellungen."""
-    karte = html[html.index('id="setWikiCard"'):html.index('id="pSitzungen"')]
+    karte = html[html.index('id="setWikiCard"') : html.index('id="pSitzungen"')]
     assert "Projekt und Wiki" in karte and 'id="pWurzel"' in karte
     assert 'id="setWikiState"' in karte and 'class="wiki-state none"' in karte
     # Kein freies Wiki-Feld und kein Uebergabeordner mehr; kein Glossar-Feld (Glossar ist Teil des Wikis).
@@ -180,7 +198,7 @@ def test_wiki_zustand_und_ordnerwahl_im_skript(js):
 def test_segmente_tragen_data_id_und_markierung_laesst_text_unveraendert(js):
     assert "el.dataset.id = ev.id" in js
     assert "hintBySeg.get(ev.id)" in js  # Markierung nachziehen, wenn die Zeile nach dem Hinweis kommt
-    mark = js[js.index("function markSegment"):js.index("function wikiQuoteHtml")]
+    mark = js[js.index("function markSegment") : js.index("function wikiQuoteHtml")]
     assert "classList.add('marked', a.cls)" in mark
     assert "insertAdjacentHTML('beforeend'" in mark  # Chip NACH .lag, kein Umbau des Textknotens
     assert "data-goto-hint" in mark and "aria-label=" in mark
@@ -194,21 +212,25 @@ def test_drei_arten_mit_eigener_klasse_icon_und_wort(js):
 
 
 def test_hinweisinhalt_wiki_beleg_ki_und_ohne_befund(js):
-    body = js[js.index("function hintBodyHtml"):js.index("function hintItemEl")]
+    body = js[js.index("function hintBodyHtml") : js.index("function hintItemEl")]
     assert "Im Wiki liegt dazu nichts vor." in body
     # ohne Befund: KEIN KI-Text
     assert body.index("Im Wiki liegt dazu nichts vor.") < body.index("kiHtml(")
     assert "kiHtml('Antwortvorschlag', h.ki_text)" in body and "kiHtml('Einschätzung', h.ki_text)" in body
-    quote = js[js.index("function wikiQuoteHtml"):js.index("const kiHtml")]
-    assert '<blockquote class="wiki">' in quote and "data-copy=" in quote and 'aria-label="${tr(\'Fundstelle kopieren\')}"' in quote
+    quote = js[js.index("function wikiQuoteHtml") : js.index("const kiHtml")]
+    assert (
+        '<blockquote class="wiki">' in quote
+        and "data-copy=" in quote
+        and "aria-label=\"${tr('Fundstelle kopieren')}\"" in quote
+    )
     assert "h.wiki_zitat" in quote
     assert 'class="tag ki"' in js and "${tr('KI')}</span>" in js
 
 
 def test_kein_produktname_in_der_oberflaeche(html, souffleur_js):
     """Der Souffleur sagt nur „KI“. Welcher Dienst dahintersteht, steht allein in den Einstellungen."""
-    aside = html[html.index('id="liveAside"'):html.index('id="lightbox"')]
-    karte = html[html.index('id="setWikiCard"'):html.index('id="pSitzungen"')]
+    aside = html[html.index('id="liveAside"') : html.index('id="lightbox"')]
+    karte = html[html.index('id="setWikiCard"') : html.index('id="pSitzungen"')]
     for text in (aside, karte, souffleur_js):
         assert not re.search(r"claude|anthropic|gpt|openai|sonnet|opus|haiku", text, re.I)
 
@@ -221,13 +243,13 @@ def test_liste_neueste_oben_nur_neuester_offen_aeltere_ab_zehn(js):
 
 
 def test_zustaende_und_essenz(js):
-    state = js[js.index("function renderSouffleurState"):js.index("function renderSouffleur(")]
+    state = js[js.index("function renderSouffleurState") : js.index("function renderSouffleur(")]
     for text in ("'pausiert'", "'läuft'", "'ohne Wiki'", "'KI nicht verfügbar'"):
         assert text in state, text
     assert "post('/api/souffleur/toggle', { aktiv })" in js
     assert "post('/api/souffleur/essenz', { minuten })" in js
     # Fehler ruhig im Bereich, kein alert/Toast
-    essenz = js[js.index("async function essenz("):js.index("function essenzHtml")]
+    essenz = js[js.index("async function essenz(") : js.index("function essenzHtml")]
     assert "$('souffleurErr').textContent = err.message" in essenz and "alert(" not in essenz
     assert "erzeugt in" in js
 
@@ -241,9 +263,13 @@ def test_offene_punkte_aus_hinweisen_und_wiki_ablage(js):
 
 
 def test_wiki_dialog_fragt_nach_den_markierungen(html, js):
-    dialog = html[html.index('id="wikiDlg"'):html.index('id="previewDlg"')]
-    haken = dialog[dialog.index('id="wikiDlgMarkierungen"') - 40:dialog.index('id="wikiDlgImmerRow"')]
-    assert dialog.index('id="wikiDlgBilder"') < dialog.index('id="wikiDlgMarkierungen"') < dialog.index('id="wikiDlgImmer"')
+    dialog = html[html.index('id="wikiDlg"') : html.index('id="previewDlg"')]
+    haken = dialog[dialog.index('id="wikiDlgMarkierungen"') - 40 : dialog.index('id="wikiDlgImmerRow"')]
+    assert (
+        dialog.index('id="wikiDlgBilder"')
+        < dialog.index('id="wikiDlgMarkierungen"')
+        < dialog.index('id="wikiDlgImmer"')
+    )
     assert "checked" not in haken and "KI-erzeugt" in haken  # Vorgabe: aus, und warum
     assert "markierungen: $('wikiDlgMarkierungen').checked" in js
     assert "$('wikiDlgMarkierungen').checked = p.wiki_markierungen === true" in js
@@ -261,26 +287,33 @@ def test_ausblenden_alt_s_esc_und_chips(js):
 
 
 def test_reset_leert_souffleur(js):
-    reset = js[js.index("function resetLiveView()"):js.index("async function resetLive()")]
+    reset = js[js.index("function resetLiveView()") : js.index("async function resetLive()")]
     assert "resetSouffleurView()" in reset
-    sreset = js[js.index("function resetSouffleurView()"):js.index("function markSegment")]
-    for text in ("souffleurHints = []", "souffleurEssenzen = []", "hintBySeg.clear()", "hintEls.clear()",
-                 "$('souffleurEssenz').innerHTML = ''", "updateHintCount()", "renderOpenPoints()"):
+    sreset = js[js.index("function resetSouffleurView()") : js.index("function markSegment")]
+    for text in (
+        "souffleurHints = []",
+        "souffleurEssenzen = []",
+        "hintBySeg.clear()",
+        "hintEls.clear()",
+        "$('souffleurEssenz').innerHTML = ''",
+        "updateHintCount()",
+        "renderOpenPoints()",
+    ):
         assert text in sreset, text
 
 
 def test_demo_sagt_dass_der_fall_erfunden_ist(html, css):
     # Plakativ ueber der Ansicht und als Marke im Kopf - beides nur in der Demo sichtbar.
-    banner = html[html.index('id="demoFiktiv"'):html.index('id="tabMeta"')]
-    assert 'data-nur="demo"' in html[html.index('<div class="demo-fiktiv"'):html.index('id="tabMeta"')]
+    banner = html[html.index('id="demoFiktiv"') : html.index('id="tabMeta"')]
+    assert 'data-nur="demo"' in html[html.index('<div class="demo-fiktiv"') : html.index('id="tabMeta"')]
     assert "Erfundenes Beispiel" in banner and "frei erfunden" in banner and "nicht auf Tatsachen" in banner
-    kopf = html[html.index('id="ctx"'):html.index('id="ctxClose"')]
+    kopf = html[html.index('id="ctx"') : html.index('id="ctxClose"')]
     assert 'data-nur="demo">erfundenes Beispiel<' in kopf
     assert ".demo-fiktiv" in css
 
 
 def test_demo_hat_einen_pauseknopf(html, js):
-    leiste = html[html.index('id="demoBar"'):html.index('id="demoErr"')]
+    leiste = html[html.index('id="demoBar"') : html.index('id="demoErr"')]
     assert leiste.index('id="demoStart"') < leiste.index('id="demoPause"') < leiste.index('id="demoStop"')
     assert 'aria-pressed="false"' in leiste and '<symbol id="i-pause"' in html
     assert "post('/api/live/pause'" in js and "'Weiter' : 'Pause'" in js
@@ -297,10 +330,31 @@ def test_phase_abschluss_bekannt(js):
 def test_css_grid_und_bausteine(css):
     assert "#tabLive { grid-template-columns: minmax(0, .85fr) minmax(0, 1.9fr) minmax(0, 1.15fr); }" in css
     assert ".live-shots" not in css
-    for sel in (".live-aside", ".live-aside.collapsed", ".hint-list", ".hint-item", ".mark.widerspruch", ".mark.offen",
-                ".mark.frage", "blockquote.wiki", "p.wiki.none", ".ki {", ".tag.ki", ".wiki-state", ".switch",
-                ".speed", ".monitor.test", ".seg.flash", ".sr-only", "body.souffleur-hidden .seg .mark", ".reopen",
-                "details.open-box", "ul.open-list", "details.older", "details.shots"):
+    for sel in (
+        ".live-aside",
+        ".live-aside.collapsed",
+        ".hint-list",
+        ".hint-item",
+        ".mark.widerspruch",
+        ".mark.offen",
+        ".mark.frage",
+        "blockquote.wiki",
+        "p.wiki.none",
+        ".ki {",
+        ".tag.ki",
+        ".wiki-state",
+        ".switch",
+        ".speed",
+        ".monitor.test",
+        ".seg.flash",
+        ".sr-only",
+        "body.souffleur-hidden .seg .mark",
+        ".reopen",
+        "details.open-box",
+        "ul.open-list",
+        "details.older",
+        "details.shots",
+    ):
         assert sel in css, sel
 
 
@@ -317,15 +371,15 @@ def test_css_tokens_tragen_beide_modi_und_souffleur_bleibt_ohne_harte_farben(css
     assert ':root[data-theme="light"] { color-scheme: light; }' in css
     assert ':root[data-theme="dark"] { color-scheme: dark; }' in css
     assert "@media (prefers-color-scheme: dark)" not in css
-    block = css[css.index("/* --- Souffleur"):css.index("/* --- Responsiv")]
+    block = css[css.index("/* --- Souffleur") : css.index("/* --- Responsiv")]
     assert not re.search(r"#[0-9a-fA-F]{3,6}\b", block)
 
 
 def test_css_responsiv_und_reduced_motion(css):
-    r1200 = css[css.index("@media (max-width: 1200px)"):css.index("@media (max-width: 860px)")]
+    r1200 = css[css.index("@media (max-width: 1200px)") : css.index("@media (max-width: 860px)")]
     assert ".live-aside { grid-column: 1 / -1; }" in r1200
     assert "grid-template-columns: repeat(2, minmax(0, 1fr))" in r1200
-    r860 = css[css.index("@media (max-width: 860px)"):css.index("@media (max-width: 560px)")]
+    r860 = css[css.index("@media (max-width: 860px)") : css.index("@media (max-width: 560px)")]
     assert ".hint-list { grid-template-columns: 1fr; }" in r860
     assert "@media (prefers-reduced-motion: reduce)" in css
 
@@ -335,14 +389,14 @@ def test_css_responsiv_und_reduced_motion(css):
 
 def test_mitdenker_hat_haekchen_und_eigenen_bereich(html):
     assert '<label class="sf-mitdenken" id="souffleurMitdenkenWahl"' in html
-    haken = html[html.index('id="souffleurMitdenkenOn"') - 40:html.index('id="souffleurMitdenkenOn"') + 40]
+    haken = html[html.index('id="souffleurMitdenkenOn"') - 40 : html.index('id="souffleurMitdenkenOn"') + 40]
     assert 'type="checkbox"' in haken and "checked" not in haken  # Vorgabe aus
     assert '<section class="md" id="souffleurMitdenken" hidden' in html
     for ident in ("souffleurMitdenkenCount", "souffleurMitdenkenState", "souffleurMitdenkenList"):
         assert f'id="{ident}"' in html
     # Eigener Bereich zwischen den Hinweisen und den offenen Punkten - nicht in der Hinweisliste.
     assert html.index('id="souffleurList"') < html.index('id="souffleurMitdenken"') < html.index('id="souffleurOpen"')
-    liste = html[html.index('id="souffleurList"'):html.index('id="souffleurMitdenken"')]
+    liste = html[html.index('id="souffleurList"') : html.index('id="souffleurMitdenken"')]
     assert "souffleurMitdenkenList" not in liste
 
 
@@ -355,17 +409,25 @@ def test_mitdenker_karten_laufen_getrennt_von_den_hinweisen():
         assert f"{art}: {{ cls: '{art}'" in js
     # Herkunft je Karte sichtbar; Wiki-Beleg nur mit geprüftem Zitat; KI-Text als KI gekennzeichnet.
     assert "MD_HERKUNFT = { wiki: 'Wiki', gespraech: 'Gespräch', allgemeinwissen: 'KI-Wissen' }" in js
-    karte = js[js.index("function gedankeEl(k)"):js.index("export function addGedanke(k)")]
+    karte = js[js.index("function gedankeEl(k)") : js.index("export function addGedanke(k)")]
     assert "k.wiki_zitat && k.fundstellen" in karte and "kiHtml(a.rolle, k.ki_text)" in karte and "md-her" in karte
     # Karten zählen nicht als Hinweise und landen nicht in deren Liste oder bei den offenen Punkten.
-    add = js[js.index("export function addGedanke(k)"):js.index("async function toggleMitdenken()")]
+    add = js[js.index("export function addGedanke(k)") : js.index("async function toggleMitdenken()")]
     assert "souffleurHints" not in add and "hintBySeg" not in add and "$('souffleurList')" not in add
 
 
 def test_mitdenker_css_nutzt_tokens(css):
-    for sel in (".sf-mitdenken", ".md {", ".mark.bestaetigung", ".mark.erkenntnis", ".mark.gedanke",
-                ".md-item.bestaetigung", ".md-item.gedanke", ".tag.her"):
+    for sel in (
+        ".sf-mitdenken",
+        ".md {",
+        ".mark.bestaetigung",
+        ".mark.erkenntnis",
+        ".mark.gedanke",
+        ".md-item.bestaetigung",
+        ".md-item.gedanke",
+        ".tag.her",
+    ):
         assert sel in css, sel
-    block = css[css.index("/* Mitdenker:"):css.index("/* Aeltere Hinweise")]
+    block = css[css.index("/* Mitdenker:") : css.index("/* Aeltere Hinweise")]
     assert not re.search(r"#[0-9a-fA-F]{3,6}\b", block)
     assert "border-style: dashed" in css.split(".mark.gedanke")[1].split("\n")[0]  # KI-erzeugt: gestrichelt wie .ki

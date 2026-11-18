@@ -54,7 +54,9 @@ def _fake_bin(tmp_path: Path, os_name: str, arch: str, nvidia: bool) -> Path:
     (bin_dir / "uname").write_text(
         f'#!/bin/sh\ncase "$1" in -s) echo {os_name};; -m) echo {arch};; *) echo {os_name};; esac\n'
     )
-    (bin_dir / "uv").write_text('#!/bin/sh\necho "UV $*"\necho "VENV $UV_PROJECT_ENVIRONMENT"\necho "MPSFB ${PYTORCH_ENABLE_MPS_FALLBACK:-}"\n')
+    (bin_dir / "uv").write_text(
+        '#!/bin/sh\necho "UV $*"\necho "VENV $UV_PROJECT_ENVIRONMENT"\necho "MPSFB ${PYTORCH_ENABLE_MPS_FALLBACK:-}"\n'
+    )
     if nvidia:
         (bin_dir / "nvidia-smi").write_text("#!/bin/sh\nexit 0\n")
     for f in bin_dir.iterdir():
@@ -111,7 +113,11 @@ def test_start_sh_aufnahme(tmp_path):
     """Verknuepfung "Sofort aufnehmen": --aufnahme wandert an 'audioscribe ui'."""
     out = _run(tmp_path, "Darwin", "arm64", "--aufnahme")
     assert "audioscribe ui --port 8766 --aufnahme" in out
-    out = _run(tmp_path / "b", "Linux", "x86_64", "--no-browser", "--aufnahme") if (tmp_path / "b").mkdir() is None else ""
+    out = (
+        _run(tmp_path / "b", "Linux", "x86_64", "--no-browser", "--aufnahme")
+        if (tmp_path / "b").mkdir() is None
+        else ""
+    )
     assert "audioscribe ui --port 8766 --no-browser --aufnahme" in out
 
 
@@ -119,7 +125,9 @@ def test_doppelklick_dateien_rufen_aufnahme():
     assert "./start.sh --aufnahme" in (ROOT / "Sofort aufnehmen.command").read_text()
     cmd = (ROOT / "Sofort aufnehmen.cmd").read_text()
     assert "start.ps1" in cmd and "-Aufnahme" in cmd and "-ExecutionPolicy Bypass" in cmd
-    assert "[switch]$Aufnahme" in (ROOT / "start.ps1").read_text() and "'--aufnahme'" in (ROOT / "start.ps1").read_text()
+    assert (
+        "[switch]$Aufnahme" in (ROOT / "start.ps1").read_text() and "'--aufnahme'" in (ROOT / "start.ps1").read_text()
+    )
 
 
 @pytest.mark.skipif(os.name == "nt", reason="bash")

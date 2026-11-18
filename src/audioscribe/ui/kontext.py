@@ -75,8 +75,14 @@ def demo_projekt() -> Projekt:
     """Das Demo-Wiki als Projekt: Sitzungen landen im Cache, ins Wiki wird nie gespeichert."""
     ablage = settings.cache_dir / "demo"
     return Projekt(
-        wurzel=demo_wurzel(), name=tr("Demo: Bahnbuchung"), sitzungen_dir=ablage, wiki_dir=demo_wurzel(),
-        assets_dir=ablage / "assets", wiki_speichern=modell.WIKI_NIE, wiki_bilder=False, demo=True,
+        wurzel=demo_wurzel(),
+        name=tr("Demo: Bahnbuchung"),
+        sitzungen_dir=ablage,
+        wiki_dir=demo_wurzel(),
+        assets_dir=ablage / "assets",
+        wiki_speichern=modell.WIKI_NIE,
+        wiki_bilder=False,
+        demo=True,
     )
 
 
@@ -222,7 +228,7 @@ def unterbrochene(state: Mapping[str, object], aktiv: Projekt | None = None) -> 
         gesehen.add(wurzel)
         try:
             for s in offene_sitzungen(ordner):
-                out.append({**s, "projekt": wurzel, "projekt_name": name})
+                out.append({**s, "projekt": wurzel, "projekt_name": name})  # noqa: PERF401 - Schleife bleibt; Comprehension waere Umschreiben
         except OSError:
             continue
     return out

@@ -202,7 +202,7 @@ def verbinde_teile(session_dir: Path) -> list[Path]:
             if ziel.parent.is_dir():
                 alt.update(p for p in ziel.parent.glob(f"{ziel.stem}.teil*{ziel.suffix}") if p not in ziele)
     for pfad in alt:
-        try:
+        try:  # noqa: SIM105 - try/except/pass bleibt; contextlib.suppress waere Umschreiben
             pfad.unlink()
         except OSError:
             pass

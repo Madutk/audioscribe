@@ -27,16 +27,27 @@ MEETING = DATA / "meeting"
 
 def _fundstellen():
     return [
-        {"id": "F1", "datei": "wiki/freigaben.md", "ueberschrift": "Grenzen",
-         "auszug": "Rechnungen ab 5.000 Euro gibt die Teamleitung frei. Rechnungen unter 5.000 Euro gibt die Sachbearbeitung selbst frei."},
-        {"id": "F2", "datei": "wiki/stammdaten.md", "ueberschrift": "Rollen",
-         "auszug": "Die Pflege der Lieferantenstammdaten liegt beim Einkauf. Die Buchhaltung prüft nur die Bankverbindung."},
+        {
+            "id": "F1",
+            "datei": "wiki/freigaben.md",
+            "ueberschrift": "Grenzen",
+            "auszug": "Rechnungen ab 5.000 Euro gibt die Teamleitung frei. Rechnungen unter 5.000 Euro gibt die Sachbearbeitung selbst frei.",
+        },
+        {
+            "id": "F2",
+            "datei": "wiki/stammdaten.md",
+            "ueberschrift": "Rollen",
+            "auszug": "Die Pflege der Lieferantenstammdaten liegt beim Einkauf. Die Buchhaltung prüft nur die Bankverbindung.",
+        },
     ]
 
 
 def test_attrappe_erkennt_fragen_offene_punkte_und_regeln():
-    regel = AttrappenRegel(aussage="ab 10.000 Euro", fundstelle="freigaben.md › Grenzen",
-                           zitat="Rechnungen ab 5.000 Euro gibt die Teamleitung frei.")
+    regel = AttrappenRegel(
+        aussage="ab 10.000 Euro",
+        fundstelle="freigaben.md › Grenzen",
+        zitat="Rechnungen ab 5.000 Euro gibt die Teamleitung frei.",
+    )
     ki = AttrappeKi(regeln=[regel])
     segmente = [
         {"id": 1, "text": "Guten Morgen zusammen."},
@@ -74,8 +85,10 @@ def test_attrappe_frage_ohne_treffer_und_offener_punkt():
 
 def test_attrappe_essenz_nimmt_erste_saetze():
     ki = AttrappeKi()
-    segmente = [{"id": 1, "text": "Die Freigabe dauert drei Werktage. Danach folgt die Buchung."},
-                {"id": 2, "text": "Ja."}]
+    segmente = [
+        {"id": 1, "text": "Die Freigabe dauert drei Werktage. Danach folgt die Buchung."},
+        {"id": 2, "text": "Ja."},
+    ]
     antwort = ki.antworte(KiAuftrag("s", "p", {}, {"art": "essenz", "segmente": segmente}))
     assert antwort.daten == {"essenz": [{"punkt": "Die Freigabe dauert drei Werktage."}], "offen": []}
 
@@ -215,8 +228,9 @@ def test_lade_konfig_liest_wiki_pfad_nur_aus_dem_stand(tmp_path, monkeypatch):
 
     k = konfig.lade_konfig({})
     assert k.wiki_dir is None
-    k = konfig.lade_konfig({"wiki_dir": str(WIKI), "souffleur_model": "claude-opus-5", "souffleur_aktiv": False},
-                           speed=5.0)
+    k = konfig.lade_konfig(
+        {"wiki_dir": str(WIKI), "souffleur_model": "claude-opus-5", "souffleur_aktiv": False}, speed=5.0
+    )
     assert k.wiki_dir == WIKI.resolve() and k.modell == "claude-opus-5" and k.aktiv is False and k.speed == 5.0
 
 
@@ -225,12 +239,23 @@ def test_lade_konfig_nimmt_wiki_und_ki_aus_dem_projekt(tmp_path):
     from audioscribe.projekt.modell import Projekt
     from audioscribe.souffleur import konfig
 
-    projekt = Projekt(wurzel=tmp_path / "p", name="Test", sitzungen_dir=tmp_path / "s", wiki_dir=WIKI,
-                      assets_dir=WIKI / "raw" / "assets", souffleur_model="claude-haiku-4-5-20251001")
+    projekt = Projekt(
+        wurzel=tmp_path / "p",
+        name="Test",
+        sitzungen_dir=tmp_path / "s",
+        wiki_dir=WIKI,
+        assets_dir=WIKI / "raw" / "assets",
+        souffleur_model="claude-haiku-4-5-20251001",
+    )
     k = konfig.lade_konfig({"wiki_dir": str(tmp_path / "anderes"), "souffleur_model": "claude-opus-5"}, projekt=projekt)
     assert k.wiki_dir == WIKI and k.modell == "claude-haiku-4-5-20251001"
-    ohne = Projekt(wurzel=tmp_path / "p", name="Test", sitzungen_dir=tmp_path / "s", wiki_dir=WIKI,
-                   assets_dir=WIKI / "raw" / "assets")
+    ohne = Projekt(
+        wurzel=tmp_path / "p",
+        name="Test",
+        sitzungen_dir=tmp_path / "s",
+        wiki_dir=WIKI,
+        assets_dir=WIKI / "raw" / "assets",
+    )
     assert konfig.lade_konfig({"souffleur_model": "claude-opus-5"}, projekt=ohne).modell == "claude-opus-5"
     # Projekt ohne Wiki: auch das Wiki der Installation gilt dann nicht.
     ohne_wiki = Projekt(wurzel=tmp_path / "p", name="Test", sitzungen_dir=tmp_path / "s")
@@ -255,11 +280,14 @@ def _souffleur(tmp_path, *, wiki=None, ki=None, aktiv=True, **extra):
     from audioscribe.souffleur.ki import KiStatus
     from audioscribe.souffleur.konfig import SouffleurKonfig
 
-    konfig = SouffleurKonfig(wiki_dir=wiki, backend="attrappe", aktiv=aktiv,
-                             fenster_leerlauf_s=0.0, **extra)
+    konfig = SouffleurKonfig(wiki_dir=wiki, backend="attrappe", aktiv=aktiv, fenster_leerlauf_s=0.0, **extra)
     hinweise = []
-    s = Souffleur(konfig, ki=ki if ki is not None else AttrappeKi(),
-                  ki_status=KiStatus("bereit", "attrappe", "attrappe", "Attrappe"), on_hinweis=hinweise.append)
+    s = Souffleur(
+        konfig,
+        ki=ki if ki is not None else AttrappeKi(),
+        ki_status=KiStatus("bereit", "attrappe", "attrappe", "Attrappe"),
+        on_hinweis=hinweise.append,
+    )
     return s, hinweise
 
 
@@ -296,8 +324,14 @@ def test_begleitdateien_und_transkript_bleibt_bytegleich(tmp_path):
     from audioscribe.souffleur import SOUFFLEUR_DATEIEN, markierung
 
     segs = _segmente()
-    write_transcript(tmp_path, [Segment(s["start"], s["end"], s["text"], s["speaker"]) for s in segs],
-                     duration_s=60, language="de", model="t", mode="live")
+    write_transcript(
+        tmp_path,
+        [Segment(s["start"], s["end"], s["text"], s["speaker"]) for s in segs],
+        duration_s=60,
+        language="de",
+        model="t",
+        mode="live",
+    )
     vorher = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in tmp_path.iterdir() if p.is_file()}
     s, hinweise = _souffleur(tmp_path)
     _laufen_lassen(s, segs, tmp_path)
@@ -320,20 +354,57 @@ def test_validierung_verwirft_erfundenes(tmp_path):
     from audioscribe.souffleur.ki import KiAntwort
 
     class LuegenKi:
-        modell = "x"; backend = "attrappe"
+        modell = "x"
+        backend = "attrappe"
 
         def antworte(self, auftrag):
             seg = auftrag.kontext["segmente"][0]["id"]
-            return KiAntwort(daten={"befunde": [
-                {"segment_id": seg, "art": "widerspruch", "aussage": "erfundener Satz", "fundstelle_id": None,
-                 "wiki_zitat": None, "ki_text": "x", "sicherheit": "hoch"},
-                {"segment_id": seg, "art": "widerspruch", "aussage": "Freigabe", "fundstelle_id": None,
-                 "wiki_zitat": "irgendwas", "ki_text": "x", "sicherheit": "hoch"},
-                {"segment_id": seg, "art": "offener_punkt", "aussage": "Freigabe", "fundstelle_id": None,
-                 "wiki_zitat": None, "ki_text": "unsicher", "sicherheit": "mittel"},
-                {"segment_id": 999, "art": "frage", "aussage": "x", "fundstelle_id": None, "wiki_zitat": None,
-                 "ki_text": "", "sicherheit": "hoch"},
-            ], "uebergangen": []}, start_s=0.1, antwort_s=0.2, modell="x")
+            return KiAntwort(
+                daten={
+                    "befunde": [
+                        {
+                            "segment_id": seg,
+                            "art": "widerspruch",
+                            "aussage": "erfundener Satz",
+                            "fundstelle_id": None,
+                            "wiki_zitat": None,
+                            "ki_text": "x",
+                            "sicherheit": "hoch",
+                        },
+                        {
+                            "segment_id": seg,
+                            "art": "widerspruch",
+                            "aussage": "Freigabe",
+                            "fundstelle_id": None,
+                            "wiki_zitat": "irgendwas",
+                            "ki_text": "x",
+                            "sicherheit": "hoch",
+                        },
+                        {
+                            "segment_id": seg,
+                            "art": "offener_punkt",
+                            "aussage": "Freigabe",
+                            "fundstelle_id": None,
+                            "wiki_zitat": None,
+                            "ki_text": "unsicher",
+                            "sicherheit": "mittel",
+                        },
+                        {
+                            "segment_id": 999,
+                            "art": "frage",
+                            "aussage": "x",
+                            "fundstelle_id": None,
+                            "wiki_zitat": None,
+                            "ki_text": "",
+                            "sicherheit": "hoch",
+                        },
+                    ],
+                    "uebergangen": [],
+                },
+                start_s=0.1,
+                antwort_s=0.2,
+                modell="x",
+            )
 
     s, hinweise = _souffleur(tmp_path, ki=LuegenKi())
     _laufen_lassen(s, _segmente()[1:3], tmp_path)
@@ -346,7 +417,14 @@ def test_validierung_verwirft_erfundenes(tmp_path):
 
 def test_dubletten_werden_unterdrueckt(tmp_path):
     s, hinweise = _souffleur(tmp_path)
-    frage = {"id": 1, "start": 0.0, "end": 3.0, "speaker": "Ich", "text": "Wer pflegt eigentlich die Lieferantenstammdaten?", "delay": 0.2}
+    frage = {
+        "id": 1,
+        "start": 0.0,
+        "end": 3.0,
+        "speaker": "Ich",
+        "text": "Wer pflegt eigentlich die Lieferantenstammdaten?",
+        "delay": 0.2,
+    }
     nochmal = {**frage, "id": 2, "start": 30.0, "end": 33.0, "text": "Wer pflegt die Lieferantenstammdaten eigentlich?"}
     _laufen_lassen(s, [frage, nochmal], tmp_path)
     assert len(hinweise) == 1
@@ -362,7 +440,8 @@ def test_ki_fehler_fuehren_zu_pause_nicht_zu_absturz(tmp_path):
     from audioscribe.souffleur.ki import KiFehler
 
     class KaputteKi:
-        modell = "x"; backend = "attrappe"
+        modell = "x"
+        backend = "attrappe"
 
         def antworte(self, auftrag):
             raise KiFehler("Dienst weg")
@@ -389,7 +468,8 @@ def test_pruefe_wiki_drei_zustaende(tmp_path):
     assert st.seiten == 4 and st.glossar_eintraege == 2 and st.glossar_datei == "wiki/glossar.md"
     assert "4 Seiten" in st.meldung and "Glossar: 2" in st.meldung
     assert wiki.pruefe_wiki(tmp_path / "gibt-es-nicht").zustand == "fehler"
-    leer = tmp_path / "leer"; leer.mkdir()
+    leer = tmp_path / "leer"
+    leer.mkdir()
     st = wiki.pruefe_wiki(leer)
     assert st.zustand == "fehler" and "Kein Wiki" in st.meldung
     (leer / "notizen.md").write_text("# Notizen\n\nEin Satz.\n", encoding="utf-8")
@@ -420,13 +500,17 @@ def test_glossar_korrigiert_suchtext_und_wird_erkannt():
 
     index = wiki.WikiIndex.laden(WIKI)
     assert index.glossar.eintraege == [("Fak Tura", "Faktura"), ("Teamleidung", "Teamleitung")]
-    assert index.glossar.fachbegriffe == [("Sachbearbeitung", "Rolle, die Rechnungen unter der Freigabegrenze freigibt")]
+    assert index.glossar.fachbegriffe == [
+        ("Sachbearbeitung", "Rolle, die Rechnungen unter der Freigabegrenze freigibt")
+    ]
     assert index.glossar.korrigiere("im fak tura gepflegt") == "im Faktura gepflegt"
     treffer = index.suche("Die Stammdaten pflegen wir im Fak Tura.")
     # Ohne Glossar-Korrektur traefe "Faktura" nicht; mit ihr steht der Abschnitt "Systeme" unter den Treffern.
     assert ("wiki/stammdaten.md", "Systeme") in {(t.datei, t.ueberschrift) for t in treffer[:2]}
     assert index.suche("Fak Tura") and index.suche("Fak Tura")[0].ueberschrift == "Systeme"
-    g = wiki.parse_glossar("# Glossar\n\n- Soundshark → Splunk\n\n| Fehlerkennung | Korrekt |\n|---|---|\n| A B | AB |\n")
+    g = wiki.parse_glossar(
+        "# Glossar\n\n- Soundshark → Splunk\n\n| Fehlerkennung | Korrekt |\n|---|---|\n| A B | AB |\n"
+    )
     assert g.eintraege == [("A B", "AB"), ("Soundshark", "Splunk")]
 
 
@@ -481,7 +565,9 @@ def test_wiki_wird_nur_gelesen(tmp_path):
 
     kopie = tmp_path / "wiki"
     shutil.copytree(WIKI, kopie)
-    vorher = sorted((str(p.relative_to(kopie)), p.stat().st_size, p.read_bytes()) for p in kopie.rglob("*") if p.is_file())
+    vorher = sorted(
+        (str(p.relative_to(kopie)), p.stat().st_size, p.read_bytes()) for p in kopie.rglob("*") if p.is_file()
+    )
     if os.name != "nt":
         for p in kopie.rglob("*"):
             p.chmod(0o555 if p.is_dir() else 0o444)
@@ -494,7 +580,9 @@ def test_wiki_wird_nur_gelesen(tmp_path):
         if os.name != "nt":
             for p in kopie.rglob("*"):
                 p.chmod(0o755 if p.is_dir() else 0o644)
-    nachher = sorted((str(p.relative_to(kopie)), p.stat().st_size, p.read_bytes()) for p in kopie.rglob("*") if p.is_file())
+    nachher = sorted(
+        (str(p.relative_to(kopie)), p.stat().st_size, p.read_bytes()) for p in kopie.rglob("*") if p.is_file()
+    )
     assert vorher == nachher
     assert hinweise  # Fragen wurden trotzdem erkannt
 
@@ -502,7 +590,13 @@ def test_wiki_wird_nur_gelesen(tmp_path):
 def test_tokenisierung_mit_umlauten_zahlen_und_stamm():
     from audioscribe.souffleur.wiki import tokenisiere
 
-    assert tokenisiere("Rechnungen ab 5.000 Euro gibt die Teamleitung frei") == ["rechn", "5000", "euro", "teamleit", "frei"]
+    assert tokenisiere("Rechnungen ab 5.000 Euro gibt die Teamleitung frei") == [
+        "rechn",
+        "5000",
+        "euro",
+        "teamleit",
+        "frei",
+    ]
     assert "belege" not in tokenisiere("Belege") and tokenisiere("Belege") == ["beleg"]
 
 
@@ -511,12 +605,20 @@ def test_tokenisierung_mit_umlauten_zahlen_und_stamm():
 
 def _regeln():
     return [
-        AttrappenRegel(aussage="ab 10.000 Euro", fundstelle="freigaben.md › Grenzen",
-                       zitat="Rechnungen ab 5.000 Euro gibt die Teamleitung frei."),
-        AttrappenRegel(aussage="fünf Jahre", fundstelle="archivierung.md › Aufbewahrung",
-                       zitat="Belege werden zehn Jahre aufbewahrt, gerechnet ab dem Ende des Geschäftsjahres."),
+        AttrappenRegel(
+            aussage="ab 10.000 Euro",
+            fundstelle="freigaben.md › Grenzen",
+            zitat="Rechnungen ab 5.000 Euro gibt die Teamleitung frei.",
+        ),
+        AttrappenRegel(
+            aussage="fünf Jahre",
+            fundstelle="archivierung.md › Aufbewahrung",
+            zitat="Belege werden zehn Jahre aufbewahrt, gerechnet ab dem Ende des Geschäftsjahres.",
+        ),
         # Diese Regel darf NICHT greifen: der Auszug enthaelt das Zitat nicht -> verworfen (Leitplanke 7)
-        AttrappenRegel(aussage="drei Werktage", fundstelle="freigaben.md › Fristen", zitat="Die Freigabe dauert eine Woche."),
+        AttrappenRegel(
+            aussage="drei Werktage", fundstelle="freigaben.md › Fristen", zitat="Die Freigabe dauert eine Woche."
+        ),
     ]
 
 
@@ -526,8 +628,14 @@ def test_abgleich_findet_widersprueche_an_der_richtigen_wiki_stelle(tmp_path):
     from audioscribe.live.store import write_transcript
     from audioscribe.models import Segment
 
-    write_transcript(tmp_path, [Segment(x["start"], x["end"], x["text"], x["speaker"]) for x in _segmente()],
-                     duration_s=60, language="de", model="t", mode="live")
+    write_transcript(
+        tmp_path,
+        [Segment(x["start"], x["end"], x["text"], x["speaker"]) for x in _segmente()],
+        duration_s=60,
+        language="de",
+        model="t",
+        mode="live",
+    )
     s, hinweise = _souffleur(tmp_path, wiki=WIKI, ki=AttrappeKi(regeln=_regeln()))
     s.starte(tmp_path)
     ende = time.monotonic() + 10
@@ -614,8 +722,12 @@ def test_wiki_wechseln_meldet_laedt_und_der_letzte_gewinnt(tmp_path):
     from audioscribe.souffleur.ki import KiStatus
     from audioscribe.souffleur.konfig import SouffleurKonfig
 
-    s = Souffleur(SouffleurKonfig(wiki_dir=None, backend="attrappe"), ki=AttrappeKi(),
-                  ki_status=KiStatus("bereit", "attrappe", "attrappe", "Attrappe"), log=protokoll.append)
+    s = Souffleur(
+        SouffleurKonfig(wiki_dir=None, backend="attrappe"),
+        ki=AttrappeKi(),
+        ki_status=KiStatus("bereit", "attrappe", "attrappe", "Attrappe"),
+        log=protokoll.append,
+    )
     s.starte(tmp_path)
     s.wechsle_wiki(tmp_path / "nix")
     s.wechsle_wiki(WIKI)
@@ -647,10 +759,19 @@ def test_wiki_wechseln_vor_dem_start_und_nach_dem_ende(tmp_path):
 def test_uebergabe_baut_markierungen_ohne_zu_schreiben(tmp_path):
     from audioscribe.souffleur import markierung, uebergabe
 
-    m = markierung.Markierung(id=1, art="widerspruch", segment_id=2, t_start=5.0, t_end=12.0, sprecher="Sprecher 1",
-                              aussage="ab 10.000 Euro", wiki_zitat="Rechnungen ab 5.000 Euro gibt die Teamleitung frei.",
-                              fundstellen=[markierung.Fundstelle("wiki/freigaben.md", "Grenzen", 5, "…")], ki_text="weicht ab",
-                              verzoegerung_s=4.2)
+    m = markierung.Markierung(
+        id=1,
+        art="widerspruch",
+        segment_id=2,
+        t_start=5.0,
+        t_end=12.0,
+        sprecher="Sprecher 1",
+        aussage="ab 10.000 Euro",
+        wiki_zitat="Rechnungen ab 5.000 Euro gibt die Teamleitung frei.",
+        fundstellen=[markierung.Fundstelle("wiki/freigaben.md", "Grenzen", 5, "…")],
+        ki_text="weicht ab",
+        verzoegerung_s=4.2,
+    )
     stand = markierung.SouffleurStand(sitzung="live-x", markierungen=[m])
     daten = uebergabe.daten(stand, sitzung="live-x", transkript_fassung="live")
     assert daten["format_version"] == 1 and daten["markierungen"][0]["zeitstempel"] == "00:00:05"
@@ -675,10 +796,10 @@ def test_config_dir_je_plattform(monkeypatch):
     monkeypatch.setattr(sys, "platform", "darwin")
     assert config._config_dir() == Path.home() / "Library" / "Application Support" / "audioscribe"
     monkeypatch.setattr(sys, "platform", "linux")
-    monkeypatch.setenv("XDG_CONFIG_HOME", "/tmp/xdg")
-    assert config._config_dir() == Path("/tmp/xdg") / "audioscribe"
-    monkeypatch.setenv("AUDIOSCRIBE_CONFIG_DIR", "/tmp/eigen")
-    assert config._config_dir() == Path("/tmp/eigen")
+    monkeypatch.setenv("XDG_CONFIG_HOME", "/tmp/xdg")  # noqa: S108 - nur Pfadvergleich, nichts wird geschrieben
+    assert config._config_dir() == Path("/tmp/xdg") / "audioscribe"  # noqa: S108 - nur Pfadvergleich, nichts wird geschrieben
+    monkeypatch.setenv("AUDIOSCRIBE_CONFIG_DIR", "/tmp/eigen")  # noqa: S108 - nur Pfadvergleich, nichts wird geschrieben
+    assert config._config_dir() == Path("/tmp/eigen")  # noqa: S108 - nur Pfadvergleich, nichts wird geschrieben
 
 
 def test_alte_einstellungsdatei_wird_uebernommen(tmp_path, monkeypatch):
@@ -716,8 +837,9 @@ def test_doctor_souffleur_check(monkeypatch, tmp_path):
     wiki = tmp_path / "pw"
     (wiki / "wiki").mkdir(parents=True)
     (wiki / "wiki" / "index.md").write_text("# P\n", encoding="utf-8")
-    projekt = modell.lege_an(name="Bahn", wurzel=tmp_path / "p", sitzungen_dir=tmp_path / "s",
-                             wiki_art="vorhanden", wiki_dir=wiki)
+    projekt = modell.lege_an(
+        name="Bahn", wurzel=tmp_path / "p", sitzungen_dir=tmp_path / "s", wiki_art="vorhanden", wiki_dir=wiki
+    )
     state.save_state({"wiki_dir": ""})
     state.merke_projekt(projekt.wurzel, projekt.name)
     r = doctor._check_souffleur()

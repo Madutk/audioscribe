@@ -112,7 +112,9 @@ def _pruefe_freie_ziele(
         if _ist_unter(ziel, session_dir):
             raise RuntimeError(tr("Die Ablage darf nicht im Sitzungsordner selbst liegen."))
     if assets_basis is not None and gleich(assets_basis, raw_basis):
-        raise RuntimeError(tr("Der Bilder-Ordner darf nicht der Transkript-Ordner selbst sein - bitte einen Unterordner wählen."))
+        raise RuntimeError(
+            tr("Der Bilder-Ordner darf nicht der Transkript-Ordner selbst sein - bitte einen Unterordner wählen.")
+        )
 
 
 def _datum(session_dir: Path) -> str:
@@ -198,8 +200,11 @@ def ablagen(ordner: Path) -> list[dict]:
 
 
 def _vermerke(ordner: Path, ablage: Ablage) -> None:
-    try:
-        _atomar(Path(ordner) / VERMERK, json.dumps([*ablagen(ordner), ablage.als_dict()], ensure_ascii=False, indent=2) + "\n")
+    try:  # noqa: SIM105 - try/except/pass bleibt; contextlib.suppress waere Umschreiben
+        _atomar(
+            Path(ordner) / VERMERK,
+            json.dumps([*ablagen(ordner), ablage.als_dict()], ensure_ascii=False, indent=2) + "\n",
+        )
     except OSError:
         pass  # der Vermerk ist Komfort - die Ablage selbst ist geschrieben
 
@@ -234,7 +239,12 @@ def letzte_ablage(session_dir: Path, projekt: Projekt | None = None, *, auch_fre
 
 
 def speichere_sitzung(
-    session_dir: Path, projekt: Projekt, *, titel: str = "", art: str = "", bilder: bool = True,
+    session_dir: Path,
+    projekt: Projekt,
+    *,
+    titel: str = "",
+    art: str = "",
+    bilder: bool = True,
     markierungen: bool = False,
 ) -> Ablage:
     """Das Transkript der Sitzung ins Wiki legen - auf Wunsch mit Bildern und mit den
@@ -243,12 +253,16 @@ def speichere_sitzung(
     Das Ablageformat bestimmt das Projekt (``wiki_format``)."""
     _pruefe_ziele(projekt)
     if projekt.wiki_format == FORMAT_MEETINGS:
-        return speichere_meeting(
-            session_dir, projekt, titel=titel, art=art, bilder=bilder, markierungen=markierungen
-        )
+        return speichere_meeting(session_dir, projekt, titel=titel, art=art, bilder=bilder, markierungen=markierungen)
     return speichere_nach(
-        session_dir, raw_basis=projekt.raw_dir, assets_basis=projekt.assets_dir, seiten_dir=projekt.seiten_dir,
-        titel=titel, bilder=bilder, markierungen=markierungen, frei=False,
+        session_dir,
+        raw_basis=projekt.raw_dir,
+        assets_basis=projekt.assets_dir,
+        seiten_dir=projekt.seiten_dir,
+        titel=titel,
+        bilder=bilder,
+        markierungen=markierungen,
+        frei=False,
     )
 
 
@@ -339,11 +353,24 @@ def speichere_nach(
         if leitfaden_md is not None:
             _atomar(ziel / LEITFADEN_DATEI, leitfaden_md)
 
-        _atomar(ziel / "README.md", _readme(titel or session_dir.name, session_dir.name, assets, ziel, stand is not None,
-                                             mit_leitfaden=leitfaden_md is not None))
+        _atomar(
+            ziel / "README.md",
+            _readme(
+                titel or session_dir.name,
+                session_dir.name,
+                assets,
+                ziel,
+                stand is not None,
+                mit_leitfaden=leitfaden_md is not None,
+            ),
+        )
         ablage = Ablage(
-            ordner=str(ziel), assets=str(assets) if assets else None, bilder=anzahl_bilder,
-            markierungen=anzahl_markierungen, titel=titel, zeit=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            ordner=str(ziel),
+            assets=str(assets) if assets else None,
+            bilder=anzahl_bilder,
+            markierungen=anzahl_markierungen,
+            titel=titel,
+            zeit=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             frei=frei,
         )
         _vermerke(session_dir, ablage)
@@ -403,7 +430,12 @@ def _mit_meeting_kopf(markdown: str, datum: str, art: str, titel: str, sprecher:
 
 
 def speichere_meeting(
-    session_dir: Path, projekt: Projekt, *, titel: str = "", art: str = "", bilder: bool = True,
+    session_dir: Path,
+    projekt: Projekt,
+    *,
+    titel: str = "",
+    art: str = "",
+    bilder: bool = True,
     markierungen: bool = False,
 ) -> Ablage:
     """Die Sitzung als eine Datei ``raw/meetings/<stamm>.md`` ins Wiki legen: das Transkript mit
@@ -418,10 +450,13 @@ def speichere_meeting(
     quelle = session_dir / "transkript.md"
     if not quelle.is_file():
         raise FileNotFoundError(tr("Kein Transkript in {ordner}", ordner=session_dir))
-    art = (art.strip().lower() or art_der_sitzung(session_dir))
+    art = art.strip().lower() or art_der_sitzung(session_dir)
     if art not in MEETING_ARTEN:
         raise RuntimeError(
-            tr("Bitte die Art des Meetings wählen ({arten}) – sie ist Teil des Dateinamens im Wiki.", arten=", ".join(MEETING_ARTEN))
+            tr(
+                "Bitte die Art des Meetings wählen ({arten}) – sie ist Teil des Dateinamens im Wiki.",
+                arten=", ".join(MEETING_ARTEN),
+            )
         )
     titel = titel.strip() or _titel_der_sitzung(session_dir)
     try:
@@ -487,8 +522,12 @@ def speichere_meeting(
             angelegt.append(begleit)
 
         ablage = Ablage(
-            ordner=str(datei), assets=str(assets) if assets else None, bilder=len(verlinkt),
-            markierungen=anzahl_markierungen, titel=titel, zeit=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            ordner=str(datei),
+            assets=str(assets) if assets else None,
+            bilder=len(verlinkt),
+            markierungen=anzahl_markierungen,
+            titel=titel,
+            zeit=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         )
         _vermerke(session_dir, ablage)
         return ablage
@@ -509,8 +548,9 @@ def _leitfaden_ergebnis(session_dir: Path) -> str | None:
     return leitfaden.render_md(lf) if lf is not None else None
 
 
-def _readme(titel: str, sitzung: str, assets: Path | None, ziel: Path, mit_markierungen: bool,
-            *, mit_leitfaden: bool = False) -> str:
+def _readme(
+    titel: str, sitzung: str, assets: Path | None, ziel: Path, mit_markierungen: bool, *, mit_leitfaden: bool = False
+) -> str:
     zeilen = [
         f"# Quelle aus AudioScribe: {titel}",
         "",
@@ -561,9 +601,10 @@ def speichere_nachbereitung(
     _pruefe_ziele(projekt)
 
     # Eine freie Ablage („Speichern unter …“) zählt hier nicht: die Nachbereitung gehört ins Wiki.
-    sitzung = letzte_ablage(session_dir, projekt, auch_freie=False) or speichere_sitzung(
-        session_dir, projekt, bilder=bilder, markierungen=markierungen
-    ).als_dict()
+    sitzung = (
+        letzte_ablage(session_dir, projekt, auch_freie=False)
+        or speichere_sitzung(session_dir, projekt, bilder=bilder, markierungen=markierungen).als_dict()
+    )
     basis = Path(sitzung["ordner"])
     # Meetings-Format: die Sitzung ist eine Datei - die Nachbereitung liegt daneben unter demselben Stamm.
     name = basis.stem if basis.is_file() else basis.name
@@ -612,7 +653,7 @@ def speichere_nachbereitung(
                 continue
             text = quelle.read_text(encoding="utf-8", errors="replace")
             if bilder and assets is not None:
-                text = _FRAME_PFAD.sub(lambda m: bildpfad(m.group(1), neu.parent) or m.group(0), text)
+                text = _FRAME_PFAD.sub(lambda m: bildpfad(m.group(1), neu.parent) or m.group(0), text)  # noqa: B023 - Lambda wird sofort von sub() aufgerufen
             else:
                 text = _BILD_LINK.sub(lambda m: f"_[{m.group(1) or m.group(2)}]_", text)
             neu.write_text(text, encoding="utf-8")
@@ -629,8 +670,12 @@ def speichere_nachbereitung(
         shutil.rmtree(ziel, ignore_errors=True)
         raise
     ablage = Ablage(
-        ordner=str(ziel), assets=str(assets) if assets and genutzt else None, bilder=len(genutzt),
-        markierungen=0, titel=workspace.name, zeit=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        ordner=str(ziel),
+        assets=str(assets) if assets and genutzt else None,
+        bilder=len(genutzt),
+        markierungen=0,
+        titel=workspace.name,
+        zeit=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         art="nachbereitung",
     )
     _vermerke(workspace, ablage)

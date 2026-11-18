@@ -83,7 +83,7 @@ def apply_hf_hub_compat() -> None:
         if "local_files_only" not in kwargs:
             try:
                 return orig(*args, local_files_only=True, **kwargs)
-            except Exception:  # noqa: BLE001 - nicht im Cache -> regulaer (online) laden
+            except Exception:  # noqa: BLE001, S110 - nicht im Cache -> regulaer (online) laden
                 pass
         return orig(*args, **kwargs)
 
@@ -97,7 +97,7 @@ def apply_hf_hub_compat() -> None:
         try:
             if getattr(module, "hf_hub_download", None) is orig:
                 module.hf_hub_download = _download  # type: ignore[attr-defined]
-        except Exception:  # noqa: BLE001 - defensive
+        except Exception:  # noqa: BLE001, S110 - defensive
             pass
     _HF_HUB_PATCHED = True
 
@@ -197,7 +197,7 @@ def ensure_ctranslate2_loadable(log=None) -> None:
         for so in libs_dir.glob("*.so*"):
             if clear_execstack_flag(so):
                 log(tr("ctranslate2: Executable-Stack-Flag entfernt ({datei}, glibc >= 2.41)", datei=so.name))
-    except Exception:  # noqa: BLE001 - best effort; der Import schlaegt sonst ohnehin fehl
+    except Exception:  # noqa: BLE001, S110 - best effort; der Import schlaegt sonst ohnehin fehl
         pass
 
 
@@ -248,8 +248,12 @@ def _cudnn8_lib_dir() -> Path:
 
 # Nur die Inferenz-Bibliotheken werden entpackt: die *_train*-Varianten (rund 230 MB)
 # braucht ctranslate2 nie, und die Dateien sind einzeln mehrere hundert MB gross.
-_CUDNN8_WINDOWS_DLLS = ("cudnn64_8.dll", "cudnn_ops_infer64_8.dll", "cudnn_cnn_infer64_8.dll",
-                        "cudnn_adv_infer64_8.dll")
+_CUDNN8_WINDOWS_DLLS = (
+    "cudnn64_8.dll",
+    "cudnn_ops_infer64_8.dll",
+    "cudnn_cnn_infer64_8.dll",
+    "cudnn_adv_infer64_8.dll",
+)
 
 
 def ensure_cudnn8(log=None) -> Path:
@@ -280,14 +284,11 @@ def ensure_cudnn8(log=None) -> Path:
     lib_dir.mkdir(parents=True, exist_ok=True)
     log(tr("Lade cuDNN 8 ({version}) fuer ctranslate2 (einmalig, ~700 MB)...", version=CUDNN8_VERSION))
     meta_url = f"https://pypi.org/pypi/nvidia-cudnn-cu12/{CUDNN8_VERSION}/json"
-    with urllib.request.urlopen(meta_url) as resp:  # noqa: S310 - PyPI ist vertrauenswuerdig
+    with urllib.request.urlopen(meta_url) as resp:  # PyPI ist vertrauenswuerdig
         meta = json.load(resp)
     plattform = "win_amd64" if windows else "manylinux"
-    wheel_url = next(
-        u["url"]
-        for u in meta["urls"]
-        if u["filename"].endswith(".whl") and plattform in u["filename"]
-    )
+    wheel_url = next(u["url"] for u in meta["urls"] if u["filename"].endswith(".whl") and plattform in u["filename"])
+
     # Fortschritt melden: 700 MB ohne jede Rueckmeldung sehen im Protokoll wie ein
     # Haenger aus - gerade in der Stapel-Oberflaeche, wo nur das Log sichtbar ist.
     def _fortschritt(bloecke: int, blockgroesse: int, gesamt: int) -> None:
@@ -346,7 +347,7 @@ def _add_windows_dll_dirs(lib_dir: Path, log) -> None:
     for pfad in verzeichnisse:
         try:
             _DLL_DIR_HANDLES.append(os.add_dll_directory(str(pfad)))
-        except OSError as exc:  # noqa: PERF203 - defensiv, darf den Lauf nicht kippen
+        except OSError as exc:  # defensiv, darf den Lauf nicht kippen
             log(tr("DLL-Verzeichnis nicht nutzbar ({pfad}): {fehler}", pfad=pfad, fehler=exc))
 
     pfade = os.environ.get("PATH", "").split(os.pathsep)
@@ -389,7 +390,7 @@ def ensure_native_libs(log=None) -> None:
     os.environ["LD_LIBRARY_PATH"] = os.pathsep.join([*prepend, *parts])
     os.environ[_LD_MARKER] = "1"
 
-    os.execv(sys.executable, [sys.executable, *sys.argv])
+    os.execv(sys.executable, [sys.executable, *sys.argv])  # noqa: S606 - Neustart des eigenen Prozesses mit sys.executable
 
 
 def free_accelerator() -> None:
@@ -410,5 +411,5 @@ def free_accelerator() -> None:
         mps = getattr(torch.backends, "mps", None)
         if mps is not None and mps.is_available() and hasattr(torch, "mps"):
             torch.mps.empty_cache()
-    except Exception:  # noqa: BLE001 - best effort
+    except Exception:  # noqa: BLE001, S110 - best effort
         pass

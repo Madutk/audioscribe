@@ -57,7 +57,7 @@ def test_speechbrain_lazy_module_reisst_inspect_stack_nicht_mit(monkeypatch):
     assert inspect.stack()  # ohne den Shim: ImportError
     # Ausserhalb von inspect bleibt das Lazy-Verhalten unangetastet.
     with pytest.raises(ImportError):
-        platzhalter.irgendein_attribut
+        platzhalter.irgendein_attribut  # noqa: B018 - Attributzugriff soll ImportError ausloesen
 
 
 def test_ensure_native_libs_registriert_dll_verzeichnis_statt_neustart(monkeypatch, tmp_path):
@@ -124,7 +124,7 @@ def test_hf_hub_wrapper_tries_cache_first(monkeypatch):
     monkeypatch.setattr(compat, "_HF_HUB_PATCHED", False)
     compat.apply_hf_hub_compat()
 
-    assert hub.hf_hub_download("m", "config.yaml", use_auth_token="t") == "/cache/config.yaml"
+    assert hub.hf_hub_download("m", "config.yaml", use_auth_token="t") == "/cache/config.yaml"  # noqa: S106 - Testwert, kein Geheimnis
     assert calls == [{"local_files_only": True, "token": "t"}]
     calls.clear()
     assert hub.hf_hub_download("m", "fehlt.bin") == "/cache/fehlt.bin"

@@ -6,7 +6,6 @@ from __future__ import annotations
 import os
 import re
 from dataclasses import replace
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -38,9 +37,13 @@ ANTWORT = {"essenz": [{"punkt": "Die Freigabe dauert drei Werktage."}], "offen":
 
 def _ergebnis(content: str, **extra) -> dict:
     return {
-        "model": "qwen3.6:27b-mlx", "done": True,
+        "model": "qwen3.6:27b-mlx",
+        "done": True,
         "message": {"role": "assistant", "content": content},
-        "prompt_eval_count": 1204, "eval_count": 310, "load_duration": int(2.5e9), "total_duration": int(6.8e9),
+        "prompt_eval_count": 1204,
+        "eval_count": 310,
+        "load_duration": int(2.5e9),
+        "total_duration": int(6.8e9),
         **extra,
     }
 
@@ -52,10 +55,11 @@ def _post(antwort: dict | Exception, aufrufe: list | None = None):
         if isinstance(antwort, Exception):
             raise antwort
         return antwort
+
     return post
 
 
-def _status(url: str = "http://x", **kw) -> OllamaStatus:  # noqa: ARG001
+def _status(url: str = "http://x", **kw) -> OllamaStatus:
     return OllamaStatus(True, version="0.19.0", modelle=("qwen3.6:35b-a3b-nvfp4", "gemma4:26b-mlx", "qwen3.6:latest"))
 
 
@@ -67,7 +71,13 @@ def test_anfrage_traegt_schema_und_schaltet_denken_ab():
 
     aufrufe: list = []
     log: list[str] = []
-    ki = OllamaKi("qwen3.6:27b-mlx", url="http://h:1/", keep_alive="5m", log=log.append, post=_post(_ergebnis(json.dumps(ANTWORT)), aufrufe))
+    ki = OllamaKi(
+        "qwen3.6:27b-mlx",
+        url="http://h:1/",
+        keep_alive="5m",
+        log=log.append,
+        post=_post(_ergebnis(json.dumps(ANTWORT)), aufrufe),
+    )
     antwort = ki.antworte(KiAuftrag("System", "Prompt", SCHEMA, timeout_s=12))
     url, body, timeout = aufrufe[0]
     assert url == "http://h:1/api/chat" and timeout == 12
@@ -127,12 +137,16 @@ def test_lokales_modell_und_modell_fuer():
 def test_ollama_status_liest_version_und_modelle():
     antworten = {
         "http://localhost:1/api/version": {"version": "0.19.0"},
-        "http://localhost:1/api/tags": {"models": [{"name": "qwen3.6:35b-a3b-nvfp4"}, {"model": "gemma4:latest"}, "murks"]},
+        "http://localhost:1/api/tags": {
+            "models": [{"name": "qwen3.6:35b-a3b-nvfp4"}, {"model": "gemma4:latest"}, "murks"]
+        },
     }
     status = ollama_status("http://localhost:1/", post=lambda url, body, t: antworten[url])
     assert status.erreichbar and status.version == "0.19.0"
     assert status.modelle == ("qwen3.6:35b-a3b-nvfp4", "gemma4:latest")
-    assert status.hat_modell("qwen3.6:35b-a3b-nvfp4") and status.hat_modell("gemma4") and not status.hat_modell("qwen3.6")
+    assert (
+        status.hat_modell("qwen3.6:35b-a3b-nvfp4") and status.hat_modell("gemma4") and not status.hat_modell("qwen3.6")
+    )
     down = ollama_status("http://localhost:1", post=_post(_HttpFehler(None, "Connection refused")))
     assert not down.erreichbar and down.fehler == "Connection refused" and down.modelle == ()
     kaputt = ollama_status("http://localhost:1", post=_post(RuntimeError("x")))
@@ -161,12 +175,18 @@ def test_ollama_sicherstellen_startet_dienst_und_wartet(tmp_path):
         return antworten[url[url.index("/api") :]]
 
     gestartet = []
-    spawn = lambda argv, **kw: gestartet.append((argv, kw))
+    spawn = lambda argv, **kw: gestartet.append((argv, kw))  # noqa: E731 - lambda bleibt; def waere Umschreiben
     meldungen = []
     log_datei = tmp_path / "ollama.log"
     status = ollama_sicherstellen(
-        "http://localhost:11434", log=meldungen.append, log_datei=log_datei, timeout_s=5.0,
-        post=post, binary="/opt/x/ollama", spawn=spawn, schlaf=lambda s: None,
+        "http://localhost:11434",
+        log=meldungen.append,
+        log_datei=log_datei,
+        timeout_s=5.0,
+        post=post,
+        binary="/opt/x/ollama",
+        spawn=spawn,
+        schlaf=lambda s: None,
     )
     assert status.erreichbar and status.version == "0.40.0"
     argv, kw = gestartet[0]
@@ -180,7 +200,7 @@ def test_ollama_sicherstellen_startet_nicht_ohne_programm_oder_bei_fremder_adres
     from audioscribe.souffleur.ki_ollama import ist_lokal, ollama_sicherstellen
 
     down = _post(_HttpFehler(None, "Connection refused"))
-    boom = lambda *a, **kw: pytest.fail("darf nicht starten")
+    boom = lambda *a, **kw: pytest.fail("darf nicht starten")  # noqa: E731 - lambda bleibt; def waere Umschreiben
     status = ollama_sicherstellen("http://localhost:11434", post=down, binary="", spawn=boom, schlaf=lambda s: None)
     assert not status.erreichbar and "nicht gefunden" in status.fehler
     status = ollama_sicherstellen("http://ki-server:11434", post=down, binary="/x/ollama", spawn=boom)
@@ -188,8 +208,12 @@ def test_ollama_sicherstellen_startet_nicht_ohne_programm_oder_bei_fremder_adres
     assert ist_lokal("http://127.0.0.1:11434") and not ist_lokal("http://ki-server:11434")
     # Dienst meldet sich nach dem Start nicht: klarer Fehlertext, kein Hängen
     status = ollama_sicherstellen(
-        "http://localhost:11434", post=down, binary="/x/ollama", spawn=lambda *a, **kw: None,
-        schlaf=lambda s: None, timeout_s=1.0,
+        "http://localhost:11434",
+        post=down,
+        binary="/x/ollama",
+        spawn=lambda *a, **kw: None,
+        schlaf=lambda s: None,
+        timeout_s=1.0,
     )
     assert not status.erreichbar and "nicht erreichbar" in status.fehler
     # Läuft schon: nichts starten
@@ -201,7 +225,9 @@ def test_ollama_sicherstellen_startet_nicht_ohne_programm_oder_bei_fremder_adres
 
 
 def test_make_ki_ollama_prueft_dienst_und_modell(tmp_path, monkeypatch):
-    monkeypatch.setattr(ki_ollama, "ollama_sicherstellen", lambda url, **kw: OllamaStatus(False, fehler="Connection refused"))
+    monkeypatch.setattr(
+        ki_ollama, "ollama_sicherstellen", lambda url, **kw: OllamaStatus(False, fehler="Connection refused")
+    )
     ki, status = make_ki(BACKEND_OLLAMA, "gemma4:26b-mlx", cache_dir=tmp_path)
     assert ki is None and status.zustand == "fehlt" and "ollama serve" in status.meldung
     monkeypatch.setattr(ki_ollama, "ollama_sicherstellen", _status)
@@ -234,13 +260,15 @@ def test_optionen_tragen_dienst_je_modell():
 def client(tmp_path, monkeypatch):
     from fastapi.testclient import TestClient
 
-    from audioscribe.config import settings
     from audioscribe.ui import server, state
 
     # Basis ist das von conftest abgeschirmte state.settings - nie die Einstellungen des Rechners.
     fake = replace(
-        state.settings, cache_dir=tmp_path / "cache", agent_skills_dir=tmp_path / "skills",
-        agent_output_dir=tmp_path / "analysen", output_dir=tmp_path / "output",
+        state.settings,
+        cache_dir=tmp_path / "cache",
+        agent_skills_dir=tmp_path / "skills",
+        agent_output_dir=tmp_path / "analysen",
+        output_dir=tmp_path / "output",
     )
     monkeypatch.setattr(server, "settings", fake)
     monkeypatch.setattr(state, "settings", fake)
@@ -263,7 +291,7 @@ def test_api_agent_defaults_folgen_dem_dienst(client):
 def test_sdk_env_leitet_nur_lokal_um():
     assert sdk_env(BACKEND_CLAUDE) == {}
     env = sdk_env(BACKEND_OLLAMA)
-    assert env["ANTHROPIC_AUTH_TOKEN"] == "ollama" and env["ANTHROPIC_BASE_URL"].startswith("http")
+    assert env["ANTHROPIC_AUTH_TOKEN"] == "ollama" and env["ANTHROPIC_BASE_URL"].startswith("http")  # noqa: S105 - Testwert, kein Geheimnis
     assert env["CLAUDE_CODE_MAX_OUTPUT_TOKENS"] == "16000"
 
 
@@ -308,14 +336,23 @@ def test_auftrag_und_argv_mit_ki_dienst(tmp_path, monkeypatch):
 
 def test_lokaler_lauf_zaehlt_keinen_verbrauch(tmp_path):
     zeilen: list[str] = []
-    auftrag = Auftrag(name="Probe", quelle=tmp_path / "q", ausgabe=tmp_path / "o", dienst=BACKEND_OLLAMA, model="gemma4:26b-mlx")
+    auftrag = Auftrag(
+        name="Probe", quelle=tmp_path / "q", ausgabe=tmp_path / "o", dienst=BACKEND_OLLAMA, model="gemma4:26b-mlx"
+    )
     sitzung = AnalyseSitzung(auftrag, [], emit=zeilen.append, status_zeilen=True)
     sitzung.workspace.mkdir(parents=True)
     zwischen = SimpleNamespace(message_id="m1", usage={"input_tokens": 500, "output_tokens": 20})
     assert sitzung._zwischenstand(zwischen) is False and not sitzung._vorlaeufig
     ergebnis = SimpleNamespace(
-        session_id="s1", num_turns=3, is_error=False, errors=[], result="", subtype="success",
-        usage={"input_tokens": 1000, "output_tokens": 100}, model_usage=None, total_cost_usd=0.25,
+        session_id="s1",
+        num_turns=3,
+        is_error=False,
+        errors=[],
+        result="",
+        subtype="success",
+        usage={"input_tokens": 1000, "output_tokens": 100},
+        model_usage=None,
+        total_cost_usd=0.25,
     )
     assert sitzung._record_result(ergebnis) is True
     m = sitzung.manifest
@@ -351,7 +388,9 @@ def test_doctor_ki_lokal(monkeypatch):
     r = doctor._check_ollama()
     assert r.status == "OK" and "Ollama 0.19.0" in r.detail and f"Souffleur: {DEFAULT_OLLAMA_MODELL}" in r.detail
     assert "OLLAMA_CONTEXT_LENGTH" in r.detail
-    monkeypatch.setattr(doctor, "settings", replace(settings, souffleur_backend="ollama", agent_model="qwen3.6:27b-mlx"))
+    monkeypatch.setattr(
+        doctor, "settings", replace(settings, souffleur_backend="ollama", agent_model="qwen3.6:27b-mlx")
+    )
     r = doctor._check_ollama()
     assert r.status == "WARN" and "Analyse: qwen3.6:27b-mlx fehlt -> 'ollama pull qwen3.6:27b-mlx'" in r.detail
 
@@ -365,6 +404,8 @@ def test_echter_ollama_aufruf(tmp_path):
     ki, status = make_ki(BACKEND_OLLAMA, "", cache_dir=tmp_path, log=print)
     assert status.zustand == "bereit", status.meldung
     schema = {"type": "object", "required": ["antwort"], "properties": {"antwort": {"type": "string"}}}
-    antwort = ki.antworte(KiAuftrag("Antworte knapp als JSON.", "Schreibe 'ok' ins Feld antwort.", schema, timeout_s=180))
+    antwort = ki.antworte(
+        KiAuftrag("Antworte knapp als JSON.", "Schreibe 'ok' ins Feld antwort.", schema, timeout_s=180)
+    )
     print(f"\n{antwort.modell}: {antwort.antwort_s:.1f} s (laden {antwort.start_s:.1f} s) -> {antwort.daten}")
     assert antwort.daten["antwort"] and antwort.verbrauch is None

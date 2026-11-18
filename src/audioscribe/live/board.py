@@ -30,9 +30,7 @@ class Job:
 
 
 class JobBoard:
-    def __init__(
-        self, coalesce_s: float = 0.0, max_gap_s: float = 3.0, catchup_s: float = 0.0
-    ) -> None:
+    def __init__(self, coalesce_s: float = 0.0, max_gap_s: float = 3.0, catchup_s: float = 0.0) -> None:
         self._cond = threading.Condition()
         self._finals: deque[Job] = deque()
         self._partials: dict[str, Job] = {}

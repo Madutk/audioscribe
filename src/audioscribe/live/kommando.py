@@ -39,18 +39,15 @@ def list_devices_text() -> str:
     lines = []
     for titel, key in (("Mikrofone", "mics"), ("System-Audio (Loopback)", "loopbacks")):
         lines.append(f"{titel}:")
-        lines += [
-            f"  [{d['index']}] {d['name']}{'  (Standard)' if d.get('default') else ''}"
-            for d in inv[key]
-        ] or ["  -"]
+        lines += [f"  [{d['index']}] {d['name']}{'  (Standard)' if d.get('default') else ''}" for d in inv[key]] or [
+            "  -"
+        ]
     lines.append("Monitore:")
     lines += [f"  [{m['index']}] {m['width']}x{m['height']}" for m in inv["monitors"]] or ["  -"]
     lines.append("Fenster (--window ID):")
     for gruppe in group_by_process(inv["windows"]):
         lines.append(f"  {gruppe['process']}")
-        lines += [
-            f"    [{w['hwnd']}] {w['title']}  ({w['width']}x{w['height']})" for w in gruppe["windows"]
-        ]
+        lines += [f"    [{w['hwnd']}] {w['title']}  ({w['width']}x{w['height']})" for w in gruppe["windows"]]
     if not inv["windows"]:
         lines.append("  -")
     lines += [f"! {p}" for p in inv["problems"]]

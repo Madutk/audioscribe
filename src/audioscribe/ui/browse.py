@@ -229,10 +229,7 @@ def quick_links(
         candidates += [(drive.drive, drive) for drive in windows_drives()]
         # Die uebersetzten Namen kommen mit: ein deutsches Windows hat "Dokumente",
         # ein englisches "Documents" - vorhanden ist immer nur einer davon.
-        candidates += [
-            (name, home / name)
-            for name in ("Desktop", "Downloads", "Videos", "Dokumente", "Documents")
-        ]
+        candidates += [(name, home / name) for name in ("Desktop", "Downloads", "Videos", "Dokumente", "Documents")]
     elif mac:
         # Finder zeigt die Nutzerordner lokalisiert ("Schreibtisch"), auf der Platte heissen
         # sie englisch - darum deutsche Labels auf englische Pfade.

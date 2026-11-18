@@ -80,7 +80,7 @@ def pcm_to_mono(data: bytes, frames: int, channels: int, planar: bool) -> np.nda
     if channels <= 1:
         return x.astype(np.float32, copy=True)
     frames_eff = len(x) // channels
-    if planar:
+    if planar:  # noqa: SIM108 - if/else bleibt; Ternary waere Umschreiben
         y = x.reshape(channels, frames_eff).mean(axis=0)
     else:
         y = x.reshape(frames_eff, channels).mean(axis=1)
@@ -111,9 +111,9 @@ def asbd_format(asbd) -> tuple[int, bool, int]:
 
 def _frameworks():
     try:
-        import CoreMedia as CM
+        import CoreMedia as CM  # noqa: N817 - Framework-Namen wie in PyObjC
         import objc
-        import ScreenCaptureKit as SCK
+        import ScreenCaptureKit as SCK  # noqa: N817 - Framework-Namen wie in PyObjC
         from Foundation import NSObject
     except ImportError as exc:
         raise RuntimeError(
@@ -125,20 +125,20 @@ def _frameworks():
 def _protocols(objc) -> list:
     out = []
     for name in ("SCStreamOutput", "SCStreamDelegate"):
-        try:
+        try:  # noqa: SIM105 - try/except/pass bleibt; contextlib.suppress waere Umschreiben
             out.append(objc.protocolNamed(name))
-        except Exception:  # noqa: BLE001 - PyObjC dispatcht auch ohne formale Protokolle
+        except Exception:  # noqa: BLE001, S110 - PyObjC dispatcht auch ohne formale Protokolle
             pass
     return out
 
 
-def _block_bytes(CM, block_buffer, length: int) -> bytes:
+def _block_bytes(CM, block_buffer, length: int) -> bytes:  # noqa: N803 - Framework-Namen wie in PyObjC
     """Rohbytes eines CMBlockBuffer - zwei PyObjC-Varianten, die erste, die geht, gewinnt."""
     try:
         status, data = CM.CMBlockBufferCopyDataBytes(block_buffer, 0, length, None)
         if status == 0 and data is not None:
             return bytes(data)
-    except Exception:  # noqa: BLE001
+    except Exception:  # noqa: BLE001, S110 - erste PyObjC-Variante scheitert -> zweite folgt
         pass
     status, _len_at, _total, ptr = CM.CMBlockBufferGetDataPointer(block_buffer, 0, None, None, None)
     if status != 0 or ptr is None:
@@ -151,7 +151,7 @@ def _block_bytes(CM, block_buffer, length: int) -> bytes:
 
 @functools.cache
 def _output_class():
-    SCK, CM, objc, NSObject = _frameworks()
+    SCK, CM, objc, NSObject = _frameworks()  # noqa: N806 - Framework-Namen wie in PyObjC
     audio_type = int(SCK.SCStreamOutputTypeAudio)
 
     class _AudioOutput(NSObject, protocols=_protocols(objc)):
@@ -254,7 +254,7 @@ def _wait(call, timeout_s: float = STARTUP_TIMEOUT_S):
     return ergebnis
 
 
-def _shareable_content(SCK):
+def _shareable_content(SCK):  # noqa: N803 - Framework-Namen wie in PyObjC
     content, error = (_wait(SCK.SCShareableContent.getShareableContentWithCompletionHandler_) + [None, None])[:2]
     if content is None:
         raise RuntimeError(
@@ -280,7 +280,7 @@ class SckStream:
     """Ein laufender ScreenCaptureKit-Stream, der nur Audio in den ``Track`` schreibt."""
 
     def __init__(self, track: Track, clock: Callable[[], float], log: Callable[[str], None]) -> None:
-        SCK, CM, _objc, _ns = _frameworks()
+        SCK, CM, _objc, _ns = _frameworks()  # noqa: N806 - Framework-Namen wie in PyObjC
         self._sink = _Sink(track, clock, log)
         self._log = log
         content = _shareable_content(SCK)
@@ -298,9 +298,9 @@ class SckStream:
         cfg.setHeight_(2)
         cfg.setMinimumFrameInterval_(CM.CMTimeMake(1, 1))
         cfg.setShowsCursor_(False)
-        try:
+        try:  # noqa: SIM105 - try/except/pass bleibt; contextlib.suppress waere Umschreiben
             cfg.setQueueDepth_(8)
-        except Exception:  # noqa: BLE001
+        except Exception:  # noqa: BLE001, S110 - Bestand, ungeprüft (REQ-11)
             pass
         self._output = _output_class().alloc().initWithSink_(self._sink)
         self._stream = SCK.SCStream.alloc().initWithFilter_configuration_delegate_(filt, cfg, self._output)
@@ -315,9 +315,9 @@ class SckStream:
             # Keine Rückmeldung: den halb gestarteten Stream nicht einfach liegen lassen,
             # sonst hält replayd die offene Anfrage und blockiert weitere Starts aus
             # demselben Programm minutenlang.
-            try:
+            try:  # noqa: SIM105 - try/except/pass bleibt; contextlib.suppress waere Umschreiben
                 _wait(self._stream.stopCaptureWithCompletionHandler_, timeout_s=2.0)
-            except Exception:  # noqa: BLE001 - Aufräumen nach Kräften
+            except Exception:  # noqa: BLE001, S110 - Aufräumen nach Kräften
                 pass
             raise
         if error is not None:
@@ -343,9 +343,9 @@ class SckStream:
         return self._sink.puffer
 
     def close(self) -> None:
-        try:
+        try:  # noqa: SIM105 - try/except/pass bleibt; contextlib.suppress waere Umschreiben
             _wait(self._stream.stopCaptureWithCompletionHandler_, timeout_s=3.0)
-        except Exception:  # noqa: BLE001 - beim Aufräumen nie scheitern
+        except Exception:  # noqa: BLE001, S110 - beim Aufräumen nie scheitern
             pass
 
 
@@ -370,6 +370,6 @@ if __name__ == "__main__":
 
     ap = argparse.ArgumentParser(description="ScreenCaptureKit-Spike: System-Audio nach WAV")
     ap.add_argument("--probe", type=float, default=5.0, metavar="SEK")
-    ap.add_argument("--out", default="/tmp/sck.wav")
+    ap.add_argument("--out", default="/tmp/sck.wav")  # noqa: S108 - Bestand, ungeprüft (REQ-11)
     a = ap.parse_args()
     raise SystemExit(_probe(a.probe, Path(a.out)))

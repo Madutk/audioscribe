@@ -161,11 +161,7 @@ def batch_eta(
         "unknown_count": sum(1 for f in files if not f.duration and f.state in (WAITING, RUNNING)),
     }
 
-    samples = [
-        (f.duration, f.seconds)
-        for f in files
-        if f.state == DONE and f.duration and f.seconds is not None
-    ]
+    samples = [(f.duration, f.seconds) for f in files if f.state == DONE and f.duration and f.seconds is not None]
     if len(samples) < _ETA_MIN_DONE:
         return balance
     fit = _fit_cost(samples)
@@ -332,14 +328,8 @@ class BatchRunner(_ProcessRunner):
             lines, new_offset = self._lines_since(offset)
             current = state.current
 
-            elapsed_current = (
-                time.monotonic() - state.file_started if state.file_started is not None else 0.0
-            )
-            eta = (
-                batch_eta(state.files, current, elapsed_current)
-                if state.running
-                else None
-            )
+            elapsed_current = time.monotonic() - state.file_started if state.file_started is not None else 0.0
+            eta = batch_eta(state.files, current, elapsed_current) if state.running else None
             return {
                 "running": state.running,
                 "cancelled": state.cancelled,
@@ -396,9 +386,7 @@ class BatchRunner(_ProcessRunner):
                     self._set_file(index, state=CANCELLED, returncode=code, seconds=elapsed)
                     break
                 if code == 0:
-                    self._set_file(
-                        index, state=DONE, returncode=0, seconds=elapsed, fraction=1.0
-                    )
+                    self._set_file(index, state=DONE, returncode=0, seconds=elapsed, fraction=1.0)
                     self._append(tr("   -> fertig in {sekunden}s", sekunden=elapsed))
                 else:
                     self._set_file(index, state=FAILED, returncode=code, seconds=elapsed)
@@ -412,7 +400,7 @@ class BatchRunner(_ProcessRunner):
         if proc is None:
             return -1
 
-        assert proc.stdout is not None
+        assert proc.stdout is not None  # noqa: S101 - Typ-Verengung fuer Optional
         logged_progress = -_LOG_PROGRESS_STEP
         for raw in proc.stdout:
             line = raw.rstrip("\n").rstrip("\r")
@@ -563,7 +551,7 @@ class AnalyseRunner(_ProcessRunner):
         try:
             proc = self._spawn(argv)
             if proc is not None:
-                assert proc.stdout is not None
+                assert proc.stdout is not None  # noqa: S101 - Typ-Verengung fuer Optional
                 for raw in proc.stdout:
                     line = raw.rstrip("\n").rstrip("\r")
                     if not line.strip():
@@ -743,7 +731,7 @@ class LiveRunner(_ProcessRunner):
             return
         self._append(tr("Stopp angefordert - Sitzung wird abgeschlossen ..."))
         try:
-            assert proc.stdin is not None
+            assert proc.stdin is not None  # noqa: S101 - Typ-Verengung fuer Optional
             proc.stdin.write("stop\n")
             proc.stdin.flush()
         except (OSError, ValueError):
@@ -761,7 +749,7 @@ class LiveRunner(_ProcessRunner):
         if not replay:
             raise RuntimeError(tr("Eine Aufnahme lässt sich nicht pausieren – nur das Abspielen eines Transkripts."))
         try:
-            assert proc.stdin is not None
+            assert proc.stdin is not None  # noqa: S101 - Typ-Verengung fuer Optional
             proc.stdin.write("pause\n" if an else "weiter\n")
             proc.stdin.flush()
         except (OSError, ValueError) as exc:
@@ -781,7 +769,7 @@ class LiveRunner(_ProcessRunner):
         if replay:
             raise RuntimeError(tr("Im Testmodus gibt es keine Bildquelle."))
         try:
-            assert proc.stdin is not None
+            assert proc.stdin is not None  # noqa: S101 - Typ-Verengung fuer Optional
             proc.stdin.write(bild_befehl(monitor, window) + "\n")
             proc.stdin.flush()
         except (OSError, ValueError) as exc:
@@ -801,7 +789,7 @@ class LiveRunner(_ProcessRunner):
         if replay:
             raise RuntimeError(tr("Im Testmodus gibt es keine Standbilder."))
         try:
-            assert proc.stdin is not None
+            assert proc.stdin is not None  # noqa: S101 - Typ-Verengung fuer Optional
             proc.stdin.write(ablage_befehl(an) + "\n")
             proc.stdin.flush()
         except (OSError, ValueError) as exc:
@@ -890,7 +878,12 @@ class LiveRunner(_ProcessRunner):
             if code != 0 and fertig and not self._discard:
                 # Das Kind hatte die Sitzung schon gesichert ("fertig") und starb erst beim Abbau
                 # (Signal, haengender Audio-Stream): die Sitzung ist vollstaendig - kein Fehler.
-                self._append(tr("Aufnahmeprozess endete nach dem Sichern mit Code {code} - die Sitzung ist vollständig.", code=code))
+                self._append(
+                    tr(
+                        "Aufnahmeprozess endete nach dem Sichern mit Code {code} - die Sitzung ist vollständig.",
+                        code=code,
+                    )
+                )
                 code = 0
             if code == 0 and opts.refine and session and not aborted:
                 with self._lock:
@@ -919,7 +912,9 @@ class LiveRunner(_ProcessRunner):
                 )
                 if code != 0:
                     self._info["error"] = self._last_line
-            self._append("\n" + (tr("Sitzung beendet.") if code == 0 else tr("Beendet mit Exit-Code {code}.", code=code)))
+            self._append(
+                "\n" + (tr("Sitzung beendet.") if code == 0 else tr("Beendet mit Exit-Code {code}.", code=code))
+            )
 
     def _nachlauf(self, code: int) -> None:
         """Nach einem sauberen Ende: ``on_ende`` ausfuehren (z. B. Wiki-Ablage "immer"). Solange
@@ -942,7 +937,7 @@ class LiveRunner(_ProcessRunner):
     def _pump(self, proc: subprocess.Popen[str] | None, on_line: Callable[[str], None]) -> int:
         if proc is None:
             return -1
-        assert proc.stdout is not None
+        assert proc.stdout is not None  # noqa: S101 - Typ-Verengung fuer Optional
         for raw in proc.stdout:
             line = raw.rstrip("\n").rstrip("\r")
             if line.strip():
@@ -961,9 +956,7 @@ class LiveRunner(_ProcessRunner):
         with self._lock:
             souffleur = self._souffleur
             if typ == "state":
-                self._info.update(
-                    {k: event.get(k) for k in ("phase", "session", "dir", "model", "device", "step")}
-                )
+                self._info.update({k: event.get(k) for k in ("phase", "session", "dir", "model", "device", "step")})
                 for k in ("sitzung_id", "titel", "art"):
                     if event.get(k):
                         self._info[k] = event[k]
@@ -1038,8 +1031,10 @@ def _terminate(proc: subprocess.Popen[str]) -> None:
     if os.name == "nt":
         # os.killpg/getpgid gibt es unter Windows nicht. taskkill /T nimmt die Enkel
         # (ffmpeg) mit; ein sanftes Signal kennt ein Konsolenprozess ohne Fenster nicht.
-        subprocess.run(  # noqa: S603, S607 - festes Kommando
-            ["taskkill", "/PID", str(proc.pid), "/T", "/F"], capture_output=True, check=False
+        subprocess.run(  # noqa: S603 - festes Kommando
+            ["taskkill", "/PID", str(proc.pid), "/T", "/F"],  # noqa: S607 - festes Kommando aus PATH
+            capture_output=True,
+            check=False,
         )
         try:
             proc.wait(timeout=10)

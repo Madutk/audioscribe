@@ -159,7 +159,9 @@ def test_prompt_und_schema_nur_mit_leitfaden():
     assert "punkte" in s["required"] and "punkte" not in prompt.SCHEMA["properties"]  # Original unverändert
     assert "Leitfaden" not in prompt.system_prompt()
     assert "Leitfaden" in prompt.system_prompt(mit_leitfaden=True)
-    p = prompt.baue_prompt([{"id": 1, "start": 0.0, "text": "x"}], kontext=[], fundstellen=[], leitfaden="[P1] (muss, offen) y")
+    p = prompt.baue_prompt(
+        [{"id": 1, "start": 0.0, "text": "x"}], kontext=[], fundstellen=[], leitfaden="[P1] (muss, offen) y"
+    )
     assert "## Leitfaden" in p and "[P1] (muss, offen) y" in p
 
 
@@ -171,10 +173,13 @@ def _wiki(tmp_path) -> Path:
     (wiki / "wiki" / "entscheidungen").mkdir(parents=True)
     (wiki / "wiki" / "index.md").write_text("# Index\n\nSiehe ENT-003 und ANF-003.\n", encoding="utf-8")
     (wiki / "wiki" / "entscheidungen" / "ENT-003.md").write_text(
-        "# ENT-003 Freigabegrenze\n\nRechnungen über 5.000 EUR gibt die Bereichsleitung frei.\n", encoding="utf-8")
+        "# ENT-003 Freigabegrenze\n\nRechnungen über 5.000 EUR gibt die Bereichsleitung frei.\n", encoding="utf-8"
+    )
     (wiki / "wiki" / "anforderungen.md").write_text(
         "# Anforderungen\n\n## ANF-003 Export\n\nDer Export läuft nachts.\n\n"
-        "## Schulung\n\nDie Schulung für das Portal übernimmt das Team Einkauf im März.\n", encoding="utf-8")
+        "## Schulung\n\nDie Schulung für das Portal übernimmt das Team Einkauf im März.\n",
+        encoding="utf-8",
+    )
     return wiki
 
 
@@ -212,8 +217,9 @@ def test_verknuepfe_wiki_kennung_vor_suche_und_ohne_rauschen(tmp_path):
 def test_souffleur_verknuepft_nach_dem_laden_des_wikis(tmp_path):
     wiki = _wiki(tmp_path)
     konfig = SouffleurKonfig(wiki_dir=wiki, backend="attrappe", fenster_leerlauf_s=0.0)
-    s = Souffleur(konfig, ki=AttrappeKi(), ki_status=KiStatus("bereit", "attrappe", "attrappe", "Attrappe"),
-                  leitfaden=_lf())
+    s = Souffleur(
+        konfig, ki=AttrappeKi(), ki_status=KiStatus("bereit", "attrappe", "attrappe", "Attrappe"), leitfaden=_lf()
+    )
     sitzung = tmp_path / "sitzung"
     s.starte(sitzung)
     assert _warte(lambda: (s.leitfaden() or {})["punkte"][0]["wiki"])
@@ -238,16 +244,35 @@ class _Abweicher:
         self.aufrufe.append(auftrag)
         seg = auftrag.kontext["segmente"][0]
         fid = next((f["id"] for f in auftrag.kontext["fundstellen"] if f["datei"].endswith("ENT-003.md")), None)
-        return KiAntwort(daten={"befunde": [], "uebergangen": [], "punkte": [
-            {"punkt_id": "P1", "status": "geklaert", "segment_id": seg["id"], "aussage": seg["text"],
-             "stand": "Teamleitung gibt frei", "abweichung_fundstelle_id": fid, "abweichung_zitat": self.zitat},
-        ]}, start_s=0.0, antwort_s=0.0, modell="x")
+        return KiAntwort(
+            daten={
+                "befunde": [],
+                "uebergangen": [],
+                "punkte": [
+                    {
+                        "punkt_id": "P1",
+                        "status": "geklaert",
+                        "segment_id": seg["id"],
+                        "aussage": seg["text"],
+                        "stand": "Teamleitung gibt frei",
+                        "abweichung_fundstelle_id": fid,
+                        "abweichung_zitat": self.zitat,
+                    },
+                ],
+            },
+            start_s=0.0,
+            antwort_s=0.0,
+            modell="x",
+        )
 
 
-@pytest.mark.parametrize("zitat, abweichend", [
-    ("Rechnungen über 5.000 EUR gibt die Bereichsleitung frei.", True),
-    ("Die Teamleitung entscheidet alles.", False),  # steht so nicht im Auszug
-])
+@pytest.mark.parametrize(
+    "zitat, abweichend",
+    [
+        ("Rechnungen über 5.000 EUR gibt die Bereichsleitung frei.", True),
+        ("Die Teamleitung entscheidet alles.", False),  # steht so nicht im Auszug
+    ],
+)
 def test_geklaert_wird_gegen_das_wiki_gehalten(tmp_path, zitat, abweichend):
     wiki = _wiki(tmp_path)
     ki = _Abweicher(zitat)
@@ -280,8 +305,13 @@ def test_geklaert_wird_gegen_das_wiki_gehalten(tmp_path, zitat, abweichend):
 def _souffleur(lf, *, ki=None, **extra):
     konfig = SouffleurKonfig(wiki_dir=None, backend="attrappe", fenster_leerlauf_s=0.0, **extra)
     hinweise: list[dict] = []
-    s = Souffleur(konfig, ki=ki or AttrappeKi(), ki_status=KiStatus("bereit", "attrappe", "attrappe", "Attrappe"),
-                  on_hinweis=hinweise.append, leitfaden=lf)
+    s = Souffleur(
+        konfig,
+        ki=ki or AttrappeKi(),
+        ki_status=KiStatus("bereit", "attrappe", "attrappe", "Attrappe"),
+        on_hinweis=hinweise.append,
+        leitfaden=lf,
+    )
     return s, hinweise
 
 
@@ -337,10 +367,31 @@ class _Erfinder:
     def antworte(self, auftrag):
         self.aufrufe.append(auftrag)
         seg = auftrag.kontext["segmente"][0]
-        return KiAntwort(daten={"befunde": [], "uebergangen": [], "punkte": [
-            {"punkt_id": "P1", "status": "geklaert", "segment_id": seg["id"], "aussage": "die Teamleitung gibt frei", "stand": "x"},
-            {"punkt_id": "P7", "status": "geklaert", "segment_id": seg["id"], "aussage": seg["text"], "stand": "x"},
-        ]}, start_s=0.0, antwort_s=0.0, modell="x")
+        return KiAntwort(
+            daten={
+                "befunde": [],
+                "uebergangen": [],
+                "punkte": [
+                    {
+                        "punkt_id": "P1",
+                        "status": "geklaert",
+                        "segment_id": seg["id"],
+                        "aussage": "die Teamleitung gibt frei",
+                        "stand": "x",
+                    },
+                    {
+                        "punkt_id": "P7",
+                        "status": "geklaert",
+                        "segment_id": seg["id"],
+                        "aussage": seg["text"],
+                        "stand": "x",
+                    },
+                ],
+            },
+            start_s=0.0,
+            antwort_s=0.0,
+            modell="x",
+        )
 
 
 def test_kurze_zusage_schliesst_einen_angesprochenen_punkt(tmp_path):
@@ -422,9 +473,26 @@ class _Offen:
     def antworte(self, auftrag):
         self.aufrufe.append(auftrag)
         seg = auftrag.kontext["segmente"][0]
-        return KiAntwort(daten={"befunde": [{"segment_id": seg["id"], "art": "offener_punkt", "aussage": seg["text"],
-                                             "fundstelle_id": None, "wiki_zitat": None, "ki_text": "", "sicherheit": "hoch"}],
-                                "uebergangen": [], "punkte": []}, start_s=0.0, antwort_s=0.0, modell="x")
+        return KiAntwort(
+            daten={
+                "befunde": [
+                    {
+                        "segment_id": seg["id"],
+                        "art": "offener_punkt",
+                        "aussage": seg["text"],
+                        "fundstelle_id": None,
+                        "wiki_zitat": None,
+                        "ki_text": "",
+                        "sicherheit": "hoch",
+                    }
+                ],
+                "uebergangen": [],
+                "punkte": [],
+            },
+            start_s=0.0,
+            antwort_s=0.0,
+            modell="x",
+        )
 
 
 @pytest.mark.parametrize("mit_vorbereitung", [True, False])
@@ -489,11 +557,18 @@ def test_routen_liste_vorschau_und_status(client, tmp_path):
     assert client.post("/api/leitfaden/punkt", json={"hinweis_id": 1}).status_code == 409
 
     meeting = Path(__file__).parent / "data" / "souffleur" / "meeting"
-    body = {"output_dir": str(tmp_path / "out"), "replay_transcript": str(meeting), "replay_speed": 1, "leitfaden": pfad}
+    body = {
+        "output_dir": str(tmp_path / "out"),
+        "replay_transcript": str(meeting),
+        "replay_speed": 1,
+        "leitfaden": pfad,
+    }
     assert client.post("/api/live/start", json={**body, "leitfaden": str(tmp_path / "leer.md")}).status_code == 400
     assert client.post("/api/live/start", json=body).status_code == 200
     try:
-        assert _warte(lambda: (client.get("/api/live/status").json().get("souffleur") or {}).get("leitfaden") is not None)
+        assert _warte(
+            lambda: (client.get("/api/live/status").json().get("souffleur") or {}).get("leitfaden") is not None
+        )
         assert client.post("/api/leitfaden/status", json={"punkt_id": "P1", "status": "kaputt"}).status_code == 400
         assert client.post("/api/leitfaden/status", json={"punkt_id": "P9", "status": "offen"}).status_code == 404
         assert client.post("/api/leitfaden/punkt", json={"hinweis_id": 999}).status_code == 404

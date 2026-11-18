@@ -73,7 +73,7 @@ def prompt(segmente: list[dict], *, minuten: int, t_von: float, t_bis: float) ->
         kopf, unbekannt = f"## Ausschnitt ({minuten} Minuten, {von} bis {bis})", "Unbekannt"
     zeilen = [kopf, ""]
     for s in segmente:
-        zeilen.append(f"[{format_timecode(float(s['start']))}] {s.get('speaker') or unbekannt}: {s['text']}")
+        zeilen.append(f"[{format_timecode(float(s['start']))}] {s.get('speaker') or unbekannt}: {s['text']}")  # noqa: PERF401 - Schleife bleibt; Comprehension waere Umschreiben
     return "\n".join(zeilen)
 
 
@@ -96,9 +96,15 @@ def erzeuge(ki: KiDienst, segmente: list[dict], *, jetzt: float, minuten: int, t
     punkte = [str(p.get("punkt", "")).strip() for p in antwort.daten.get("essenz", []) if isinstance(p, dict)]
     offen = [str(o).strip() for o in antwort.daten.get("offen", []) if str(o).strip()]
     return Essenz(
-        minuten=minuten, t_von=round(t_von, 1), t_bis=round(t_bis, 1),
-        segment_ids=[int(s["id"]) for s in auswahl], punkte=[p for p in punkte if p][:5], offen=offen,
-        ki_s=round(antwort.antwort_s, 2), ki_start_s=round(antwort.start_s, 2), modell=antwort.modell,
+        minuten=minuten,
+        t_von=round(t_von, 1),
+        t_bis=round(t_bis, 1),
+        segment_ids=[int(s["id"]) for s in auswahl],
+        punkte=[p for p in punkte if p][:5],
+        offen=offen,
+        ki_s=round(antwort.antwort_s, 2),
+        ki_start_s=round(antwort.start_s, 2),
+        modell=antwort.modell,
     )
 
 

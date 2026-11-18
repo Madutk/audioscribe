@@ -38,7 +38,8 @@ def test_lade_transkript_markdown_ohne_fettdruck(tmp_path):
     # Von Hand geschriebene Transkripte: ``[HH:MM:SS] Sprecher: Text`` ohne ``**``.
     (tmp_path / "t.md").write_text(
         "# Meeting\n\n- Datum: 06.10.2026\n\n[00:00:03] Moderator: Guten Morgen.\n\n"
-        "[00:00:07] Assistenz: Ja, alles gut: danke.\n", encoding="utf-8",
+        "[00:00:07] Assistenz: Ja, alles gut: danke.\n",
+        encoding="utf-8",
     )
     segs = lade_transkript(tmp_path / "t.md")
     assert [(s.start, s.end, s.speaker) for s in segs] == [(3.0, 7.0, "Moderator"), (7.0, 10.0, "Assistenz")]
@@ -146,8 +147,10 @@ def test_cli_live_transcript_zweigt_vor_dem_backend_ab(tmp_path, monkeypatch):
 
     monkeypatch.setattr("audioscribe.live.replay_transkript.TranskriptReplaySession", FakeSession)
     quelle = str(MEETING / "transcript.json")
-    assert cli.main(["live", "--transcript", quelle, "--speed", "5", "--replay-delay", "1.5",
-                     "--output", str(tmp_path)]) == 0
+    assert (
+        cli.main(["live", "--transcript", quelle, "--speed", "5", "--replay-delay", "1.5", "--output", str(tmp_path)])
+        == 0
+    )
     (opts,) = gestartet
     assert opts.quelle == MEETING / "transcript.json" and opts.output_dir == tmp_path
     assert (opts.speed, opts.delay_s) == (5.0, 1.5)
@@ -262,7 +265,7 @@ def test_raffen_behaelt_reihenfolge_und_wortlaut_und_streicht_leerlauf():
     assert gerafft[0].start == 1.0 and gerafft[0].end == 2.5  # Vorlauf 1 s, Mindestdauer 1,5 s
     assert gerafft[1].start == gerafft[0].end and gerafft[1].end - gerafft[1].start == 1.5
     assert round(gerafft[2].end - gerafft[2].start, 2) == 10.6  # 200 Zeichen / 20 + 0,6 s
-    assert all(a.end == b.start for a, b in zip(gerafft, gerafft[1:]))  # lueckenlos
+    assert all(a.end == b.start for a, b in zip(gerafft, gerafft[1:]))  # lueckenlos  # noqa: B905 - Nachbarpaare, zweite Folge absichtlich kuerzer
     assert raffe([]) == []
 
 
@@ -289,9 +292,13 @@ def test_argv_und_cli_reichen_raffen_durch(tmp_path, monkeypatch):
 
     quelle = tmp_path / "transkript.md"
     quelle.write_text("[00:00:03] A: Hallo.\n", encoding="utf-8")
-    argv = build_live_argv(LiveJobOptions(output_dir=tmp_path, replay_transcript=quelle, replay_raffen=True), prefix=["x"])
+    argv = build_live_argv(
+        LiveJobOptions(output_dir=tmp_path, replay_transcript=quelle, replay_raffen=True), prefix=["x"]
+    )
     assert "--raffen" in argv
-    assert "--raffen" not in build_live_argv(LiveJobOptions(output_dir=tmp_path, replay_transcript=quelle), prefix=["x"])
+    assert "--raffen" not in build_live_argv(
+        LiveJobOptions(output_dir=tmp_path, replay_transcript=quelle), prefix=["x"]
+    )
 
     gesehen = {}
 
@@ -377,7 +384,10 @@ def test_live_runner_pausiert_nur_ein_laufendes_replay(tmp_path):
     runner = LiveRunner()
     with pytest.raises(RuntimeError):
         runner.pause(True)  # nichts laeuft
-    runner.start(LiveJobOptions(output_dir=tmp_path, replay_transcript=MEETING), argv_builder=lambda o: [sys.executable, str(kind)])
+    runner.start(
+        LiveJobOptions(output_dir=tmp_path, replay_transcript=MEETING),
+        argv_builder=lambda o: [sys.executable, str(kind)],
+    )
     warte(runner, lambda s: s["phase"] == "laeuft")
     assert runner.snapshot()["pausiert"] is False
     runner.pause(True)
@@ -392,7 +402,9 @@ def test_live_runner_pausiert_nur_ein_laufendes_replay(tmp_path):
 
     # Eine echte Aufnahme laesst sich nicht pausieren.
     aufnahme = LiveRunner()
-    aufnahme.start(LiveJobOptions(output_dir=tmp_path, refine=False), argv_builder=lambda o: [sys.executable, str(kind)])
+    aufnahme.start(
+        LiveJobOptions(output_dir=tmp_path, refine=False), argv_builder=lambda o: [sys.executable, str(kind)]
+    )
     warte(aufnahme, lambda s: s["phase"] == "laeuft")
     with pytest.raises(RuntimeError, match="Aufnahme"):
         aufnahme.pause(True)

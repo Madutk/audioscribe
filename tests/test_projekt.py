@@ -14,8 +14,12 @@ from audioscribe.projekt.modell import Projekt, ProjektFehler
 def test_anlegen_schreibt_projektdatei_in_den_projektordner_mit_relativen_pfaden(wiki, tmp_path):
     wurzel = tmp_path / "bahn-projekt"
     projekt = modell.lege_an(
-        name=" Bahnbuchung ", wurzel=wurzel, sitzungen_dir=tmp_path / "bahn-sitzungen",
-        wiki_art="vorhanden", wiki_dir=wiki, assets_dir=wiki / "raw" / "assets",
+        name=" Bahnbuchung ",
+        wurzel=wurzel,
+        sitzungen_dir=tmp_path / "bahn-sitzungen",
+        wiki_art="vorhanden",
+        wiki_dir=wiki,
+        assets_dir=wiki / "raw" / "assets",
     )
     datei = wurzel / ".audioscribe" / "projekt.json"
     daten = json.loads(datei.read_text(encoding="utf-8"))
@@ -48,8 +52,14 @@ def test_projekt_ohne_wiki_hat_keine_wiki_pfade(projekt_ohne_wiki):
 def test_altes_projekt_version_1_oeffnet_sich_mit_wiki_in_der_wurzel(wiki, tmp_path):
     """Projektdateien von vor dem Projektordner liegen im Wiki und kennen kein wiki_dir."""
     (wiki / ".audioscribe").mkdir()
-    alt = {"version": 1, "id": "abc", "name": "Alt", "sitzungen_dir": "../bahn-sitzungen", "assets_dir": "raw/assets",
-           "wiki_speichern": "immer"}
+    alt = {
+        "version": 1,
+        "id": "abc",
+        "name": "Alt",
+        "sitzungen_dir": "../bahn-sitzungen",
+        "assets_dir": "raw/assets",
+        "wiki_speichern": "immer",
+    }
     (wiki / ".audioscribe" / "projekt.json").write_text(json.dumps(alt), encoding="utf-8")
     p = modell.lade(wiki)
     assert p.wurzel == wiki and p.wiki_dir == wiki and p.raw_dir == wiki / "raw" and p.hinweis == ""
@@ -79,17 +89,20 @@ def test_neues_wiki_im_projektordner(tmp_path):
 
 
 def test_projektordner_wird_angelegt_und_geprueft(wiki, tmp_path):
-    ok = dict(name="P", wurzel=tmp_path / "neu" , sitzungen_dir=tmp_path / "neu" / "sitzungen")
+    ok = dict(name="P", wurzel=tmp_path / "neu", sitzungen_dir=tmp_path / "neu" / "sitzungen")
     assert modell.pruefe(**ok) == {}  # der Ordner fehlt noch, der Elternordner ist da
     assert "übergeordnete" in modell.pruefe(**{**ok, "wurzel": tmp_path / "fehlt" / "neu"})["wurzel"]
     (tmp_path / "datei.txt").write_text("x", encoding="utf-8")
     assert "Datei" in modell.pruefe(**{**ok, "wurzel": tmp_path / "datei.txt"})["wurzel"]
     # Unter den Wiki-Seiten darf kein Projekt entstehen.
-    fehler = modell.pruefe(**{**ok, "wurzel": wiki / "wiki" / "p"}, wiki_art="vorhanden", wiki_dir=wiki,
-                           assets_dir=wiki / "raw" / "assets")
+    fehler = modell.pruefe(
+        **{**ok, "wurzel": wiki / "wiki" / "p"}, wiki_art="vorhanden", wiki_dir=wiki, assets_dir=wiki / "raw" / "assets"
+    )
     assert "Wiki-Seiten" in fehler["wurzel"]
     # Das Wiki selbst als Projektordner ist erlaubt (so sahen Projekte frueher aus).
-    fehler = modell.pruefe(**{**ok, "wurzel": wiki}, wiki_art="vorhanden", wiki_dir=wiki, assets_dir=wiki / "raw" / "assets")
+    fehler = modell.pruefe(
+        **{**ok, "wurzel": wiki}, wiki_art="vorhanden", wiki_dir=wiki, assets_dir=wiki / "raw" / "assets"
+    )
     assert fehler == {}
 
 
@@ -133,8 +146,14 @@ def test_laden_ohne_projekt_meldet_verstaendlich(tmp_path):
 
 
 def test_pruefung_je_feld(wiki, tmp_path):
-    ok = dict(name="P", wurzel=tmp_path / "p", sitzungen_dir=tmp_path / "s", wiki_art="vorhanden", wiki_dir=wiki,
-              assets_dir=wiki / "raw" / "assets")
+    ok = dict(
+        name="P",
+        wurzel=tmp_path / "p",
+        sitzungen_dir=tmp_path / "s",
+        wiki_art="vorhanden",
+        wiki_dir=wiki,
+        assets_dir=wiki / "raw" / "assets",
+    )
     assert modell.pruefe(**ok) == {}
     assert "name" in modell.pruefe(**{**ok, "name": "  "})
     assert "wurzel" in modell.pruefe(**{**ok, "wurzel": None})
@@ -189,7 +208,9 @@ def test_neues_wiki_nie_in_ein_bestehendes_wiki(wiki, tmp_path):
     mit = dict(name="P", wurzel=tmp_path / "q", sitzungen_dir=tmp_path / "s", wiki_art="vorhanden", wiki_dir=wiki)
     assert "assets_dir" in modell.pruefe(**mit, assets_dir=wiki / "raw")
     # Gross-/Kleinschreibung: WIKI/ trifft unter Windows und macOS denselben Ordner wie wiki/.
-    assert "sitzungen_dir" in modell.pruefe(**{**mit, "sitzungen_dir": wiki / "WIKI" / "sitzungen"}, assets_dir=wiki / "raw" / "assets")
+    assert "sitzungen_dir" in modell.pruefe(
+        **{**mit, "sitzungen_dir": wiki / "WIKI" / "sitzungen"}, assets_dir=wiki / "raw" / "assets"
+    )
     assert sorted(p.name for p in (wiki / "wiki").iterdir()) == vorher
 
 
@@ -224,8 +245,15 @@ def test_markierungen_ins_wiki_sind_vorgabe_aus_und_werden_gemerkt(projekt):
 
 
 def test_aendern_weist_falsche_typen_und_werte_ab(projekt):
-    for felder in ({"sitzungen_dir": 123}, {"assets_dir": ["x"]}, {"wiki_bilder": "false"}, {"sprache": "--help x"},
-                   {"agent_model": 5}, {"wiki_speichern": "manchmal"}, {"wiki_markierungen": 1}):
+    for felder in (
+        {"sitzungen_dir": 123},
+        {"assets_dir": ["x"]},
+        {"wiki_bilder": "false"},
+        {"sprache": "--help x"},
+        {"agent_model": 5},
+        {"wiki_speichern": "manchmal"},
+        {"wiki_markierungen": 1},
+    ):
         with pytest.raises(ProjektFehler):
             modell.aendere(projekt, felder)
     assert modell.lade(projekt.wurzel) == projekt  # nichts davon wurde gespeichert
@@ -261,13 +289,16 @@ def test_effektive_einstellungen_projekt_schlaegt_global(projekt):
     assert set(eff.herkunft.values()) == {"global"}
     eigen = modell.aendere(projekt, {"sprache": "de"})
     eff = einstellungen.effektiv(stand, eigen)
-    assert eff["sprache"] == "de" and eff.herkunft["sprache"] == "projekt" and eff.herkunft["souffleur_model"] == "global"
+    assert (
+        eff["sprache"] == "de" and eff.herkunft["sprache"] == "projekt" and eff.herkunft["souffleur_model"] == "global"
+    )
     # Ohne Projekt gelten die globalen Werte; ohne Stand die Vorgaben aus der Umgebung.
     from audioscribe.config import settings
 
     assert einstellungen.effektiv({}, None)["agent_model"] == settings.agent_model
     assert einstellungen.als_state({"ki_dienst": "claude-agent", "sprache": "auto"}) == {
-        "souffleur_backend": "claude-agent", "sprache": "auto",
+        "souffleur_backend": "claude-agent",
+        "sprache": "auto",
     }
 
 
@@ -304,8 +335,11 @@ def test_demo_projekt_wird_nie_gespeichert(tmp_path):
 def test_ablageformat_neu_meetings_bestehend_ordner(wiki, tmp_path):
     """Neue Projekte legen Meetings als Datei ab; Projektdateien ohne Angabe behalten den Ordner."""
     neu = modell.lege_an(
-        name="Neu", wurzel=tmp_path / "neu", sitzungen_dir=tmp_path / "neu" / "sitzungen",
-        wiki_art=modell.WIKI_VORHANDEN, wiki_dir=wiki,
+        name="Neu",
+        wurzel=tmp_path / "neu",
+        sitzungen_dir=tmp_path / "neu" / "sitzungen",
+        wiki_art=modell.WIKI_VORHANDEN,
+        wiki_dir=wiki,
     )
     assert neu.wiki_format == modell.FORMAT_MEETINGS
     assert modell.lade(neu.wurzel).wiki_format == modell.FORMAT_MEETINGS

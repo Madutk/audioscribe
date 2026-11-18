@@ -112,9 +112,7 @@ class Settings:
     # hoechstens alle partial_interval_s. VAD jeden Takt (0,25 s) statt jeden zweiten:
     # spart ~0,25 s Verzoegerung, kostet auf der CPU etwas Rechenzeit.
     live_pause_s: float = field(default_factory=lambda: float(_env("LIVE_PAUSE_S", "0.6")))
-    live_partial_interval_s: float = field(
-        default_factory=lambda: float(_env("LIVE_PARTIAL_INTERVAL_S", "2.0"))
-    )
+    live_partial_interval_s: float = field(default_factory=lambda: float(_env("LIVE_PARTIAL_INTERVAL_S", "2.0")))
     live_partial_min_s: float = field(default_factory=lambda: float(_env("LIVE_PARTIAL_MIN_S", "1.0")))
     live_vad_every_tick: bool = field(default_factory=lambda: _flag("LIVE_VAD_EVERY_TICK", "0"))
     # Uebersprechen (live/uebersprechen.py): Mikrofon-Abschnitte, deren Lautstaerke-Huellkurve
@@ -135,9 +133,7 @@ class Settings:
 
     # --- Ausgabe: Zeitstempel-Granularitaet ---
     # Neuer Zeitstempel alle N Saetze (0 = ganzer Sprecher-Beitrag als ein Block).
-    sentences_per_timestamp: int = field(
-        default_factory=lambda: int(_env("SENTENCES_PER_TIMESTAMP", "2"))
-    )
+    sentences_per_timestamp: int = field(default_factory=lambda: int(_env("SENTENCES_PER_TIMESTAMP", "2")))
 
     # --- Stufe 4: Diarisierung (pyannote) — Kern-Feature, standardmaessig AN ---
     enable_diarization: bool = field(default_factory=lambda: _flag("DIARIZATION", "1"))
@@ -169,9 +165,7 @@ class Settings:
     agent_model: str = field(default_factory=lambda: _env("AGENT_MODEL", "claude-opus-5"))
     # Hier wird rekursiv nach SKILL.md gesucht (auch synced/<konto>/<skill>/).
     agent_skills_dir: Path = field(
-        default_factory=lambda: Path(
-            _env("AGENT_SKILLS_DIR", str(Path.home() / ".claude" / "skills"))
-        ).expanduser()
+        default_factory=lambda: Path(_env("AGENT_SKILLS_DIR", str(Path.home() / ".claude" / "skills"))).expanduser()
     )
     # Vorauswahl (kommagetrennt); fehlende Skills werden in der Vorauswahl uebergangen.
     agent_skills: tuple[str, ...] = field(
@@ -179,8 +173,7 @@ class Settings:
             s.strip()
             for s in _env(
                 "AGENT_SKILLS",
-                "transkript-normalisierung,prozessrekonstruktion,prozessdoku-qs,"
-                "arbeitsanweisung-ableiten",
+                "transkript-normalisierung,prozessrekonstruktion,prozessdoku-qs,arbeitsanweisung-ableiten",
             ).split(",")
             if s.strip()
         )
@@ -323,9 +316,7 @@ def mlx_available() -> bool:
         return False
 
 
-def resolve_asr_backend(
-    raw: str, device: str = "cpu", mlx_check: Callable[[], bool] = mlx_available
-) -> str:
+def resolve_asr_backend(raw: str, device: str = "cpu", mlx_check: Callable[[], bool] = mlx_available) -> str:
     """Loest ``settings.asr_backend`` auf: ``auto`` -> ``mlx`` auf dem Mac, wenn installiert.
 
     ``device`` ist nur Information: auf ``cuda`` bleibt faster-whisper auch bei ``auto``
@@ -366,7 +357,7 @@ def ensure_ffmpeg_on_path() -> str:
         import imageio_ffmpeg
 
         binary = imageio_ffmpeg.get_ffmpeg_exe()
-    except Exception as exc:  # noqa: BLE001 - klare Fehlermeldung statt Stacktrace
+    except Exception as exc:  # klare Fehlermeldung statt Stacktrace
         raise RuntimeError(
             tr(
                 "ffmpeg nicht gefunden und 'imageio-ffmpeg' nicht verfuegbar. "

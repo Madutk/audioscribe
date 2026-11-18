@@ -19,9 +19,10 @@ import subprocess
 import time
 import urllib.error
 import urllib.request
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from audioscribe.i18n import tr
 from audioscribe.souffleur.ki import BACKEND_OLLAMA, KiAntwort, KiAuftrag, KiFehler
@@ -46,7 +47,7 @@ PostFn = Callable[[str, dict | None, float], dict]
 _ZEITUEBERSCHREITUNG = "Zeitüberschreitung"
 
 
-class _HttpFehler(Exception):
+class _HttpFehler(Exception):  # noqa: N818 - deutsche Benennung: Fehler statt Error
     """HTTP-Problem beim Dienst: ``code`` None = nicht erreichbar / Zeitüberschreitung."""
 
     def __init__(self, code: int | None, text: str) -> None:
@@ -62,7 +63,7 @@ def _http_json(url: str, body: dict | None, timeout_s: float) -> dict:
     if hinweis := variante.pruefe_ollama_url(url):
         raise _HttpFehler(None, hinweis)  # letzte Sperre: keine Anfrage an fremde Rechner
     daten = None if body is None else json.dumps(body).encode("utf-8")
-    req = urllib.request.Request(url, data=daten, headers={"Content-Type": "application/json"})
+    req = urllib.request.Request(url, data=daten, headers={"Content-Type": "application/json"})  # noqa: S310 - URL oben mit pruefe_ollama_url gegen fremde Rechner geprueft
     try:
         with urllib.request.urlopen(req, timeout=timeout_s) as antwort:  # noqa: S310 - localhost
             roh = antwort.read().decode("utf-8")
@@ -72,7 +73,7 @@ def _http_json(url: str, body: dict | None, timeout_s: float) -> dict:
         except Exception:  # noqa: BLE001
             detail = ""
         raise _HttpFehler(exc.code, str(detail or exc.reason)) from exc
-    except (urllib.error.URLError, socket.timeout, TimeoutError, ConnectionError, OSError) as exc:
+    except (urllib.error.URLError, TimeoutError, ConnectionError, OSError) as exc:
         grund = getattr(exc, "reason", exc)
         if isinstance(grund, (socket.timeout, TimeoutError)) or "timed out" in str(grund):
             raise _HttpFehler(None, _ZEITUEBERSCHREITUNG) from exc
@@ -147,7 +148,7 @@ def ist_lokal(url: str) -> bool:
     from urllib.parse import urlsplit
 
     host = (urlsplit(url).hostname or "").lower()
-    return host in {"localhost", "127.0.0.1", "::1", "0.0.0.0"}
+    return host in {"localhost", "127.0.0.1", "::1", "0.0.0.0"}  # noqa: S104 - Vergleichswert fuer lokale Hosts, kein Bind
 
 
 def ollama_sicherstellen(
@@ -174,14 +175,20 @@ def ollama_sicherstellen(
         return status
     exe = binary if binary is not None else ollama_binary()
     if not exe:
-        return OllamaStatus(False, fehler=tr("{fehler}; 'ollama' nicht gefunden (brew install ollama / ollama.com)", fehler=status.fehler))
+        return OllamaStatus(
+            False,
+            fehler=tr("{fehler}; 'ollama' nicht gefunden (brew install ollama / ollama.com)", fehler=status.fehler),
+        )
     env = dict(os.environ)
     env.setdefault("OLLAMA_CONTEXT_LENGTH", str(SERVE_CONTEXT_LENGTH))
     if log:
-        log(tr(
-            "Lokale KI: Dienst läuft nicht - starte '{programm} serve' (Kontext {kontext}) ...",
-            programm=exe, kontext=env["OLLAMA_CONTEXT_LENGTH"],
-        ))
+        log(
+            tr(
+                "Lokale KI: Dienst läuft nicht - starte '{programm} serve' (Kontext {kontext}) ...",
+                programm=exe,
+                kontext=env["OLLAMA_CONTEXT_LENGTH"],
+            )
+        )
     ausgabe: Any = subprocess.DEVNULL
     try:
         if log_datei is not None:
@@ -206,10 +213,15 @@ def ollama_sicherstellen(
         status = ollama_status(url, post=post, timeout_s=1.0)
         if status.erreichbar:
             if log:
-                log(tr("Lokale KI: Ollama {version} läuft unter {url}", version=status.version or "", url=url).replace("  ", " "))
+                log(
+                    tr("Lokale KI: Ollama {version} läuft unter {url}", version=status.version or "", url=url).replace(
+                        "  ", " "
+                    )
+                )
             return status
     return OllamaStatus(
-        False, fehler=tr("'ollama serve' gestartet, aber nach {sekunden} s nicht erreichbar", sekunden=f"{timeout_s:.0f}")
+        False,
+        fehler=tr("'ollama serve' gestartet, aber nach {sekunden} s nicht erreichbar", sekunden=f"{timeout_s:.0f}"),
     )
 
 
@@ -242,7 +254,7 @@ class OllamaKi:
         self.modell = lokales_modell(modell)
         self.url = url.rstrip("/")
         self.keep_alive = keep_alive
-        self._log = log or (lambda msg: None)
+        self._log = log or (lambda msg: None)  # noqa: ARG005 - Leer-Rueckruf, Argument absichtlich ungenutzt
         self._post = post
 
     def anfrage(self, auftrag: KiAuftrag) -> dict:
@@ -270,13 +282,15 @@ class OllamaKi:
                     tr("Lokales Modell {modell} nicht vorhanden - 'ollama pull {modell}'", modell=self.modell)
                 ) from exc
             if exc.code is None and exc.text == _ZEITUEBERSCHREITUNG:
-                raise KiFehler(tr("KI-Aufruf nach {sekunden} s abgebrochen", sekunden=f"{auftrag.timeout_s:.0f}")) from exc
+                raise KiFehler(
+                    tr("KI-Aufruf nach {sekunden} s abgebrochen", sekunden=f"{auftrag.timeout_s:.0f}")
+                ) from exc
             if exc.code is None:
                 raise KiFehler(tr("Lokale KI nicht erreichbar unter {url} - 'ollama serve'", url=self.url)) from exc
             raise KiFehler(tr("Lokale KI meldet HTTP {code}: {fehler}", code=exc.code, fehler=exc.text)) from exc
         except KiFehler:
             raise
-        except Exception as exc:  # noqa: BLE001 - jede weitere Ausnahme wird zum KiFehler
+        except Exception as exc:  # jede weitere Ausnahme wird zum KiFehler
             raise KiFehler(tr("KI-Aufruf gescheitert: {fehler}", fehler=f"{type(exc).__name__}: {exc}")) from exc
         antwort_s = time.monotonic() - t0
 
@@ -297,11 +311,20 @@ class OllamaKi:
         aus = int(ergebnis.get("eval_count") or 0)
         laden_s = float(ergebnis.get("load_duration") or 0) / 1e9
         self._log(
-            tr("[KI lokal] {modell}: {ein} Tokens ein, {aus} aus, {dauer} s", modell=self.modell, ein=ein, aus=aus,
-               dauer=f"{antwort_s:.1f}")
+            tr(
+                "[KI lokal] {modell}: {ein} Tokens ein, {aus} aus, {dauer} s",
+                modell=self.modell,
+                ein=ein,
+                aus=aus,
+                dauer=f"{antwort_s:.1f}",
+            )
             + (tr(" (davon Modell laden {dauer} s)", dauer=f"{laden_s:.1f}") if laden_s >= 0.5 else "")
         )
         return KiAntwort(
-            daten=daten, start_s=round(laden_s, 3), antwort_s=antwort_s, modell=self.modell,
-            session_id=None, verbrauch=None,
+            daten=daten,
+            start_s=round(laden_s, 3),
+            antwort_s=antwort_s,
+            modell=self.modell,
+            session_id=None,
+            verbrauch=None,
         )

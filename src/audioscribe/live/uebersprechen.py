@@ -93,7 +93,9 @@ def _rms_raster(audio: np.ndarray, hop: int, fenster: int) -> np.ndarray:
     return np.sqrt((cs[ends] - cs[starts]) / np.maximum(ends - starts, 1))
 
 
-def huellkurve(audio: np.ndarray, *, hop_s: float = HOP_S, fenster_s: float = FENSTER_S, trend_s: float = TREND_S) -> np.ndarray:
+def huellkurve(
+    audio: np.ndarray, *, hop_s: float = HOP_S, fenster_s: float = FENSTER_S, trend_s: float = TREND_S
+) -> np.ndarray:
     """Trendbereinigte dB-Hüllkurve: ein Wert je ``hop_s``."""
     from scipy.ndimage import uniform_filter1d
 

@@ -82,10 +82,22 @@ mac = [
 audioscribe = "audioscribe.cli:main"
 
 [dependency-groups]
-dev = ["pytest>=8", "httpx"]
+dev = ["pytest>=8", "httpx", "ruff"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+extend-exclude = [".claude", "demo"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "BLE", "S", "ARG", "N", "PERF", "SIM", "UP", "RUF100"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S603", "S607", "ARG", "N"]
 
 [build-system]
 requires = ["hatchling"]

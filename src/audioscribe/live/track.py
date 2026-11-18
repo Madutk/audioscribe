@@ -108,8 +108,10 @@ class Track:
             if self.start_sample and wav_path.exists():
                 # "wb" würde den Mitschnitt der unterbrochenen Sitzung löschen - eine
                 # Fortsetzung schreibt immer in eine neue Teil-Datei.
-                raise RuntimeError(tr("Mitschnitt existiert bereits und wird nicht überschrieben: {pfad}", pfad=wav_path))
-            self._wav = wave.open(str(wav_path), "wb")
+                raise RuntimeError(
+                    tr("Mitschnitt existiert bereits und wird nicht überschrieben: {pfad}", pfad=wav_path)
+                )
+            self._wav = wave.open(str(wav_path), "wb")  # noqa: SIM115 - Datei bleibt offen, solange der Track schreibt
             self._wav.setnchannels(1)
             self._wav.setsampwidth(2)
             self._wav.setframerate(SAMPLE_RATE)
@@ -141,7 +143,7 @@ class Track:
         with self._lock:
             self._fill_to(int((t_now - self._slack_s) * SAMPLE_RATE))
             start = self._pending_start
-            if self._pending:
+            if self._pending:  # noqa: SIM108 - if/else bleibt; Ternary waere Umschreiben
                 samples = np.concatenate(self._pending)
             else:
                 samples = np.zeros(0, dtype=np.float32)
