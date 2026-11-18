@@ -21,7 +21,7 @@ def test_auto_waehlt_cuda_falls_verfuegbar():
 
 
 def test_auto_faellt_auf_cpu_zurueck():
-    assert resolve_device("auto", cuda_check=lambda: False) == "cpu"
+    assert resolve_device("auto", cuda_check=lambda: False, mps_check=lambda: False) == "cpu"
 
 
 def test_explizites_cpu_ohne_cuda_probe():
@@ -39,7 +39,7 @@ def test_cuda_mit_geraetenummer_bleibt_erhalten():
 
 
 def test_gross_kleinschreibung_und_whitespace():
-    assert resolve_device(" AUTO ", cuda_check=lambda: False) == "cpu"
+    assert resolve_device(" AUTO ", cuda_check=lambda: False, mps_check=lambda: False) == "cpu"
 
 
 # --- resolve_compute_type (FR-21) ---
