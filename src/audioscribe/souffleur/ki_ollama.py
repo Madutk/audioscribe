@@ -290,7 +290,7 @@ class OllamaKi:
             raise KiFehler(tr("Lokale KI meldet HTTP {code}: {fehler}", code=exc.code, fehler=exc.text)) from exc
         except KiFehler:
             raise
-        except Exception as exc:
+        except Exception as exc:  # jede weitere Ausnahme wird zum KiFehler
             raise KiFehler(tr("KI-Aufruf gescheitert: {fehler}", fehler=f"{type(exc).__name__}: {exc}")) from exc
         antwort_s = time.monotonic() - t0
 

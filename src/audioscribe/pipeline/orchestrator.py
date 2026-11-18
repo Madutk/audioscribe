@@ -141,7 +141,7 @@ def _annotiert_aktualisieren(ziel_dir: Path, make_pdf: bool, reporter) -> None:
         for name in ("transkript.annotiert.md", "transkript.annotiert.pdf"):
             try:  # noqa: SIM105 - try/except/pass bleibt; contextlib.suppress waere Umschreiben
                 (ziel_dir / name).unlink(missing_ok=True)
-            except OSError:
+            except OSError:  # gesperrte Datei darf den Lauf nicht kippen
                 pass
         return
 
@@ -152,7 +152,7 @@ def _annotiert_aktualisieren(ziel_dir: Path, make_pdf: bool, reporter) -> None:
     try:
         annot = export_annotated(ziel_dir, make_pdf=make_pdf)
         reporter.info(tr("Annotiertes Transkript: {pfad}", pfad=annot))
-    except (OSError, ValueError) as exc:
+    except (OSError, ValueError) as exc:  # Bilder sind da, Text ebenso
         reporter.info(tr("Annotiertes Transkript uebersprungen: {fehler}", fehler=exc))
 
 

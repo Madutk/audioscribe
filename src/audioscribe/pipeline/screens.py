@@ -349,7 +349,7 @@ def _alte_bilder_loeschen(out_dir: Path, marks: list[Mark]) -> None:
         if frames_dir in pfad.parents and pfad.is_file():
             try:  # noqa: SIM105 - try/except/pass bleibt; contextlib.suppress waere Umschreiben
                 pfad.unlink()
-            except OSError:
+            except OSError:  # eine gesperrte Datei darf den Lauf nicht kippen
                 pass
 
 

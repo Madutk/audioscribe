@@ -63,7 +63,7 @@ class ReplayCapture:
             self._files[name] = Path(path)
             liste.append({"index": 0, "name": f"Replay {Path(path).name}", "default": True, **info})
 
-    def open(self, name: str, device: dict, wav_path: Path) -> Track:
+    def open(self, name: str, device: dict, wav_path: Path) -> Track:  # wie AudioCapture
         path = self._files[name]
         track = Track(name, device["rate"], device["channels"], wav_path, start_sample=self._start_sample)
         with self._lock:

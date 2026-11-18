@@ -357,7 +357,7 @@ def ensure_ffmpeg_on_path() -> str:
         import imageio_ffmpeg
 
         binary = imageio_ffmpeg.get_ffmpeg_exe()
-    except Exception as exc:
+    except Exception as exc:  # klare Fehlermeldung statt Stacktrace
         raise RuntimeError(
             tr(
                 "ffmpeg nicht gefunden und 'imageio-ffmpeg' nicht verfuegbar. "

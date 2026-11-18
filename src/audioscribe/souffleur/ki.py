@@ -125,7 +125,7 @@ class ClaudeAgentKi:
             return anyio.run(self._frage, auftrag)
         except KiFehler:
             raise
-        except Exception as exc:
+        except Exception as exc:  # jede SDK-/Prozess-Ausnahme wird zum KiFehler
             raise KiFehler(tr("KI-Aufruf gescheitert: {fehler}", fehler=f"{type(exc).__name__}: {exc}")) from exc
 
     async def _frage(self, auftrag: KiAuftrag) -> KiAntwort:
