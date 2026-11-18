@@ -1,0 +1,43 @@
+name: tests
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Read-only token; the suite needs no secrets, models or AI service.
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    name: tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - uses: astral-sh/setup-uv@v10.3.3
+        with:
+          enable-cache: true
+
+      # The mac extra exists only for macOS.
+      - name: Install dependencies
+        shell: bash
+        run: |
+          extras="--extra cpu --extra review --extra agent --extra live"
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            extras="$extras --extra mac"
+          fi
+          uv sync --locked $extras
+
+      - name: Run tests
+        env:
+          AUDIOSCRIBE_CONFIG_DIR: ${{ runner.temp }}/cfg
+        run: uv run --no-sync python -m pytest -q -p no:cacheprovider -rs
