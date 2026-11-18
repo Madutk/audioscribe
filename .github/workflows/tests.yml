@@ -41,3 +41,24 @@ jobs:
         env:
           AUDIOSCRIBE_CONFIG_DIR: ${{ runner.temp }}/cfg
         run: uv run --no-sync python -m pytest -q -p no:cacheprovider -rs
+
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - uses: astral-sh/setup-uv@v10.3.3
+        with:
+          enable-cache: true
+
+      # Only the dev group: ruff in the version pinned by uv.lock, no project install.
+      - name: Install ruff
+        run: uv sync --locked --only-group dev
+
+      - name: Lint
+        run: uv run --no-sync ruff check
+
+      - name: Check formatting
+        run: uv run --no-sync ruff format --check
