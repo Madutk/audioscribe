@@ -450,7 +450,7 @@ def test_build_analyze_argv_alle_optionen(tmp_path):
     assert argv[:3] == ["as", "analyze", str(tmp_path / "q")]
     assert "--name=-Test" in argv and "--context-text=--kein-flag" in argv
     assert f"--context={tmp_path / 'k.md'}" in argv
-    assert ["--skill=a", "--skill=b"] == [a for a in argv if a.startswith("--skill=")]
+    assert [a for a in argv if a.startswith("--skill=")] == ["--skill=a", "--skill=b"]
     assert "--model=claude-sonnet-5" in argv and "--no-bash" in argv
     assert "--no-skills" not in argv
 
@@ -562,7 +562,6 @@ def client(tmp_path, monkeypatch):
 
     from fastapi.testclient import TestClient
 
-    from audioscribe.config import settings
     from audioscribe.ui import server
 
     _skill(tmp_path / "skills", "prozessrekonstruktion")

@@ -127,7 +127,7 @@ def _lebt(pid: int | None, auftrag_id: str) -> bool:
         return False
     try:
         os.kill(pid, 0)
-        ausgabe = subprocess.run(  # noqa: S603, S607 - festes Kommando
+        ausgabe = subprocess.run(  # noqa: S603 - festes Kommando
             ["ps", "-p", str(pid), "-o", "command="], capture_output=True, text=True, check=False, timeout=5
         ).stdout
     except (OSError, subprocess.SubprocessError):

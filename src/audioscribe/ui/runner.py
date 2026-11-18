@@ -1038,7 +1038,7 @@ def _terminate(proc: subprocess.Popen[str]) -> None:
     if os.name == "nt":
         # os.killpg/getpgid gibt es unter Windows nicht. taskkill /T nimmt die Enkel
         # (ffmpeg) mit; ein sanftes Signal kennt ein Konsolenprozess ohne Fenster nicht.
-        subprocess.run(  # noqa: S603, S607 - festes Kommando
+        subprocess.run(  # noqa: S603 - festes Kommando
             ["taskkill", "/PID", str(proc.pid), "/T", "/F"], capture_output=True, check=False
         )
         try:

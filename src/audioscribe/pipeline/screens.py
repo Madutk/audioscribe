@@ -349,7 +349,7 @@ def _alte_bilder_loeschen(out_dir: Path, marks: list[Mark]) -> None:
         if frames_dir in pfad.parents and pfad.is_file():
             try:
                 pfad.unlink()
-            except OSError:  # noqa: PERF203 - eine gesperrte Datei darf den Lauf nicht kippen
+            except OSError:
                 pass
 
 

@@ -21,7 +21,6 @@ from audioscribe.config import (
 from audioscribe.i18n import tr
 from audioscribe.progress import Reporter, emit_download
 
-
 # Auf der CPU bringt Batching kaum Durchsatz, WhisperX meldet Fortschritt aber nur je
 # fertigem Stapel: mit 8 Abschnitten (~4 min Audio) stuende der Balken minutenlang still.
 _CPU_BATCH_SIZE = 2

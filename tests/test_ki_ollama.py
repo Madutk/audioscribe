@@ -6,7 +6,6 @@ from __future__ import annotations
 import os
 import re
 from dataclasses import replace
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -55,7 +54,7 @@ def _post(antwort: dict | Exception, aufrufe: list | None = None):
     return post
 
 
-def _status(url: str = "http://x", **kw) -> OllamaStatus:  # noqa: ARG001
+def _status(url: str = "http://x", **kw) -> OllamaStatus:
     return OllamaStatus(True, version="0.19.0", modelle=("qwen3.6:35b-a3b-nvfp4", "gemma4:26b-mlx", "qwen3.6:latest"))
 
 
@@ -234,7 +233,6 @@ def test_optionen_tragen_dienst_je_modell():
 def client(tmp_path, monkeypatch):
     from fastapi.testclient import TestClient
 
-    from audioscribe.config import settings
     from audioscribe.ui import server, state
 
     # Basis ist das von conftest abgeschirmte state.settings - nie die Einstellungen des Rechners.

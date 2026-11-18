@@ -13,6 +13,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 from audioscribe.config import resolve_asr_backend, resolve_device, settings
+from audioscribe.i18n import tr
 from audioscribe.live import events, journal
 from audioscribe.live.bilanz import TEIL_LIVE, TEIL_REFINE, RefineBilanz, _komma, beschreibe_refine, save_bilanz
 from audioscribe.live.diagnose import ART_UEBERSPRECHEN, DIAGNOSE_NAME, Diagnose, lies_diagnose
@@ -22,7 +23,6 @@ from audioscribe.live.track import SAMPLE_RATE, load_wav
 from audioscribe.live.uebersprechen import ausschnitt, gleiche_ab, lag_samples, pruefe, schaetze_lag
 from audioscribe.models import Segment
 from audioscribe.pipeline.merge import fill_segment_speakers, relabel_speakers, result_to_segments
-from audioscribe.i18n import tr
 from audioscribe.progress import ConsoleReporter
 
 

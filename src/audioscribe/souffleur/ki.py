@@ -19,9 +19,10 @@ from __future__ import annotations
 import os
 import re
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Protocol
+from typing import Any, Protocol
 
 from audioscribe.i18n import tr
 from audioscribe.verbrauch import Verbrauch, aus_ergebnis
@@ -124,7 +125,7 @@ class ClaudeAgentKi:
             return anyio.run(self._frage, auftrag)
         except KiFehler:
             raise
-        except Exception as exc:  # noqa: BLE001 - jede SDK-/Prozess-Ausnahme wird zum KiFehler
+        except Exception as exc:
             raise KiFehler(tr("KI-Aufruf gescheitert: {fehler}", fehler=f"{type(exc).__name__}: {exc}")) from exc
 
     async def _frage(self, auftrag: KiAuftrag) -> KiAntwort:

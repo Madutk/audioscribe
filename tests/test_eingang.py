@@ -7,11 +7,11 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from conftest import _sitzung_in
 
 from audioscribe.projekt import eingang
 from audioscribe.projekt.modell import ProjektFehler
 from audioscribe.ui import state
-from conftest import _sitzung_in
 
 
 @pytest.fixture

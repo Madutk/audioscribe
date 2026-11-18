@@ -366,7 +366,7 @@ def ensure_ffmpeg_on_path() -> str:
         import imageio_ffmpeg
 
         binary = imageio_ffmpeg.get_ffmpeg_exe()
-    except Exception as exc:  # noqa: BLE001 - klare Fehlermeldung statt Stacktrace
+    except Exception as exc:
         raise RuntimeError(
             tr(
                 "ffmpeg nicht gefunden und 'imageio-ffmpeg' nicht verfuegbar. "

@@ -1,9 +1,9 @@
 """Live-Transkription (PRD §17): reine Bausteine ohne Audio-Hardware und ohne Modelle."""
 
 import json
-from pathlib import Path
 import sys
 import threading
+from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np

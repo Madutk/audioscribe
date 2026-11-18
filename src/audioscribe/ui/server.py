@@ -38,7 +38,9 @@ from audioscribe.live import llm_wiki
 from audioscribe.pipeline.media import probe_duration
 from audioscribe.projekt import eingang, einstellungen, modell, wiki_ablage
 from audioscribe.projekt.modell import ProjektFehler
-from audioscribe.ui import browse, dialog_nativ, jobs, kontext as kontext_modul, sofort as sofort_modul, state
+from audioscribe.ui import browse, dialog_nativ, jobs, state
+from audioscribe.ui import kontext as kontext_modul
+from audioscribe.ui import sofort as sofort_modul
 from audioscribe.ui.einarbeitung import Warteschlange
 from audioscribe.ui.runner import AnalyseRunner, BatchRunner, LiveRunner
 from audioscribe.verbrauch import QUELLE_MITDENKER, QUELLE_SOUFFLEUR, Zaehler
@@ -1279,7 +1281,6 @@ def create_app():
     @app.get("/api/agent/defaults")
     def api_agent_defaults():
         from audioscribe.agent.skills import discover_skills
-
         from audioscribe.souffleur.ki import modell_fuer
 
         saved = state.load_state()
@@ -1528,7 +1529,7 @@ def create_app():
 
         try:
             return JSONResponse({"windows": list_windows()})
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             raise HTTPException(500, tr("Fenster nicht lesbar: {fehler}", fehler=exc)) from exc
 
     def _souffleur_factory(opts: jobs.LiveJobOptions):

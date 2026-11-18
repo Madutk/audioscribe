@@ -7,7 +7,6 @@ from audioscribe.review.frames import build_extract_cmd, frame_filename
 from audioscribe.review.marks import Mark, load_marks, save_marks
 from audioscribe.review.merge import render_markdown_with_marks
 
-
 # --- FR-14: Frame-Dateiname & ffmpeg-Kommando ---
 
 

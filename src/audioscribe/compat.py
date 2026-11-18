@@ -280,7 +280,7 @@ def ensure_cudnn8(log=None) -> Path:
     lib_dir.mkdir(parents=True, exist_ok=True)
     log(tr("Lade cuDNN 8 ({version}) fuer ctranslate2 (einmalig, ~700 MB)...", version=CUDNN8_VERSION))
     meta_url = f"https://pypi.org/pypi/nvidia-cudnn-cu12/{CUDNN8_VERSION}/json"
-    with urllib.request.urlopen(meta_url) as resp:  # noqa: S310 - PyPI ist vertrauenswuerdig
+    with urllib.request.urlopen(meta_url) as resp:
         meta = json.load(resp)
     plattform = "win_amd64" if windows else "manylinux"
     wheel_url = next(
@@ -346,7 +346,7 @@ def _add_windows_dll_dirs(lib_dir: Path, log) -> None:
     for pfad in verzeichnisse:
         try:
             _DLL_DIR_HANDLES.append(os.add_dll_directory(str(pfad)))
-        except OSError as exc:  # noqa: PERF203 - defensiv, darf den Lauf nicht kippen
+        except OSError as exc:
             log(tr("DLL-Verzeichnis nicht nutzbar ({pfad}): {fehler}", pfad=pfad, fehler=exc))
 
     pfade = os.environ.get("PATH", "").split(os.pathsep)

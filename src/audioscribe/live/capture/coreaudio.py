@@ -8,7 +8,6 @@ Downmix und 16 kHz macht ``Track``.
 from __future__ import annotations
 
 from collections.abc import Callable
-from pathlib import Path
 
 from audioscribe.i18n import tr
 from audioscribe.live.track import Track

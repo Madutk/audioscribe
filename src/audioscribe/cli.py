@@ -23,7 +23,6 @@ from pathlib import Path
 
 from audioscribe import __version__
 
-
 _BACKEND_HELP = (
     "ASR-Backend fuer Whisper: auto (Default: mlx auf Apple Silicon, sonst faster-whisper) "
     "| faster-whisper | mlx"

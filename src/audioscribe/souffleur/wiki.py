@@ -52,30 +52,12 @@ KENNUNG = re.compile(r"\b[A-Z]{1,5}-\d{1,4}\b")
 _TAUSENDER = re.compile(r"(?<=\d)[.  ](?=\d{3}\b)")
 
 _STOPP = set(
-    """
-    aber alle allem allen aller alles als also am an ander andere anderem anderen anderer anderes auch auf aus bei bin bis
-    bist da damit dann das dass dasselbe dazu dein deine dem den denn der deren derselbe des dessen die dies diese dieselbe
-    diesem diesen dieser dieses doch dort du durch ein eine einem einen einer eines einig einige einigem einigen einiger
-    einiges einmal er es etwas euch euer eure für gegen gewesen hab habe haben hat hatte hatten hier hin hinter ich ihm ihn
-    ihnen ihr ihre im in indem ins ist ja jede jedem jeden jeder jedes jene jenem jenen jener jenes jetzt kann kein keine
-    keinem keinen keiner keines können könnte machen man manche manchem manchen mancher manches mein meine mich mir mit muss
-    musste nach nicht nichts noch nun nur ob oder ohne sehr sein seine sich sie sind so solche solchem solchen solcher solches
-    soll sollte sondern sonst um und uns unser unsere unter viel vom von vor während war waren warst was weg weil weiter welche
-    welchem welchen welcher welches wenn werde werden wie wieder will wir wird wirst wo wollen wollte würde würden zu zum zur
-    zwar zwischen eigentlich halt mal gut okay ok genau ne bei uns ab denen dafür darum dies gibt geht macht machen wer wann
-    """.split()
+    ["aber", "alle", "allem", "allen", "aller", "alles", "als", "also", "am", "an", "ander", "andere", "anderem", "anderen", "anderer", "anderes", "auch", "auf", "aus", "bei", "bin", "bis", "bist", "da", "damit", "dann", "das", "dass", "dasselbe", "dazu", "dein", "deine", "dem", "den", "denn", "der", "deren", "derselbe", "des", "dessen", "die", "dies", "diese", "dieselbe", "diesem", "diesen", "dieser", "dieses", "doch", "dort", "du", "durch", "ein", "eine", "einem", "einen", "einer", "eines", "einig", "einige", "einigem", "einigen", "einiger", "einiges", "einmal", "er", "es", "etwas", "euch", "euer", "eure", "für", "gegen", "gewesen", "hab", "habe", "haben", "hat", "hatte", "hatten", "hier", "hin", "hinter", "ich", "ihm", "ihn", "ihnen", "ihr", "ihre", "im", "in", "indem", "ins", "ist", "ja", "jede", "jedem", "jeden", "jeder", "jedes", "jene", "jenem", "jenen", "jener", "jenes", "jetzt", "kann", "kein", "keine", "keinem", "keinen", "keiner", "keines", "können", "könnte", "machen", "man", "manche", "manchem", "manchen", "mancher", "manches", "mein", "meine", "mich", "mir", "mit", "muss", "musste", "nach", "nicht", "nichts", "noch", "nun", "nur", "ob", "oder", "ohne", "sehr", "sein", "seine", "sich", "sie", "sind", "so", "solche", "solchem", "solchen", "solcher", "solches", "soll", "sollte", "sondern", "sonst", "um", "und", "uns", "unser", "unsere", "unter", "viel", "vom", "von", "vor", "während", "war", "waren", "warst", "was", "weg", "weil", "weiter", "welche", "welchem", "welchen", "welcher", "welches", "wenn", "werde", "werden", "wie", "wieder", "will", "wir", "wird", "wirst", "wo", "wollen", "wollte", "würde", "würden", "zu", "zum", "zur", "zwar", "zwischen", "eigentlich", "halt", "mal", "gut", "okay", "ok", "genau", "ne", "bei", "uns", "ab", "denen", "dafür", "darum", "dies", "gibt", "geht", "macht", "machen", "wer", "wann"]
 )
 # Englische Stoppwörter für ein englisches Wiki - nur Wörter, die im Deutschen kein Inhaltswort
 # sind (also nicht etwa "kind", "still", "fast", "per", "her"), damit die deutsche Suche unverändert bleibt.
 _STOPP |= set(
-    """
-    the and or but if then than that this these those there here is are was were be been being have has had having
-    do does did done doing will would shall should can could may might must not no yes of off on to at by for from with
-    without into onto about over after before again once only just some any each every both few more many much other
-    others such own too very what which who whom whose when where why how it its he him his she we our ours you
-    your yours they them their theirs me my us let lets get gets got go goes going make makes something anything
-    nothing thing things like think know actually really well okay right yeah out up down
-    """.split()
+    ["the", "and", "or", "but", "if", "then", "than", "that", "this", "these", "those", "there", "here", "is", "are", "was", "were", "be", "been", "being", "have", "has", "had", "having", "do", "does", "did", "done", "doing", "will", "would", "shall", "should", "can", "could", "may", "might", "must", "not", "no", "yes", "of", "off", "on", "to", "at", "by", "for", "from", "with", "without", "into", "onto", "about", "over", "after", "before", "again", "once", "only", "just", "some", "any", "each", "every", "both", "few", "more", "many", "much", "other", "others", "such", "own", "too", "very", "what", "which", "who", "whom", "whose", "when", "where", "why", "how", "it", "its", "he", "him", "his", "she", "we", "our", "ours", "you", "your", "yours", "they", "them", "their", "theirs", "me", "my", "us", "let", "lets", "get", "gets", "got", "go", "goes", "going", "make", "makes", "something", "anything", "nothing", "thing", "things", "like", "think", "know", "actually", "really", "well", "okay", "right", "yeah", "out", "up", "down"]
 )
 
 

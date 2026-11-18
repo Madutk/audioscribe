@@ -97,7 +97,7 @@ def create_app(out_dir: str | Path):
         abs_png, rel_png = _unique_frame_path(frames_dir, t)
         try:
             extract_frame(video_path, t, abs_png)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             raise HTTPException(500, f"Frame-Extraktion fehlgeschlagen: {exc}") from exc
         mark = Mark(
             t=t,

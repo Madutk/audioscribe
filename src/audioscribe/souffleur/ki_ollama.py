@@ -19,9 +19,10 @@ import subprocess
 import time
 import urllib.error
 import urllib.request
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from audioscribe.i18n import tr
 from audioscribe.souffleur.ki import BACKEND_OLLAMA, KiAntwort, KiAuftrag, KiFehler
@@ -72,7 +73,7 @@ def _http_json(url: str, body: dict | None, timeout_s: float) -> dict:
         except Exception:  # noqa: BLE001
             detail = ""
         raise _HttpFehler(exc.code, str(detail or exc.reason)) from exc
-    except (urllib.error.URLError, socket.timeout, TimeoutError, ConnectionError, OSError) as exc:
+    except (urllib.error.URLError, TimeoutError, ConnectionError, OSError) as exc:
         grund = getattr(exc, "reason", exc)
         if isinstance(grund, (socket.timeout, TimeoutError)) or "timed out" in str(grund):
             raise _HttpFehler(None, _ZEITUEBERSCHREITUNG) from exc
@@ -276,7 +277,7 @@ class OllamaKi:
             raise KiFehler(tr("Lokale KI meldet HTTP {code}: {fehler}", code=exc.code, fehler=exc.text)) from exc
         except KiFehler:
             raise
-        except Exception as exc:  # noqa: BLE001 - jede weitere Ausnahme wird zum KiFehler
+        except Exception as exc:
             raise KiFehler(tr("KI-Aufruf gescheitert: {fehler}", fehler=f"{type(exc).__name__}: {exc}")) from exc
         antwort_s = time.monotonic() - t0
 

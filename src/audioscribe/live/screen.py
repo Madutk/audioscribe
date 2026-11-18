@@ -12,6 +12,7 @@ from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 
+from audioscribe.i18n import tr
 from audioscribe.live.fenster import WindowGone
 from audioscribe.pipeline.screens import (
     _RUHE_ABTASTUNGEN,
@@ -28,7 +29,6 @@ from audioscribe.pipeline.screens import (
     changed_blocks,
     shot_filename,
 )
-from audioscribe.i18n import tr
 from audioscribe.review.marks import Mark
 
 _JPEG_QUALITY = 88  # entspricht grob ffmpegs -q:v 3 der Offline-Standbilder

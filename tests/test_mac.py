@@ -8,17 +8,14 @@ from __future__ import annotations
 
 import sys
 import types
-from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
 import pytest
 
 from audioscribe.live import berechtigungen
-from audioscribe.live.capture import ensure_permissions, list_devices, open_capture, pick
-from audioscribe.live.capture import coreaudio, sck
+from audioscribe.live.capture import coreaudio, ensure_permissions, list_devices, open_capture, pick, sck
 from audioscribe.live.track import SAMPLE_RATE, Track
-
 
 # --- capture: Fabrik, pick, Geraete ---------------------------------------------------
 
@@ -103,7 +100,7 @@ def _fake_screencapture(monkeypatch, *, rc=0, write=True, seen=None):
 
     from PIL import Image
 
-    def run(argv, **kw):  # noqa: ARG001
+    def run(argv, **kw):
         if seen is not None:
             seen.append(argv)
         if write:
@@ -594,10 +591,8 @@ def test_fenster_delegiert_unter_macos(monkeypatch):
 
 
 def test_fenster_liste_leer_ohne_pyobjc_unter_macos(monkeypatch):
-    from audioscribe.live import fenster
-
     import audioscribe.live
-    from audioscribe.live import fenster_mac
+    from audioscribe.live import fenster, fenster_mac
 
     monkeypatch.setattr(fenster.sys, "platform", "darwin")
     monkeypatch.setitem(sys.modules, "Quartz", None)
