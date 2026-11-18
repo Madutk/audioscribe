@@ -67,20 +67,32 @@ def test_ensure_native_libs_registriert_dll_verzeichnis_statt_neustart(monkeypat
     cudnn_*_infer64_8.dll stirbt der Lauf beim Modell-Laden mit
     "Could not locate cudnn_ops_infer64_8.dll".
     """
-    monkeypatch.setattr(compat.os, "name", "nt")
-    monkeypatch.setattr(compat, "ensure_cudnn8", lambda log=None: tmp_path)
     registriert = []
-    monkeypatch.setattr(
-        compat.os,
-        "add_dll_directory",
-        lambda pfad: registriert.append(pfad) or object(),
-        raising=False,
-    )
 
     def kein_execv(*args):
         raise AssertionError("execv darf unter Windows nicht laufen")
 
-    monkeypatch.setattr(compat.os, "execv", kein_execv)
+    class NtOs:
+        """Stellvertreter fuer ``compat.os``: gibt sich als Windows aus, reicht den Rest durch.
+
+        ``os.name`` prozessweit auf "nt" zu stellen kippt ausserhalb von Windows sysconfig
+        und pathlib (WindowsPath) - deshalb sieht nur compat das vorgetaeuschte System.
+        """
+
+        name = "nt"
+        add_dll_directory = staticmethod(lambda pfad: registriert.append(pfad) or object())
+        execv = staticmethod(kein_execv)
+
+        def __getattr__(self, attr):
+            return getattr(os, attr)
+
+    monkeypatch.setattr(compat, "os", NtOs())
+    monkeypatch.setattr(compat, "ensure_cudnn8", lambda log=None: tmp_path)
+    # purelib aus tmp_path: sonst kaeme torch/lib der echten Umgebung mit in die Suche.
+    monkeypatch.setattr("sysconfig.get_paths", lambda *args, **kwargs: {"purelib": str(tmp_path / "site-packages")})
+    # Abschottung: der Windows-Zweig schreibt in PATH und haelt die Handles fest.
+    monkeypatch.setenv("PATH", os.environ.get("PATH", ""))
+    monkeypatch.setattr(compat, "_DLL_DIR_HANDLES", [])
 
     compat.ensure_native_libs()
 
