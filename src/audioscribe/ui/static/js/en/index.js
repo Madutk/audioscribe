@@ -6,5 +6,6 @@ import moduleA from './module-a.js';
 import moduleB from './module-b.js';
 import leitfaden from './leitfaden.js';
 import einarbeitung from './einarbeitung.js';
+import auswertung from './auswertung.js';
 
-export default { ...allgemein, ...seite, ...moduleA, ...moduleB, ...leitfaden, ...einarbeitung };
+export default { ...allgemein, ...seite, ...moduleA, ...moduleB, ...leitfaden, ...einarbeitung, ...auswertung };

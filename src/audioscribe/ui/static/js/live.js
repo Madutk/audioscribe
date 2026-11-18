@@ -298,6 +298,7 @@ function resetLiveView() {
   $('liveLog').textContent = '';
   $('liveResult').innerHTML = ''; delete $('liveResult').dataset.key;
   $('liveFazit').innerHTML = ''; $('liveFazit').hidden = true;
+  renderAuswertung(null);
   $('liveShotCount').textContent = '';
   $('liveTestBadge').hidden = true;
   $('lightbox').classList.remove('open');
@@ -542,6 +543,7 @@ async function pollLive() {
   }
 
   renderFazit(s.fazit);
+  renderAuswertung(s.auswertung);
   renderSouffleur(s);
   liveDir = s.dir || null;
   liveBeendet = !running && s.phase === 'beendet' && !!s.dir && modus() !== 'demo';
@@ -640,6 +642,55 @@ function renderFazit(f) {
     }
   }
   box.innerHTML = `<div class="result fazit"><b>${tr('Fazit')}</b><dl>${rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl></div>`;
+  box.hidden = false;
+}
+
+/** Bezeichner aus souffleur-auswertung.json (Arten, Gruende, Status) in der Sprache der
+ *  Oberflaeche. Die Datei enthaelt nur feste Bezeichner; alles andere heisst "sonstige". */
+function auswertungName(k) {
+  const namen = {
+    widerspruch: tr('Widerspruch'), frage: tr('Frage'), offener_punkt: tr('Offener Punkt'), anknuepfen: tr('Anknüpfen'),
+    zu_kurz: tr('zu kurz'), keine_ki: tr('keine KI'), ki_pause: tr('KI-Pause'),
+    offen: tr('offen'), angesprochen: tr('angesprochen'), geklaert: tr('geklärt'), vertagt: tr('vertagt'),
+    bestaetigung: tr('Bestätigung'), erkenntnis: tr('Erkenntnis'), gedanke: tr('Gedanke'),
+    sonstige: tr('sonstige'),
+  };
+  return Object.prototype.hasOwnProperty.call(namen, k) ? namen[k] : namen.sonstige;
+}
+
+/** Auswertung je Meeting (REQ-12): die Kernzahlen aus souffleur-auswertung.json unter dem Fazit -
+ *  erscheint, sobald der Status sie nach dem Sitzungsende traegt, und bleibt bis zum Zuruecksetzen stehen.
+ *  Zeigt die Zahlen der Datei und rechnet nichts selbst. */
+function renderAuswertung(a) {
+  const box = $('liveAuswertung');
+  if (!a) {
+    if (!box.hidden || box.innerHTML) { box.hidden = true; box.innerHTML = ''; delete box.dataset.key; }
+    return;
+  }
+  const key = JSON.stringify([a, englisch]);
+  if (box.dataset.key === key) return;  // Poll alle 500 ms - nur bei Aenderung neu zeichnen
+  box.dataset.key = key;
+  const locale = englisch ? 'en-US' : 'de-DE';
+  const sek = (v) => (v === null || v === undefined) ? '–'
+    : `${v.toLocaleString(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} s`;
+  const usd = (v) => v.toLocaleString(locale, { style: 'currency', currency: 'USD' });
+  const gruppe = (g, text) => !g ? tr('nicht erfasst') : g.nicht_lesbar ? tr('nicht lesbar') : text(g);
+  const jeBezeichner = (z) => Object.entries(z).map(([k, n]) => `${zahl(n)} ${auswertungName(k)}`).join(' · ');
+  const kosten = (name, spur) => `${name} ${!spur || spur.kosten_usd === null || spur.kosten_usd === undefined
+    ? tr('nicht erfasst') : usd(spur.kosten_usd)}`;
+  const rows = [
+    [tr('Hinweise'), gruppe(a.hinweise, (h) => h.gesamt ? jeBezeichner(h.je_art) : '0')],
+    [tr('Verzögerung'), gruppe(a.verzoegerung, (v) => tr('Median {median} · Maximum {max} · {n} von {m} über 15 s', {
+      median: sek(v.sprachende.median), max: sek(v.sprachende.max), n: zahl(v.ueber_15s), m: zahl(v.n) })
+      + (v.gestreckt ? ' · ' + tr('Sitzungsuhr gestreckt (Replay)') : ''))],
+    [tr('Fenster'), gruppe(a.fenster, (f) => tr('{n} gesamt', { n: zahl(f.gesamt) }) + ' · '
+      + tr('ohne KI-Aufruf: {liste}', { liste: jeBezeichner(f.ohne_ki_aufruf) || '0' }) + ' · '
+      + tr('KI-Fehler: {n}', { n: zahl(f.ki_fehler) }))],
+    [tr('Leitfaden'), gruppe(a.leitfaden, (l) => l.gesamt ? jeBezeichner(l.je_status) : '0')],
+    [tr('Mitdenker'), gruppe(a.mitdenker, (m) => m.karten ? jeBezeichner(m.je_art) : tr('{n} Karten', { n: 0 }))],
+    [tr('Kosten'), gruppe(a.verbrauch, (v) => `${kosten(tr('Abgleich'), v.abgleich)} · ${kosten(tr('Mitdenker'), v.mitdenker)}`)],
+  ];
+  box.innerHTML = `<div class="result fazit auswertung"><b>${tr('Auswertung')}</b><dl>${rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl></div>`;
   box.hidden = false;
 }
 

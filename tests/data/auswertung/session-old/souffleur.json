@@ -1,0 +1,98 @@
+{
+  "version": 1,
+  "sitzung": "session-old",
+  "speed": 4.0,
+  "wiki": {
+    "zustand": "keins",
+    "name": "",
+    "pfad": "",
+    "seiten": 0,
+    "warnungen": []
+  },
+  "ki": {
+    "backend": "ollama",
+    "modell": "erfunden-lokal",
+    "zustand": "bereit"
+  },
+  "markierungen": [
+    {
+      "id": 1,
+      "art": "frage",
+      "segment_id": 3,
+      "t_start": 35.0,
+      "t_end": 40.0,
+      "sprecher": "Sprecher 1",
+      "aussage": "ERFUNDEN-AUSSAGE-1",
+      "fundstellen": [
+        {
+          "datei": "wiki/erfunden.md",
+          "ueberschrift": "ERFUNDEN-UEBERSCHRIFT",
+          "zeile": 3,
+          "auszug": "ERFUNDEN-AUSZUG",
+          "score": 2.0
+        }
+      ],
+      "wiki_zitat": null,
+      "ki_text": "ERFUNDEN-KITEXT-1",
+      "ohne_befund": false,
+      "sicherheit": "hoch",
+      "verzoegerung_s": 9.0,
+      "anteil_asr_s": 2.0,
+      "anteil_warten_s": 1.0,
+      "anteil_suche_s": 0.01,
+      "ki_start_s": 0.0,
+      "ki_antwort_s": 6.0,
+      "verzoegerung_real_s": 8.0,
+      "t_hinweis": 49.0,
+      "fenster_id": 1,
+      "punkt_id": null,
+      "punkt_text": "",
+      "bild": null,
+      "erstellt": "2026-01-15 10:00:00",
+      "label": "frage",
+      "offener_punkt": false,
+      "fundstelle": null
+    },
+    {
+      "id": 2,
+      "art": "offener_punkt",
+      "segment_id": 8,
+      "t_start": 85.0,
+      "t_end": 90.0,
+      "sprecher": "Sprecher 1",
+      "aussage": "ERFUNDEN-AUSSAGE-2",
+      "fundstellen": [
+        {
+          "datei": "wiki/erfunden.md",
+          "ueberschrift": "ERFUNDEN-UEBERSCHRIFT",
+          "zeile": 3,
+          "auszug": "ERFUNDEN-AUSZUG",
+          "score": 2.0
+        }
+      ],
+      "wiki_zitat": null,
+      "ki_text": "ERFUNDEN-KITEXT-2",
+      "ohne_befund": false,
+      "sicherheit": "hoch",
+      "verzoegerung_s": 11.0,
+      "anteil_asr_s": 2.0,
+      "anteil_warten_s": 2.0,
+      "anteil_suche_s": 0.01,
+      "ki_start_s": 0.0,
+      "ki_antwort_s": 7.0,
+      "verzoegerung_real_s": 10.0,
+      "t_hinweis": 101.0,
+      "fenster_id": 2,
+      "punkt_id": null,
+      "punkt_text": "",
+      "bild": null,
+      "erstellt": "2026-01-15 10:00:00",
+      "label": "offener_punkt",
+      "offener_punkt": true,
+      "fundstelle": null
+    }
+  ],
+  "bilanz": {
+    "hinweise": 2
+  }
+}

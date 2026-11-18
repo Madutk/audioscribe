@@ -28,4 +28,8 @@ SOUFFLEUR_DATEIEN: tuple[str, ...] = (
     # Mitdenker (mitdenker.py): KI-erzeugte Karten - bleiben im Sitzungsordner, nie ins Wiki.
     "souffleur-mitdenker.json",
     "souffleur-mitdenker.md",
+    # Auswertung je Meeting (auswertung.py): nur Zahlen und Bezeichner, abgeleitet aus den Dateien
+    # oben - bleibt im Sitzungsordner, nie ins Wiki.
+    "souffleur-auswertung.json",
+    "souffleur-auswertung.md",
 )

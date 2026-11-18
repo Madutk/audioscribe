@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "sitzung_id": "00000000000000000000000000000000",
+  "status": "beendet",
+  "titel": "ERFUNDEN-SITZUNGSTITEL",
+  "gestartet": "2026-01-15T10:00:00",
+  "aktualisiert": "2026-01-15T10:31:00",
+  "sprache": "de",
+  "modell": "erfunden-asr",
+  "replay": false,
+  "teile": []
+}
