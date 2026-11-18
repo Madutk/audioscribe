@@ -12,6 +12,7 @@ Befehle:
   bpmn    - BPMN-Modell mit Lanes aus bpmn-modell.json erzeugen/pruefen (FR-36)
   live    - Live-Transkription: Monitor + System-Audio + Mikrofon mitschneiden (PRD §17; Windows, macOS)
   refine  - Live-Sitzung mit der Offline-Pipeline nachschaerfen (FR-43)
+  auswertung - Auswertung je Meeting aus den Dateien eines Sitzungsordners schreiben (REQ-12)
 """
 
 from __future__ import annotations
@@ -247,6 +248,27 @@ def _refine(args: argparse.Namespace) -> int:
         print(str(exc))
         return 1
     print(f"\nFertig. Transkript: {out}")
+    return 0
+
+
+def _auswertung(args: argparse.Namespace) -> int:
+    """Auswertung eines vorhandenen Sitzungsordners schreiben - liest nur Dateien, laedt kein Modell."""
+    from audioscribe.souffleur import auswertung
+
+    ordner = Path(args.target).expanduser()
+    try:
+        auswertung.erzeuge(ordner)
+    except auswertung.KeineQuellenFehler:
+        print(
+            f"Keine Auswertung moeglich: {ordner} ist kein Sitzungsordner mit Souffleur-Dateien "
+            f"({', '.join(auswertung.QUELLDATEIEN)}).",
+            file=sys.stderr,
+        )
+        return 1
+    except OSError as exc:
+        print(f"Auswertung nicht schreibbar: {exc}", file=sys.stderr)
+        return 1
+    print(f"Auswertung: {ordner / auswertung.AUSWERTUNG_MD_DATEI}")
     return 0
 
 
@@ -542,7 +564,17 @@ def main(argv: list[str] | None = None) -> int:
     ref.add_argument("--backend", help=_BACKEND_HELP)
     ref.add_argument("--no-diarize", action="store_true", help="System-Spur nicht diarisieren")
 
+    aus = sub.add_parser(
+        "auswertung",
+        help="Auswertung je Meeting: Kennzahlen des Souffleurs aus den Dateien eines Sitzungsordners "
+        "(souffleur-auswertung.json/.md; ohne Modell, ohne KI, ohne Netz)",
+    )
+    aus.add_argument("target", metavar="ORDNER", help="Sitzungsordner (output/live-...)")
+
     args = parser.parse_args(argv)
+
+    if args.command == "auswertung":
+        return _auswertung(args)
 
     if args.command == "live":
         if args.list_devices:

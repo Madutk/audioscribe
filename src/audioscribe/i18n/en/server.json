@@ -147,5 +147,6 @@
   "Bitte die Art des Meetings wählen ({arten}) – sie ist Teil des Dateinamens im Wiki.": "Please choose the meeting type ({arten}) – it is part of the file name in the wiki.",
   "Analyse-Ordner nicht gefunden: {ordner}": "Analysis folder not found: {ordner}",
   "Ablage darf nicht unter den Wiki-Seiten liegen: {ziel}": "Filing target must not be under the wiki pages: {ziel}",
-  "Die Ablage darf nicht im Sitzungsordner selbst liegen.": "The filing target must not be inside the session folder itself."
+  "Die Ablage darf nicht im Sitzungsordner selbst liegen.": "The filing target must not be inside the session folder itself.",
+  "Auswertung fehlgeschlagen: {fehler}": "Evaluation failed: {fehler}"
 }

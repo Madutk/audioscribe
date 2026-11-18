@@ -23,6 +23,7 @@ from pathlib import Path
 
 from audioscribe.i18n import tr
 from audioscribe.live.events import parse_event
+from audioscribe.souffleur import auswertung
 from audioscribe.ui.jobs import (
     AnalyseOptions,
     JobOptions,
@@ -664,6 +665,7 @@ class LiveRunner(_ProcessRunner):
                 "fortgesetzt": getattr(opts, "resume_dir", None) is not None,  # Wiederaufnahme (PRD §21)
                 "pausiert": False,  # Abspielen angehalten (nur Transkript-Replay, z. B. die Demo)
                 "nachlauf": None,  # Ergebnis von on_ende, z. B. {"wiki_ablage": {...}}
+                "auswertung": None,  # Auswertung je Meeting (souffleur-auswertung.json), nach dem Ende
                 "bildquelle": None,  # {monitor, window, label, aktiv} - wirksame Bildquelle (FR-37)
             }
             self._events = []
@@ -905,6 +907,7 @@ class LiveRunner(_ProcessRunner):
                     souffleur.abschliessen()
                 except Exception as exc:  # noqa: BLE001 - Abschluss des Souffleurs ist Zugabe
                     self._append(tr("Souffleur-Abschluss fehlgeschlagen: {fehler}", fehler=exc))
+            self._werte_aus(code)
             self._nachlauf(code)
             with self._lock:
                 self._info.update(
@@ -915,6 +918,20 @@ class LiveRunner(_ProcessRunner):
             self._append(
                 "\n" + (tr("Sitzung beendet.") if code == 0 else tr("Beendet mit Exit-Code {code}.", code=code))
             )
+
+    def _werte_aus(self, code: int) -> None:
+        """Auswertung je Meeting (REQ-12): nach einem sauberen Ende und nach dem Abschluss des
+        Souffleurs die zwei Auswertungsdateien schreiben - auch im Testmodus und in der Demo, die
+        keinen Nachlauf haben. Solange gilt die Sitzung als laufend; die Auswertung steht danach
+        als ``auswertung`` im Status. Nicht fuer verworfene Sitzungen, und nichts ohne Souffleur-Dateien."""
+        with self._lock:
+            session, verworfen = self._info.get("dir"), self._discard
+        if code != 0 or verworfen or not session:
+            return
+        daten = auswertung.am_sitzungsende(Path(session), self._append)
+        if daten:
+            with self._lock:
+                self._info["auswertung"] = daten
 
     def _nachlauf(self, code: int) -> None:
         """Nach einem sauberen Ende: ``on_ende`` ausfuehren (z. B. Wiki-Ablage "immer"). Solange
