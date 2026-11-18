@@ -646,7 +646,7 @@ function renderFazit(f) {
 }
 
 /** Bezeichner aus souffleur-auswertung.json (Arten, Gruende, Status) in der Sprache der
- *  Oberflaeche; ein unbekannter steht, wie er in der Datei steht. */
+ *  Oberflaeche. Die Datei enthaelt nur feste Bezeichner; alles andere heisst "sonstige". */
 function auswertungName(k) {
   const namen = {
     widerspruch: tr('Widerspruch'), frage: tr('Frage'), offener_punkt: tr('Offener Punkt'), anknuepfen: tr('Anknüpfen'),
@@ -655,7 +655,7 @@ function auswertungName(k) {
     bestaetigung: tr('Bestätigung'), erkenntnis: tr('Erkenntnis'), gedanke: tr('Gedanke'),
     sonstige: tr('sonstige'),
   };
-  return Object.prototype.hasOwnProperty.call(namen, k) ? namen[k] : k;
+  return Object.prototype.hasOwnProperty.call(namen, k) ? namen[k] : namen.sonstige;
 }
 
 /** Auswertung je Meeting (REQ-12): die Kernzahlen aus souffleur-auswertung.json unter dem Fazit -

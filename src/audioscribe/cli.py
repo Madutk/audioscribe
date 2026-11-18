@@ -268,6 +268,9 @@ def _auswertung(args: argparse.Namespace) -> int:
     except OSError as exc:
         print(f"Auswertung nicht schreibbar: {exc}", file=sys.stderr)
         return 1
+    except Exception as exc:  # noqa: BLE001 - nie mit einem Traceback enden: Meldung und Fehlercode
+        print(f"Auswertung fehlgeschlagen: {type(exc).__name__}: {exc}", file=sys.stderr)
+        return 1
     print(f"Auswertung: {ordner / auswertung.AUSWERTUNG_MD_DATEI}")
     return 0
 

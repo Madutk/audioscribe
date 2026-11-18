@@ -11,22 +11,33 @@ Leitplanken:
   nur die zwei Auswertungsdateien, jede atomar.
 - **Kein Wortlaut**: In die Auswertung gehen nur Zahlen, Zeitangaben und feste Bezeichner (Arten,
   Gründe, Status, Dienst- und Modellname, Ordnername). Texte aus den Quelldateien sind Daten; sie
-  werden gezählt, nie übernommen. Ein unbekannter Grund zählt nur dann unter seinem Namen, wenn er
-  ein kurzer Bezeichner ist, sonst unter ``sonstige``.
+  werden gezählt, nie übernommen. Jeder gezählte Bezeichner wird gegen eine feste Liste geprüft;
+  alles andere zählt unter ``sonstige`` - kein Wert aus einer Quelldatei wird zum Schlüssel.
+  Nicht endliche Zahlen (``NaN``, ``Infinity``) gelten als fehlender Wert.
 - Fehlt die Quelle einer Gruppe, ist die Gruppe ``null`` ("nicht erfasst"), nie 0. Ist die Quelle
   da, aber nicht lesbar, ist die Gruppe ``{"nicht_lesbar": true}``; der Rest entsteht.
-- Nur Standardbibliothek: kein Modell, kein KI-Dienst, kein Netz.
+- Kein Modell, kein KI-Dienst, kein Netz: importiert werden nur Konstanten des Produktcodes.
 """
 
 from __future__ import annotations
 
+import contextlib
 import json
+import math
 import os
 import re
 import statistics
-from collections.abc import Callable
+import tempfile
+from collections.abc import Callable, Iterable
 from datetime import datetime
 from pathlib import Path
+
+from audioscribe.live import journal as journal_modul
+from audioscribe.souffleur import ki as ki_modul
+from audioscribe.souffleur import leitfaden as lf_modul
+from audioscribe.souffleur import markierung as mk
+from audioscribe.souffleur import mitdenker as md_modul
+from audioscribe.souffleur import wiki as wiki_modul
 
 AUSWERTUNG_DATEI = "souffleur-auswertung.json"
 AUSWERTUNG_MD_DATEI = "souffleur-auswertung.md"
@@ -48,17 +59,54 @@ SPUR_MITDENKER = "mitdenker"
 SONSTIGE = "sonstige"
 NICHT_LESBAR = {"nicht_lesbar": True}
 
-# Feste Reihenfolge der bekannten Bezeichner in der Ausgabe (Unbekanntes steht dahinter).
-_ARTEN = ("widerspruch", "frage", "offener_punkt", "anknuepfen")
-_STUFEN = ("hoch", "mittel")
-_STATUS = ("offen", "angesprochen", "geklaert", "vertagt")
-_KARTEN_ARTEN = ("bestaetigung", "erkenntnis", "gedanke")
-_HERKUNFT = ("wiki", "gespraech", "allgemeinwissen")
+# Feste Listen der Bezeichner (Kriterium 16): Gezählt wird nur, was in einer dieser Listen steht;
+# jeder andere Wert zählt unter ``sonstige``. Kein Wert aus einer Quelldatei wird als Schlüssel
+# übernommen. Wo der Produktcode eine Konstante hat, kommt die Liste von dort.
+HINWEIS_ARTEN: tuple[str, ...] = (mk.ART_WIDERSPRUCH, mk.ART_FRAGE, mk.ART_OFFEN, mk.ART_ANKNUEPFEN)
+PUNKT_STATUS: tuple[str, ...] = lf_modul.STATUS
+KARTEN_ARTEN: tuple[str, ...] = md_modul.ARTEN
+KARTEN_HERKUNFT: tuple[str, ...] = (md_modul.HERKUNFT_WIKI, md_modul.HERKUNFT_GESPRAECH, md_modul.HERKUNFT_KI)
+# "laedt" kennt nur die Anzeige des Souffleurs (kern.py, status) - dafür gibt es keine Konstante.
+WIKI_ZUSTAENDE: tuple[str, ...] = (
+    wiki_modul.ZUSTAND_KEINS,
+    wiki_modul.ZUSTAND_OK,
+    wiki_modul.ZUSTAND_FEHLER,
+    "laedt",
+)
+KI_DIENSTE: tuple[str, ...] = ki_modul.BACKENDS
+# Ohne Konstante im Produktcode - eigene Listen; tests/test_auswertung.py prüft sie gegen die Quelle
+# (Antwortschemata in prompt.py und mitdenker.py, Diagnosezeilen in kern.py und mitdenker.py).
+STUFEN: tuple[str, ...] = ("hoch", "mittel")  # sicherheit der Hinweise, relevanz der Karten
+OHNE_KI_AUFRUF: tuple[str, ...] = ("zu_kurz", "keine_ki", "ki_pause")
+BEFUND_VERWORFEN: tuple[str, ...] = ("ungueltig", "dublette")
+KI_UEBERGANGEN: tuple[str, ...] = (
+    "smalltalk",
+    "organisatorisch",
+    "passt_zum_wiki",
+    "rhetorische_frage",
+    "unverstaendlich",
+)
+LEITFADEN_VERWORFEN: tuple[str, ...] = (
+    "ungueltig",
+    "ohne_beleg",
+    "abweichung_ohne_beleg",
+    "unbekannt",
+    "unveraendert",
+)
+KARTEN_VERWORFEN: tuple[str, ...] = (
+    "ungueltig",
+    "unbekannte_art",
+    "unbekanntes_segment",
+    "ohne_text",
+    "ohne_zitat",
+    "ohne_aussage",
+    "relevanz_mittel",
+    "dublette",
+)
 
 _FEHLT = object()  # Quelldatei nicht vorhanden
 _KAPUTT = object()  # vorhanden, aber nicht lesbar (kein JSON, falsche Form)
 
-_BEZEICHNER = re.compile(r"\w{1,40}")
 _NAME = re.compile(r"[\w.:/@+-]{1,80}")  # Dienst- und Modellnamen, z. B. "claude-agent", "qwen2.5:14b"
 
 
@@ -75,7 +123,8 @@ def _lies_json(pfad: Path) -> object:
         return _FEHLT
     try:
         return json.loads(pfad.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+    except (OSError, ValueError, RecursionError, OverflowError):
+        # RecursionError: tief verschachteltes JSON; ValueError deckt auch überlange Zahlen ab.
         return _KAPUTT
 
 
@@ -95,7 +144,7 @@ def _lies_zeilen(pfad: Path) -> tuple[list[dict], int] | object:
             continue
         try:
             wert = json.loads(teil.decode("utf-8"))
-        except ValueError:
+        except (ValueError, RecursionError, OverflowError):
             unlesbar += 1
             continue
         if isinstance(wert, dict):
@@ -115,31 +164,37 @@ def _liste_von_dicts(wert: object) -> list[dict] | None:
 
 
 def _zahl(wert: object) -> float | int | None:
-    """Nur echte Zahlen - ``True``/``False`` und Texte sind keine."""
+    """Nur echte, endliche Zahlen. ``True``/``False`` und Texte sind keine; ``NaN``, ``Infinity``
+    und Zahlen jenseits des Gleitkommabereichs gelten als fehlender Wert (wie ``null``)."""
     if isinstance(wert, bool) or not isinstance(wert, (int, float)):
         return None
-    return wert
+    try:
+        endlich = math.isfinite(float(wert))
+    except OverflowError:
+        return None
+    return wert if endlich else None
 
 
-def _bezeichner(wert: object) -> str:
-    """Ein fester Bezeichner, wie er in der Datei steht - oder ``sonstige`` (kein Wortlaut)."""
-    if isinstance(wert, str) and _BEZEICHNER.fullmatch(wert):
-        return wert
-    return SONSTIGE
+def _fest(wert: object, erlaubt: tuple[str, ...]) -> str | None:
+    """Der Bezeichner aus der festen Liste - nie der Wert aus der Datei -, sonst ``None``."""
+    if isinstance(wert, str):
+        for bezeichner in erlaubt:
+            if wert == bezeichner:
+                return bezeichner
+    return None
 
 
 def _name(wert: object) -> str | None:
     return wert if isinstance(wert, str) and _NAME.fullmatch(wert) else None
 
 
-def _zaehle(werte, ordnung: tuple[str, ...] = ()) -> dict[str, int]:
-    """Zählt Bezeichner. Nur was vorkommt, steht im Ergebnis - bekannte in fester Reihenfolge
-    (``ordnung``) vorn, alle anderen dahinter, wie sie zuerst vorkamen."""
-    zaehler: dict[str, int] = {}
+def _zaehle(werte: Iterable[object], erlaubt: tuple[str, ...]) -> dict[str, int]:
+    """Zählt Bezeichner gegen die feste Liste ``erlaubt``; alles andere zählt unter ``sonstige``.
+    Nur was vorkommt, steht im Ergebnis - in der Reihenfolge der Liste, ``sonstige`` zuletzt."""
+    zaehler = dict.fromkeys((*erlaubt, SONSTIGE), 0)
     for wert in werte:
-        schluessel = _bezeichner(wert)
-        zaehler[schluessel] = zaehler.get(schluessel, 0) + 1
-    return {k: zaehler[k] for k in (*(o for o in ordnung if o in zaehler), *(k for k in zaehler if k not in ordnung))}
+        zaehler[_fest(wert, erlaubt) or SONSTIGE] += 1
+    return {k: n for k, n in zaehler.items() if n}
 
 
 def _stat(werte: list[float]) -> dict:
@@ -156,20 +211,37 @@ def _mittel(werte: list[float]) -> float | None:
     return round(statistics.fmean(werte), 2) if werte else None
 
 
-def _gruende(zeilen: list[dict], feld: str) -> dict[str, int]:
+def _gruende(zeilen: list[dict], feld: str, erlaubt: tuple[str, ...]) -> dict[str, int]:
     """Zählt ``grund`` über die Listen ``feld`` der Zeilen (Einträge ohne Objektform: ``sonstige``)."""
     return _zaehle(
-        (e.get("grund") if isinstance(e, dict) else None)
-        for z in zeilen
-        if isinstance(z.get(feld), list)
-        for e in z[feld]
+        (
+            (e.get("grund") if isinstance(e, dict) else None)
+            for z in zeilen
+            if isinstance(z.get(feld), list)
+            for e in z[feld]
+        ),
+        erlaubt,
     )
 
 
 # --- Gruppen ----------------------------------------------------------------------------
 
 
-def _rahmen(session_dir: Path, stand: object, journal: object) -> dict:
+def _journal(session_dir: Path) -> tuple[int, float | None] | None:
+    """Zahl der Segmente und letzter Zeitpunkt aus dem Journal - gelesen mit ``journal.lies_journal``,
+    also mit derselben Regel, nach der das Produkt eine Zeile als gültig ansieht. ``None`` ohne Journal."""
+    if not (session_dir / JOURNAL_DATEI).is_file():
+        return None
+    try:
+        bestand = journal_modul.lies_journal(session_dir)
+    except (OverflowError, RecursionError):
+        return None
+    zeiten = [bestand.takt_s, *(float(s["end"]) for s in bestand.segmente)]
+    zeiten = [t for t in zeiten if _zahl(t) is not None and t > 0]
+    return len(bestand.segmente), max(zeiten) if zeiten else None
+
+
+def _rahmen(session_dir: Path, stand: object) -> dict:
     sitzung = _lies_json(session_dir / SITZUNG_DATEI)
     sitzung = sitzung if isinstance(sitzung, dict) else {}
     gestartet = sitzung.get("gestartet")
@@ -183,15 +255,11 @@ def _rahmen(session_dir: Path, stand: object, journal: object) -> dict:
     live = bilanz.get("live") if isinstance(bilanz, dict) else None
     aufnahme_s = _zahl(live.get("aufnahme_s")) if isinstance(live, dict) else None
     segmente = None
-    if isinstance(journal, tuple):
-        zeilen = journal[0]
-        segment_zeilen = [z for z in zeilen if z.get("art") == "segment"]
-        segmente = len({json.dumps(z["id"], sort_keys=True) for z in segment_zeilen if z.get("id") is not None})
+    journal = _journal(session_dir)
+    if journal is not None:
+        segmente = journal[0]
         if aufnahme_s is None:
-            zeiten = [_zahl(z.get("elapsed")) for z in zeilen if z.get("art") == "takt"]
-            zeiten += [_zahl(z.get("end")) for z in segment_zeilen]
-            zeiten = [t for t in zeiten if t is not None]
-            aufnahme_s = max(zeiten) if zeiten else None
+            aufnahme_s = journal[1]
 
     stand = stand if isinstance(stand, dict) else {}
     ki, wiki = stand.get("ki"), stand.get("wiki")
@@ -200,11 +268,11 @@ def _rahmen(session_dir: Path, stand: object, journal: object) -> dict:
         "gestartet": gestartet,
         "aufnahme_s": None if aufnahme_s is None else round(float(aufnahme_s), 2),
         "segmente": segmente,
-        "ki": {"backend": _name(ki.get("backend")), "modell": _name(ki.get("modell"))}
+        "ki": {"backend": _fest(ki.get("backend"), KI_DIENSTE), "modell": _name(ki.get("modell"))}
         if isinstance(ki, dict)
         else None,
         "wiki": {
-            "zustand": _bezeichner(wiki.get("zustand")) if wiki.get("zustand") is not None else None,
+            "zustand": _fest(wiki.get("zustand"), WIKI_ZUSTAENDE),
             "seiten": _zahl(wiki.get("seiten")),
         }
         if isinstance(wiki, dict)
@@ -219,8 +287,8 @@ def _hinweise(markierungen: list[dict], aufnahme_s: float | None) -> dict:
     gesamt = len(markierungen)
     return {
         "gesamt": gesamt,
-        "je_art": _zaehle((m.get("art") for m in markierungen), _ARTEN),
-        "je_sicherheit": _zaehle((m.get("sicherheit") for m in markierungen), _STUFEN),
+        "je_art": _zaehle((m.get("art") for m in markierungen), HINWEIS_ARTEN),
+        "je_sicherheit": _zaehle((m.get("sicherheit") for m in markierungen), STUFEN),
         "ohne_befund": sum(1 for m in markierungen if m.get("ohne_befund") is True),
         "je_stunde": round(gesamt / (aufnahme_s / 3600), 1) if aufnahme_s else None,
     }
@@ -251,7 +319,7 @@ def _verzoegerung(markierungen: list[dict], speed: float | None) -> dict | None:
 
 
 def _erfolgreich(zeilen: list[dict]) -> list[dict]:
-    return [z for z in zeilen if z.get("ki_antwort_s") is not None]
+    return [z for z in zeilen if _zahl(z.get("ki_antwort_s")) is not None]
 
 
 def _fenster(zeilen: list[dict], unlesbar: int) -> dict:
@@ -261,12 +329,14 @@ def _fenster(zeilen: list[dict], unlesbar: int) -> dict:
     ki_fehler = sum(1 for z in fehler if "treffer" in z)
     return {
         "gesamt": len(fenster),
-        "ohne_ki_aufruf": _zaehle(z["uebergangen"] for z in fenster if isinstance(z.get("uebergangen"), str)),
+        "ohne_ki_aufruf": _zaehle(
+            (z["uebergangen"] for z in fenster if isinstance(z.get("uebergangen"), str)), OHNE_KI_AUFRUF
+        ),
         "ki_aufrufe": len(erfolgreich) + ki_fehler,
         "ki_fehler": ki_fehler,
         "abgebrochen": len(fehler) - ki_fehler,
-        "verworfen": _gruende(erfolgreich, "verworfen"),
-        "ki_uebergangen": _gruende(erfolgreich, "uebergangen"),
+        "verworfen": _gruende(erfolgreich, "verworfen", BEFUND_VERWORFEN),
+        "ki_uebergangen": _gruende(erfolgreich, "uebergangen", KI_UEBERGANGEN),
         "unlesbare_zeilen": unlesbar,
     }
 
@@ -279,7 +349,7 @@ def _leitfaden(punkte: list[dict], diagnose: list[dict] | None) -> dict:
         urheber[schluessel] = urheber.get(schluessel, 0) + 1
     return {
         "gesamt": len(punkte),
-        "je_status": _zaehle((p.get("status") for p in punkte), _STATUS),
+        "je_status": _zaehle((p.get("status") for p in punkte), PUNKT_STATUS),
         "muss_offen": sum(
             1 for p in punkte if p.get("prioritaet") == "muss" and p.get("status") not in ("geklaert", "vertagt")
         ),
@@ -289,7 +359,9 @@ def _leitfaden(punkte: list[dict], diagnose: list[dict] | None) -> dict:
         ),
         "ki_verworfen": None
         if diagnose is None
-        else _gruende(_erfolgreich([z for z in diagnose if "spur" not in z]), "leitfaden_verworfen"),
+        else _gruende(
+            _erfolgreich([z for z in diagnose if "spur" not in z]), "leitfaden_verworfen", LEITFADEN_VERWORFEN
+        ),
     }
 
 
@@ -304,15 +376,15 @@ def _mitdenker(daten: dict, karten: list[dict], diagnose: list[dict] | None) -> 
         "laeufe": _zahl(bilanz.get("laeufe")),
         "gescheitert": _zahl(bilanz.get("fehler")),
         "karten": len(karten),
-        "je_art": _zaehle((k.get("art") for k in karten), _KARTEN_ARTEN),
+        "je_art": _zaehle((k.get("art") for k in karten), KARTEN_ARTEN),
         # Eine Karte mit zwei Herkünften zählt bei beiden.
         "je_herkunft": _zaehle(
-            (h for k in karten for h in (k["herkunft"] if isinstance(k.get("herkunft"), list) else [])), _HERKUNFT
+            (h for k in karten for h in (k["herkunft"] if isinstance(k.get("herkunft"), list) else [])), KARTEN_HERKUNFT
         ),
-        "je_relevanz": _zaehle((k.get("relevanz") for k in karten), _STUFEN),
+        "je_relevanz": _zaehle((k.get("relevanz") for k in karten), STUFEN),
         "verworfen": None
         if diagnose is None
-        else _gruende([z for z in diagnose if z.get("spur") == SPUR_MITDENKER], "verworfen"),
+        else _gruende([z for z in diagnose if z.get("spur") == SPUR_MITDENKER], "verworfen", KARTEN_VERWORFEN),
         "zeit_bis_karte": _stat(zeiten),
     }
 
@@ -347,15 +419,23 @@ def hat_quellen(session_dir: str | Path) -> bool:
     return session_dir.is_dir() and any((session_dir / name).is_file() for name in QUELLDATEIEN)
 
 
+def _gruppe(rechne: Callable[..., dict | None], *args: object) -> dict | None:
+    """Eine Gruppe rechnen. Lässt sich ihre Quelle nicht verrechnen (Zahlen jenseits des
+    Gleitkommabereichs, unerwartete Form), ist die Gruppe "nicht lesbar" - der Rest entsteht."""
+    try:
+        return rechne(*args)
+    except (ArithmeticError, RecursionError, TypeError, ValueError, KeyError, AttributeError):
+        return dict(NICHT_LESBAR)
+
+
 def werte_aus(session_dir: str | Path) -> dict:
     """Die Auswertung eines Sitzungsordners als Dict. Liest nur, schreibt nichts."""
     session_dir = Path(session_dir)
     stand = _lies_json(session_dir / STAND_DATEI)
     diagnose = _lies_zeilen(session_dir / DIAGNOSE_DATEI)
-    journal = _lies_zeilen(session_dir / JOURNAL_DATEI)
     diagnose_zeilen = diagnose[0] if isinstance(diagnose, tuple) else None
 
-    rahmen = _rahmen(session_dir, stand, journal)
+    rahmen = _rahmen(session_dir, stand)
 
     hinweise: dict | None
     verzoegerung: dict | None
@@ -366,8 +446,8 @@ def werte_aus(session_dir: str | Path) -> dict:
         if markierungen is None:
             hinweise, verzoegerung = dict(NICHT_LESBAR), dict(NICHT_LESBAR)
         else:
-            hinweise = _hinweise(markierungen, rahmen["aufnahme_s"])
-            verzoegerung = _verzoegerung(markierungen, rahmen["speed"])
+            hinweise = _gruppe(_hinweise, markierungen, rahmen["aufnahme_s"])
+            verzoegerung = _gruppe(_verzoegerung, markierungen, rahmen["speed"])
 
     fenster: dict | None
     verbrauch: dict | None
@@ -376,8 +456,8 @@ def werte_aus(session_dir: str | Path) -> dict:
     elif diagnose_zeilen is None:
         fenster, verbrauch = dict(NICHT_LESBAR), dict(NICHT_LESBAR)
     else:
-        fenster = _fenster(diagnose_zeilen, diagnose[1])
-        verbrauch = _verbrauch(diagnose_zeilen)
+        fenster = _gruppe(_fenster, diagnose_zeilen, diagnose[1])
+        verbrauch = _gruppe(_verbrauch, diagnose_zeilen)
 
     leitfaden: dict | None
     roh = _lies_json(session_dir / LEITFADEN_DATEI)
@@ -385,7 +465,7 @@ def werte_aus(session_dir: str | Path) -> dict:
         leitfaden = None
     else:
         punkte = _liste_von_dicts(roh.get("punkte")) if isinstance(roh, dict) else None
-        leitfaden = dict(NICHT_LESBAR) if punkte is None else _leitfaden(punkte, diagnose_zeilen)
+        leitfaden = dict(NICHT_LESBAR) if punkte is None else _gruppe(_leitfaden, punkte, diagnose_zeilen)
 
     mitdenker: dict | None
     roh = _lies_json(session_dir / MITDENKER_DATEI)
@@ -393,7 +473,7 @@ def werte_aus(session_dir: str | Path) -> dict:
         mitdenker = None
     else:
         karten = _liste_von_dicts(roh.get("karten")) if isinstance(roh, dict) else None
-        mitdenker = dict(NICHT_LESBAR) if karten is None else _mitdenker(roh, karten, diagnose_zeilen)
+        mitdenker = dict(NICHT_LESBAR) if karten is None else _gruppe(_mitdenker, roh, karten, diagnose_zeilen)
 
     return {
         "version": AUSWERTUNG_VERSION,
@@ -411,18 +491,27 @@ def werte_aus(session_dir: str | Path) -> dict:
 
 
 def _atomar(pfad: Path, text: str) -> None:
-    tmp = pfad.with_suffix(pfad.suffix + ".tmp")
+    """Atomar schreiben über eine eindeutige Zwischendatei im selben Ordner. ``mkstemp`` legt sie
+    neu und exklusiv an (nie durch einen Symlink); ``os.replace`` ersetzt das Ziel selbst - ist es
+    ein Symlink, wird der Link ersetzt, nicht die Datei dahinter beschrieben."""
+    fd, tmp = tempfile.mkstemp(dir=pfad.parent, prefix=f".{pfad.name}.", suffix=".tmp")
     try:
-        tmp.write_text(text, encoding="utf-8")
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(text)
+        os.chmod(tmp, 0o644)  # mkstemp legt 0600 an - lesbar wie die anderen Begleitdateien
         os.replace(tmp, pfad)
-    finally:
-        tmp.unlink(missing_ok=True)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            os.unlink(tmp)
+        raise
 
 
 def schreibe(session_dir: str | Path, daten: dict) -> Path:
     """``souffleur-auswertung.json`` und ``souffleur-auswertung.md`` schreiben (atomar). Mehr nicht."""
     session_dir = Path(session_dir)
-    _atomar(session_dir / AUSWERTUNG_DATEI, json.dumps(daten, ensure_ascii=False, indent=2) + "\n")
+    # allow_nan=False: nie NaN oder Infinity in der Datei - sie wäre sonst kein gültiges JSON.
+    text = json.dumps(daten, ensure_ascii=False, indent=2, allow_nan=False) + "\n"
+    _atomar(session_dir / AUSWERTUNG_DATEI, text)
     _atomar(session_dir / AUSWERTUNG_MD_DATEI, render_markdown(daten))
     return session_dir / AUSWERTUNG_MD_DATEI
 
@@ -486,6 +575,10 @@ _LABEL = {
     "allgemeinwissen": "KI-Wissen",
     "relevanz_mittel": "Relevanz mittel",
     "ohne_zitat": "ohne Zitat",
+    "ohne_aussage": "ohne Aussage",
+    "ohne_text": "ohne Text",
+    "unbekannte_art": "unbekannte Art",
+    "unbekanntes_segment": "unbekanntes Segment",
     "moderator": "Moderator",
     "datei": "Datei",
     "ki": "KI",
