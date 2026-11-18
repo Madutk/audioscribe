@@ -49,7 +49,7 @@ def install_hint() -> str:
     return tr("KI-Dienst nicht verfügbar: Paket 'claude-agent-sdk' fehlt (uv sync --extra agent).")
 
 
-class KiFehler(RuntimeError):
+class KiFehler(RuntimeError):  # noqa: N818 - deutsche Benennung: Fehler statt Error
     """Ein KI-Aufruf ist gescheitert (Dienst, Zeitüberschreitung, unbrauchbare Antwort)."""
 
 
@@ -114,8 +114,8 @@ class ClaudeAgentKi:
         # Ein leerer, eigener Ordner - nie der Wiki-Pfad und nie ein Transkriptordner: die CLI
         # legt Sitzungsdateien nach dem Arbeitsverzeichnis ab.
         self.cwd = Path(cwd)
-        self._log = log or (lambda msg: None)
-        self._on_verbrauch = on_verbrauch or (lambda verbrauch: None)
+        self._log = log or (lambda msg: None)  # noqa: ARG005 - Leer-Rueckruf, Argument absichtlich ungenutzt
+        self._on_verbrauch = on_verbrauch or (lambda verbrauch: None)  # noqa: ARG005 - Leer-Rueckruf, Argument absichtlich ungenutzt
 
     def antworte(self, auftrag: KiAuftrag) -> KiAntwort:
         import anyio

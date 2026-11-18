@@ -116,7 +116,7 @@ def _unicode_fonts() -> tuple[str, str] | None:
         reg, bold = ttf / "DejaVuSans.ttf", ttf / "DejaVuSans-Bold.ttf"
         if reg.exists():
             return str(reg), str(bold if bold.exists() else reg)
-    except Exception:  # noqa: BLE001
+    except Exception:  # noqa: BLE001, S110 - kein Unicode-Font gefunden -> None
         pass
     return None
 

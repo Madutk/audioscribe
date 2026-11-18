@@ -42,7 +42,7 @@ def _mss_fehlt() -> str:
     return tr("mss fehlt - keine Standbilder (uv sync ... --extra live)")
 
 
-class SourceUnavailable(RuntimeError):
+class SourceUnavailable(RuntimeError):  # noqa: N818 - Bestand, ungeprüft (REQ-11)
     """Die gewählte Bildquelle gibt es nicht (Monitor-Index, geschlossenes Fenster)."""
 
 

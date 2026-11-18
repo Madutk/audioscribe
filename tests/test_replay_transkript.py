@@ -265,7 +265,7 @@ def test_raffen_behaelt_reihenfolge_und_wortlaut_und_streicht_leerlauf():
     assert gerafft[0].start == 1.0 and gerafft[0].end == 2.5  # Vorlauf 1 s, Mindestdauer 1,5 s
     assert gerafft[1].start == gerafft[0].end and gerafft[1].end - gerafft[1].start == 1.5
     assert round(gerafft[2].end - gerafft[2].start, 2) == 10.6  # 200 Zeichen / 20 + 0,6 s
-    assert all(a.end == b.start for a, b in zip(gerafft, gerafft[1:]))  # lueckenlos
+    assert all(a.end == b.start for a, b in zip(gerafft, gerafft[1:]))  # lueckenlos  # noqa: B905 - Nachbarpaare, zweite Folge absichtlich kuerzer
     assert raffe([]) == []
 
 

@@ -65,7 +65,7 @@ def run_pipeline(
     finally:
         if audio_path != source_path:
             # Das extrahierte WAV wird danach nie wieder gelesen (~115 MB je Stunde).
-            try:
+            try:  # noqa: SIM105 - try/except/pass bleibt; contextlib.suppress waere Umschreiben
                 audio_path.unlink(missing_ok=True)
             except OSError:
                 pass
@@ -139,7 +139,7 @@ def _annotiert_aktualisieren(ziel_dir: Path, make_pdf: bool, reporter) -> None:
 
     if not load_marks(ziel_dir):
         for name in ("transkript.annotiert.md", "transkript.annotiert.pdf"):
-            try:
+            try:  # noqa: SIM105 - try/except/pass bleibt; contextlib.suppress waere Umschreiben
                 (ziel_dir / name).unlink(missing_ok=True)
             except OSError:
                 pass

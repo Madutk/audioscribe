@@ -91,9 +91,9 @@ def log(message: str) -> None:
         _stdout_tot.set()
         rueckrufe, _bei_tot[:] = list(_bei_tot), []
         for rueckruf in rueckrufe:
-            try:
+            try:  # noqa: SIM105 - try/except/pass bleibt; contextlib.suppress waere Umschreiben
                 rueckruf()
-            except Exception:  # noqa: BLE001 - der Notabschluss darf hier nie scheitern
+            except Exception:  # noqa: BLE001, S110 - der Notabschluss darf hier nie scheitern
                 pass
 
 

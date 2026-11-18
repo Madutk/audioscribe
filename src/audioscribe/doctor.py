@@ -37,7 +37,10 @@ MACOS_MIN = (14, 0)  # mlx-Wheels gibt es ab macOS 14; ScreenCaptureKit-Audio ab
 def _sysctl(name: str) -> str:
     try:
         return subprocess.run(  # noqa: S603 - festes Kommando
-            ["sysctl", "-n", name], capture_output=True, text=True, timeout=5
+            ["sysctl", "-n", name],  # noqa: S607 - festes Kommando aus PATH
+            capture_output=True,
+            text=True,
+            timeout=5,
         ).stdout.strip()
     except Exception:  # noqa: BLE001
         return ""
@@ -152,7 +155,7 @@ def evaluate_device(
             ),
         )
 
-    if raw == "auto":
+    if raw == "auto":  # noqa: SIM108 - if/else bleibt; Ternary waere Umschreiben
         device = "cuda" if cuda_ok else ("mps" if mps_ok else "cpu")
     else:
         device = raw
@@ -246,7 +249,7 @@ def _check_whisperx() -> CheckResult:
     ensure_ctranslate2_loadable()  # execstack-Fix fuer glibc >= 2.41, vor dem Import
     ensure_pkg_resources()  # pkg_resources-Ersatz fuer ctranslate2 unter Windows
     try:
-        import whisperx  # noqa: F401
+        import whisperx  # noqa: F401, I001 - Importfolge wie bisher (whisperx vor ctranslate2), nicht umsortiert
 
         # whisperx laedt sein ASR-Modul erst bei Gebrauch nach - ohne diesen Import
         # faende der Check ein kaputtes ctranslate2 nicht und der Lauf braeche erst

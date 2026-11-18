@@ -41,7 +41,7 @@ _UWP_HOST = "ApplicationFrameHost"
 Rect = tuple[int, int, int, int]  # left, top, right, bottom
 
 
-class WindowGone(RuntimeError):
+class WindowGone(RuntimeError):  # noqa: N818 - Bestand, ungeprüft (REQ-11)
     """Das Fenster existiert nicht mehr."""
 
 

@@ -796,10 +796,10 @@ def test_config_dir_je_plattform(monkeypatch):
     monkeypatch.setattr(sys, "platform", "darwin")
     assert config._config_dir() == Path.home() / "Library" / "Application Support" / "audioscribe"
     monkeypatch.setattr(sys, "platform", "linux")
-    monkeypatch.setenv("XDG_CONFIG_HOME", "/tmp/xdg")
-    assert config._config_dir() == Path("/tmp/xdg") / "audioscribe"
-    monkeypatch.setenv("AUDIOSCRIBE_CONFIG_DIR", "/tmp/eigen")
-    assert config._config_dir() == Path("/tmp/eigen")
+    monkeypatch.setenv("XDG_CONFIG_HOME", "/tmp/xdg")  # noqa: S108 - nur Pfadvergleich, nichts wird geschrieben
+    assert config._config_dir() == Path("/tmp/xdg") / "audioscribe"  # noqa: S108 - nur Pfadvergleich, nichts wird geschrieben
+    monkeypatch.setenv("AUDIOSCRIBE_CONFIG_DIR", "/tmp/eigen")  # noqa: S108 - nur Pfadvergleich, nichts wird geschrieben
+    assert config._config_dir() == Path("/tmp/eigen")  # noqa: S108 - nur Pfadvergleich, nichts wird geschrieben
 
 
 def test_alte_einstellungsdatei_wird_uebernommen(tmp_path, monkeypatch):

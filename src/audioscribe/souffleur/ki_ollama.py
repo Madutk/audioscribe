@@ -47,7 +47,7 @@ PostFn = Callable[[str, dict | None, float], dict]
 _ZEITUEBERSCHREITUNG = "Zeitüberschreitung"
 
 
-class _HttpFehler(Exception):
+class _HttpFehler(Exception):  # noqa: N818 - deutsche Benennung: Fehler statt Error
     """HTTP-Problem beim Dienst: ``code`` None = nicht erreichbar / Zeitüberschreitung."""
 
     def __init__(self, code: int | None, text: str) -> None:
@@ -63,7 +63,7 @@ def _http_json(url: str, body: dict | None, timeout_s: float) -> dict:
     if hinweis := variante.pruefe_ollama_url(url):
         raise _HttpFehler(None, hinweis)  # letzte Sperre: keine Anfrage an fremde Rechner
     daten = None if body is None else json.dumps(body).encode("utf-8")
-    req = urllib.request.Request(url, data=daten, headers={"Content-Type": "application/json"})
+    req = urllib.request.Request(url, data=daten, headers={"Content-Type": "application/json"})  # noqa: S310 - URL oben mit pruefe_ollama_url gegen fremde Rechner geprueft
     try:
         with urllib.request.urlopen(req, timeout=timeout_s) as antwort:  # noqa: S310 - localhost
             roh = antwort.read().decode("utf-8")
@@ -148,7 +148,7 @@ def ist_lokal(url: str) -> bool:
     from urllib.parse import urlsplit
 
     host = (urlsplit(url).hostname or "").lower()
-    return host in {"localhost", "127.0.0.1", "::1", "0.0.0.0"}
+    return host in {"localhost", "127.0.0.1", "::1", "0.0.0.0"}  # noqa: S104 - Vergleichswert fuer lokale Hosts, kein Bind
 
 
 def ollama_sicherstellen(
@@ -254,7 +254,7 @@ class OllamaKi:
         self.modell = lokales_modell(modell)
         self.url = url.rstrip("/")
         self.keep_alive = keep_alive
-        self._log = log or (lambda msg: None)
+        self._log = log or (lambda msg: None)  # noqa: ARG005 - Leer-Rueckruf, Argument absichtlich ungenutzt
         self._post = post
 
     def anfrage(self, auftrag: KiAuftrag) -> dict:

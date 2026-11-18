@@ -48,5 +48,5 @@ def extract_frame(video: str | Path, t: float, out_png: str | Path, *, ffmpeg: s
     out_png = Path(out_png)
     out_png.parent.mkdir(parents=True, exist_ok=True)
     cmd = build_extract_cmd(ffmpeg or _ffmpeg_exe(), Path(video), t, out_png)
-    subprocess.run(cmd, check=True, capture_output=True)
+    subprocess.run(cmd, check=True, capture_output=True)  # noqa: S603 - Bestand, ungeprüft (REQ-11)
     return out_png

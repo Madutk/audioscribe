@@ -259,7 +259,7 @@ def detect_changes(
         )
         bis_zum_ende = False
         try:
-            assert proc.stdout is not None
+            assert proc.stdout is not None  # noqa: S101 - Typ-Verengung fuer Optional
             while True:
                 buf = proc.stdout.read(frame_bytes)
                 if buf is None or len(buf) < frame_bytes:
@@ -347,7 +347,7 @@ def _alte_bilder_loeschen(out_dir: Path, marks: list[Mark]) -> None:
         pfad = (out_dir / mark.png).resolve()
         # Pfadpruefung wie in review/server.py: nie ausserhalb des Bilderordners loeschen.
         if frames_dir in pfad.parents and pfad.is_file():
-            try:
+            try:  # noqa: SIM105 - try/except/pass bleibt; contextlib.suppress waere Umschreiben
                 pfad.unlink()
             except OSError:
                 pass

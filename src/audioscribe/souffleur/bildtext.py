@@ -99,5 +99,5 @@ def lade(session_dir: Path) -> list[Bild]:
     out = []
     for roh in daten.get("bilder") or [] if isinstance(daten, dict) else []:
         if isinstance(roh, dict) and roh.get("id") and roh.get("datei"):
-            out.append(Bild(**{k: v for k, v in roh.items() if k in Bild.__dataclass_fields__}))
+            out.append(Bild(**{k: v for k, v in roh.items() if k in Bild.__dataclass_fields__}))  # noqa: PERF401 - Schleife bleibt; Comprehension waere Umschreiben
     return out

@@ -104,7 +104,7 @@ class AudioCapture:
             try:
                 stream.stop_stream()
                 stream.close()
-            except Exception:  # noqa: BLE001 - beim Aufräumen nie scheitern
+            except Exception:  # noqa: BLE001, S110 - beim Aufräumen nie scheitern
                 pass
         self._streams = []
         for track in self._tracks:

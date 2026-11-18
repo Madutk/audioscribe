@@ -73,7 +73,7 @@ def prompt(segmente: list[dict], *, minuten: int, t_von: float, t_bis: float) ->
         kopf, unbekannt = f"## Ausschnitt ({minuten} Minuten, {von} bis {bis})", "Unbekannt"
     zeilen = [kopf, ""]
     for s in segmente:
-        zeilen.append(f"[{format_timecode(float(s['start']))}] {s.get('speaker') or unbekannt}: {s['text']}")
+        zeilen.append(f"[{format_timecode(float(s['start']))}] {s.get('speaker') or unbekannt}: {s['text']}")  # noqa: PERF401 - Schleife bleibt; Comprehension waere Umschreiben
     return "\n".join(zeilen)
 
 

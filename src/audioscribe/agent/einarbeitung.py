@@ -258,7 +258,7 @@ class WikiSitzung(AnalyseSitzung):
         self._client = ClaudeSDKClient(options=options)
         await self._client.connect()
 
-    async def _can_use_tool(self, tool_name: str, tool_input: dict[str, Any], context: Any):
+    async def _can_use_tool(self, tool_name: str, tool_input: dict[str, Any], context: Any):  # noqa: ARG002 - Signatur gibt das Agent SDK vor
         from claude_agent_sdk import PermissionResultAllow, PermissionResultDeny
 
         if tool_name == guard.FRAGE_TOOL:

@@ -31,7 +31,7 @@ TITEL_MAX = 120
 sperre = threading.Lock()
 
 
-class DialogFehler(RuntimeError):
+class DialogFehler(RuntimeError):  # noqa: N818 - deutsche Benennung: Fehler statt Error
     """Dialog nicht startbar, abgelaufen oder mit unerwarteter Antwort beendet."""
 
 
@@ -132,7 +132,7 @@ def waehle_ordner(start: Path | None, titel: str) -> Path | None:
     """Ordnerdialog zeigen und warten. ``None`` = abgebrochen."""
     flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if PLATTFORM == "windows" else 0
     try:
-        proc = subprocess.run(
+        proc = subprocess.run(  # noqa: S603 - Bestand, ungeprüft (REQ-11)
             kommando(start, titel),
             capture_output=True,
             text=True,

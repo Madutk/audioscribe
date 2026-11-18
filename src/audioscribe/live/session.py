@@ -291,9 +291,9 @@ class LiveSession:
         """Audio ist geschlossen: sichern, was da ist, und die Sitzung fortsetzbar lassen.
         Wartende Abschnitte werden nicht mehr gerechnet - sie stehen im Mitschnitt."""
         self._threads_stop.set()
-        try:
+        try:  # noqa: SIM105 - try/except/pass bleibt; contextlib.suppress waere Umschreiben
             self._persist()
-        except Exception:  # noqa: BLE001 - der Notabschluss sichert, so viel geht
+        except Exception:  # noqa: BLE001, S110 - der Notabschluss sichert, so viel geht
             pass
         self._diagnose.close()
         self._setze_status(journal.UNTERBROCHEN)
@@ -802,7 +802,7 @@ class LiveSession:
             import torch
 
             torch.set_num_threads(self.opts.cpu_threads)
-        except Exception:  # noqa: BLE001 - ohne torch (kein Embedder) gibt es nichts zu begrenzen
+        except Exception:  # noqa: BLE001, S110 - ohne torch (kein Embedder) gibt es nichts zu begrenzen
             pass
 
     def _load_embedder(self):

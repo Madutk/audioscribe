@@ -129,7 +129,7 @@ class Sperre:
         if datei is None:
             return
         _entsperren(datei)
-        try:
+        try:  # noqa: SIM105 - try/except/pass bleibt; contextlib.suppress waere Umschreiben
             datei.close()
         except OSError:
             pass
@@ -202,7 +202,7 @@ class Journal:
     def close(self) -> None:
         with self._lock:
             if self._datei is not None:
-                try:
+                try:  # noqa: SIM105 - try/except/pass bleibt; contextlib.suppress waere Umschreiben
                     self._datei.close()
                 except OSError:
                     pass

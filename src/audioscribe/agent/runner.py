@@ -318,7 +318,7 @@ class AnalyseSitzung:
 
     async def start(self) -> bool:
         """Erster Auftrag: das Material nach Vorgabe analysieren."""
-        assert self._material is not None, "start() nur fuer neue Laeufe (nicht bei resume)"
+        assert self._material is not None, "start() nur fuer neue Laeufe (nicht bei resume)"  # noqa: S101 - Vorbedingung fuer Aufrufer, Meldung steht dabei
         return await self.nachricht(build_task_prompt(self.auftrag, self._material, self.skills))
 
     async def nachricht(self, text: str) -> bool:
@@ -450,7 +450,7 @@ class AnalyseSitzung:
         self._fortschritt_melden()
         return not msg.is_error
 
-    async def _can_use_tool(self, tool_name: str, tool_input: dict[str, Any], context: Any):
+    async def _can_use_tool(self, tool_name: str, tool_input: dict[str, Any], context: Any):  # noqa: ARG002 - Signatur gibt das Agent SDK vor
         from claude_agent_sdk import PermissionResultAllow, PermissionResultDeny
 
         decision = guard.check_tool(tool_name, tool_input, self.workspace, bash=self.auftrag.bash)

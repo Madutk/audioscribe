@@ -491,7 +491,7 @@ def _tabellen(text: str) -> list[list[list[str]]]:
     aktuell: list[list[str]] = []
     for line in text.splitlines():
         if line.strip().startswith("|"):
-            if _TABELLE_TRENNER.match(line.strip().strip("|").strip() + "--"):
+            if _TABELLE_TRENNER.match(line.strip().strip("|").strip() + "--"):  # noqa: SIM102 - geschachteltes if bleibt; Zusammenziehen waere Umschreiben
                 if set(line.replace("|", "").replace(":", "").strip()) <= {"-", " "}:
                     continue
             zellen = [z.strip() for z in line.strip().strip("|").split("|")]

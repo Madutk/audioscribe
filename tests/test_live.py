@@ -1017,8 +1017,8 @@ def test_vor_ort_laedt_sprecher_modell_auch_ohne_system_audio(tmp_path, monkeypa
     logged = []
     monkeypatch.setattr(events, "log", logged.append)
     monkeypatch.setattr(speakers, "BackgroundEmbedder", lambda load, log: "geladen")
-    assert make_session(tmp_path, loopback="none", hf_token="t")._load_embedder() is None
-    assert make_session(tmp_path, loopback="none", hf_token="t", raum=True)._load_embedder() == "geladen"
+    assert make_session(tmp_path, loopback="none", hf_token="t")._load_embedder() is None  # noqa: S106 - Testwert, kein Geheimnis
+    assert make_session(tmp_path, loopback="none", hf_token="t", raum=True)._load_embedder() == "geladen"  # noqa: S106 - Testwert, kein Geheimnis
     assert make_session(tmp_path, loopback="none", raum=True)._load_embedder() is None
     assert any("Vor-Ort-Modus" in zeile for zeile in logged)
 
@@ -2316,7 +2316,7 @@ def _vor_ort_sitzung(ordner, spuren, monkeypatch, antworten, *, raum=True):
         return {"language": "de", "segments": [{k: v for k, v in seg.items() if k != "raw"} for seg in aktuell["segs"]]}
 
     def diarize(audio, result, reporter):
-        for seg, roh in zip(result["segments"], aktuell["segs"]):
+        for seg, roh in zip(result["segments"], aktuell["segs"]):  # noqa: B905 - Bestand, ungeprüft (REQ-11)
             seg["speaker"] = roh["raw"]
         return result
 

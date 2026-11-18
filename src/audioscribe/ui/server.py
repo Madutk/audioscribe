@@ -113,7 +113,7 @@ def _size_mb(path: Path) -> float:
 
 
 @functools.lru_cache(maxsize=512)
-def _duration_cached(path: str, mtime_ns: int, size: int) -> float | None:
+def _duration_cached(path: str, mtime_ns: int, size: int) -> float | None:  # noqa: ARG001 - nur Teil des Cache-Schluessels
     """Gemessene Laufzeit; der Schluessel invalidiert sich bei jeder Dateiaenderung selbst."""
     return probe_duration(Path(path))
 
@@ -1015,7 +1015,7 @@ def create_app():
         d = wiki_jobs.uebersicht()
         return JSONResponse({**d, "auftraege": [_mit_pfad(e) for e in d["auftraege"]]})
 
-    def _auftrag(auftrag_id: str, fn):
+    def _auftrag(auftrag_id: str, fn):  # noqa: ARG001 - Bestand, ungeprüft (REQ-11)
         try:
             return fn()
         except KeyError as exc:
@@ -1362,7 +1362,7 @@ def create_app():
         folder = _ausgabe_dir(output_dir)
         p = _projekt()
         try:
-            if p is not None and not folder.is_dir():
+            if p is not None and not folder.is_dir():  # noqa: SIM108 - if/else bleibt; Ternary waere Umschreiben
                 results = []  # neues Projekt: der Sitzungsordner entsteht mit der ersten Sitzung
             else:
                 results = jobs.scan_results(folder)
@@ -1484,7 +1484,7 @@ def create_app():
             raise HTTPException(409, str(exc)) from exc
         # Ein neuer Lauf in denselben Ordner ersetzt das alte Ergebnis - dessen Vermerk
         # "im Wiki" gilt fuer das neue nicht mehr.
-        try:
+        try:  # noqa: SIM105 - try/except/pass bleibt; contextlib.suppress waere Umschreiben
             (Path(workspace) / wiki_ablage.VERMERK).unlink(missing_ok=True)
         except OSError:
             pass
@@ -2240,9 +2240,9 @@ def serve(*, host: str = "127.0.0.1", port: int = 8766, open_browser: bool = Tru
     if not browse.IS_WINDOWS and not browse.IS_MAC:
         print("Unter WSL: die Adresse notfalls von Hand im Windows-Browser oeffnen.")
     if open_browser:
-        try:
+        try:  # noqa: SIM105 - try/except/pass bleibt; contextlib.suppress waere Umschreiben
             webbrowser.open(url_browser)
-        except Exception:  # noqa: BLE001
+        except Exception:  # noqa: BLE001, S110 - Browser oeffnen ist Zugabe
             pass
     if aufnahme:
         threading.Thread(target=app.state.sofort_starten, name="audioscribe-sofort", daemon=True).start()

@@ -135,7 +135,7 @@ def _split_by_sentences(segs: list[Segment], sentences_per_line: int) -> list[Pa
     for seg in segs:
         speaker = seg.speaker or UNKNOWN
         # Tokens = ausgerichtete Woerter, sonst das Segment als ein Token.
-        if seg.words:
+        if seg.words:  # noqa: SIM108 - if/else bleibt; Ternary waere Umschreiben
             tokens = [(w.text, w.start, w.end) for w in seg.words]
         else:
             tokens = [(seg.text, seg.start, seg.end)]

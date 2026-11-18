@@ -228,7 +228,7 @@ def unterbrochene(state: Mapping[str, object], aktiv: Projekt | None = None) -> 
         gesehen.add(wurzel)
         try:
             for s in offene_sitzungen(ordner):
-                out.append({**s, "projekt": wurzel, "projekt_name": name})
+                out.append({**s, "projekt": wurzel, "projekt_name": name})  # noqa: PERF401 - Schleife bleibt; Comprehension waere Umschreiben
         except OSError:
             continue
     return out

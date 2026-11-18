@@ -400,7 +400,7 @@ class BatchRunner(_ProcessRunner):
         if proc is None:
             return -1
 
-        assert proc.stdout is not None
+        assert proc.stdout is not None  # noqa: S101 - Typ-Verengung fuer Optional
         logged_progress = -_LOG_PROGRESS_STEP
         for raw in proc.stdout:
             line = raw.rstrip("\n").rstrip("\r")
@@ -551,7 +551,7 @@ class AnalyseRunner(_ProcessRunner):
         try:
             proc = self._spawn(argv)
             if proc is not None:
-                assert proc.stdout is not None
+                assert proc.stdout is not None  # noqa: S101 - Typ-Verengung fuer Optional
                 for raw in proc.stdout:
                     line = raw.rstrip("\n").rstrip("\r")
                     if not line.strip():
@@ -731,7 +731,7 @@ class LiveRunner(_ProcessRunner):
             return
         self._append(tr("Stopp angefordert - Sitzung wird abgeschlossen ..."))
         try:
-            assert proc.stdin is not None
+            assert proc.stdin is not None  # noqa: S101 - Typ-Verengung fuer Optional
             proc.stdin.write("stop\n")
             proc.stdin.flush()
         except (OSError, ValueError):
@@ -749,7 +749,7 @@ class LiveRunner(_ProcessRunner):
         if not replay:
             raise RuntimeError(tr("Eine Aufnahme lässt sich nicht pausieren – nur das Abspielen eines Transkripts."))
         try:
-            assert proc.stdin is not None
+            assert proc.stdin is not None  # noqa: S101 - Typ-Verengung fuer Optional
             proc.stdin.write("pause\n" if an else "weiter\n")
             proc.stdin.flush()
         except (OSError, ValueError) as exc:
@@ -769,7 +769,7 @@ class LiveRunner(_ProcessRunner):
         if replay:
             raise RuntimeError(tr("Im Testmodus gibt es keine Bildquelle."))
         try:
-            assert proc.stdin is not None
+            assert proc.stdin is not None  # noqa: S101 - Typ-Verengung fuer Optional
             proc.stdin.write(bild_befehl(monitor, window) + "\n")
             proc.stdin.flush()
         except (OSError, ValueError) as exc:
@@ -789,7 +789,7 @@ class LiveRunner(_ProcessRunner):
         if replay:
             raise RuntimeError(tr("Im Testmodus gibt es keine Standbilder."))
         try:
-            assert proc.stdin is not None
+            assert proc.stdin is not None  # noqa: S101 - Typ-Verengung fuer Optional
             proc.stdin.write(ablage_befehl(an) + "\n")
             proc.stdin.flush()
         except (OSError, ValueError) as exc:
@@ -937,7 +937,7 @@ class LiveRunner(_ProcessRunner):
     def _pump(self, proc: subprocess.Popen[str] | None, on_line: Callable[[str], None]) -> int:
         if proc is None:
             return -1
-        assert proc.stdout is not None
+        assert proc.stdout is not None  # noqa: S101 - Typ-Verengung fuer Optional
         for raw in proc.stdout:
             line = raw.rstrip("\n").rstrip("\r")
             if line.strip():
@@ -1032,7 +1032,9 @@ def _terminate(proc: subprocess.Popen[str]) -> None:
         # os.killpg/getpgid gibt es unter Windows nicht. taskkill /T nimmt die Enkel
         # (ffmpeg) mit; ein sanftes Signal kennt ein Konsolenprozess ohne Fenster nicht.
         subprocess.run(  # noqa: S603 - festes Kommando
-            ["taskkill", "/PID", str(proc.pid), "/T", "/F"], capture_output=True, check=False
+            ["taskkill", "/PID", str(proc.pid), "/T", "/F"],  # noqa: S607 - festes Kommando aus PATH
+            capture_output=True,
+            check=False,
         )
         try:
             proc.wait(timeout=10)

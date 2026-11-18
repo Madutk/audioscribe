@@ -117,7 +117,7 @@ def create_app(out_dir: str | Path):
         png = (out_dir / body.png).resolve()
         # Pfad-Traversal absichern: nur Dateien innerhalb von frames/ loeschen.
         if frames_dir in png.parents and png.exists():
-            try:
+            try:  # noqa: SIM105 - try/except/pass bleibt; contextlib.suppress waere Umschreiben
                 png.unlink()
             except OSError:
                 pass
@@ -140,9 +140,9 @@ def serve(
     app = create_app(out_dir)
     url = f"http://{host}:{port}/"
     if open_browser:
-        try:
+        try:  # noqa: SIM105 - try/except/pass bleibt; contextlib.suppress waere Umschreiben
             webbrowser.open(url)
-        except Exception:  # noqa: BLE001
+        except Exception:  # noqa: BLE001, S110 - Browser oeffnen ist Zugabe
             pass
     print(f"AudioScribe Review laeuft auf {url}  (Strg+C zum Beenden)")
     uvicorn.run(app, host=host, port=port, log_level="warning")

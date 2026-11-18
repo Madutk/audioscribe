@@ -74,8 +74,8 @@ class Souffleur:
         self._leitfaden = leitfaden
         self.ki = ki
         self.ki_status = ki_status
-        self.on_hinweis: Callable[[dict], None] = on_hinweis or (lambda h: None)
-        self._log = log or (lambda m: None)
+        self.on_hinweis: Callable[[dict], None] = on_hinweis or (lambda h: None)  # noqa: ARG005 - Leer-Rueckruf, Argument absichtlich ungenutzt
+        self._log = log or (lambda m: None)  # noqa: ARG005 - Leer-Rueckruf, Argument absichtlich ungenutzt
         self.uhr = SitzungsUhr(konfig.speed)
         self._lock = threading.RLock()
         self._segmente: list[dict] = []  # Felder des segment-Ereignisses + "empfangen_mono"
@@ -247,7 +247,7 @@ class Souffleur:
 
     def stop(self) -> None:
         """Harter Abbruch (Reset): keine Spätresultate mehr nach außen, nicht lange warten."""
-        self.on_hinweis = lambda h: None
+        self.on_hinweis = lambda h: None  # noqa: ARG005 - Leer-Rueckruf, Argument absichtlich ungenutzt
         self._mitdenker.stop()
         with self._lock:
             self._beendet = True

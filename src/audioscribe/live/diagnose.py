@@ -220,7 +220,7 @@ class Diagnose:
 def _zeit_ueber(proben: list[tuple[float, float]], schwelle_s: float) -> float:
     """Sekunden, in denen der Rückstand über der Schwelle lag - Stichprobe bis zur nächsten."""
     gesamt = 0.0
-    for (t, backlog), (t_next, _) in zip(proben, proben[1:]):
+    for (t, backlog), (t_next, _) in zip(proben, proben[1:]):  # noqa: B905 - Nachbarpaare, zweite Folge absichtlich kuerzer
         if backlog > schwelle_s:
             gesamt += t_next - t
     return gesamt

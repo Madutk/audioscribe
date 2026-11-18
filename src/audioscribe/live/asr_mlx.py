@@ -157,5 +157,5 @@ def free_mlx_model() -> None:
             holder.model = None
             holder.model_path = None
         mx.clear_cache()
-    except Exception:  # noqa: BLE001 - best effort
+    except Exception:  # noqa: BLE001, S110 - best effort
         pass

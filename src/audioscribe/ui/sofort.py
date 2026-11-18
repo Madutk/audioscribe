@@ -42,7 +42,7 @@ def _bildquelle(saved: Mapping[str, object], inventar: Mapping[str, object]) -> 
     fenster = [w for w in (inventar.get("windows") or []) if isinstance(w, Mapping)]
     if quelle == "window" and fenster:
         gemerkt = str(saved.get("live_window") or "")
-        label = lambda w: f"{w.get('process', '')} – {w.get('title', '')}"
+        label = lambda w: f"{w.get('process', '')} – {w.get('title', '')}"  # noqa: E731 - lambda bleibt; def waere Umschreiben
         treffer = next((w for w in fenster if label(w) == gemerkt), None) or next(
             (w for w in fenster if gemerkt.startswith(f"{w.get('process', '')} – ")), None
         )
@@ -101,7 +101,7 @@ def server_antwortet(host: str, port: int, timeout_s: float = 1.0) -> bool:
     """Läuft unter dieser Adresse schon AudioScribe? Nur eine JSON-Antwort mit ``modus`` zählt -
     ein fremder Dienst auf dem Port gilt als „niemand da“ (dann scheitert der Start wie bisher)."""
     try:
-        with urllib.request.urlopen(_url(host, port) + "api/kontext", timeout=timeout_s) as antwort:
+        with urllib.request.urlopen(_url(host, port) + "api/kontext", timeout=timeout_s) as antwort:  # noqa: S310 - eigener Server, URL aus _url() mit http
             daten = json.loads(antwort.read().decode("utf-8"))
     except (urllib.error.URLError, OSError, ValueError):
         return False
@@ -114,12 +114,12 @@ def an_laufenden_server(host: str, port: int, *, open_browser: bool = True, time
     if not server_antwortet(host, port):
         return False
     url = _url(host, port)
-    anfrage = urllib.request.Request(
+    anfrage = urllib.request.Request(  # noqa: S310 - eigener Server, URL aus _url() mit http
         url + "api/aufnahme/sofort", data=b"{}", method="POST", headers={"Content-Type": "application/json"}
     )
     try:
         # Die Antwort dauert, solange die Geräte ermittelt werden.
-        with urllib.request.urlopen(anfrage, timeout=timeout_s):
+        with urllib.request.urlopen(anfrage, timeout=timeout_s):  # noqa: S310 - eigener Server, URL aus _url() mit http
             pass
         print(f"AudioScribe laeuft bereits auf {url} - Aufnahme gestartet.")
     except urllib.error.HTTPError as exc:
@@ -131,8 +131,8 @@ def an_laufenden_server(host: str, port: int, *, open_browser: bool = True, time
     except (urllib.error.URLError, OSError) as exc:
         print(f"AudioScribe laeuft bereits auf {url} - keine Antwort: {exc}", file=sys.stderr)
     if open_browser:
-        try:
+        try:  # noqa: SIM105 - try/except/pass bleibt; contextlib.suppress waere Umschreiben
             webbrowser.open(url + ROUTE_AUFNAHME)
-        except Exception:  # noqa: BLE001
+        except Exception:  # noqa: BLE001, S110 - Browser oeffnen ist Zugabe
             pass
     return True

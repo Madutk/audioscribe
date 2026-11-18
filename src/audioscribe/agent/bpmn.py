@@ -115,7 +115,7 @@ class Modell:
         return {k.id: k for k in self.knoten}
 
 
-class ModellFehler(ValueError):
+class ModellFehler(ValueError):  # noqa: N818 - deutsche Benennung: Fehler statt Error
     def __init__(self, fehler: list[str]) -> None:
         super().__init__("; ".join(fehler))
         self.fehler = fehler
@@ -221,7 +221,7 @@ def parse_modell(data: object) -> Modell:
                 stack.append(f.nach)
     for k in knoten:
         if starts and k.id not in seen:
-            fehler.append(tr("{id}: vom Start aus nicht erreichbar", id=k.id))
+            fehler.append(tr("{id}: vom Start aus nicht erreichbar", id=k.id))  # noqa: PERF401 - Schleife bleibt; Comprehension waere Umschreiben
 
     if fehler:
         raise ModellFehler(fehler)
@@ -674,7 +674,7 @@ def _icon(k: Knoten, b: Box) -> str:
 
 
 def to_svg(m: Modell, lay: Layout, prozessname: str) -> str:
-    W, H = lay.width, lay.height
+    W, H = lay.width, lay.height  # noqa: N806 - W/H = Breite/Hoehe der Zeichnung
     p: list[str] = [
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" '
         f'viewBox="0 0 {W} {H}" font-family="Arial, Helvetica, sans-serif" fill="{_STROKE}">',

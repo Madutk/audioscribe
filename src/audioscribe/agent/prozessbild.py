@@ -208,7 +208,7 @@ def to_browser_path(path: Path, browser: Path) -> str:
     """Pfad so, wie der Browser ihn versteht (Windows-Exe unter WSL -> ``wslpath -w``)."""
     if not is_windows_exe_from_wsl(browser):
         return str(path)
-    return subprocess.run(["wslpath", "-w", str(path)], capture_output=True, text=True, check=True).stdout.strip()
+    return subprocess.run(["wslpath", "-w", str(path)], capture_output=True, text=True, check=True).stdout.strip()  # noqa: S603, S607 - festes Kommando aus PATH, Pfad als Argument
 
 
 def _profile_dir(browser: Path) -> str:
@@ -220,7 +220,7 @@ def _profile_dir(browser: Path) -> str:
     if is_windows_exe_from_wsl(browser):
         try:
             temp = subprocess.run(
-                ["cmd.exe", "/c", "echo %TEMP%"],
+                ["cmd.exe", "/c", "echo %TEMP%"],  # noqa: S607 - festes Kommando aus PATH, Pfad als Argument
                 capture_output=True,
                 text=True,
                 timeout=15,

@@ -67,8 +67,8 @@ def make_progress_hook(
 
     def hook(
         step_name: str,
-        step_artifact=None,
-        file=None,
+        step_artifact=None,  # noqa: ARG001 - Signatur des pyannote-Hooks
+        file=None,  # noqa: ARG001 - Signatur des pyannote-Hooks
         total: int | None = None,
         completed: int | None = None,
     ) -> None:

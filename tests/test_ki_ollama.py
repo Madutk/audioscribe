@@ -175,7 +175,7 @@ def test_ollama_sicherstellen_startet_dienst_und_wartet(tmp_path):
         return antworten[url[url.index("/api") :]]
 
     gestartet = []
-    spawn = lambda argv, **kw: gestartet.append((argv, kw))
+    spawn = lambda argv, **kw: gestartet.append((argv, kw))  # noqa: E731 - lambda bleibt; def waere Umschreiben
     meldungen = []
     log_datei = tmp_path / "ollama.log"
     status = ollama_sicherstellen(
@@ -200,7 +200,7 @@ def test_ollama_sicherstellen_startet_nicht_ohne_programm_oder_bei_fremder_adres
     from audioscribe.souffleur.ki_ollama import ist_lokal, ollama_sicherstellen
 
     down = _post(_HttpFehler(None, "Connection refused"))
-    boom = lambda *a, **kw: pytest.fail("darf nicht starten")
+    boom = lambda *a, **kw: pytest.fail("darf nicht starten")  # noqa: E731 - lambda bleibt; def waere Umschreiben
     status = ollama_sicherstellen("http://localhost:11434", post=down, binary="", spawn=boom, schlaf=lambda s: None)
     assert not status.erreichbar and "nicht gefunden" in status.fehler
     status = ollama_sicherstellen("http://ki-server:11434", post=down, binary="/x/ollama", spawn=boom)
@@ -291,7 +291,7 @@ def test_api_agent_defaults_folgen_dem_dienst(client):
 def test_sdk_env_leitet_nur_lokal_um():
     assert sdk_env(BACKEND_CLAUDE) == {}
     env = sdk_env(BACKEND_OLLAMA)
-    assert env["ANTHROPIC_AUTH_TOKEN"] == "ollama" and env["ANTHROPIC_BASE_URL"].startswith("http")
+    assert env["ANTHROPIC_AUTH_TOKEN"] == "ollama" and env["ANTHROPIC_BASE_URL"].startswith("http")  # noqa: S105 - Testwert, kein Geheimnis
     assert env["CLAUDE_CODE_MAX_OUTPUT_TOKENS"] == "16000"
 
 

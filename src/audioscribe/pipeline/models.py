@@ -90,7 +90,7 @@ def fetch_model(model: str, on_progress: Callable[[int, int], None]) -> str:
 
         try:
             return utils.download_model(model, local_files_only=True)
-        except Exception:  # noqa: BLE001 - nicht (vollständig) im Cache -> herunterladen
+        except Exception:  # noqa: BLE001, S110 - nicht (vollständig) im Cache -> herunterladen
             pass
 
         original = utils.disabled_tqdm

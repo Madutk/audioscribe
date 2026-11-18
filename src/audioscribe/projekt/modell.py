@@ -62,7 +62,7 @@ MEETING_ARTEN: tuple[str, ...] = ("abstimmung", "review", "workshop", "brainstor
 UEBERSCHREIBBAR: tuple[str, ...] = ("ki_dienst", "souffleur_model", "agent_model", "sprache")
 
 
-class ProjektFehler(ValueError):
+class ProjektFehler(ValueError):  # noqa: N818 - deutsche Benennung: Fehler statt Error
     """Projekt nicht lesbar oder Angaben unvollständig - die Meldung ist für den Nutzer."""
 
 

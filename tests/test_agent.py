@@ -411,7 +411,7 @@ def test_cli_analyze_list_skills(tmp_path, capsys, monkeypatch):
 def test_cli_analyze_ohne_transkript(tmp_path, capsys, monkeypatch):
     from audioscribe.cli import main
 
-    monkeypatch.setattr("sys.stdin", open(__file__))  # kein TTY -> keine Rueckfragen
+    monkeypatch.setattr("sys.stdin", open(__file__))  # kein TTY -> keine Rueckfragen  # noqa: SIM115 - offene Datei als stdin-Ersatz
     code = main(["analyze", str(tmp_path), "--name", "x", "--out", str(tmp_path / "o")])
     assert code == 1
     assert "Kein Transkript" in capsys.readouterr().out
@@ -421,7 +421,7 @@ def test_cli_analyze_ohne_transkript(tmp_path, capsys, monkeypatch):
 def test_cli_analyze_unbekannter_skill(tmp_path, capsys, monkeypatch):
     from audioscribe.cli import main
 
-    monkeypatch.setattr("sys.stdin", open(__file__))
+    monkeypatch.setattr("sys.stdin", open(__file__))  # noqa: SIM115 - offene Datei als stdin-Ersatz
     q = _quelle(tmp_path)
     code = main(
         [
@@ -445,7 +445,7 @@ def test_cli_analyze_unbekannter_skill(tmp_path, capsys, monkeypatch):
 def test_cli_analyze_resume_ohne_sitzung(tmp_path, capsys, monkeypatch):
     from audioscribe.cli import main
 
-    monkeypatch.setattr("sys.stdin", open(__file__))
+    monkeypatch.setattr("sys.stdin", open(__file__))  # noqa: SIM115 - offene Datei als stdin-Ersatz
     code = main(["analyze", str(_quelle(tmp_path)), "--name", "x", "--out", str(tmp_path), "--resume"])
     assert code == 1
     assert "Keine fortsetzbare Sitzung" in capsys.readouterr().out
@@ -880,7 +880,7 @@ def test_bpmn_layout_stapelt_zweige_in_derselben_lane():
 def test_bpmn_xml_vollstaendig():
     m = bpmn.parse_modell(_bpmn_daten())
     xml = bpmn.to_bpmn_xml(m, bpmn.layout(m), "Rechnungsprüfung")
-    root = ET.fromstring(xml)
+    root = ET.fromstring(xml)  # noqa: S314 - XML aus eigenem Export im Test
     assert root.get("exporter") == "audioscribe"
     proc = root.find("bpmn:process", _BPMN_NS)
     assert proc.find("bpmn:userTask[@id='S1']", _BPMN_NS).get("name") == "S1: Rechnung prüfen"
@@ -908,7 +908,7 @@ def test_bpmn_svg():
     assert f'width="{lay.width}"' in svg and f'height="{lay.height}"' in svg
     for text in ("S1: Rechnung", "Sachbearbeitung", "Fachbereich", "Rechnungsprüfung", "Korrektur"):
         assert text in svg
-    ET.fromstring(svg)  # wohlgeformt
+    ET.fromstring(svg)  # wohlgeformt  # noqa: S314 - XML aus eigenem Export im Test
 
 
 def test_bpmn_wrap():

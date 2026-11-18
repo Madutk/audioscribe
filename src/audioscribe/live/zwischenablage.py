@@ -18,7 +18,7 @@ from collections.abc import Callable
 from audioscribe.i18n import tr
 
 
-class AblageNichtVerfuegbar(RuntimeError):
+class AblageNichtVerfuegbar(RuntimeError):  # noqa: N818 - Bestand, ungeprüft (REQ-11)
     """Auf diesem System lässt sich die Zwischenablage nicht beobachten."""
 
 
@@ -80,7 +80,7 @@ def systemzugriff() -> tuple[Callable[[], int], Callable[[], object]]:
 
 def _fingerabdruck(img) -> str:
     klein = img.convert("L").resize((32, 32))
-    return hashlib.sha1(klein.tobytes()).hexdigest()
+    return hashlib.sha1(klein.tobytes()).hexdigest()  # noqa: S324 - Fingerabdruck zum Bildvergleich, keine Sicherheitsfunktion
 
 
 class ClipboardWatcher(threading.Thread):

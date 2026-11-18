@@ -140,7 +140,7 @@ def optionen(state: Mapping[str, object]) -> dict:
         return [{"id": m, "label": m, "dienst": d} for d, _ in dienste for m in modelle(d, zweck)]
 
     return {
-        "ki_dienste": mit([{"id": i, "label": l} for i, l in dienste], g["ki_dienst"]),
+        "ki_dienste": mit([{"id": i, "label": l} for i, l in dienste], g["ki_dienst"]),  # noqa: E741 - l = label; Umbenennen waere Umschreiben
         "souffleur_models": mit(je_dienst("souffleur"), g["souffleur_model"], dienst=g["ki_dienst"]),
         "agent_models": mit(je_dienst("agent"), g["agent_model"], dienst=g["ki_dienst"]),
         "sprachen": mit([{"id": s, "label": _label(_SPRACHEN.get(s, s))} for s in jobs.LANGUAGES], g["sprache"]),

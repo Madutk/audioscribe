@@ -128,7 +128,11 @@ def _lebt(pid: int | None, auftrag_id: str) -> bool:
     try:
         os.kill(pid, 0)
         ausgabe = subprocess.run(  # noqa: S603 - festes Kommando
-            ["ps", "-p", str(pid), "-o", "command="], capture_output=True, text=True, check=False, timeout=5
+            ["ps", "-p", str(pid), "-o", "command="],  # noqa: S607 - festes Kommando aus PATH
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=5,
         ).stdout
     except (OSError, subprocess.SubprocessError):
         return False
@@ -451,7 +455,7 @@ class Warteschlange:
                 if self._ende:
                     return
                 e = self._naechster()
-                assert e is not None
+                assert e is not None  # noqa: S101 - Typ-Verengung fuer Optional
                 e.status = LAEUFT
                 e.gestartet = _jetzt()
                 e.beendet = None
@@ -505,7 +509,7 @@ class Warteschlange:
             from audioscribe.ui.runner import _terminate
 
             _terminate(proc)
-        assert proc.stdout is not None
+        assert proc.stdout is not None  # noqa: S101 - Typ-Verengung fuer Optional
         for raw in proc.stdout:
             line = raw.rstrip("\n").rstrip("\r")
             if not line.strip():
@@ -619,7 +623,7 @@ def _beende_pid(pid: int | None) -> None:
 
     if not pid:
         return
-    try:
+    try:  # noqa: SIM105 - try/except/pass bleibt; contextlib.suppress waere Umschreiben
         os.killpg(os.getpgid(pid), signal.SIGTERM)
     except (OSError, ProcessLookupError):
         pass

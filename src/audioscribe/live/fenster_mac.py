@@ -108,7 +108,7 @@ def eintraege(infos: list[dict], eigene_pid: int) -> list[dict]:
     return out
 
 
-def _infos(Q, option=None, window: int = 0) -> list[dict]:
+def _infos(Q, option=None, window: int = 0) -> list[dict]:  # noqa: N803 - Framework-Namen wie in PyObjC
     opt = option if option is not None else (Q.kCGWindowListOptionOnScreenOnly | Q.kCGWindowListExcludeDesktopElements)
     raw = Q.CGWindowListCopyWindowInfo(opt, window or Q.kCGNullWindowID)
     return [dict(w) for w in (raw or [])]
@@ -116,12 +116,12 @@ def _infos(Q, option=None, window: int = 0) -> list[dict]:
 
 def list_windows() -> list[dict]:
     """Sichtbare Anwendungsfenster in Z-Order (vorderstes zuerst)."""
-    Q = _quartz()
+    Q = _quartz()  # noqa: N806 - Framework-Namen wie in PyObjC
     return eintraege(_infos(Q), os.getpid())
 
 
 def _info(hwnd: int) -> dict | None:
-    Q = _quartz()
+    Q = _quartz()  # noqa: N806 - Framework-Namen wie in PyObjC
     infos = _infos(Q, Q.kCGWindowListOptionIncludingWindow, hwnd)
     return infos[0] if infos else None
 
@@ -161,7 +161,7 @@ def grab_window(hwnd: int, fallback: Callable[[Rect], object] | None = None):
 
     from audioscribe.live.fenster import WindowGone
 
-    Q = _quartz()
+    Q = _quartz()  # noqa: N806 - Framework-Namen wie in PyObjC
     info = _info(hwnd)
     if info is None:
         raise WindowGone(tr("Fenster {hwnd} existiert nicht mehr", hwnd=hwnd))

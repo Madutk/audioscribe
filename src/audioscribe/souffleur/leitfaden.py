@@ -87,7 +87,7 @@ _ZIEL = re.compile(r"^(ziel|ziele|goal|goals|zweck|purpose)\b", re.I)
 _HINTERGRUND = re.compile(r"^(hintergrund|kontext|background|context)\b", re.I)
 
 
-class LeitfadenFehler(ValueError):
+class LeitfadenFehler(ValueError):  # noqa: N818 - deutsche Benennung: Fehler statt Error
     """Die Datei ist kein brauchbarer Leitfaden (nicht lesbar, zu groß, ohne Punkte)."""
 
 
@@ -554,7 +554,7 @@ def lade_stand(session_dir: Path) -> Leitfaden | None:
     punkte = []
     for roh in data["punkte"]:
         if isinstance(roh, dict) and roh.get("id") and roh.get("text"):
-            punkte.append(Punkt(**{k: v for k, v in roh.items() if k in Punkt.__dataclass_fields__}))
+            punkte.append(Punkt(**{k: v for k, v in roh.items() if k in Punkt.__dataclass_fields__}))  # noqa: PERF401 - Schleife bleibt; Comprehension waere Umschreiben
     if not punkte:
         return None
     felder = {k: str(data.get(k) or "") for k in ("quelle", "titel", "art", "datum", "ziel", "hintergrund")}

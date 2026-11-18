@@ -200,7 +200,7 @@ def ablagen(ordner: Path) -> list[dict]:
 
 
 def _vermerke(ordner: Path, ablage: Ablage) -> None:
-    try:
+    try:  # noqa: SIM105 - try/except/pass bleibt; contextlib.suppress waere Umschreiben
         _atomar(
             Path(ordner) / VERMERK,
             json.dumps([*ablagen(ordner), ablage.als_dict()], ensure_ascii=False, indent=2) + "\n",
@@ -653,7 +653,7 @@ def speichere_nachbereitung(
                 continue
             text = quelle.read_text(encoding="utf-8", errors="replace")
             if bilder and assets is not None:
-                text = _FRAME_PFAD.sub(lambda m: bildpfad(m.group(1), neu.parent) or m.group(0), text)
+                text = _FRAME_PFAD.sub(lambda m: bildpfad(m.group(1), neu.parent) or m.group(0), text)  # noqa: B023 - Lambda wird sofort von sub() aufgerufen
             else:
                 text = _BILD_LINK.sub(lambda m: f"_[{m.group(1) or m.group(2)}]_", text)
             neu.write_text(text, encoding="utf-8")

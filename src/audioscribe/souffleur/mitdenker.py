@@ -574,7 +574,7 @@ class Mitdenker:
             self._lauf_sperre.release()
 
     def _ein_lauf(self, snap: dict) -> list[Karte]:
-        assert self.ki is not None
+        assert self.ki is not None  # noqa: S101 - Typ-Verengung fuer Optional
         jetzt = float(snap["jetzt"])
         with self._lock:
             stand = self._stand
