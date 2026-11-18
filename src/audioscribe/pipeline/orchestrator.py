@@ -48,13 +48,7 @@ def run_pipeline(
     # stillschweigend (das extrahierte 16k-WAV enthaelt keine Bilder).
     do_screens = settings.enable_screens and from_video
 
-    total = (
-        3
-        + (1 if from_video else 0)
-        + (1 if do_align else 0)
-        + (1 if do_diar else 0)
-        + (1 if do_screens else 0)
-    )
+    total = 3 + (1 if from_video else 0) + (1 if do_align else 0) + (1 if do_diar else 0) + (1 if do_screens else 0)
     reporter = reporter or ConsoleReporter(total)
     step = 0
 

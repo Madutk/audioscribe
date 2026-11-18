@@ -78,8 +78,15 @@ UI_SPRACHEN: tuple[str, ...] = ("de", "en")
 LIVE_SOURCES: tuple[str, ...] = ("monitor", "window", "none", "transcript")
 
 _BOOL_KEYS = (
-    "diarize", "frames", "agent_bash", "live_partials", "live_speakers", "live_refine",
-    "souffleur_aktiv", "souffleur_sensibel", "souffleur_mitdenken",
+    "diarize",
+    "frames",
+    "agent_bash",
+    "live_partials",
+    "live_speakers",
+    "live_refine",
+    "souffleur_aktiv",
+    "souffleur_sensibel",
+    "souffleur_mitdenken",
 )
 
 _LOESCHBAR = ("wiki_dir", "eingang_dir")

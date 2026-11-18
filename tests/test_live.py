@@ -124,8 +124,10 @@ def test_track_take_advances_timeline_while_source_is_silent():
 def test_load_wav_survives_unfinished_header(tmp_path):
     path = tmp_path / "crash.wav"
     data = (np.ones(1000) * 1000).astype("<i2").tobytes()
-    path.write_bytes(b"RIFF\x24\x00\x00\x00WAVEfmt \x10\x00\x00\x00\x01\x00\x01\x00"
-                     b"\x80\x3e\x00\x00\x00\x7d\x00\x00\x02\x00\x10\x00data\x00\x00\x00\x00" + data)
+    path.write_bytes(
+        b"RIFF\x24\x00\x00\x00WAVEfmt \x10\x00\x00\x00\x01\x00\x01\x00"
+        b"\x80\x3e\x00\x00\x00\x7d\x00\x00\x02\x00\x10\x00data\x00\x00\x00\x00" + data
+    )
     assert len(load_wav(path)) == 1000
 
 
@@ -563,10 +565,24 @@ def abschnitt(i=1, *, dauer=2.0, rechen=0.5, sprecher=0.0, latenz=1.0, woerter=3
     from audioscribe.live.diagnose import Abschnitt
 
     return Abschnitt(
-        chunk_index=i, track="system", audio_start_s=0.0, audio_end_s=dauer, audio_dauer_s=dauer,
-        t_abgeschlossen=dauer, t_start=dauer + 0.1, t_ende=dauer + latenz, wartezeit_s=0.1,
-        rechenzeit_s=rechen, sprecher_s=sprecher, latenz_s=latenz, latenz_max_s=latenz, modell="m",
-        eco=eco, parts=parts, anzahl_woerter=woerter, schluss="pause",
+        chunk_index=i,
+        track="system",
+        audio_start_s=0.0,
+        audio_end_s=dauer,
+        audio_dauer_s=dauer,
+        t_abgeschlossen=dauer,
+        t_start=dauer + 0.1,
+        t_ende=dauer + latenz,
+        wartezeit_s=0.1,
+        rechenzeit_s=rechen,
+        sprecher_s=sprecher,
+        latenz_s=latenz,
+        latenz_max_s=latenz,
+        modell="m",
+        eco=eco,
+        parts=parts,
+        anzahl_woerter=woerter,
+        schluss="pause",
     )
 
 
@@ -615,10 +631,25 @@ def test_diagnose_without_measurements_has_no_tempo_or_latency(tmp_path):
 def test_beschreibe_live_mentions_preview_tempo_and_catchup_share():
     from audioscribe.live.bilanz import LiveBilanz, beschreibe_live
 
-    b = LiveBilanz(laden_s=1.0, aufnahme_s=90.0, abschluss_s=1.0, gesamt_s=95.0, abschnitte=5, audio_s=80.0,
-                   rechenzeit_s=12.0, tempo=0.15, vorschau_n=20, vorschau_s=40.0, tempo_inkl_vorschau=0.65,
-                   verzoegerung_mittel_s=3.0, verzoegerung_median_s=3.0, verzoegerung_max_s=5.0,
-                   aufholmodus_s=9.0, aufholmodus_anteil=0.1, eco_abschnitte=2)
+    b = LiveBilanz(
+        laden_s=1.0,
+        aufnahme_s=90.0,
+        abschluss_s=1.0,
+        gesamt_s=95.0,
+        abschnitte=5,
+        audio_s=80.0,
+        rechenzeit_s=12.0,
+        tempo=0.15,
+        vorschau_n=20,
+        vorschau_s=40.0,
+        tempo_inkl_vorschau=0.65,
+        verzoegerung_mittel_s=3.0,
+        verzoegerung_median_s=3.0,
+        verzoegerung_max_s=5.0,
+        aufholmodus_s=9.0,
+        aufholmodus_anteil=0.1,
+        eco_abschnitte=2,
+    )
     text = beschreibe_live(b)
     assert "Rechenzeit 12,0 s (0,15× Echtzeit) · 20 Vorschauen 40,0 s (0,65× Echtzeit)" in text
     assert "5 Abschnitte (2 sparsam)" in text and "Aufholmodus 9,0 s (10 %)" in text
@@ -627,10 +658,21 @@ def test_beschreibe_live_mentions_preview_tempo_and_catchup_share():
 def test_beschreibe_live_mentions_all_the_numbers():
     from audioscribe.live.bilanz import LiveBilanz, beschreibe_live
 
-    b = LiveBilanz(laden_s=6.2, aufnahme_s=114.0, abschluss_s=2.9, gesamt_s=125.0, abschnitte=27,
-                   zusammengelegt=3, audio_s=100.0, rechenzeit_s=38.4, tempo=0.34,
-                   verzoegerung_mittel_s=2.1, verzoegerung_median_s=1.8, verzoegerung_max_s=4.8,
-                   aufholmodus_s=12.0)
+    b = LiveBilanz(
+        laden_s=6.2,
+        aufnahme_s=114.0,
+        abschluss_s=2.9,
+        gesamt_s=125.0,
+        abschnitte=27,
+        zusammengelegt=3,
+        audio_s=100.0,
+        rechenzeit_s=38.4,
+        tempo=0.34,
+        verzoegerung_mittel_s=2.1,
+        verzoegerung_median_s=1.8,
+        verzoegerung_max_s=4.8,
+        aufholmodus_s=12.0,
+    )
     assert beschreibe_live(b) == (
         "Fazit: Aufnahme 1:54 · Modelle 6,2 s · Rechenzeit 38,4 s (0,34× Echtzeit) · "
         "Verzögerung Ø 2,1 s / max 4,8 s · 27 Abschnitte (3 zusammengelegt) · Aufholmodus 12,0 s · Abschluss 2,9 s"
@@ -668,7 +710,12 @@ def test_session_finish_writes_bilanz_and_reports_before_fertig(tmp_path, monkey
     types = [(typ, d.get("teil") or d.get("phase")) for typ, d in emitted]
     assert types.index((events.FAZIT, "live")) < types.index((events.STATE, "fertig"))
     fazit = next(d for typ, d in emitted if typ == events.FAZIT)
-    assert (fazit["aufnahme_s"], fazit["abschnitte"], fazit["verzoegerung_max_s"], fazit["tempo"]) == (10.0, 1, 1.5, 0.2)
+    assert (fazit["aufnahme_s"], fazit["abschnitte"], fazit["verzoegerung_max_s"], fazit["tempo"]) == (
+        10.0,
+        1,
+        1.5,
+        0.2,
+    )
     assert any(line.startswith("Fazit: Aufnahme 0:10") for line in logged)
     assert load_bilanz(session.dir)["live"]["rechenzeit_s"] == 0.4
     assert (session.dir / "transkript.live.md").exists()
@@ -690,9 +737,18 @@ def test_refine_session_times_its_stages(tmp_path, monkeypatch):
         wav.setframerate(SR)
         wav.writeframes(np.zeros(SR * 3, dtype="<i2").tobytes())
     # Backend und Gerät festlegen: sonst wählt "auto" auf Apple Silicon mlx (Stufenname).
-    monkeypatch.setattr(refine, "settings", replace(refine.settings, enable_alignment=True, enable_diarization=True,
-                                                    whisper_model="tiny", asr_backend="faster-whisper",
-                                                    device="cpu"))
+    monkeypatch.setattr(
+        refine,
+        "settings",
+        replace(
+            refine.settings,
+            enable_alignment=True,
+            enable_diarization=True,
+            whisper_model="tiny",
+            asr_backend="faster-whisper",
+            device="cpu",
+        ),
+    )
     ergebnis = {"language": "de", "segments": [{"start": 0.0, "end": 1.0, "text": "Hallo", "words": []}]}
     monkeypatch.setattr("audioscribe.pipeline.transcribe.transcribe", lambda audio, reporter: dict(ergebnis))
     monkeypatch.setattr("audioscribe.pipeline.transcribe.align", lambda audio, result, reporter: result)
@@ -702,7 +758,9 @@ def test_refine_session_times_its_stages(tmp_path, monkeypatch):
     assert refine.refine_session(tmp_path) == tmp_path / "transkript.md"
     data = load_bilanz(tmp_path)["nachschaerfen"]
     assert [st["name"] for st in data["stufen"]] == [
-        "Transkription Mikrofon (faster-whisper tiny)", "Wort-Alignment Mikrofon", "Zusammenführen & Export"
+        "Transkription Mikrofon (faster-whisper tiny)",
+        "Wort-Alignment Mikrofon",
+        "Zusammenführen & Export",
     ]
     assert all(st["dauer_s"] >= 0 for st in data["stufen"])
     assert data["audio_s"] == 3.0 and data["modell"] == "tiny" and data["tempo"] is not None
@@ -712,8 +770,16 @@ def test_refine_session_times_its_stages(tmp_path, monkeypatch):
 
     zeilen = lies_diagnose(tmp_path)
     assert [z["art"] for z in zeilen] == ["nachschaerfen", "stufe", "stufe", "stufe"]
-    assert zeilen[0] == {"art": "nachschaerfen", "teil": "nachschaerfen", "spur": "Mikrofon", "start_s": 0.0,
-                         "end_s": 1.0, "dauer_s": 1.0, "anzahl_woerter": 1, "modell": "tiny"}
+    assert zeilen[0] == {
+        "art": "nachschaerfen",
+        "teil": "nachschaerfen",
+        "spur": "Mikrofon",
+        "start_s": 0.0,
+        "end_s": 1.0,
+        "dauer_s": 1.0,
+        "anzahl_woerter": 1,
+        "modell": "tiny",
+    }
     assert all(z["teil"] == "nachschaerfen" for z in zeilen)
 
 
@@ -753,8 +819,9 @@ def test_replay_capture_feeds_wav_on_session_clock(tmp_path):
     speed = 20.0
     clock = lambda: (time.monotonic() - t0) * speed  # noqa: E731
     ended = []
-    cap = ReplayCapture(clock, system=tmp_path / "in.wav", mic=None, speed=speed, on_end=lambda: ended.append(1),
-                        nachlauf_s=0.5)
+    cap = ReplayCapture(
+        clock, system=tmp_path / "in.wav", mic=None, speed=speed, on_end=lambda: ended.append(1), nachlauf_s=0.5
+    )
     assert cap.mics == [] and len(cap.loopbacks) == 1
     dev = cap.loopbacks[0]
     assert (dev["rate"], dev["channels"], dev["default"], round(dev["dauer_s"], 2)) == (8000, 2, True, 1.2)
@@ -787,9 +854,18 @@ def test_live_session_replays_wav_end_to_end(tmp_path, monkeypatch):
     emitted, logged = [], []
     monkeypatch.setattr(events, "emit", lambda typ, **d: emitted.append((typ, d)))
     monkeypatch.setattr(events, "log", logged.append)
-    opts = LiveOptions(output_dir=tmp_path / "out", model="m", device="cpu", compute_type="int8",
-                       replay_system=tmp_path / "ref.wav", speed=10.0, monitor=0, mic="none",
-                       partials=False, speakers=False)
+    opts = LiveOptions(
+        output_dir=tmp_path / "out",
+        model="m",
+        device="cpu",
+        compute_type="int8",
+        replay_system=tmp_path / "ref.wav",
+        speed=10.0,
+        monitor=0,
+        mic="none",
+        partials=False,
+        speakers=False,
+    )
     session = LiveSession(opts)
     monkeypatch.setattr(session, "_load_asr", lambda: FakeAsr())
     monkeypatch.setattr(session, "_load_vad", lambda: energy_vad)
@@ -828,8 +904,25 @@ def test_cli_live_wav_builds_replay_options(tmp_path, monkeypatch):
             return 0
 
     monkeypatch.setattr("audioscribe.live.session.LiveSession", FakeSession)
-    assert cli.main(["live", "--wav", str(tmp_path / "ref.wav"), "--speed", "4", "--model", "base",
-                     "--output", str(tmp_path), "--eco", "--monitor", "2"]) == 0
+    assert (
+        cli.main(
+            [
+                "live",
+                "--wav",
+                str(tmp_path / "ref.wav"),
+                "--speed",
+                "4",
+                "--model",
+                "base",
+                "--output",
+                str(tmp_path),
+                "--eco",
+                "--monitor",
+                "2",
+            ]
+        )
+        == 0
+    )
     (opts,) = gestartet
     assert opts.replay_system == tmp_path / "ref.wav" and opts.replay_mic is None
     assert (opts.speed, opts.model, opts.force_eco) == (4.0, "base", True)
@@ -837,7 +930,11 @@ def test_cli_live_wav_builds_replay_options(tmp_path, monkeypatch):
     assert cli.main(["live", "--wav", str(tmp_path / "fehlt.wav")]) == 1
     assert cli.main(["live", "--wav-mic", str(tmp_path / "ref.wav"), "--speed", "0"]) == 1
     assert cli.main(["live", "--wav-mic", str(tmp_path / "ref.wav")]) == 0
-    assert (gestartet[-1].mic, gestartet[-1].loopback, gestartet[-1].replay_mic) == ("default", "none", tmp_path / "ref.wav")
+    assert (gestartet[-1].mic, gestartet[-1].loopback, gestartet[-1].replay_mic) == (
+        "default",
+        "none",
+        tmp_path / "ref.wav",
+    )
 
 
 def test_cli_live_backend_mlx_waehlt_turbo_und_stellschrauben(tmp_path, monkeypatch):
@@ -846,7 +943,9 @@ def test_cli_live_backend_mlx_waehlt_turbo_und_stellschrauben(tmp_path, monkeypa
 
     write_wav(tmp_path / "ref.wav", silence(0.5))
     monkeypatch.setattr(cli, "_prepare_backend", lambda: ("mps", "int8"))
-    monkeypatch.setattr("audioscribe.config.resolve_asr_backend", lambda raw, device: "mlx" if raw == "mlx" else "faster-whisper")
+    monkeypatch.setattr(
+        "audioscribe.config.resolve_asr_backend", lambda raw, device: "mlx" if raw == "mlx" else "faster-whisper"
+    )
     monkeypatch.setenv("AUDIOSCRIBE_LIVE_PAUSE_S", "0.45")
     gestartet = []
 
@@ -862,7 +961,10 @@ def test_cli_live_backend_mlx_waehlt_turbo_und_stellschrauben(tmp_path, monkeypa
     (opts,) = gestartet
     assert (opts.backend, opts.device, opts.model) == ("mlx", "mps", "large-v3-turbo")
     assert opts.pause_s in (0.45, 0.6)  # 0.45, wenn settings in diesem Prozess frisch geladen wurde
-    assert cli.main(["live", "--wav", str(tmp_path / "ref.wav"), "--backend", "faster-whisper", "--output", str(tmp_path)]) == 0
+    assert (
+        cli.main(["live", "--wav", str(tmp_path / "ref.wav"), "--backend", "faster-whisper", "--output", str(tmp_path)])
+        == 0
+    )
     assert (gestartet[-1].backend, gestartet[-1].model) == ("faster-whisper", "small")
 
 
@@ -997,8 +1099,15 @@ def test_detector_continuous_motion_still_yields_images():
     ],
 )
 def test_wanted_follows_alt_tab_rules(kw, erwartet):
-    basis = {"title": "Editor", "class_name": "Chrome_WidgetWin_1", "style_ex": 0, "cloaked": 0,
-             "has_owner": False, "width": 800, "height": 600}
+    basis = {
+        "title": "Editor",
+        "class_name": "Chrome_WidgetWin_1",
+        "style_ex": 0,
+        "cloaked": 0,
+        "has_owner": False,
+        "width": 800,
+        "height": 600,
+    }
     assert fenster._wanted(**{**basis, **kw}) is erwartet
 
 
@@ -1034,9 +1143,14 @@ def test_sortiere_bevorzugt_zieht_teams_vor():
 
 
 def test_list_windows_markiert_bevorzugt(monkeypatch):
-    monkeypatch.setattr(fenster, "_list_windows", lambda: [
-        {"hwnd": 1, "process": "chrome", "title": "A"}, {"hwnd": 2, "process": "Microsoft Teams", "title": "M"},
-    ])
+    monkeypatch.setattr(
+        fenster,
+        "_list_windows",
+        lambda: [
+            {"hwnd": 1, "process": "chrome", "title": "A"},
+            {"hwnd": 2, "process": "Microsoft Teams", "title": "M"},
+        ],
+    )
     assert [(w["hwnd"], w["bevorzugt"]) for w in fenster.list_windows()] == [(2, True), (1, False)]
 
 
@@ -1078,8 +1192,14 @@ def make_watcher(tmp_path, source_factory, **kw):
     takt = count()
     marks, log = [], []
     watcher = ScreenWatcher(
-        1, tmp_path, lambda: next(takt) * 5.0, marks.append, fps=500.0, log=log.append,
-        source_factory=source_factory, **kw,
+        1,
+        tmp_path,
+        lambda: next(takt) * 5.0,
+        marks.append,
+        fps=500.0,
+        log=log.append,
+        source_factory=source_factory,
+        **kw,
     )
     return watcher, marks, log
 
@@ -1157,7 +1277,9 @@ def test_screen_watcher_wechselt_quelle_und_zaehlt_weiter(tmp_path):
     watcher.join(timeout=5)
     assert not watcher.is_alive()
     assert [z for z in log if z.startswith("Standbilder: ")] == [
-        "Standbilder: Monitor 1", "Standbilder: Fenster 'Jira'", "Standbilder: Monitor 1",
+        "Standbilder: Monitor 1",
+        "Standbilder: Fenster 'Jira'",
+        "Standbilder: Monitor 1",
     ]
     aktive = [(q["monitor"], q["window"], q["aktiv"]) for q in quellen]
     assert aktive == [(1, 0, True), (0, 4711, True), (7, 0, False), (0, 0, False), (1, 0, True)]
@@ -1179,7 +1301,12 @@ def test_screen_watcher_wartet_nach_fenster_weg_auf_neue_quelle(tmp_path):
     wait_for(lambda: len(marks) == 2)
     watcher.stop()
     watcher.join(timeout=5)
-    assert [m.id for m in marks] == [1, 2] and quellen[-1] == {"monitor": 1, "window": 0, "label": "Monitor 1", "aktiv": True}
+    assert [m.id for m in marks] == [1, 2] and quellen[-1] == {
+        "monitor": 1,
+        "window": 0,
+        "label": "Monitor 1",
+        "aktiv": True,
+    }
 
 
 def test_screen_watcher_startet_im_leerlauf_ohne_quelle(tmp_path):
@@ -1187,7 +1314,9 @@ def test_screen_watcher_startet_im_leerlauf_ohne_quelle(tmp_path):
     weiss = Image.new("RGB", (64, 36), (255, 255, 255))
     protokoll, quellen = [], []
     watcher, marks, log = make_watcher(
-        tmp_path, lambda m, w: DauerQuelle("Monitor 2", weiss, protokoll), on_quelle=quellen.append,
+        tmp_path,
+        lambda m, w: DauerQuelle("Monitor 2", weiss, protokoll),
+        on_quelle=quellen.append,
     )
     watcher._wunsch = (0, 0)  # wie "nur Ton" beim Start
     watcher.start()
@@ -1207,8 +1336,18 @@ def test_bild_befehl_rundreise():
     assert bild_befehl(0, 4711) == "bild fenster 4711" and parse_bild_befehl("BILD Fenster 4711\n") == (0, 4711)
     assert bild_befehl(2, 4711) == "bild fenster 4711"  # Fenster vor Monitor
     assert bild_befehl() == "bild aus" and parse_bild_befehl("  bild aus ") == (0, 0)
-    for kaputt in ("stop", "bild", "bild monitor", "bild monitor x", "bild monitor 0", "bild monitor -1",
-                   "bild fenster 99999999999", "bild kamera 1", "bild aus jetzt", ""):
+    for kaputt in (
+        "stop",
+        "bild",
+        "bild monitor",
+        "bild monitor x",
+        "bild monitor 0",
+        "bild monitor -1",
+        "bild fenster 99999999999",
+        "bild kamera 1",
+        "bild aus jetzt",
+        "",
+    ):
         assert parse_bild_befehl(kaputt) is None, kaputt
 
 
@@ -1223,7 +1362,9 @@ def test_session_stdin_wechselt_bildquelle(tmp_path, monkeypatch):
     session = LiveSession(LiveOptions(output_dir=tmp_path, model="m", device="cpu", compute_type="int8"))
     gesehen = []
     session._screen = SimpleNamespace(wechsle=lambda monitor=0, window=0: gesehen.append((monitor, window)))
-    monkeypatch.setattr("sys.stdin", io.StringIO("bild monitor 2\nquatsch\nbild fenster 4711\nbild aus\nstop\nbild monitor 3\n"))
+    monkeypatch.setattr(
+        "sys.stdin", io.StringIO("bild monitor 2\nquatsch\nbild fenster 4711\nbild aus\nstop\nbild monitor 3\n")
+    )
     session._watch_stdin()
     assert gesehen == [(2, 0), (0, 4711), (0, 0)] and session._stop.is_set()  # nach "stop" wird nichts mehr gelesen
 
@@ -1363,7 +1504,7 @@ ev(type="state", phase="fertig", **state)
 
 REFINE = (
     "print('[Stufe 1/2] Transkription Mikrofon', flush=True); print('[Fortschritt] 50.0%', flush=True); "
-    "print('[Live] {\"type\": \"fazit\", \"teil\": \"nachschaerfen\", \"gesamt_s\": 4.0, \"stufen\": []}', flush=True)"
+    'print(\'[Live] {"type": "fazit", "teil": "nachschaerfen", "gesamt_s": 4.0, "stufen": []}\', flush=True)'
 )
 
 
@@ -1485,7 +1626,15 @@ def test_live_runner_reset_after_end_clears_state(tmp_path):
     runner.stop()
     wait_for(lambda: not runner.snapshot()["running"])
     assert runner.reset() == tmp_path
-    assert runner.snapshot() == {"running": False, "offset": 0, "lines": [], "events": [], "ev_offset": 0, "partials": {}, "souffleur": None}
+    assert runner.snapshot() == {
+        "running": False,
+        "offset": 0,
+        "lines": [],
+        "events": [],
+        "ev_offset": 0,
+        "partials": {},
+        "souffleur": None,
+    }
     assert runner.reset() is None  # ein zweites Mal ist harmlos
 
 
@@ -1513,8 +1662,10 @@ def test_live_runner_wechselt_bildquelle_nur_in_laufender_aufnahme(tmp_path):
     runner = LiveRunner()
     with pytest.raises(RuntimeError):
         runner.bildquelle(2, 0)  # nichts laeuft
-    runner.start(LiveJobOptions(output_dir=tmp_path, refine=False),
-                 argv_builder=lambda o: [sys.executable, "-c", QUELLEN_KIND, str(tmp_path)])
+    runner.start(
+        LiveJobOptions(output_dir=tmp_path, refine=False),
+        argv_builder=lambda o: [sys.executable, "-c", QUELLEN_KIND, str(tmp_path)],
+    )
     quelle = lambda: runner.snapshot().get("bildquelle")  # noqa: E731
     assert wait_for(lambda: (q := quelle()) and q["monitor"] == 1 and q)["aktiv"] is True
     runner.bildquelle(2, 0)
@@ -1531,8 +1682,10 @@ def test_live_runner_wechselt_bildquelle_nur_in_laufender_aufnahme(tmp_path):
 
     # Im Testmodus (Transkript abspielen) gibt es keine Bildquelle.
     replay = LiveRunner()
-    replay.start(LiveJobOptions(output_dir=tmp_path, replay_transcript=tmp_path / "t.md"),
-                 argv_builder=lambda o: [sys.executable, "-c", QUELLEN_KIND, str(tmp_path)])
+    replay.start(
+        LiveJobOptions(output_dir=tmp_path, replay_transcript=tmp_path / "t.md"),
+        argv_builder=lambda o: [sys.executable, "-c", QUELLEN_KIND, str(tmp_path)],
+    )
     wait_for(lambda: replay.snapshot()["phase"] == "laeuft")
     with pytest.raises(RuntimeError, match="Testmodus"):
         replay.bildquelle(2, 0)
@@ -1543,8 +1696,15 @@ def test_live_runner_wechselt_bildquelle_nur_in_laufender_aufnahme(tmp_path):
 def test_build_live_argv_and_refine_argv(tmp_path):
     from audioscribe.ui.jobs import LiveJobOptions, build_live_argv, build_refine_argv
 
-    opts = LiveJobOptions(output_dir=tmp_path, monitor=2, mic="23", loopback="none", partials=False,
-                          model="small", refine_model="large-v3-turbo")
+    opts = LiveJobOptions(
+        output_dir=tmp_path,
+        monitor=2,
+        mic="23",
+        loopback="none",
+        partials=False,
+        model="small",
+        refine_model="large-v3-turbo",
+    )
     argv = build_live_argv(opts, prefix=["audioscribe"])
     assert argv[:2] == ["audioscribe", "live"]
     assert {"--monitor=2", "--mic=23", "--loopback=none", "--model=small", "--no-partials"} <= set(argv)
@@ -1603,8 +1763,14 @@ def test_live_start_with_window_remembers_label(client, tmp_path, monkeypatch):
     gestartet = []
     monkeypatch.setattr(LiveRunner, "start", lambda self, opts, **kw: gestartet.append(opts))
     state.save_state({"live_monitor": "2"})
-    body = {"output_dir": str(tmp_path), "monitor": 0, "window": 4711, "window_label": "chrome – Jira",
-            "mic": "none", "loopback": "none"}
+    body = {
+        "output_dir": str(tmp_path),
+        "monitor": 0,
+        "window": 4711,
+        "window_label": "chrome – Jira",
+        "mic": "none",
+        "loopback": "none",
+    }
     assert client.post("/api/live/start", json=body).status_code == 200
     assert gestartet[0].window == 4711 and gestartet[0].monitor == 0
     saved = state.load_state()
@@ -1691,7 +1857,12 @@ def test_first_tab_is_renamed():
 
     html = (Path(server.__file__).parent / "static" / "index.html").read_text(encoding="utf-8")
     # PRD §21: statt gleichrangiger Reiter die Bereiche je Einstieg - im Projekt Live vor Nachbereitung.
-    assert html.index(">Live-Sitzung<") < html.index(">Nachbereitung<") < html.index(">Transkribieren<") < html.index(">KI-Analyse<")
+    assert (
+        html.index(">Live-Sitzung<")
+        < html.index(">Nachbereitung<")
+        < html.index(">Transkribieren<")
+        < html.index(">KI-Analyse<")
+    )
     assert ">Offline Transcription<" not in html
 
 
@@ -1837,7 +2008,10 @@ def test_gleiche_ab_zaehlt_die_vier_faelle():
     ]
     offline = [(1.1, 2.0, True), (2.0, 4.1, True), (6.1, 9.1, True), (11.1, 14.1, False), (30.0, 33.0, False)]
     assert gleiche_ab(live, offline) == {
-        "bestaetigt": 1, "zurueckgeholt": 1, "nachtraeglich_entfernt": 1, "ohne_text": 1
+        "bestaetigt": 1,
+        "zurueckgeholt": 1,
+        "nachtraeglich_entfernt": 1,
+        "ohne_text": 1,
     }
     # Überlappt ein Live-Fenster mehrere Segmente, zählt es nur als weg, wenn alle weg sind.
     assert gleiche_ab(live[:1], [(1.1, 2.0, True), (2.0, 4.1, False)])["zurueckgeholt"] == 1
@@ -1846,13 +2020,31 @@ def test_gleiche_ab_zaehlt_die_vier_faelle():
 def test_beschreibe_uebersprechen_in_live_und_refine_fazit():
     from audioscribe.live.bilanz import LiveBilanz, RefineBilanz, beschreibe_live, beschreibe_refine
 
-    b = LiveBilanz(laden_s=1.0, aufnahme_s=60.0, abschluss_s=0.5, gesamt_s=70.0, abschnitte=4,
-                   uebersprechen_geprueft=3, uebersprechen_verworfen=2)
+    b = LiveBilanz(
+        laden_s=1.0,
+        aufnahme_s=60.0,
+        abschluss_s=0.5,
+        gesamt_s=70.0,
+        abschnitte=4,
+        uebersprechen_geprueft=3,
+        uebersprechen_verworfen=2,
+    )
     assert " · 4 Abschnitte · Übersprechen 2 verworfen · " in beschreibe_live(b)
     assert "Übersprechen" not in beschreibe_live(LiveBilanz(1.0, 60.0, 0.5, 70.0, uebersprechen_geprueft=3))
-    r = RefineBilanz(gesamt_s=10.0, audio_s=60.0, uebersprechen={
-        "geprueft": 12, "verworfen": 3, "bestaetigt": 2, "zurueckgeholt": 1, "nachtraeglich_entfernt": 0,
-        "ohne_text": 0, "lag_s": 0.08, "lag_score": 0.9})
+    r = RefineBilanz(
+        gesamt_s=10.0,
+        audio_s=60.0,
+        uebersprechen={
+            "geprueft": 12,
+            "verworfen": 3,
+            "bestaetigt": 2,
+            "zurueckgeholt": 1,
+            "nachtraeglich_entfernt": 0,
+            "ohne_text": 0,
+            "lag_s": 0.08,
+            "lag_score": 0.9,
+        },
+    )
     assert beschreibe_refine(r).endswith("Übersprechen 3 von 12 verworfen (live bestätigt 2, zurückgeholt 1)")
     assert "Übersprechen" not in beschreibe_refine(RefineBilanz(gesamt_s=10.0, audio_s=60.0))
 
@@ -1896,9 +2088,20 @@ def test_live_session_verwirft_uebersprechen_im_replay(tmp_path, monkeypatch):
     emitted = []
     monkeypatch.setattr(events, "emit", lambda typ, **d: emitted.append((typ, d)))
     monkeypatch.setattr(events, "log", lambda *_a, **_k: None)
-    opts = LiveOptions(output_dir=tmp_path / "out", model="m", device="cpu", compute_type="int8",
-                       replay_system=system_wav, replay_mic=mic_wav, speed=10.0, monitor=0,
-                       mic="default", loopback="default", partials=False, speakers=False)
+    opts = LiveOptions(
+        output_dir=tmp_path / "out",
+        model="m",
+        device="cpu",
+        compute_type="int8",
+        replay_system=system_wav,
+        replay_mic=mic_wav,
+        speed=10.0,
+        monitor=0,
+        mic="default",
+        loopback="default",
+        partials=False,
+        speakers=False,
+    )
     session = LiveSession(opts)
     monkeypatch.setattr(session, "_load_asr", lambda: FakeAsr())
     monkeypatch.setattr(session, "_load_vad", lambda: energy_vad)
@@ -1914,13 +2117,17 @@ def test_live_session_verwirft_uebersprechen_im_replay(tmp_path, monkeypatch):
     assert len(mic_segs) == 1 and abs(mic_segs[0]["start"] - 11.0) < 0.2 and mic_segs[0]["speaker"] == ICH
     pruefungen = [z for z in lies_diagnose(session.dir) if z["art"] == "uebersprechen"]
     assert [(z["teil"], z["track"], z["entscheidung"]) for z in pruefungen] == [
-        ("live", "mic", "verworfen"), ("live", "mic", "verworfen"), ("live", "mic", "behalten")
+        ("live", "mic", "verworfen"),
+        ("live", "mic", "verworfen"),
+        ("live", "mic", "behalten"),
     ]
     assert all(z["score"] >= 0.8 and abs(z["lag_s"] - 0.08) < 0.03 for z in pruefungen[:2])
     # Eigener Block: das System ist still, der Score null. Die VAD schneidet die Blöcke
     # knapp unter 3 s, die Schwelle liegt dann minimal über der Basis.
     assert pruefungen[2]["score"] == 0.0
-    assert all(z["abdeckung"] >= 0.9 and 0.7 <= z["schwelle"] <= 0.76 and 2.6 <= z["dauer_s"] <= 3.2 for z in pruefungen)
+    assert all(
+        z["abdeckung"] >= 0.9 and 0.7 <= z["schwelle"] <= 0.76 and 2.6 <= z["dauer_s"] <= 3.2 for z in pruefungen
+    )
     bilanz = load_bilanz(session.dir)["live"]
     assert (bilanz["uebersprechen_geprueft"], bilanz["uebersprechen_verworfen"], bilanz["abschnitte"]) == (3, 2, 3)
     # Je verworfenem Abschnitt wird die Vorschau zurückgenommen.
@@ -1936,10 +2143,18 @@ def test_live_session_ohne_filter_oder_ohne_system_prueft_nichts(tmp_path, monke
     monkeypatch.setattr(events, "emit", lambda typ, **d: emitted.append((typ, d)))
     monkeypatch.setattr(events, "log", lambda *_a, **_k: None)
     basis = dict(model="m", device="cpu", compute_type="int8", speed=10.0, monitor=0, partials=False, speakers=False)
-    for i, extra in enumerate((
-        dict(replay_system=system_wav, replay_mic=mic_wav, mic="default", loopback="default", uebersprechen_schwelle=0.0),
-        dict(replay_mic=mic_wav, mic="default", loopback="none"),
-    )):
+    for i, extra in enumerate(
+        (
+            dict(
+                replay_system=system_wav,
+                replay_mic=mic_wav,
+                mic="default",
+                loopback="default",
+                uebersprechen_schwelle=0.0,
+            ),
+            dict(replay_mic=mic_wav, mic="default", loopback="none"),
+        )
+    ):
         session = LiveSession(LiveOptions(output_dir=tmp_path / f"out{i}", **basis, **extra))
         monkeypatch.setattr(session, "_load_asr", lambda: FakeAsr())
         monkeypatch.setattr(session, "_load_vad", lambda: energy_vad)
@@ -1965,24 +2180,71 @@ def test_refine_verwirft_uebersprechen_und_gleicht_mit_live_ab(tmp_path, monkeyp
     _echo_sitzung(tmp_path / "audio", rng)
     # Live-Entscheidungen: eine richtig, eine falsch behalten, eine falsch verworfen, eine ohne Text.
     live = [
-        {"art": "uebersprechen", "teil": "live", "track": "mic", "start_s": 1.1, "end_s": 4.1, "entscheidung": "verworfen"},
-        {"art": "uebersprechen", "teil": "live", "track": "mic", "start_s": 6.1, "end_s": 9.1, "entscheidung": "behalten"},
-        {"art": "uebersprechen", "teil": "live", "track": "mic", "start_s": 11.0, "end_s": 14.0, "entscheidung": "verworfen"},
-        {"art": "uebersprechen", "teil": "live", "track": "mic", "start_s": 15.5, "end_s": 15.9, "entscheidung": "verworfen"},
+        {
+            "art": "uebersprechen",
+            "teil": "live",
+            "track": "mic",
+            "start_s": 1.1,
+            "end_s": 4.1,
+            "entscheidung": "verworfen",
+        },
+        {
+            "art": "uebersprechen",
+            "teil": "live",
+            "track": "mic",
+            "start_s": 6.1,
+            "end_s": 9.1,
+            "entscheidung": "behalten",
+        },
+        {
+            "art": "uebersprechen",
+            "teil": "live",
+            "track": "mic",
+            "start_s": 11.0,
+            "end_s": 14.0,
+            "entscheidung": "verworfen",
+        },
+        {
+            "art": "uebersprechen",
+            "teil": "live",
+            "track": "mic",
+            "start_s": 15.5,
+            "end_s": 15.9,
+            "entscheidung": "verworfen",
+        },
     ]
     (tmp_path / "diagnose.jsonl").write_text("".join(_json.dumps(z) + "\n" for z in live), encoding="utf-8")
-    monkeypatch.setattr(refine, "settings", replace(refine.settings, enable_alignment=False, enable_diarization=False,
-                                                    whisper_model="tiny", live_uebersprechen_schwelle=0.7))
-    antworten = iter([
-        {"language": "de", "segments": [  # Mikrofon: zwei Echos, ein eigener Block, ein kurzer Einwurf
-            {"start": 1.08, "end": 4.08, "text": "Echo eins"},
-            {"start": 6.08, "end": 9.08, "text": "Echo zwei"},
-            {"start": 11.0, "end": 14.0, "text": "Ich selbst"},
-            {"start": 14.5, "end": 14.9, "text": "Mhm"},
-        ]},
-        {"language": "de", "segments": [{"start": 1.0, "end": 4.0, "text": "Gegenseite eins"},
-                                        {"start": 6.0, "end": 9.0, "text": "Gegenseite zwei"}]},
-    ])
+    monkeypatch.setattr(
+        refine,
+        "settings",
+        replace(
+            refine.settings,
+            enable_alignment=False,
+            enable_diarization=False,
+            whisper_model="tiny",
+            live_uebersprechen_schwelle=0.7,
+        ),
+    )
+    antworten = iter(
+        [
+            {
+                "language": "de",
+                "segments": [  # Mikrofon: zwei Echos, ein eigener Block, ein kurzer Einwurf
+                    {"start": 1.08, "end": 4.08, "text": "Echo eins"},
+                    {"start": 6.08, "end": 9.08, "text": "Echo zwei"},
+                    {"start": 11.0, "end": 14.0, "text": "Ich selbst"},
+                    {"start": 14.5, "end": 14.9, "text": "Mhm"},
+                ],
+            },
+            {
+                "language": "de",
+                "segments": [
+                    {"start": 1.0, "end": 4.0, "text": "Gegenseite eins"},
+                    {"start": 6.0, "end": 9.0, "text": "Gegenseite zwei"},
+                ],
+            },
+        ]
+    )
     monkeypatch.setattr("audioscribe.pipeline.transcribe.transcribe", lambda audio, reporter: next(antworten))
     emitted = []
     monkeypatch.setattr(events, "emit", lambda typ, **d: emitted.append((typ, d)))
@@ -1992,11 +2254,19 @@ def test_refine_verwirft_uebersprechen_und_gleicht_mit_live_ab(tmp_path, monkeyp
     absaetze = _json.loads((tmp_path / "transcript.json").read_text(encoding="utf-8"))["paragraphs"]
     # Absätze fassen aufeinanderfolgende Segmente desselben Sprechers zusammen; die Echos fehlen.
     assert [(p["speaker"], p["text"]) for p in absaetze] == [
-        ("Gegenseite", "Gegenseite eins Gegenseite zwei"), ("Ich", "Ich selbst Mhm")
+        ("Gegenseite", "Gegenseite eins Gegenseite zwei"),
+        ("Ich", "Ich selbst Mhm"),
     ]
     u = load_bilanz(tmp_path)["nachschaerfen"]["uebersprechen"]
-    assert {k: u[k] for k in ("geprueft", "verworfen", "bestaetigt", "zurueckgeholt", "nachtraeglich_entfernt", "ohne_text")} == {
-        "geprueft": 4, "verworfen": 2, "bestaetigt": 1, "zurueckgeholt": 1, "nachtraeglich_entfernt": 1, "ohne_text": 1
+    assert {
+        k: u[k] for k in ("geprueft", "verworfen", "bestaetigt", "zurueckgeholt", "nachtraeglich_entfernt", "ohne_text")
+    } == {
+        "geprueft": 4,
+        "verworfen": 2,
+        "bestaetigt": 1,
+        "zurueckgeholt": 1,
+        "nachtraeglich_entfernt": 1,
+        "ohne_text": 1,
     }
     assert abs(u["lag_s"] - 0.08) < 0.03 and u["lag_score"] > 0.5
     stufen = [st["name"] for st in load_bilanz(tmp_path)["nachschaerfen"]["stufen"]]
@@ -2027,8 +2297,17 @@ def _vor_ort_sitzung(ordner, spuren, monkeypatch, antworten, *, raum=True):
             wav.setframerate(SR)
             wav.writeframes(np.zeros(SR * 10, dtype="<i2").tobytes())
     journal.schreibe_status(ordner, status=journal.BEENDET, raum=raum)
-    monkeypatch.setattr(refine, "settings", replace(refine.settings, enable_alignment=False, enable_diarization=True,
-                                                    whisper_model="tiny", live_uebersprechen_schwelle=0.0))
+    monkeypatch.setattr(
+        refine,
+        "settings",
+        replace(
+            refine.settings,
+            enable_alignment=False,
+            enable_diarization=True,
+            whisper_model="tiny",
+            live_uebersprechen_schwelle=0.0,
+        ),
+    )
     folge = iter(antworten)
     aktuell = {}
 
@@ -2048,38 +2327,63 @@ def _vor_ort_sitzung(ordner, spuren, monkeypatch, antworten, *, raum=True):
 
 
 def _absaetze(ordner):
-    return [(p["speaker"], p["text"]) for p in json.loads((ordner / "transcript.json").read_text(encoding="utf-8"))["paragraphs"]]
+    return [
+        (p["speaker"], p["text"])
+        for p in json.loads((ordner / "transcript.json").read_text(encoding="utf-8"))["paragraphs"]
+    ]
 
 
 def test_refine_vor_ort_trennt_das_mikrofon_in_sprecher(tmp_path, monkeypatch):
     from audioscribe.live.bilanz import load_bilanz
 
-    refine = _vor_ort_sitzung(tmp_path, [MIC_WAV], monkeypatch, [[
-        {"start": 0.0, "end": 2.0, "text": "Guten Morgen.", "raw": "SPEAKER_01"},
-        {"start": 2.5, "end": 4.0, "text": "Hallo zusammen.", "raw": "SPEAKER_00"},
-        {"start": 4.5, "end": 6.0, "text": "Fangen wir an.", "raw": "SPEAKER_01"},
-    ]])
+    refine = _vor_ort_sitzung(
+        tmp_path,
+        [MIC_WAV],
+        monkeypatch,
+        [
+            [
+                {"start": 0.0, "end": 2.0, "text": "Guten Morgen.", "raw": "SPEAKER_01"},
+                {"start": 2.5, "end": 4.0, "text": "Hallo zusammen.", "raw": "SPEAKER_00"},
+                {"start": 4.5, "end": 6.0, "text": "Fangen wir an.", "raw": "SPEAKER_01"},
+            ]
+        ],
+    )
     refine.refine_session(tmp_path)
     assert _absaetze(tmp_path) == [
-        ("Sprecher 1", "Guten Morgen."), ("Sprecher 2", "Hallo zusammen."), ("Sprecher 1", "Fangen wir an.")
+        ("Sprecher 1", "Guten Morgen."),
+        ("Sprecher 2", "Hallo zusammen."),
+        ("Sprecher 1", "Fangen wir an."),
     ]
     stufen = [st["name"] for st in load_bilanz(tmp_path)["nachschaerfen"]["stufen"]]
     assert "Diarisierung Mikrofon (pyannote)" in stufen
 
 
 def test_refine_ohne_vor_ort_bleibt_das_mikrofon_ich(tmp_path, monkeypatch):
-    refine = _vor_ort_sitzung(tmp_path, [MIC_WAV], monkeypatch, [[
-        {"start": 0.0, "end": 2.0, "text": "Guten Morgen.", "raw": "SPEAKER_00"},
-    ]], raum=False)
+    refine = _vor_ort_sitzung(
+        tmp_path,
+        [MIC_WAV],
+        monkeypatch,
+        [
+            [
+                {"start": 0.0, "end": 2.0, "text": "Guten Morgen.", "raw": "SPEAKER_00"},
+            ]
+        ],
+        raum=False,
+    )
     refine.refine_session(tmp_path)
     assert _absaetze(tmp_path) == [(ICH, "Guten Morgen.")]
 
 
 def test_refine_vor_ort_mit_system_audio_nummeriert_ueber_beide_spuren(tmp_path, monkeypatch):
-    refine = _vor_ort_sitzung(tmp_path, [MIC_WAV, SYSTEM_WAV], monkeypatch, [
-        [{"start": 3.0, "end": 4.0, "text": "Im Raum.", "raw": "SPEAKER_00"}],
-        [{"start": 0.0, "end": 2.0, "text": "Aus dem Call.", "raw": "SPEAKER_00"}],
-    ])
+    refine = _vor_ort_sitzung(
+        tmp_path,
+        [MIC_WAV, SYSTEM_WAV],
+        monkeypatch,
+        [
+            [{"start": 3.0, "end": 4.0, "text": "Im Raum.", "raw": "SPEAKER_00"}],
+            [{"start": 0.0, "end": 2.0, "text": "Aus dem Call.", "raw": "SPEAKER_00"}],
+        ],
+    )
     refine.refine_session(tmp_path)
     # Beide Spuren liefern SPEAKER_00 - das sind trotzdem zwei Personen.
     assert _absaetze(tmp_path) == [("Sprecher 1", "Aus dem Call."), ("Sprecher 2", "Im Raum.")]

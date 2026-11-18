@@ -24,8 +24,7 @@ from pathlib import Path
 from audioscribe import __version__
 
 _BACKEND_HELP = (
-    "ASR-Backend fuer Whisper: auto (Default: mlx auf Apple Silicon, sonst faster-whisper) "
-    "| faster-whisper | mlx"
+    "ASR-Backend fuer Whisper: auto (Default: mlx auf Apple Silicon, sonst faster-whisper) | faster-whisper | mlx"
 )
 
 
@@ -189,8 +188,7 @@ def _live(args: argparse.Namespace) -> int:
         return 1
     opts = LiveOptions(
         output_dir=(
-            resume_dir.parent if resume_dir is not None
-            else Path(args.output) if args.output else settings.output_dir
+            resume_dir.parent if resume_dir is not None else Path(args.output) if args.output else settings.output_dir
         ),
         resume_dir=resume_dir,
         titel=args.titel or "",
@@ -281,9 +279,7 @@ def main(argv: list[str] | None = None) -> int:
         "--compute-type",
         help="Rechenpraezision: auto (Default; cuda->float16, cpu->int8) | float16 | int8_float16 | int8",
     )
-    run.add_argument(
-        "--device", help="auto (Default: CUDA > MPS (Apple Silicon) > CPU) | cuda | mps | cpu"
-    )
+    run.add_argument("--device", help="auto (Default: CUDA > MPS (Apple Silicon) > CPU) | cuda | mps | cpu")
     run.add_argument("--backend", help=_BACKEND_HELP)
     run.add_argument(
         "--sentences-per-timestamp",
@@ -322,30 +318,23 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument("--pdf", action="store_true", help="zusaetzlich PDF erzeugen")
     run.add_argument("--output", help="Ausgabeverzeichnis (Default: ./output)")
 
-    rev = sub.add_parser(
-        "review", help="Review-Oberflaeche: Video + Transkript, wichtige Frames markieren"
-    )
-    rev.add_argument(
-        "target", metavar="ORDNER|VIDEO", help="Ausgabeordner (output/<name>) ODER Videopfad"
-    )
+    rev = sub.add_parser("review", help="Review-Oberflaeche: Video + Transkript, wichtige Frames markieren")
+    rev.add_argument("target", metavar="ORDNER|VIDEO", help="Ausgabeordner (output/<name>) ODER Videopfad")
     rev.add_argument("--port", type=int, default=8765, help="HTTP-Port (Default: 8765)")
     rev.add_argument("--no-browser", action="store_true", help="Browser nicht automatisch oeffnen")
 
-    ui = sub.add_parser(
-        "ui", help="Browser-Oberflaeche: Ordner waehlen und alle Medien darin transkribieren"
-    )
+    ui = sub.add_parser("ui", help="Browser-Oberflaeche: Ordner waehlen und alle Medien darin transkribieren")
     # Eigener Port, damit UI (8766) und Review-Oberflaeche (8765) parallel laufen koennen.
     ui.add_argument("--port", type=int, default=8766, help="HTTP-Port (Default: 8766)")
     ui.add_argument("--no-browser", action="store_true", help="Browser nicht automatisch oeffnen")
     ui.add_argument(
-        "--aufnahme", action="store_true",
+        "--aufnahme",
+        action="store_true",
         help="Sofort aufnehmen: Aufnahme ohne Projekt mit den zuletzt benutzten Geraeten sofort starten "
         "(Desktop-Verknuepfung); laeuft die Oberflaeche schon, startet dort nur die Aufnahme",
     )
 
-    exp = sub.add_parser(
-        "export", help="Transkript + Markierungen zu annotiertem Markdown/PDF mergen"
-    )
+    exp = sub.add_parser("export", help="Transkript + Markierungen zu annotiertem Markdown/PDF mergen")
     exp.add_argument("target", metavar="ORDNER|VIDEO", help="Ausgabeordner (output/<name>) ODER Videopfad")
     exp.add_argument("--pdf", action="store_true", help="zusaetzlich annotiertes PDF erzeugen")
 
@@ -360,9 +349,7 @@ def main(argv: list[str] | None = None) -> int:
         help="Ergebnisordner eines 'run' (output/<name>) ODER Videopfad",
     )
     ana.add_argument("--name", help="Name des Prozesses (bestimmt auch den Unterordner)")
-    ana.add_argument(
-        "--out", help="Ausgabeordner; Ergebnisse landen in <out>/<name> (Default: ./analysen)"
-    )
+    ana.add_argument("--out", help="Ausgabeordner; Ergebnisse landen in <out>/<name> (Default: ./analysen)")
     ana.add_argument(
         "--context",
         action="append",
@@ -376,9 +363,7 @@ def main(argv: list[str] | None = None) -> int:
         metavar="NAME",
         help="Skill bereitstellen (mehrfach moeglich; Default: AUDIOSCRIBE_AGENT_SKILLS)",
     )
-    ana.add_argument(
-        "--no-skills", action="store_true", help="keine Skills bereitstellen (auch keine Vorauswahl)"
-    )
+    ana.add_argument("--no-skills", action="store_true", help="keine Skills bereitstellen (auch keine Vorauswahl)")
     ana.add_argument("--skills-dir", metavar="PFAD", help="Ordner mit Skills (Default: ~/.claude/skills)")
     ana.add_argument("--list-skills", action="store_true", help="verfuegbare Skills anzeigen und beenden")
     ana.add_argument("--model", help="Modell (Default: claude-opus-5; bei --ki-dienst ollama ein Ollama-Tag)")
@@ -389,9 +374,7 @@ def main(argv: list[str] | None = None) -> int:
         help="KI-Dienst: claude-agent (Default) oder ollama (lokales Modell auf diesem Rechner, experimentell)",
     )
     ana.add_argument("--max-turns", type=int, metavar="N", help="Obergrenze fuer Agenten-Runden")
-    ana.add_argument(
-        "--no-bash", action="store_true", help="Agent darf keine Befehle/Skill-Skripte ausfuehren"
-    )
+    ana.add_argument("--no-bash", action="store_true", help="Agent darf keine Befehle/Skill-Skripte ausfuehren")
     ana.add_argument(
         "--no-prozessbild",
         action="store_true",
@@ -414,14 +397,18 @@ def main(argv: list[str] | None = None) -> int:
         help="eine Rohquelle per Claude-Agent ins LLM-Wiki einarbeiten (nach CLAUDE.md des Wikis)",
     )
     ing.add_argument("--wiki", required=True, metavar="ORDNER", help="Wiki-Wurzel (mit CLAUDE.md, raw/, wiki/)")
-    ing.add_argument("--rohquelle", required=True, metavar="PFAD", help="Rohquelle relativ zum Wiki, z. B. raw/meetings/<datei>.md")
+    ing.add_argument(
+        "--rohquelle", required=True, metavar="PFAD", help="Rohquelle relativ zum Wiki, z. B. raw/meetings/<datei>.md"
+    )
     ing.add_argument("--arbeitsordner", required=True, metavar="ORDNER", help="Protokoll und analyse.json des Auftrags")
     ing.add_argument("--seiten", metavar="ORDNER", help="Seitenordner des Wikis (Default: <wiki>/wiki)")
     ing.add_argument("--assets", metavar="ORDNER", help="Bilder der Sitzung, falls außerhalb des Wikis")
     ing.add_argument("--model", help="Modell (Default: wie die KI-Analyse)")
     ing.add_argument("--ki-dienst", choices=("claude-agent", "ollama"), default="claude-agent")
     ing.add_argument("--max-turns", type=int, metavar="N")
-    ing.add_argument("--fortsetzen", action="store_true", help="unterbrochenen Lauf fortsetzen (gleiche Claude-Sitzung)")
+    ing.add_argument(
+        "--fortsetzen", action="store_true", help="unterbrochenen Lauf fortsetzen (gleiche Claude-Sitzung)"
+    )
     ing.add_argument("--nachricht", metavar="TEXT", help="Folgenachricht in die vorhandene Sitzung")
     ing.add_argument("--fragen", action="store_true", help="Rückfragen des Agenten über stdin beantworten")
 
@@ -467,12 +454,8 @@ def main(argv: list[str] | None = None) -> int:
         default="default",
         help="System-Audio (Windows: WASAPI-Loopback, macOS: ScreenCaptureKit): default | none | Geraeteindex",
     )
-    live.add_argument(
-        "--list-devices", action="store_true", help="Audio-Geraete, Monitore und Fenster anzeigen"
-    )
-    live.add_argument(
-        "--model", help="Whisper-Modell (Default: large-v3-turbo auf CUDA und MLX, small auf CPU)"
-    )
+    live.add_argument("--list-devices", action="store_true", help="Audio-Geraete, Monitore und Fenster anzeigen")
+    live.add_argument("--model", help="Whisper-Modell (Default: large-v3-turbo auf CUDA und MLX, small auf CPU)")
     live.add_argument("--language", help="Sprachcode (z.B. 'de') oder 'auto'")
     live.add_argument("--device", help="auto | cuda | mps | cpu")
     live.add_argument("--backend", help=_BACKEND_HELP)
@@ -491,9 +474,7 @@ def main(argv: list[str] | None = None) -> int:
         help="Screenshots aus der Zwischenablage als Standbilder uebernehmen (macOS, Windows)",
     )
     live.add_argument("--no-partials", action="store_true", help="keinen vorlaeufigen Text ausgeben")
-    live.add_argument(
-        "--no-speakers", action="store_true", help="System-Spur nicht in 'Sprecher N' trennen"
-    )
+    live.add_argument("--no-speakers", action="store_true", help="System-Spur nicht in 'Sprecher N' trennen")
     live.add_argument(
         "--vor-ort",
         action="store_true",
@@ -617,10 +598,7 @@ def main(argv: list[str] | None = None) -> int:
         try:
             serve(out_dir, port=args.port, open_browser=not args.no_browser)
         except ModuleNotFoundError:
-            print(
-                "Die Review-Oberflaeche benoetigt fastapi + uvicorn. Installiere sie mit:\n"
-                "  uv sync --extra review"
-            )
+            print("Die Review-Oberflaeche benoetigt fastapi + uvicorn. Installiere sie mit:\n  uv sync --extra review")
             return 1
         except FileNotFoundError as exc:
             print(str(exc))
@@ -639,10 +617,7 @@ def main(argv: list[str] | None = None) -> int:
         try:
             serve_ui(port=args.port, open_browser=not args.no_browser, aufnahme=args.aufnahme)
         except ModuleNotFoundError:
-            print(
-                "Die Browser-Oberflaeche benoetigt fastapi + uvicorn. Installiere sie mit:\n"
-                "  uv sync --extra review"
-            )
+            print("Die Browser-Oberflaeche benoetigt fastapi + uvicorn. Installiere sie mit:\n  uv sync --extra review")
             return 1
         return 0
 

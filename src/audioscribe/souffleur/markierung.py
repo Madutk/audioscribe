@@ -33,8 +33,12 @@ ARTEN: tuple[str, ...] = (ART_WIDERSPRUCH, ART_OFFEN, ART_FRAGE)
 ART_ANKNUEPFEN = "anknuepfen"
 ALLE_ARTEN: tuple[str, ...] = (*ARTEN, ART_ANKNUEPFEN)
 # Deutsche Bezeichnungen - so stehen sie in den Begleitdateien; für die Oberfläche art_label().
-ART_LABEL = {ART_WIDERSPRUCH: "Widerspruch", ART_OFFEN: "Offener Punkt", ART_FRAGE: "Frage",
-             ART_ANKNUEPFEN: "Anknüpfen"}
+ART_LABEL = {
+    ART_WIDERSPRUCH: "Widerspruch",
+    ART_OFFEN: "Offener Punkt",
+    ART_FRAGE: "Frage",
+    ART_ANKNUEPFEN: "Anknüpfen",
+}
 
 
 def art_label(art: str) -> str:
@@ -145,8 +149,7 @@ def bilanz(markierungen: list[Markierung], *, ki_aufrufe: int = 0, ki_fehler: in
     return {
         "hinweise": len(hinweise),
         # Anstöße aus dem Leitfaden zählen nur mit, wenn es welche gibt - sonst bleibt die Bilanz wie bisher.
-        "je_art": {art: n for art in ALLE_ARTEN
-                   if (n := sum(1 for m in hinweise if m.art == art)) or art in ARTEN},
+        "je_art": {art: n for art in ALLE_ARTEN if (n := sum(1 for m in hinweise if m.art == art)) or art in ARTEN},
         "offene_punkte": sum(1 for m in hinweise if m.ist_offener_punkt),
         "ki_aufrufe": ki_aufrufe,
         "ki_fehler": ki_fehler,
@@ -197,8 +200,12 @@ def lade(session_dir: Path) -> SouffleurStand | None:
         felder["fundstellen"] = [Fundstelle(**f) for f in roh.get("fundstellen", [])]
         markierungen.append(Markierung(**felder))
     return SouffleurStand(
-        sitzung=str(data.get("sitzung", "")), speed=float(data.get("speed", 1.0)), wiki=data.get("wiki"),
-        ki=data.get("ki"), markierungen=markierungen, bilanz=dict(data.get("bilanz") or {}),
+        sitzung=str(data.get("sitzung", "")),
+        speed=float(data.get("speed", 1.0)),
+        wiki=data.get("wiki"),
+        ki=data.get("ki"),
+        markierungen=markierungen,
+        bilanz=dict(data.get("bilanz") or {}),
         version=int(data.get("version", STAND_VERSION)),
     )
 
@@ -224,9 +231,15 @@ def render_protokoll(stand: SouffleurStand) -> str:
         "",
     ]
     if stand.speed != 1.0:
-        zeilen += [f"Abspieltempo {stand.speed:g}×: Sitzungs-Verzögerungen sind entsprechend gestreckt, die reale Spalte nicht.", ""]
+        zeilen += [
+            f"Abspieltempo {stand.speed:g}×: Sitzungs-Verzögerungen sind entsprechend gestreckt, die reale Spalte nicht.",
+            "",
+        ]
     if stand.wiki:
-        zeilen += [f"Wiki: {stand.wiki.get('name') or stand.wiki.get('pfad')} ({stand.wiki.get('zustand')}), Stand {stand.wiki.get('stand') or '–'}", ""]
+        zeilen += [
+            f"Wiki: {stand.wiki.get('name') or stand.wiki.get('pfad')} ({stand.wiki.get('zustand')}), Stand {stand.wiki.get('stand') or '–'}",
+            "",
+        ]
     zeilen += [
         "| Zeit | Art | Aussage | Fundstelle | Wiki-Zitat | KI | Hinweis nach | real |",
         "|---|---|---|---|---|---|---|---|",
@@ -248,7 +261,9 @@ def render_protokoll(stand: SouffleurStand) -> str:
     if b:
         v, r, s = b.get("verzoegerung_s", {}), b.get("verzoegerung_real_s", {}), b.get("ki_start_s", {})
         zeilen += [
-            "", "## Bilanz", "",
+            "",
+            "## Bilanz",
+            "",
             f"- Hinweise: {b.get('hinweise', 0)} (Widerspruch {b.get('je_art', {}).get(ART_WIDERSPRUCH, 0)}, "
             f"offener Punkt {b.get('je_art', {}).get(ART_OFFEN, 0)}, Frage {b.get('je_art', {}).get(ART_FRAGE, 0)}), "
             f"offene Punkte gesamt {b.get('offene_punkte', 0)}",

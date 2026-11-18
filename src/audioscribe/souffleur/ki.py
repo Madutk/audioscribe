@@ -173,8 +173,12 @@ class ClaudeAgentKi:
         if not isinstance(daten, dict):
             raise KiFehler(tr("KI-Antwort ohne strukturierte Daten"))
         return KiAntwort(
-            daten=daten, start_s=start_s if start_s is not None else antwort_s, antwort_s=antwort_s,
-            modell=self.modell, session_id=ergebnis.session_id, verbrauch=verbrauch,
+            daten=daten,
+            start_s=start_s if start_s is not None else antwort_s,
+            antwort_s=antwort_s,
+            modell=self.modell,
+            session_id=ergebnis.session_id,
+            verbrauch=verbrauch,
         )
 
     def _loesche_sitzungsdatei(self, session_id: str | None) -> None:
@@ -195,17 +199,84 @@ class ClaudeAgentKi:
 
 # --- Attrappe ---------------------------------------------------------------------------------
 
-_RHETORISCH = ("oder?", "nicht wahr?", "stimmt's?", "ne?", "gell?", "doch klar", "right?", "isn't it?", "don't you think?")
-_OFFEN = (
-    "noch offen", "ungeklärt", "noch unklar", "muss jemand prüfen", "klären wir noch", "nicht geklärt",
-    "still open", "unresolved", "still unclear", "need to clarify", "not clarified",
+_RHETORISCH = (
+    "oder?",
+    "nicht wahr?",
+    "stimmt's?",
+    "ne?",
+    "gell?",
+    "doch klar",
+    "right?",
+    "isn't it?",
+    "don't you think?",
 )
-_GEKLAERT = ("machen wir so", "ist entschieden", "abgemacht", "einverstanden", "geklärt", "agreed", "decided", "settled")
+_OFFEN = (
+    "noch offen",
+    "ungeklärt",
+    "noch unklar",
+    "muss jemand prüfen",
+    "klären wir noch",
+    "nicht geklärt",
+    "still open",
+    "unresolved",
+    "still unclear",
+    "need to clarify",
+    "not clarified",
+)
+_GEKLAERT = (
+    "machen wir so",
+    "ist entschieden",
+    "abgemacht",
+    "einverstanden",
+    "geklärt",
+    "agreed",
+    "decided",
+    "settled",
+)
 _VORSCHLAG = ("man könnte", "wir könnten", "vielleicht sollten wir", "we could", "maybe we should")
 _STOPP = {
-    "der", "die", "das", "und", "oder", "ist", "sind", "ein", "eine", "wir", "bei", "uns", "von", "im", "in",
-    "mit", "für", "auf", "zu", "den", "dem", "des", "es", "sich", "auch", "nicht", "ab", "an", "wer", "wie",
-    "was", "gibt", "eigentlich", "doch", "noch", "dann", "nach", "aus", "als", "werden", "wird", "macht",
+    "der",
+    "die",
+    "das",
+    "und",
+    "oder",
+    "ist",
+    "sind",
+    "ein",
+    "eine",
+    "wir",
+    "bei",
+    "uns",
+    "von",
+    "im",
+    "in",
+    "mit",
+    "für",
+    "auf",
+    "zu",
+    "den",
+    "dem",
+    "des",
+    "es",
+    "sich",
+    "auch",
+    "nicht",
+    "ab",
+    "an",
+    "wer",
+    "wie",
+    "was",
+    "gibt",
+    "eigentlich",
+    "doch",
+    "noch",
+    "dann",
+    "nach",
+    "aus",
+    "als",
+    "werden",
+    "wird",
+    "macht",
 }
 
 
@@ -257,35 +328,57 @@ class AttrappeKi:
             regel = next((r for r in self.regeln if r.aussage.lower() in unten), None)
             if regel is not None:
                 treffer = next(
-                    (f for f in fundstellen if regel.fundstelle.lower() in f"{f['datei']} › {f['ueberschrift']}".lower()),
+                    (
+                        f
+                        for f in fundstellen
+                        if regel.fundstelle.lower() in f"{f['datei']} › {f['ueberschrift']}".lower()
+                    ),
                     None,
                 )
-                befunde.append({
-                    "segment_id": seg["id"], "art": "widerspruch", "aussage": regel.aussage,
-                    "fundstelle_id": treffer["id"] if treffer else None,
-                    "wiki_zitat": regel.zitat if treffer else None, "ki_text": regel.ki_text,
-                    "suchbegriffe": [], "sicherheit": "hoch",
-                })
+                befunde.append(
+                    {
+                        "segment_id": seg["id"],
+                        "art": "widerspruch",
+                        "aussage": regel.aussage,
+                        "fundstelle_id": treffer["id"] if treffer else None,
+                        "wiki_zitat": regel.zitat if treffer else None,
+                        "ki_text": regel.ki_text,
+                        "suchbegriffe": [],
+                        "sicherheit": "hoch",
+                    }
+                )
                 continue
             if text.endswith("?"):
                 if any(unten.endswith(r) or r in unten for r in _RHETORISCH):
                     uebergangen.append({"segment_id": seg["id"], "grund": "rhetorische_frage"})
                     continue
                 treffer = self._beste_fundstelle(text, fundstellen)
-                befunde.append({
-                    "segment_id": seg["id"], "art": "frage", "aussage": text,
-                    "fundstelle_id": treffer["id"] if treffer else None,
-                    "wiki_zitat": _erster_satz(treffer["auszug"]) if treffer else None,
-                    "ki_text": tr("Im Wiki steht dazu etwas.") if treffer else tr("Im Wiki liegt dazu nichts vor."),
-                    "suchbegriffe": sorted(_woerter(text))[:3], "sicherheit": "hoch",
-                })
+                befunde.append(
+                    {
+                        "segment_id": seg["id"],
+                        "art": "frage",
+                        "aussage": text,
+                        "fundstelle_id": treffer["id"] if treffer else None,
+                        "wiki_zitat": _erster_satz(treffer["auszug"]) if treffer else None,
+                        "ki_text": tr("Im Wiki steht dazu etwas.") if treffer else tr("Im Wiki liegt dazu nichts vor."),
+                        "suchbegriffe": sorted(_woerter(text))[:3],
+                        "sicherheit": "hoch",
+                    }
+                )
                 continue
             if any(s in unten for s in _OFFEN):
-                befunde.append({
-                    "segment_id": seg["id"], "art": "offener_punkt", "aussage": text, "fundstelle_id": None,
-                    "wiki_zitat": None, "ki_text": tr("Wurde als ungeklärt benannt."), "suchbegriffe": [],
-                    "sicherheit": "hoch",
-                })
+                befunde.append(
+                    {
+                        "segment_id": seg["id"],
+                        "art": "offener_punkt",
+                        "aussage": text,
+                        "fundstelle_id": None,
+                        "wiki_zitat": None,
+                        "ki_text": tr("Wurde als ungeklärt benannt."),
+                        "suchbegriffe": [],
+                        "sicherheit": "hoch",
+                    }
+                )
                 continue
             grund = "smalltalk" if len(_woerter(text)) < 4 else "passt_zum_wiki"
             uebergangen.append({"segment_id": seg["id"], "grund": grund})
@@ -310,9 +403,15 @@ class AttrappeKi:
                     continue
                 unten = text.lower()
                 geklaert = any(w in unten for w in _GEKLAERT) and not any(o in unten for o in _OFFEN)
-                out.append({"punkt_id": p["id"], "status": "geklaert" if geklaert else "angesprochen",
-                            "segment_id": seg["id"], "aussage": text,
-                            "stand": tr("Wurde besprochen.") if geklaert else tr("Noch ohne Entscheidung.")})
+                out.append(
+                    {
+                        "punkt_id": p["id"],
+                        "status": "geklaert" if geklaert else "angesprochen",
+                        "segment_id": seg["id"],
+                        "aussage": text,
+                        "stand": tr("Wurde besprochen.") if geklaert else tr("Noch ohne Entscheidung."),
+                    }
+                )
                 break
         return out[:4]
 
@@ -340,22 +439,42 @@ class AttrappeKi:
         for seg in kontext.get("segmente", []):
             text = str(seg.get("text", "")).strip()
             unten = text.lower()
-            karte = {"segment_id": seg["id"], "aussage": text, "titel": _erster_satz(text)[:80],
-                     "fundstelle_id": None, "wiki_zitat": None, "bezug_segment_ids": [],
-                     "allgemeinwissen": False, "relevanz": "hoch"}
+            karte = {
+                "segment_id": seg["id"],
+                "aussage": text,
+                "titel": _erster_satz(text)[:80],
+                "fundstelle_id": None,
+                "wiki_zitat": None,
+                "bezug_segment_ids": [],
+                "allgemeinwissen": False,
+                "relevanz": "hoch",
+            }
             if any(s in unten for s in _VORSCHLAG):
-                karten.append({**karte, "art": "gedanke", "allgemeinwissen": True,
-                               "ki_text": tr("Der Vorschlag ist noch nicht zu Ende gedacht.")})
+                karten.append(
+                    {
+                        **karte,
+                        "art": "gedanke",
+                        "allgemeinwissen": True,
+                        "ki_text": tr("Der Vorschlag ist noch nicht zu Ende gedacht."),
+                    }
+                )
             elif any(s in unten for s in _GEKLAERT) and not any(o in unten for o in _OFFEN):
                 karten.append({**karte, "art": "erkenntnis", "ki_text": tr("Darauf hat sich die Runde geeinigt.")})
             else:
                 woerter = _woerter(text)
-                treffer = next((f for f in fundstellen
-                                if len(woerter & _woerter(f"{f['ueberschrift']} {f['auszug']}")) >= 2), None)
+                treffer = next(
+                    (f for f in fundstellen if len(woerter & _woerter(f"{f['ueberschrift']} {f['auszug']}")) >= 2), None
+                )
                 if treffer is not None and not text.endswith("?"):
-                    karten.append({**karte, "art": "bestaetigung", "fundstelle_id": treffer["id"],
-                                   "wiki_zitat": _erster_satz(treffer["auszug"]),
-                                   "ki_text": tr("Das Wiki hält das so fest.")})
+                    karten.append(
+                        {
+                            **karte,
+                            "art": "bestaetigung",
+                            "fundstelle_id": treffer["id"],
+                            "wiki_zitat": _erster_satz(treffer["auszug"]),
+                            "ki_text": tr("Das Wiki hält das so fest."),
+                        }
+                    )
         return {"karten": karten[:2]}
 
 
@@ -414,7 +533,9 @@ def make_ki(
         return None, KiStatus("fehlt", backend, modell, hinweis)
     modell = modell_fuer(backend, modell)
     if backend == BACKEND_ATTRAPPE:
-        return AttrappeKi(regeln=regeln), KiStatus("bereit", backend, "attrappe", tr("KI-Attrappe (regelbasiert, ohne Netz)"))
+        return AttrappeKi(regeln=regeln), KiStatus(
+            "bereit", backend, "attrappe", tr("KI-Attrappe (regelbasiert, ohne Netz)")
+        )
     if backend == BACKEND_OLLAMA:
         return _make_ollama(modell, log=log)
     if backend != BACKEND_CLAUDE:
@@ -438,15 +559,23 @@ def _make_ollama(modell: str, *, log: Callable[[str], None] | None) -> tuple[Any
     status = ollama_sicherstellen(settings.ollama_url, log=log, log_datei=settings.cache_dir / "ollama.log")
     if not status.erreichbar:
         return None, KiStatus(
-            "fehlt", BACKEND_OLLAMA, modell,
+            "fehlt",
+            BACKEND_OLLAMA,
+            modell,
             tr(
                 "Lokale KI nicht erreichbar unter {url} ({fehler}; 'ollama serve' starten)",
-                url=settings.ollama_url, fehler=status.fehler,
+                url=settings.ollama_url,
+                fehler=status.fehler,
             ),
         )
     if not status.hat_modell(modell):
         return None, KiStatus(
-            "fehlt", BACKEND_OLLAMA, modell, tr("Lokales Modell {modell} nicht geladen - 'ollama pull {modell}'", modell=modell)
+            "fehlt",
+            BACKEND_OLLAMA,
+            modell,
+            tr("Lokales Modell {modell} nicht geladen - 'ollama pull {modell}'", modell=modell),
         )
     ki = OllamaKi(modell, url=settings.ollama_url, keep_alive=settings.ollama_keep_alive, log=log)
-    return ki, KiStatus("bereit", BACKEND_OLLAMA, modell, tr("KI bereit (lokal auf diesem Rechner, Modell {modell})", modell=modell))
+    return ki, KiStatus(
+        "bereit", BACKEND_OLLAMA, modell, tr("KI bereit (lokal auf diesem Rechner, Modell {modell})", modell=modell)
+    )

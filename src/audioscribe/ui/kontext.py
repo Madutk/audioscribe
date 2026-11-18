@@ -75,8 +75,14 @@ def demo_projekt() -> Projekt:
     """Das Demo-Wiki als Projekt: Sitzungen landen im Cache, ins Wiki wird nie gespeichert."""
     ablage = settings.cache_dir / "demo"
     return Projekt(
-        wurzel=demo_wurzel(), name=tr("Demo: Bahnbuchung"), sitzungen_dir=ablage, wiki_dir=demo_wurzel(),
-        assets_dir=ablage / "assets", wiki_speichern=modell.WIKI_NIE, wiki_bilder=False, demo=True,
+        wurzel=demo_wurzel(),
+        name=tr("Demo: Bahnbuchung"),
+        sitzungen_dir=ablage,
+        wiki_dir=demo_wurzel(),
+        assets_dir=ablage / "assets",
+        wiki_speichern=modell.WIKI_NIE,
+        wiki_bilder=False,
+        demo=True,
     )
 
 

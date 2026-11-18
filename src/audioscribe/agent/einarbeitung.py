@@ -52,8 +52,17 @@ SCHEMA_DATEI = "CLAUDE.md"
 
 # Lesen/Schreiben (Guard), Plan (Fortschritt), Skills des Wikis, Rückfrage an den Menschen.
 WIKI_TOOLS = [
-    "Read", "Write", "Edit", "Glob", "Grep", "Skill",
-    "TaskCreate", "TaskUpdate", "TaskList", "TaskGet", "TodoWrite",
+    "Read",
+    "Write",
+    "Edit",
+    "Glob",
+    "Grep",
+    "Skill",
+    "TaskCreate",
+    "TaskUpdate",
+    "TaskList",
+    "TaskGet",
+    "TodoWrite",
     guard.FRAGE_TOOL,
 ]
 
@@ -110,7 +119,12 @@ def ingest_prompt(auftrag: WikiAuftrag) -> str:
         ),
     ]
     if auftrag.assets is not None:
-        teile.append(tr("Die Bilder der Sitzung liegen unter `{ordner}`.", ordner=_rel_oder_abs(auftrag.assets, auftrag.wiki_dir)))
+        teile.append(
+            tr(
+                "Die Bilder der Sitzung liegen unter `{ordner}`.",
+                ordner=_rel_oder_abs(auftrag.assets, auftrag.wiki_dir),
+            )
+        )
     teile.append(tr("Schließe mit dem Abschlussbericht aus CLAUDE.md ab."))
     return "\n".join(teile)
 
@@ -162,7 +176,7 @@ def parse_frage_line(line: str) -> dict | None:
     if not line.startswith(FRAGE_PREFIX):
         return None
     try:
-        data = json.loads(line[len(FRAGE_PREFIX):])
+        data = json.loads(line[len(FRAGE_PREFIX) :])
     except ValueError:
         return None
     if not isinstance(data, dict) or not isinstance(data.get("id"), str) or not isinstance(data.get("questions"), list):
@@ -209,7 +223,9 @@ class WikiSitzung(AnalyseSitzung):
     def _kopfzeile(self) -> str:
         return tr(
             "=== {zeit} Einarbeiten '{quelle}' ins Wiki {wiki}",
-            zeit=_now(), quelle=self.wiki.rohquelle, wiki=self.wiki.wiki_dir,
+            zeit=_now(),
+            quelle=self.wiki.rohquelle,
+            wiki=self.wiki.wiki_dir,
         )
 
     async def _prepare(self, ClaudeAgentOptions: Any, ClaudeSDKClient: Any) -> None:  # noqa: N803
@@ -253,7 +269,9 @@ class WikiSitzung(AnalyseSitzung):
         )
         if decision.erlaubt:
             return PermissionResultAllow()
-        self.log(tr("[Verweigert] {aufruf} - {grund}", aufruf=tool_summary(tool_name, tool_input), grund=decision.grund))
+        self.log(
+            tr("[Verweigert] {aufruf} - {grund}", aufruf=tool_summary(tool_name, tool_input), grund=decision.grund)
+        )
         return PermissionResultDeny(message=decision.grund)
 
     async def _frage(self, tool_input: dict[str, Any]):
@@ -298,7 +316,9 @@ async def _stdin_antwort(frage_id: str) -> dict | None:
             return data
 
 
-async def _run(auftrag: WikiAuftrag, emit: Callable[[str], None], status_zeilen: bool, lies_antwort: LiesAntwort | None) -> bool:
+async def _run(
+    auftrag: WikiAuftrag, emit: Callable[[str], None], status_zeilen: bool, lies_antwort: LiesAntwort | None
+) -> bool:
     async with WikiSitzung(auftrag, emit=emit, status_zeilen=status_zeilen, lies_antwort=lies_antwort) as sitzung:
         if auftrag.nachricht.strip():
             text = auftrag.nachricht.strip()
@@ -344,7 +364,13 @@ def ingest(args: argparse.Namespace) -> int:
 
     wiki_dir = Path(args.wiki).expanduser()
     if not (wiki_dir / SCHEMA_DATEI).is_file():
-        print(tr("Im Wiki {ordner} fehlt {datei} - ohne Schema kann nicht eingearbeitet werden.", ordner=wiki_dir, datei=SCHEMA_DATEI))
+        print(
+            tr(
+                "Im Wiki {ordner} fehlt {datei} - ohne Schema kann nicht eingearbeitet werden.",
+                ordner=wiki_dir,
+                datei=SCHEMA_DATEI,
+            )
+        )
         return 1
     rohquelle = args.rohquelle.strip().strip("/")
     if not (wiki_dir / rohquelle).exists():

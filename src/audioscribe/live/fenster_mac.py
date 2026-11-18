@@ -17,7 +17,9 @@ from audioscribe.i18n import tr
 Rect = tuple[int, int, int, int]  # left, top, right, bottom
 
 # Fenster dieser Prozesse sind Teile der Shell, nie eine Anwendung.
-_SHELL_OWNERS = frozenset({"Window Server", "Dock", "Control Center", "Notification Center", "Spotlight", "SystemUIServer"})
+_SHELL_OWNERS = frozenset(
+    {"Window Server", "Dock", "Control Center", "Notification Center", "Spotlight", "SystemUIServer"}
+)
 
 
 SCREENCAPTURE = "/usr/sbin/screencapture"
@@ -60,7 +62,9 @@ def _quartz():
     try:
         import Quartz
     except ImportError as exc:
-        raise RuntimeError(tr("Fensteraufnahme braucht PyObjC (Quartz) -> 'uv sync --extra cpu --extra mac --extra live'")) from exc
+        raise RuntimeError(
+            tr("Fensteraufnahme braucht PyObjC (Quartz) -> 'uv sync --extra cpu --extra mac --extra live'")
+        ) from exc
     return Quartz
 
 

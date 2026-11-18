@@ -40,8 +40,10 @@ def test_quellseite_wird_an_der_frontmatter_erkannt(tmp_path):
     (w / "wiki" / "sources").mkdir(parents=True)
     assert quellseite(w, "raw/meetings/a.md") is None
     seite = w / "wiki" / "sources" / "Q-001.md"
-    seite.write_text("---\nid: Q-001\nrohquelle: \"raw/meetings/a.md\"\n---\n# A\n", encoding="utf-8")
-    (w / "wiki" / "sonst.md").write_text("# Sonst\n\nrohquelle: raw/meetings/a.md im Text zählt nicht\n", encoding="utf-8")
+    seite.write_text('---\nid: Q-001\nrohquelle: "raw/meetings/a.md"\n---\n# A\n', encoding="utf-8")
+    (w / "wiki" / "sonst.md").write_text(
+        "# Sonst\n\nrohquelle: raw/meetings/a.md im Text zählt nicht\n", encoding="utf-8"
+    )
     assert quellseite(w, "raw/meetings/a.md") == seite
     assert quellseite(w, "raw/meetings/b.md") is None
 
@@ -67,7 +69,7 @@ def test_argv_je_art(tmp_path):
 
 # Ersatz für 'audioscribe ingest': schreibt Protokoll, Status und analyse.json; mit "frage"
 # im Namen der Rohquelle stellt es eine Rückfrage und gibt die Antwort aus.
-_KIND = r'''
+_KIND = r"""
 import json, sys, time
 from pathlib import Path
 args = dict(a.split("=", 1) for a in sys.argv[1:] if a.startswith("--") and "=" in a)
@@ -84,7 +86,7 @@ if "frage" in args["--rohquelle"]:
 if "langsam" in args["--rohquelle"]:
     time.sleep(30)
 sys.exit(3 if "kaputt" in args["--rohquelle"] else 0)
-'''
+"""
 
 
 @pytest.fixture
@@ -178,9 +180,22 @@ def test_neustart_setzt_unterbrochene_fort(tmp_path, kind):
     basis = tmp_path / "q"
     basis.mkdir()
     liste = [
-        {"id": "a", "wiki_dir": str(tmp_path), "rohquelle": "raw/a.md", "status": "laeuft", "eingereiht": "1", "pid": 999999},
-        {"id": "b", "wiki_dir": str(tmp_path), "rohquelle": "raw/b.md", "status": "frage", "eingereiht": "2",
-         "frage": {"id": "f", "questions": []}},
+        {
+            "id": "a",
+            "wiki_dir": str(tmp_path),
+            "rohquelle": "raw/a.md",
+            "status": "laeuft",
+            "eingereiht": "1",
+            "pid": 999999,
+        },
+        {
+            "id": "b",
+            "wiki_dir": str(tmp_path),
+            "rohquelle": "raw/b.md",
+            "status": "frage",
+            "eingereiht": "2",
+            "frage": {"id": "f", "questions": []},
+        },
         {"id": "c", "wiki_dir": str(tmp_path), "rohquelle": "raw/c.md", "status": "fertig", "eingereiht": "0"},
         {"id": "d", "status": "unsinn"},
     ]
@@ -306,7 +321,7 @@ def test_agent_reicht_rueckfragen_durch_und_prueft_zugriffe(tmp_path):
     assert isinstance(erlaubt, sdk.PermissionResultAllow)
     assert erlaubt.updated_input["answers"] == {"Wer gibt frei?": "Teamleitung"}
     zeile = next(a for a in ausgaben if a.startswith(FRAGE_PREFIX))
-    assert json.loads(zeile[len(FRAGE_PREFIX):])["id"] == gefragt[0]
+    assert json.loads(zeile[len(FRAGE_PREFIX) :])["id"] == gefragt[0]
     assert isinstance(raw, sdk.PermissionResultDeny) and isinstance(seite, sdk.PermissionResultAllow)
 
     # Ohne jemanden, der antworten kann: ablehnen statt warten.

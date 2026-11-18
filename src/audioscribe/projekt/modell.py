@@ -223,11 +223,13 @@ def lade(pfad: Path | str) -> Projekt:
     else:
         wiki_dir = _aus_text(text("wiki_dir") or "", wurzel)
         if wiki_dir is None:
-            hinweise.append(tr(
-                "Der Wiki-Ordner aus der Projektdatei ({pfad}) ist auf diesem Rechner nicht "
-                "erreichbar – das Projekt arbeitet bis zur Korrektur in den Projekteinstellungen ohne Wiki.",
-                pfad=text("wiki_dir"),
-            ))
+            hinweise.append(
+                tr(
+                    "Der Wiki-Ordner aus der Projektdatei ({pfad}) ist auf diesem Rechner nicht "
+                    "erreichbar – das Projekt arbeitet bis zur Korrektur in den Projekteinstellungen ohne Wiki.",
+                    pfad=text("wiki_dir"),
+                )
+            )
     seiten = wiki_dir / SEITEN_ORDNER if wiki_dir is not None else None
 
     # Dieselben Regeln wie beim Anlegen - die Datei kann von Hand geändert oder von einem
@@ -235,29 +237,39 @@ def lade(pfad: Path | str) -> Projekt:
     # sagt es dem Nutzer, statt dass Mitschnitte stillschweigend unter wiki/ landen.
     ersatz = vorschlag(wurzel, wiki_dir)
     sitzungen = _aus_text(text("sitzungen_dir") or "", wurzel) if text("sitzungen_dir") else None
-    if sitzungen is None or _gleich(sitzungen, wurzel) or (
-        wiki_dir is not None and (_gleich(sitzungen, wiki_dir) or _ist_unter(sitzungen, seiten))
+    if (
+        sitzungen is None
+        or _gleich(sitzungen, wurzel)
+        or (wiki_dir is not None and (_gleich(sitzungen, wiki_dir) or _ist_unter(sitzungen, seiten)))
     ):
-        hinweise.append(tr(
-            "Der Sitzungsordner aus der Projektdatei ({pfad}) ist auf diesem "
-            "Rechner nicht verwendbar – verwendet wird {ersatz}. Bitte in den "
-            "Projekteinstellungen prüfen.",
-            pfad=text("sitzungen_dir") or tr("fehlt"), ersatz=ersatz["sitzungen_dir"],
-        ))
+        hinweise.append(
+            tr(
+                "Der Sitzungsordner aus der Projektdatei ({pfad}) ist auf diesem "
+                "Rechner nicht verwendbar – verwendet wird {ersatz}. Bitte in den "
+                "Projekteinstellungen prüfen.",
+                pfad=text("sitzungen_dir") or tr("fehlt"),
+                ersatz=ersatz["sitzungen_dir"],
+            )
+        )
         sitzungen = Path(ersatz["sitzungen_dir"])
 
     assets: Path | None = None
     if wiki_dir is not None:
         assets = _aus_text(text("assets_dir") or "", wurzel) if text("assets_dir") else wiki_dir / ASSETS_VORSCHLAG
         if (
-            assets is None or not _ist_unter(assets, wiki_dir) or _ist_unter(assets, seiten)
-            or _gleich(assets, wiki_dir) or _gleich(assets, wiki_dir / RAW_ORDNER)
+            assets is None
+            or not _ist_unter(assets, wiki_dir)
+            or _ist_unter(assets, seiten)
+            or _gleich(assets, wiki_dir)
+            or _gleich(assets, wiki_dir / RAW_ORDNER)
         ):
-            hinweise.append(tr(
-                "Der Bilder-Ordner aus der Projektdatei ({pfad}) ist nicht verwendbar – "
-                "verwendet wird {ersatz}.",
-                pfad=text("assets_dir"), ersatz=ersatz["assets_dir"],
-            ))
+            hinweise.append(
+                tr(
+                    "Der Bilder-Ordner aus der Projektdatei ({pfad}) ist nicht verwendbar – verwendet wird {ersatz}.",
+                    pfad=text("assets_dir"),
+                    ersatz=ersatz["assets_dir"],
+                )
+            )
             assets = Path(ersatz["assets_dir"])
 
     speichern = data.get("wiki_speichern")
@@ -422,7 +434,9 @@ def pruefe(
         else:
             assets_dir = Path(assets_dir)
             if not _ist_unter(assets_dir, wiki) or _gleich(assets_dir, wiki):
-                fehler["assets_dir"] = tr("Der Bilder-Ordner muss im LLM-Wiki liegen, damit die Verweise beim Umzug gültig bleiben.")
+                fehler["assets_dir"] = tr(
+                    "Der Bilder-Ordner muss im LLM-Wiki liegen, damit die Verweise beim Umzug gültig bleiben."
+                )
             elif _ist_unter(assets_dir, seiten):
                 fehler["assets_dir"] = tr("Bilder dürfen nicht unter wiki/ liegen – dort stehen nur die Wiki-Seiten.")
             elif _gleich(assets_dir, wiki / RAW_ORDNER):
@@ -468,7 +482,11 @@ def lege_an(
     if wiki is not None and assets_dir is None:
         assets_dir = wiki / ASSETS_VORSCHLAG
     fehler = pruefe(
-        name=name, wurzel=wurzel, sitzungen_dir=sitzungen_dir, wiki_art=wiki_art, wiki_dir=wiki_dir,
+        name=name,
+        wurzel=wurzel,
+        sitzungen_dir=sitzungen_dir,
+        wiki_art=wiki_art,
+        wiki_dir=wiki_dir,
         assets_dir=assets_dir,
     )
     if fehler:
@@ -590,8 +608,13 @@ def aendere(projekt: Projekt, felder: dict) -> Projekt:
         raise ProjektFehler(tr("Dieses Projekt hat kein Wiki – ein Bilder-Ordner braucht ein Wiki."))
     art = WIKI_KEINS if geaendert.wiki_dir is None else (WIKI_NEU if geruest else WIKI_VORHANDEN)
     fehler = pruefe(
-        name=geaendert.name, wurzel=geaendert.wurzel, sitzungen_dir=geaendert.sitzungen_dir,
-        wiki_art=art, wiki_dir=geaendert.wiki_dir, assets_dir=geaendert.assets_dir, neu=False,
+        name=geaendert.name,
+        wurzel=geaendert.wurzel,
+        sitzungen_dir=geaendert.sitzungen_dir,
+        wiki_art=art,
+        wiki_dir=geaendert.wiki_dir,
+        assets_dir=geaendert.assets_dir,
+        neu=False,
     )
     # Ein Wiki, das gerade nicht lesbar ist, darf das Ändern der übrigen Einstellungen nicht sperren.
     fehler.pop("wurzel", None)

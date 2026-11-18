@@ -41,7 +41,10 @@ def test_verbrauch_addiert_und_kennt_fehlenden_preis():
     assert summe.tokens == 470 and summe.aufrufe == 2 and summe.kosten_usd == pytest.approx(0.01)
     assert (b + b).kosten_usd is None  # kein Preis genannt bleibt "kein Preis", nicht 0
     assert Verbrauch.aus_dict(summe.als_dict()) == Verbrauch(101, 22, 303, 44, 0.01, 2)
-    assert Verbrauch.aus_dict("quatsch") == Verbrauch() and Verbrauch.aus_dict({"eingabe": -5, "ausgabe": True}) == Verbrauch()
+    assert (
+        Verbrauch.aus_dict("quatsch") == Verbrauch()
+        and Verbrauch.aus_dict({"eingabe": -5, "ausgabe": True}) == Verbrauch()
+    )
 
 
 def test_minus_ist_die_differenz_laufender_summen_und_nie_negativ():
@@ -66,13 +69,26 @@ def test_aus_ergebnis_nimmt_model_usage_sonst_usage():
         total_cost_usd=0.42,
         usage={"input_tokens": 1, "output_tokens": 1},
         model_usage={
-            "gross": {"inputTokens": 100, "outputTokens": 50, "cacheReadInputTokens": 1000, "cacheCreationInputTokens": 200, "costUSD": 0.4},
-            "klein": {"inputTokens": 10, "outputTokens": 5, "cacheReadInputTokens": 0, "cacheCreationInputTokens": 0, "costUSD": 0.02},
+            "gross": {
+                "inputTokens": 100,
+                "outputTokens": 50,
+                "cacheReadInputTokens": 1000,
+                "cacheCreationInputTokens": 200,
+                "costUSD": 0.4,
+            },
+            "klein": {
+                "inputTokens": 10,
+                "outputTokens": 5,
+                "cacheReadInputTokens": 0,
+                "cacheCreationInputTokens": 0,
+                "costUSD": 0.02,
+            },
         },
     )
     assert aus_ergebnis(je_modell) == Verbrauch(110, 55, 1000, 200, 0.42, 1)
     nur_usage = SimpleNamespace(
-        total_cost_usd=None, model_usage=None,
+        total_cost_usd=None,
+        model_usage=None,
         usage={"input_tokens": 7, "output_tokens": 3, "cache_read_input_tokens": 20, "cache_creation_input_tokens": 5},
     )
     assert aus_ergebnis(nur_usage) == Verbrauch(7, 3, 20, 5, None, 1)
@@ -89,7 +105,9 @@ def test_zaehler_trennt_laufende_aktivitaet_und_summe():
     z.setze(QUELLE_ANALYSE, Verbrauch(1000, 0, kosten_usd=None))
     z.setze(QUELLE_ANALYSE, Verbrauch(5000, 500, kosten_usd=1.0, aufrufe=1))  # ersetzt, addiert nicht
     s = z.snapshot()
-    assert s["quellen"]["souffleur"]["aktuell"]["tokens"] == 330 and s["quellen"]["souffleur"]["aktuell"]["aufrufe"] == 2
+    assert (
+        s["quellen"]["souffleur"]["aktuell"]["tokens"] == 330 and s["quellen"]["souffleur"]["aktuell"]["aufrufe"] == 2
+    )
     assert s["quellen"]["analyse"]["aktuell"]["tokens"] == 5500
     assert s["gesamt"]["tokens"] == 5830 and s["gesamt"]["kosten_usd"] == pytest.approx(1.03)
     # Neue Sitzung: die laufende Anzeige beginnt bei null, die Summe bleibt.
@@ -155,9 +173,22 @@ def test_claude_ki_bucht_verbrauch_auch_bei_fehler(tmp_path, monkeypatch):
 
 def _ergebnis(kosten: float, eingabe: int, ausgabe: int) -> SimpleNamespace:
     return SimpleNamespace(
-        session_id="sess", num_turns=2, total_cost_usd=kosten, is_error=False, errors=None, result="ok",
-        subtype="success", usage=None,
-        model_usage={"m": {"inputTokens": eingabe, "outputTokens": ausgabe, "cacheReadInputTokens": 0, "cacheCreationInputTokens": 0}},
+        session_id="sess",
+        num_turns=2,
+        total_cost_usd=kosten,
+        is_error=False,
+        errors=None,
+        result="ok",
+        subtype="success",
+        usage=None,
+        model_usage={
+            "m": {
+                "inputTokens": eingabe,
+                "outputTokens": ausgabe,
+                "cacheReadInputTokens": 0,
+                "cacheCreationInputTokens": 0,
+            }
+        },
     )
 
 
@@ -239,10 +270,10 @@ def test_route_verbrauch_beginnt_leer(tmp_path, monkeypatch):
 def test_kopf_zeigt_den_verbrauch_dezent_und_ehrlich():
     html = (STATIC / "index.html").read_text(encoding="utf-8")
     js = (STATIC / "js" / "verbrauch.js").read_text(encoding="utf-8")
-    kopf = html[html.index('<header class="top">'):html.index("</header>")]
+    kopf = html[html.index('<header class="top">') : html.index("</header>")]
     # Zwischen Abstandhalter und Zahnrad, anfangs unsichtbar, Einzelheiten im Popover.
     assert kopf.index('class="spacer"') < kopf.index('id="kiVerbrauch"') < kopf.index('id="openSettings"')
-    knopf = kopf[kopf.index('id="kiVerbrauch"'):kopf.index("</button>", kopf.index('id="kiVerbrauch"'))]
+    knopf = kopf[kopf.index('id="kiVerbrauch"') : kopf.index("</button>", kopf.index('id="kiVerbrauch"'))]
     assert " hidden" in knopf and 'popovertarget="kiVerbrauchInfo"' in knopf
     assert 'id="kiVerbrauchInfo" popover' in kopf and '<symbol id="i-coins"' in html
     # Der Preis ist ein Gegenwert, keine Rechnung - das steht dabei.

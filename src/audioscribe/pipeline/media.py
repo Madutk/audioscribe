@@ -20,12 +20,33 @@ from audioscribe.progress import Reporter
 
 # Container, die wir als Video behandeln (Audiospur wird extrahiert).
 VIDEO_SUFFIXES = {
-    ".mp4", ".mkv", ".mov", ".avi", ".webm", ".m4v", ".wmv",
-    ".flv", ".mpg", ".mpeg", ".ts", ".m2ts", ".3gp", ".ogv",
+    ".mp4",
+    ".mkv",
+    ".mov",
+    ".avi",
+    ".webm",
+    ".m4v",
+    ".wmv",
+    ".flv",
+    ".mpg",
+    ".mpeg",
+    ".ts",
+    ".m2ts",
+    ".3gp",
+    ".ogv",
 }
 # Reine Audioformate (werden direkt geladen, keine Extraktion noetig).
 AUDIO_SUFFIXES = {
-    ".mp3", ".m4a", ".wav", ".flac", ".ogg", ".opus", ".aac", ".wma", ".aiff", ".aif",
+    ".mp3",
+    ".m4a",
+    ".wav",
+    ".flac",
+    ".ogg",
+    ".opus",
+    ".aac",
+    ".wma",
+    ".aiff",
+    ".aif",
 }
 
 
@@ -49,11 +70,18 @@ def extract_audio(video: Path, reporter: Reporter | None = None) -> Path:
     out = Path(name)
 
     cmd = [
-        ffmpeg, "-y", "-nostdin", "-i", str(video),
-        "-vn",                 # kein Video
-        "-ac", "1",            # mono
-        "-ar", "16000",        # 16 kHz (Whisper-Eingang)
-        "-c:a", "pcm_s16le",   # unkomprimiertes WAV
+        ffmpeg,
+        "-y",
+        "-nostdin",
+        "-i",
+        str(video),
+        "-vn",  # kein Video
+        "-ac",
+        "1",  # mono
+        "-ar",
+        "16000",  # 16 kHz (Whisper-Eingang)
+        "-c:a",
+        "pcm_s16le",  # unkomprimiertes WAV
         str(out),
     ]
     # stdin=DEVNULL wie in _run_probe (sonst blockiert ffmpeg im Serverprozess);
@@ -108,9 +136,13 @@ def probe_duration(media: Path, *, timeout: float = 20.0) -> float | None:
     ffprobe = shutil.which("ffprobe")
     if ffprobe:
         cmd = [
-            ffprobe, "-v", "error",
-            "-show_entries", "format=duration",
-            "-of", "default=nw=1:nk=1",
+            ffprobe,
+            "-v",
+            "error",
+            "-show_entries",
+            "format=duration",
+            "-of",
+            "default=nw=1:nk=1",
             str(media),
         ]
         out = _run_probe(cmd, timeout)

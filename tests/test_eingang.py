@@ -147,8 +147,11 @@ def geraete(monkeypatch):
     monkeypatch.setattr(
         "audioscribe.live.kommando.inventory",
         lambda: {
-            "mics": [{"index": 3, "name": "Headset", "default": False}], "loopbacks": [],
-            "monitors": [{"index": 1, "width": 1920, "height": 1080}], "windows": [], "problems": [],
+            "mics": [{"index": 3, "name": "Headset", "default": False}],
+            "loopbacks": [],
+            "monitors": [{"index": 1, "width": 1920, "height": 1080}],
+            "windows": [],
+            "problems": [],
         },
     )
 
@@ -286,14 +289,20 @@ def test_speichern_unter_ohne_projekt(client, aufnahme, tmp_path, monkeypatch):
 
     client.post("/api/kontext", json={"modus": "aufnahme"})
     monkeypatch.setattr(
-        runner_modul.LiveRunner, "snapshot",
+        runner_modul.LiveRunner,
+        "snapshot",
         lambda self, offset=0, ev_offset=0: {"running": False, "dir": str(aufnahme), "phase": "beendet"},
     )
     assert client.get("/api/live/status").json()["wiki_ablage"] is None
     assert client.post("/api/wiki/speichern", json={"sitzung": str(aufnahme)}).status_code == 409  # kein Ziel
-    r = client.post("/api/wiki/speichern", json={
-        "sitzung": str(aufnahme), "raw_basis": str(tmp_path / "t"), "immer": True,
-    })
+    r = client.post(
+        "/api/wiki/speichern",
+        json={
+            "sitzung": str(aufnahme),
+            "raw_basis": str(tmp_path / "t"),
+            "immer": True,
+        },
+    )
     assert r.status_code == 200, r.text
     ziel = Path(r.json()["ordner"])
     assert ziel.parent == tmp_path / "t" and r.json()["bilder"] == 2 and r.json()["frei"] is True
@@ -301,7 +310,10 @@ def test_speichern_unter_ohne_projekt(client, aufnahme, tmp_path, monkeypatch):
     assert client.get("/api/live/status").json()["wiki_ablage"]["ordner"] == str(ziel)
     # Nur Aufnahmen aus dem Eingangsordner.
     fremd = _sitzung_in(SimpleNamespace(sitzungen_dir=tmp_path / "fremd"))
-    assert client.post("/api/wiki/speichern", json={"sitzung": str(fremd), "raw_basis": str(tmp_path / "t")}).status_code == 400
+    assert (
+        client.post("/api/wiki/speichern", json={"sitzung": str(fremd), "raw_basis": str(tmp_path / "t")}).status_code
+        == 400
+    )
 
 
 def test_wiki_status_vorbelegung_ohne_projekt(client, aufnahme, wiki, tmp_path):
@@ -311,11 +323,18 @@ def test_wiki_status_vorbelegung_ohne_projekt(client, aufnahme, wiki, tmp_path):
     a = client.get("/api/wiki/status").json()["ablage"]
     assert a == {"raw_basis": str(wiki / "raw")}
     # Auch ohne Projekt gilt: nie unter die Seiten des Wikis.
-    r = client.post("/api/wiki/speichern", json={
-        "sitzung": str(aufnahme), "raw_basis": str(wiki / "wiki" / "quellen"),
-    })
+    r = client.post(
+        "/api/wiki/speichern",
+        json={
+            "sitzung": str(aufnahme),
+            "raw_basis": str(wiki / "wiki" / "quellen"),
+        },
+    )
     assert r.status_code == 400 and "Wiki-Seiten" in r.json()["detail"]
     # Die Vorgabe selbst funktioniert: Ablage unter raw/, die Bilder in ihrem assets/.
     r = client.post("/api/wiki/speichern", json={"sitzung": str(aufnahme), **a})
     assert r.status_code == 200, r.text
-    assert Path(r.json()["ordner"]).parent == wiki / "raw" and Path(r.json()["assets"]) == Path(r.json()["ordner"]) / "assets"
+    assert (
+        Path(r.json()["ordner"]).parent == wiki / "raw"
+        and Path(r.json()["assets"]) == Path(r.json()["ordner"]) / "assets"
+    )

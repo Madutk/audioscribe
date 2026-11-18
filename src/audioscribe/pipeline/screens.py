@@ -409,9 +409,7 @@ def capture_screens(
     for versatz, t in enumerate(zeitpunkte):
         bild_id = start_id + versatz
         name = shot_filename(bild_id, t, suffix)
-        cmd = build_shot_cmd(
-            ffmpeg, video, t, frames_dir / name, max_breite=max_breite, qualitaet=qualitaet
-        )
+        cmd = build_shot_cmd(ffmpeg, video, t, frames_dir / name, max_breite=max_breite, qualitaet=qualitaet)
         try:
             subprocess.run(cmd, check=True, capture_output=True)  # noqa: S603
         except (OSError, subprocess.CalledProcessError):

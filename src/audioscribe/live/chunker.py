@@ -74,9 +74,7 @@ def silero_vad() -> Vad:
     from faster_whisper.vad import VadOptions, get_speech_timestamps
 
     # Polsterung 0: gepolstert wird beim Ausschneiden, sonst stimmen die Pausen nicht.
-    options = VadOptions(
-        threshold=0.5, min_speech_duration_ms=200, min_silence_duration_ms=300, speech_pad_ms=0
-    )
+    options = VadOptions(threshold=0.5, min_speech_duration_ms=200, min_silence_duration_ms=300, speech_pad_ms=0)
 
     def vad(audio: np.ndarray) -> list[tuple[int, int]]:
         return [(int(d["start"]), int(d["end"])) for d in get_speech_timestamps(audio, options)]
@@ -158,9 +156,7 @@ class Chunker:
         if self._open is None:
             return None
         start = max(0, self._open - self._pad)
-        return Utterance(
-            self._buf_start + self._open, self._buf_start + len(self._buf), self._buf[start:].copy()
-        )
+        return Utterance(self._buf_start + self._open, self._buf_start + len(self._buf), self._buf[start:].copy())
 
     def _groups(self, speech: list[tuple[int, int]]) -> list[tuple[int, int, list[tuple[int, int]]]]:
         """Fasst VAD-Stücke zusammen, die weniger als eine Pause auseinanderliegen."""
@@ -182,6 +178,4 @@ class Chunker:
     def _cut(self, start: int, end: int, schluss: str, *, pad_end: bool = True) -> Utterance:
         a = max(0, start - self._pad)
         b = min(len(self._buf), end + self._pad) if pad_end else end
-        return Utterance(
-            self._buf_start + start, self._buf_start + end, self._buf[a:b].copy(), schluss=schluss
-        )
+        return Utterance(self._buf_start + start, self._buf_start + end, self._buf[a:b].copy(), schluss=schluss)

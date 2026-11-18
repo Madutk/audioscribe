@@ -93,8 +93,18 @@ def ereignisse(monkeypatch):
 def live_session(tmp_path, monkeypatch, *, antwort="Text", **kw):
     from audioscribe.live.session import LiveOptions, LiveSession
 
-    opts = LiveOptions(output_dir=tmp_path / "out", model="m", device="cpu", compute_type="int8", speed=10.0,
-                       monitor=0, mic="none", partials=False, speakers=False, **kw)
+    opts = LiveOptions(
+        output_dir=tmp_path / "out",
+        model="m",
+        device="cpu",
+        compute_type="int8",
+        speed=10.0,
+        monitor=0,
+        mic="none",
+        partials=False,
+        speakers=False,
+        **kw,
+    )
     session = LiveSession(opts)
     monkeypatch.setattr(session, "_load_asr", lambda: FakeAsr(antwort))
     monkeypatch.setattr(session, "_load_vad", lambda: energy_vad)
@@ -177,8 +187,12 @@ def test_sperre_ist_das_lebenszeichen(tmp_path):
 
 def test_offene_sitzungen_listet_nur_unterbrochene(tmp_path):
     assert journal.offene_sitzungen(tmp_path / "fehlt") == []
-    alt = sitzung_von_hand(tmp_path / "live-a", segmente=[seg(1, 0.0, 4.0, "eins"), seg(2, 5.0, 9.5, "zwei")],
-                           gestartet="2026-10-06T09:00:00", titel="Früh")
+    alt = sitzung_von_hand(
+        tmp_path / "live-a",
+        segmente=[seg(1, 0.0, 4.0, "eins"), seg(2, 5.0, 9.5, "zwei")],
+        gestartet="2026-10-06T09:00:00",
+        titel="Früh",
+    )
     sitzung_von_hand(tmp_path / "live-b", status=journal.UNTERBROCHEN, gestartet="2026-10-06T11:00:00")
     laeuft = sitzung_von_hand(tmp_path / "live-c", gestartet="2026-10-06T12:00:00")
     sitzung_von_hand(tmp_path / "live-d", status=journal.BEENDET)
@@ -204,8 +218,13 @@ def test_save_marks_schreibt_atomar(tmp_path):
     from audioscribe.review.marks import Mark, load_marks, save_marks
 
     save_marks(tmp_path, [Mark(t=3.0, png="frames/0001_00-00-03.jpg", id=1, kind="auto")])
-    save_marks(tmp_path, [Mark(t=3.0, png="frames/0001_00-00-03.jpg", id=1, kind="auto"),
-                          Mark(t=9.0, png="frames/0002_00-00-09.jpg", id=2, kind="auto")])
+    save_marks(
+        tmp_path,
+        [
+            Mark(t=3.0, png="frames/0001_00-00-03.jpg", id=1, kind="auto"),
+            Mark(t=9.0, png="frames/0002_00-00-09.jpg", id=2, kind="auto"),
+        ],
+    )
     assert [m.id for m in load_marks(tmp_path)] == [1, 2]
     assert sorted(p.name for p in tmp_path.iterdir()) == ["marks.json"]
 
@@ -248,8 +267,9 @@ def test_kindprozess_ueberlebt_den_tod_des_lesers(tmp_path):
 
     marke = tmp_path / "notabschluss.txt"
     kind = KIND_TOTE_PIPE
-    proc = subprocess.Popen([sys.executable, "-c", kind, str(marke)], stdout=subprocess.PIPE,
-                            stderr=subprocess.DEVNULL, text=True)
+    proc = subprocess.Popen(
+        [sys.executable, "-c", kind, str(marke)], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True
+    )
     assert proc.stdout.readline().strip() == "bereit"
     proc.stdout.close()  # der Server ist weg
     proc.wait(timeout=30)
@@ -299,8 +319,15 @@ def test_replay_capture_spielt_ab_dem_versatz(tmp_path):
     t0 = time.monotonic()
     clock = lambda: 50.0 + (time.monotonic() - t0) * 20.0  # noqa: E731
     ended = []
-    cap = ReplayCapture(clock, system=tmp_path / "in.wav", mic=None, speed=20.0, on_end=lambda: ended.append(1),
-                        nachlauf_s=0.3, start_sample=start)
+    cap = ReplayCapture(
+        clock,
+        system=tmp_path / "in.wav",
+        mic=None,
+        speed=20.0,
+        on_end=lambda: ended.append(1),
+        nachlauf_s=0.3,
+        start_sample=start,
+    )
     track = cap.open("system", cap.loopbacks[0], tmp_path / "audio" / "system.teil2.wav")
     ende = time.monotonic() + 10
     while not ended and time.monotonic() < ende:
@@ -337,8 +364,16 @@ def test_screen_watcher_zaehlt_ab_start_id_weiter(tmp_path):
     takt = count()
     marks = []
     log = []
-    watcher = ScreenWatcher(1, tmp_path, lambda: 900.0 + next(takt) * 5.0, marks.append, fps=500.0,
-                            log=log.append, source_factory=lambda m, w: Quelle(), start_id=7)
+    watcher = ScreenWatcher(
+        1,
+        tmp_path,
+        lambda: 900.0 + next(takt) * 5.0,
+        marks.append,
+        fps=500.0,
+        log=log.append,
+        source_factory=lambda m, w: Quelle(),
+        start_id=7,
+    )
     watcher.start()
     ende = time.monotonic() + 5
     while "Fenster geschlossen - keine weiteren Standbilder" not in log and time.monotonic() < ende:
@@ -382,10 +417,13 @@ def test_verbinde_teile_fuellt_auf_und_repariert_den_kopf(tmp_path):
     kopf_abreissen(session / teil_wav("system", 1))  # Teil 1 endete mit dem Absturz
     write_wav(session / teil_wav("system", 2), np.full(SR // 2, 0.5, dtype=np.float32))
     write_wav(session / teil_wav("mic", 2), np.full(SR // 2, 0.75, dtype=np.float32))  # Spur erst im 2. Teil
-    journal.schreibe_status(session, teile=[
-        {"nr": 1, "start_sample": 0, "spuren": {"system": teil_wav("system", 1)}},
-        {"nr": 2, "start_sample": 2 * SR, "spuren": {"system": teil_wav("system", 2), "mic": teil_wav("mic", 2)}},
-    ])
+    journal.schreibe_status(
+        session,
+        teile=[
+            {"nr": 1, "start_sample": 0, "spuren": {"system": teil_wav("system", 1)}},
+            {"nr": 2, "start_sample": 2 * SR, "spuren": {"system": teil_wav("system", 2), "mic": teil_wav("mic", 2)}},
+        ],
+    )
 
     geschrieben = verbinde_teile(session)
     assert sorted(p.name for p in geschrieben) == ["mikrofon.wav", "system.wav"]
@@ -411,10 +449,13 @@ def test_verbinde_teile_nach_abbruch_zwischen_tausch_und_zustand(tmp_path):
     write_wav(session / teil_wav("system", 1), np.full(SR, 0.25, dtype=np.float32))
     write_wav(session / teil_wav("system", 2), np.full(SR, 0.5, dtype=np.float32))
     write_wav(session / SYSTEM_WAV, np.full(5 * SR, 0.9, dtype=np.float32))  # Rest eines abgebrochenen Versuchs
-    journal.schreibe_status(session, teile=[
-        {"nr": 1, "start_sample": 0, "spuren": {"system": teil_wav("system", 1)}},
-        {"nr": 2, "start_sample": SR, "spuren": {"system": teil_wav("system", 2)}},
-    ])
+    journal.schreibe_status(
+        session,
+        teile=[
+            {"nr": 1, "start_sample": 0, "spuren": {"system": teil_wav("system", 1)}},
+            {"nr": 2, "start_sample": SR, "spuren": {"system": teil_wav("system", 2)}},
+        ],
+    )
     verbinde_teile(session)
     system = load_wav(session / SYSTEM_WAV)
     assert len(system) == 2 * SR and abs(system[10] - 0.25) < 0.01 and abs(system[-10] - 0.5) < 0.01
@@ -441,23 +482,51 @@ def test_resume_setzt_ids_und_uhr_fort_ohne_bestand_zu_ueberschreiben(tmp_path, 
     emitted, _ = ereignisse
     ordner = sitzung_von_hand(
         tmp_path / "live-2026-10-06_10-00-00",
-        segmente=[seg(1, 1.0, 3.0, "Hallo", track="mic", speaker="Ich"), seg(2, 4.0, 6.0, "Guten Tag"),
-                  seg(4, 20.0, 22.5, "Dritter Satz")],  # ID 3 fehlt (Zeile ging verloren)
-        titel="Workshop", status=journal.UNTERBROCHEN,
+        segmente=[
+            seg(1, 1.0, 3.0, "Hallo", track="mic", speaker="Ich"),
+            seg(2, 4.0, 6.0, "Guten Tag"),
+            seg(4, 20.0, 22.5, "Dritter Satz"),
+        ],  # ID 3 fehlt (Zeile ging verloren)
+        titel="Workshop",
+        status=journal.UNTERBROCHEN,
         teile=[{"nr": 1, "start_sample": 0, "spuren": {"system": SYSTEM_WAV}}],
     )
     write_wav(ordner / SYSTEM_WAV, silence(30.0))  # der Mitschnitt lief weiter als das letzte Segment
     save_marks(ordner, [Mark(t=2.0, png="frames/0001_00-00-02.jpg", id=1, kind="auto")])
     (ordner / "diagnose.jsonl").write_text(
-        json.dumps({"art": "abschnitt", "chunk_index": 9, "track": "mic", "audio_start_s": 1.0, "audio_end_s": 3.0,
-                    "audio_dauer_s": 2.0, "t_abgeschlossen": 3.1, "t_start": 3.2, "t_ende": 3.9, "wartezeit_s": 0.1,
-                    "rechenzeit_s": 0.7, "sprecher_s": 0.0, "latenz_s": 0.9, "latenz_max_s": 0.9, "modell": "m",
-                    "eco": False, "parts": 1, "anzahl_woerter": 1, "schluss": "pause"}) + "\n"
-        + json.dumps({"art": "nachschaerfen", "teil": "nachschaerfen"}) + '\n{"art": "abschn', encoding="utf-8")
+        json.dumps(
+            {
+                "art": "abschnitt",
+                "chunk_index": 9,
+                "track": "mic",
+                "audio_start_s": 1.0,
+                "audio_end_s": 3.0,
+                "audio_dauer_s": 2.0,
+                "t_abgeschlossen": 3.1,
+                "t_start": 3.2,
+                "t_ende": 3.9,
+                "wartezeit_s": 0.1,
+                "rechenzeit_s": 0.7,
+                "sprecher_s": 0.0,
+                "latenz_s": 0.9,
+                "latenz_max_s": 0.9,
+                "modell": "m",
+                "eco": False,
+                "parts": 1,
+                "anzahl_woerter": 1,
+                "schluss": "pause",
+            }
+        )
+        + "\n"
+        + json.dumps({"art": "nachschaerfen", "teil": "nachschaerfen"})
+        + '\n{"art": "abschn',
+        encoding="utf-8",
+    )
     sitzung_id = journal.lies_status(ordner)["sitzung_id"]
 
-    session = LiveSession(LiveOptions(output_dir=tmp_path / "egal", model="m", device="cpu", compute_type="int8",
-                                      resume_dir=ordner))
+    session = LiveSession(
+        LiveOptions(output_dir=tmp_path / "egal", model="m", device="cpu", compute_type="int8", resume_dir=ordner)
+    )
     session._asr = FakeAsr("Neu")
     session._labeler = SpeakerLabeler(None)
     assert session.dir == ordner and session._seg_id == 4 and session._teil_nr == 2
@@ -469,7 +538,11 @@ def test_resume_setzt_ids_und_uhr_fort_ohne_bestand_zu_ueberschreiben(tmp_path, 
     session._melde_bestand()
     wieder = [(typ, d) for typ, d in emitted if d.get("restored")]
     assert [(typ, d["id"]) for typ, d in wieder] == [("segment", 1), ("segment", 2), ("segment", 4), ("shot", 1)]
-    assert wieder[0][1]["track"] == "mic" and wieder[0][1]["text"] == "Hallo" and wieder[3][1]["file"] == "0001_00-00-02.jpg"
+    assert (
+        wieder[0][1]["track"] == "mic"
+        and wieder[0][1]["text"] == "Hallo"
+        and wieder[3][1]["file"] == "0001_00-00-02.jpg"
+    )
 
     emitted.clear()
     utt = Utterance(31 * SR, 33 * SR, np.zeros(2 * SR, dtype=np.float32))
@@ -497,13 +570,18 @@ def test_resume_setzt_ids_und_uhr_fort_ohne_bestand_zu_ueberschreiben(tmp_path, 
 def test_resume_stolpert_nicht_ueber_reste_eines_gescheiterten_versuchs(tmp_path):
     from audioscribe.live.session import LiveOptions, LiveSession
 
-    ordner = sitzung_von_hand(tmp_path / "live-x", segmente=[seg(1, 0.0, 2.0, "eins")], status=journal.UNTERBROCHEN,
-                              teile=[{"nr": 1, "start_sample": 0, "spuren": {"system": teil_wav("system", 1)}}])
+    ordner = sitzung_von_hand(
+        tmp_path / "live-x",
+        segmente=[seg(1, 0.0, 2.0, "eins")],
+        status=journal.UNTERBROCHEN,
+        teile=[{"nr": 1, "start_sample": 0, "spuren": {"system": teil_wav("system", 1)}}],
+    )
     write_wav(ordner / teil_wav("system", 1), speech(3.0))
     # Zweiter Anlauf: Mikrofon ging auf, dann scheiterte das System-Audio - nie eingetragen.
     write_wav(ordner / teil_wav("mic", 2), silence(0.1))
-    session = LiveSession(LiveOptions(output_dir=tmp_path, model="m", device="cpu", compute_type="int8",
-                                      resume_dir=ordner))
+    session = LiveSession(
+        LiveOptions(output_dir=tmp_path, model="m", device="cpu", compute_type="int8", resume_dir=ordner)
+    )
     assert session._teil_nr == 3 and session._start_sample == 3 * SR
     assert not (ordner / session._wav_name("mic")).exists()
     session._beginne_teil({"system": session._wav_name("system")})
@@ -518,8 +596,9 @@ def test_resume_lehnt_fertige_und_replay_sitzungen_ab(tmp_path, status):
     from audioscribe.live.session import LiveOptions, LiveSession
 
     def versuche(ordner):
-        return LiveSession(LiveOptions(output_dir=tmp_path, model="m", device="cpu", compute_type="int8",
-                                       resume_dir=ordner))
+        return LiveSession(
+            LiveOptions(output_dir=tmp_path, model="m", device="cpu", compute_type="int8", resume_dir=ordner)
+        )
 
     with pytest.raises(RuntimeError, match="sitzung.json fehlt"):
         versuche(tmp_path)
@@ -537,8 +616,9 @@ def test_live_sitzung_wird_nach_absturz_ende_zu_ende_fortgesetzt(tmp_path, monke
     write_wav(tmp_path / "eins.wav", np.concatenate([silence(1.0), speech(1.5), silence(0.5)]))
     write_wav(tmp_path / "zwei.wav", np.concatenate([silence(0.5), speech(1.0), silence(0.5)]))
 
-    erste = live_session(tmp_path, monkeypatch, antwort="Erster Teil.", replay_system=tmp_path / "eins.wav",
-                         titel="Workshop")
+    erste = live_session(
+        tmp_path, monkeypatch, antwort="Erster Teil.", replay_system=tmp_path / "eins.wav", titel="Workshop"
+    )
     assert erste.run() == 0
     ordner = erste.dir
     status = journal.lies_status(ordner)
@@ -555,8 +635,9 @@ def test_live_sitzung_wird_nach_absturz_ende_zu_ende_fortgesetzt(tmp_path, monke
     assert [e["name"] for e in journal.offene_sitzungen(ordner.parent)] == [ordner.name]
 
     emitted.clear()
-    zweite = live_session(tmp_path, monkeypatch, antwort="Zweiter Teil.", replay_system=tmp_path / "zwei.wav",
-                          resume_dir=ordner)
+    zweite = live_session(
+        tmp_path, monkeypatch, antwort="Zweiter Teil.", replay_system=tmp_path / "zwei.wav", resume_dir=ordner
+    )
     assert zweite._start_sample == laenge_1
     assert zweite.run() == 0
 
@@ -622,7 +703,8 @@ def unterbrochene_sitzung(tmp_path):
     ordner = sitzung_von_hand(
         tmp_path / "live-2026-10-06_10-00-00",
         segmente=[seg(2, 5.0, 8.0, "Guten Morgen."), seg(1, 0.5, 4.0, "Hallo zusammen.", track="mic", speaker="Ich")],
-        teile=[{"nr": 1, "start_sample": 0, "spuren": {"mic": MIC_WAV}}], titel="Abnahme",
+        teile=[{"nr": 1, "start_sample": 0, "spuren": {"mic": MIC_WAV}}],
+        titel="Abnahme",
     )
     j = journal.Journal(ordner)
     j.shot(id=1, t=3.0, png="frames/0001_00-00-03.jpg", created="2026-10-06 10:00", kind="auto")
@@ -734,11 +816,13 @@ def test_argv_fuer_resume_titel_und_finalize(tmp_path):
     assert LiveJobOptions(output_dir=tmp_path).resume_dir is None and LiveJobOptions(output_dir=tmp_path).titel == ""
     ohne = build_live_argv(LiveJobOptions(output_dir=tmp_path), prefix=["x"])
     assert not any(a.startswith(("--resume", "--titel")) for a in ohne)  # unverändert ohne Wiederaufnahme
-    argv = build_live_argv(LiveJobOptions(output_dir=tmp_path, resume_dir=ordner, titel=" Workshop Reise "),
-                           prefix=["x"])
+    argv = build_live_argv(
+        LiveJobOptions(output_dir=tmp_path, resume_dir=ordner, titel=" Workshop Reise "), prefix=["x"]
+    )
     assert argv[:2] == ["x", "live"] and f"--resume={ordner}" in argv and "--titel=Workshop Reise" in argv
-    replay = build_live_argv(LiveJobOptions(output_dir=tmp_path, replay_transcript=tmp_path, titel="Demo"),
-                             prefix=["x"])
+    replay = build_live_argv(
+        LiveJobOptions(output_dir=tmp_path, replay_transcript=tmp_path, titel="Demo"), prefix=["x"]
+    )
     assert "--titel=Demo" in replay and not any(a.startswith("--resume") for a in replay)
     assert build_finalize_argv(ordner, prefix=["x"]) == ["x", "live", f"--finalize={ordner}"]
 
@@ -758,7 +842,11 @@ def test_transkript_replay_schreibt_zustand_als_replay(tmp_path, ereignisse):
     assert session.run() == 0
     status = journal.lies_status(session.dir)
     assert (status["status"], status["replay"], status["titel"], status["modell"]) == (
-        journal.BEENDET, True, "Demo", MODELL_REPLAY)
+        journal.BEENDET,
+        True,
+        "Demo",
+        MODELL_REPLAY,
+    )
     zustaende = [d for typ, d in emitted if typ == events.STATE]
     assert all(d["sitzung_id"] == status["sitzung_id"] and d["titel"] == "Demo" for d in zustaende)
     # Auch ein abgebrochenes Replay taucht nie unter den unterbrochenen Sitzungen auf.
@@ -770,6 +858,7 @@ def test_vor_ort_modus_gilt_beim_fortsetzen_weiter(tmp_path):
     from audioscribe.live.session import LiveOptions, LiveSession
 
     ordner = sitzung_von_hand(tmp_path / "vor-ort", raum=True)
-    session = LiveSession(LiveOptions(output_dir=tmp_path, model="m", device="cpu", compute_type="int8",
-                                      resume_dir=ordner))
+    session = LiveSession(
+        LiveOptions(output_dir=tmp_path, model="m", device="cpu", compute_type="int8", resume_dir=ordner)
+    )
     assert session._raum is True

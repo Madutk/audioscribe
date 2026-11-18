@@ -278,7 +278,11 @@ def parse_accelerator(stdout: str, backend_raw: str = "auto") -> dict | None:
         return None
     raw = (backend_raw or "auto").strip().lower()
     mlx = bool(daten.get("mlx")) and raw != "faster-whisper" and not bool(daten.get("cuda"))
-    return {"cuda": bool(daten.get("cuda")), "mps": bool(daten.get("mps")), "backend": "mlx" if mlx else "faster-whisper"}
+    return {
+        "cuda": bool(daten.get("cuda")),
+        "mps": bool(daten.get("mps")),
+        "backend": "mlx" if mlx else "faster-whisper",
+    }
 
 
 def probe_accelerator(*, timeout: float = 120.0) -> dict | None:
@@ -424,11 +428,7 @@ def scan_results(output_dir: Path) -> list[dict]:
                     continue
                 mtime = transcript.stat().st_mtime
                 frames_dir = Path(entry.path) / "frames"
-                frames = (
-                    sum(1 for p in frames_dir.iterdir() if p.is_file())
-                    if frames_dir.is_dir()
-                    else 0
-                )
+                frames = sum(1 for p in frames_dir.iterdir() if p.is_file()) if frames_dir.is_dir() else 0
             except OSError:
                 continue
             annotated = (Path(entry.path) / "transkript.annotiert.md").is_file()
@@ -539,9 +539,7 @@ def build_finalize_argv(session_dir: Path, *, prefix: Sequence[str] | None = Non
     return [*argv, "live", f"--finalize={Path(session_dir)}"]
 
 
-def build_refine_argv(
-    session_dir: Path, opts: LiveJobOptions, *, prefix: Sequence[str] | None = None
-) -> list[str]:
+def build_refine_argv(session_dir: Path, opts: LiveJobOptions, *, prefix: Sequence[str] | None = None) -> list[str]:
     """Baut den ``audioscribe refine``-Aufruf fuer eine beendete Sitzung."""
     argv = list(prefix if prefix is not None else cli_prefix())
     return [

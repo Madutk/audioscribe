@@ -19,9 +19,7 @@ _SENTENCE_TERMINATORS = re.compile(r"(\w*)([.!?…]+)(?!\w)")
 
 # Gaengige deutsche Abkuerzungen, die fast nie am Satzende stehen. "usw."/"etc." fehlen
 # bewusst: die beenden oft genug tatsaechlich einen Satz.
-_ABKUERZUNGEN = frozenset(
-    {"bzw", "ca", "dr", "nr", "vgl", "ggf", "inkl", "evtl", "prof", "bspw", "sog", "zzgl", "abs"}
-)
+_ABKUERZUNGEN = frozenset({"bzw", "ca", "dr", "nr", "vgl", "ggf", "inkl", "evtl", "prof", "bspw", "sog", "zzgl", "abs"})
 
 
 def _count_sentences(text: str) -> int:
@@ -34,9 +32,7 @@ def _count_sentences(text: str) -> int:
     n = 0
     for match in _SENTENCE_TERMINATORS.finditer(text):
         wort, zeichen = match.groups()
-        if zeichen == "." and (
-            (wort.isdigit() and len(wort) <= 2) or len(wort) == 1 or wort.lower() in _ABKUERZUNGEN
-        ):
+        if zeichen == "." and ((wort.isdigit() and len(wort) <= 2) or len(wort) == 1 or wort.lower() in _ABKUERZUNGEN):
             continue
         n += 1
     return n
@@ -133,9 +129,7 @@ def _split_by_sentences(segs: list[Segment], sentences_per_line: int) -> list[Pa
     def flush() -> None:
         nonlocal cur
         if cur and cur["parts"]:
-            paragraphs.append(
-                Paragraph(cur["start"], cur["end"], cur["speaker"], _clean_join(cur["parts"]))
-            )
+            paragraphs.append(Paragraph(cur["start"], cur["end"], cur["speaker"], _clean_join(cur["parts"])))
         cur = None
 
     for seg in segs:

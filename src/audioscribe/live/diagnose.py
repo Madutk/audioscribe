@@ -209,9 +209,7 @@ class Diagnose:
             rueckstand_max_s=round(max((b for _, b in proben), default=0.0), 1),
             aufholmodus_s=round(aufhol_s, 1),
             sprecher_s=round(sprecher_s, 1),
-            tempo_inkl_vorschau=(
-                round((rechen_s + sprecher_s + vorschau_s) / audio_s, 2) if audio_s > 0 else None
-            ),
+            tempo_inkl_vorschau=(round((rechen_s + sprecher_s + vorschau_s) / audio_s, 2) if audio_s > 0 else None),
             aufholmodus_anteil=round(aufhol_s / aufnahme_s, 2) if aufnahme_s > 0 else 0.0,
             eco_abschnitte=sum(1 for a in abschnitte if a.eco),
             uebersprechen_geprueft=len(uebersprechen),

@@ -18,8 +18,7 @@ def _load_transcript(out_dir: Path) -> dict:
     tj = out_dir / "transcript.json"
     if not tj.exists():
         raise FileNotFoundError(
-            f"transcript.json nicht gefunden in {out_dir}. "
-            "Zuerst 'audioscribe run <video>' ausfuehren."
+            f"transcript.json nicht gefunden in {out_dir}. Zuerst 'audioscribe run <video>' ausfuehren."
         )
     return json.loads(tj.read_text(encoding="utf-8"))
 

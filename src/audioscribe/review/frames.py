@@ -43,9 +43,7 @@ def _ffmpeg_exe() -> str:
     return imageio_ffmpeg.get_ffmpeg_exe()
 
 
-def extract_frame(
-    video: str | Path, t: float, out_png: str | Path, *, ffmpeg: str | None = None
-) -> Path:
+def extract_frame(video: str | Path, t: float, out_png: str | Path, *, ffmpeg: str | None = None) -> Path:
     """Extrahiert das Standbild bei Sekunde ``t`` nach ``out_png`` und liefert den Pfad."""
     out_png = Path(out_png)
     out_png.parent.mkdir(parents=True, exist_ok=True)

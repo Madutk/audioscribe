@@ -149,7 +149,9 @@ def beschreibe_live(b: LiveBilanz) -> str:
 
 def beschreibe_refine(b: RefineBilanz) -> str:
     stufen = ", ".join(f"{st['name']} {_s(st['dauer_s'])}" for st in b.stufen)
-    text = tr("Fazit Nachschärfen: {dauer}", dauer=_hms(b.gesamt_s)) + _tempo(b.tempo) + (f" · {stufen}" if stufen else "")
+    text = (
+        tr("Fazit Nachschärfen: {dauer}", dauer=_hms(b.gesamt_s)) + _tempo(b.tempo) + (f" · {stufen}" if stufen else "")
+    )
     if b.uebersprechen and b.uebersprechen.get("geprueft"):
         text += " · " + beschreibe_uebersprechen(b.uebersprechen)
     return text
@@ -163,7 +165,11 @@ def beschreibe_uebersprechen(u: dict) -> str:
         "nachtraeglich_entfernt": tr("nachträglich entfernt"),
     }
     abgleich = [f"{name} {u[key]}" for key, name in namen.items() if u.get(key)]
-    text = tr("Übersprechen {verworfen} von {geprueft} verworfen", verworfen=u.get("verworfen", 0), geprueft=u.get("geprueft", 0))
+    text = tr(
+        "Übersprechen {verworfen} von {geprueft} verworfen",
+        verworfen=u.get("verworfen", 0),
+        geprueft=u.get("geprueft", 0),
+    )
     if abgleich:
         text += f" ({', '.join(abgleich)})"
     return text

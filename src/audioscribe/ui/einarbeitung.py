@@ -187,7 +187,9 @@ class Warteschlange:
                     e.art = ART_FORTSETZEN
                 e.frage = None
                 e.hinweis = tr("Unterbrochen (Programm beendet) – wird fortgesetzt.")
-                self._protokoll(e.id, "\n" + tr("— Unterbrochen: AudioScribe wurde beendet. Der Lauf wird fortgesetzt."))
+                self._protokoll(
+                    e.id, "\n" + tr("— Unterbrochen: AudioScribe wurde beendet. Der Lauf wird fortgesetzt.")
+                )
             e.pid = None
             self._auftraege.append(e)
         self._speichern()
@@ -198,7 +200,9 @@ class Warteschlange:
             self.basis.mkdir(parents=True, exist_ok=True)
             ziel = self.basis / LISTE
             tmp = ziel.with_suffix(".tmp")
-            tmp.write_text(json.dumps([asdict(e) for e in self._auftraege], ensure_ascii=False, indent=2), encoding="utf-8")
+            tmp.write_text(
+                json.dumps([asdict(e) for e in self._auftraege], ensure_ascii=False, indent=2), encoding="utf-8"
+            )
             os.replace(tmp, ziel)
         except OSError:
             pass  # die Warteschlange läuft im Speicher weiter; beim nächsten Schreiben neu versuchen
@@ -327,7 +331,9 @@ class Warteschlange:
             proc = self._proc if self._aktiv == auftrag_id else None
             if proc is None or proc.stdin is None or proc.poll() is not None:
                 raise RuntimeError(tr("Der Lauf ist nicht mehr aktiv."))
-            daten = {"id": frage_id, "answers": antworten} if antworten is not None else {"id": frage_id, "ablehnen": True}
+            daten = (
+                {"id": frage_id, "answers": antworten} if antworten is not None else {"id": frage_id, "ablehnen": True}
+            )
             try:
                 proc.stdin.write(json.dumps(daten, ensure_ascii=False) + "\n")
                 proc.stdin.flush()
@@ -506,7 +512,7 @@ class Warteschlange:
                 continue
             if line.startswith(_STATUS_PREFIX):
                 try:
-                    progress = json.loads(line[len(_STATUS_PREFIX):])
+                    progress = json.loads(line[len(_STATUS_PREFIX) :])
                 except ValueError:
                     progress = None
                 if isinstance(progress, dict):
@@ -517,7 +523,7 @@ class Warteschlange:
                 continue
             if line.startswith(_FRAGE_PREFIX):
                 try:
-                    frage = json.loads(line[len(_FRAGE_PREFIX):])
+                    frage = json.loads(line[len(_FRAGE_PREFIX) :])
                 except ValueError:
                     frage = None
                 if isinstance(frage, dict) and isinstance(frage.get("id"), str):
@@ -567,7 +573,10 @@ class Warteschlange:
             with self._lock:
                 e.quellseite = seite
                 if seite is None and kopie.art != ART_NACHRICHT:
-                    e.hinweis = tr("Keine Quellseite mit „rohquelle: {quelle}“ gefunden – bitte das Protokoll prüfen.", quelle=kopie.rohquelle)
+                    e.hinweis = tr(
+                        "Keine Quellseite mit „rohquelle: {quelle}“ gefunden – bitte das Protokoll prüfen.",
+                        quelle=kopie.rohquelle,
+                    )
                 self._speichern()
         meldung = {
             FERTIG: tr("Einarbeiten fertig."),
@@ -623,6 +632,17 @@ def _loesche(ordner: Path) -> None:
 
 
 __all__ = [
-    "ABGEBROCHEN", "ART_FORTSETZEN", "ART_NACHRICHT", "ART_NEU", "FEHLER", "FERTIG", "FRAGE",
-    "LAEUFT", "OFFEN", "WARTET", "Eintrag", "Warteschlange", "build_ingest_argv",
+    "ABGEBROCHEN",
+    "ART_FORTSETZEN",
+    "ART_NACHRICHT",
+    "ART_NEU",
+    "FEHLER",
+    "FERTIG",
+    "FRAGE",
+    "LAEUFT",
+    "OFFEN",
+    "WARTET",
+    "Eintrag",
+    "Warteschlange",
+    "build_ingest_argv",
 ]

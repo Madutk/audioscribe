@@ -24,9 +24,7 @@ WRITE_TOOLS: dict[str, str] = {
 }
 READ_TOOLS: dict[str, str] = {"Read": "file_path", "Glob": "path", "Grep": "path"}
 # Ohne Pfadbezug, immer erlaubt.
-FREE_TOOLS: frozenset[str] = frozenset(
-    {"Skill", "TodoWrite", "TaskCreate", "TaskUpdate", "TaskList", "TaskGet"}
-)
+FREE_TOOLS: frozenset[str] = frozenset({"Skill", "TodoWrite", "TaskCreate", "TaskUpdate", "TaskList", "TaskGet"})
 
 
 @dataclass(frozen=True)
@@ -79,7 +77,8 @@ def check_tool(
             return Entscheidung(False, tr("Kein Zielpfad angegeben."))
         if not _inside(target, ws):
             return Entscheidung(
-                False, tr("Schreiben nur im Ergebnisordner erlaubt ({ordner}), nicht in {ziel}.", ordner=ws, ziel=target)
+                False,
+                tr("Schreiben nur im Ergebnisordner erlaubt ({ordner}), nicht in {ziel}.", ordner=ws, ziel=target),
             )
         if _inside(target, ws / ".claude"):
             return Entscheidung(False, tr("Die Skill-Kopien unter .claude/ sind schreibgeschuetzt."))
@@ -137,6 +136,4 @@ def check_wiki_tool(
             return Entscheidung(True)
         return Entscheidung(False, tr("Lesen nur im Wiki erlaubt, nicht in {ziel}.", ziel=target))
 
-    return Entscheidung(
-        False, tr("Werkzeug '{werkzeug}' ist für das Einarbeiten nicht freigegeben.", werkzeug=tool)
-    )
+    return Entscheidung(False, tr("Werkzeug '{werkzeug}' ist für das Einarbeiten nicht freigegeben.", werkzeug=tool))

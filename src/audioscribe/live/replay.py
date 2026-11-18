@@ -69,9 +69,7 @@ class ReplayCapture:
         with self._lock:
             self._offen += 1
             self._dauer_max = max(self._dauer_max, device["dauer_s"])
-        thread = threading.Thread(
-            target=self._feed, args=(track, path, device), name=f"replay-{name}", daemon=True
-        )
+        thread = threading.Thread(target=self._feed, args=(track, path, device), name=f"replay-{name}", daemon=True)
         self._threads.append(thread)
         self._tracks.append(track)
         thread.start()

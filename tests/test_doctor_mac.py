@@ -38,7 +38,9 @@ def test_check_platform_darwin_mit_attrappen(monkeypatch):
     monkeypatch.setattr(doctor.sys, "platform", "darwin")
     monkeypatch.setattr(doctor.platform, "mac_ver", lambda: ("15.2", ("", "", ""), ""))
     monkeypatch.setattr(doctor.platform, "machine", lambda: "arm64")
-    monkeypatch.setattr(doctor, "_sysctl", lambda name: {"machdep.cpu.brand_string": "Apple M5", "sysctl.proc_translated": "0"}[name])
+    monkeypatch.setattr(
+        doctor, "_sysctl", lambda name: {"machdep.cpu.brand_string": "Apple M5", "sysctl.proc_translated": "0"}[name]
+    )
     monkeypatch.setenv("TERM_PROGRAM", "Apple_Terminal")
     r = doctor._check_platform()
     assert r.status == "OK" and "Apple M5" in r.detail and "Terminal" in r.detail

@@ -121,7 +121,9 @@ class BackgroundEmbedder:
             self._embedder = self._load()
             self._log(tr("Sprecher-Modell bereit ({sekunden} s)", sekunden=f"{time.monotonic() - started:.1f}"))
         except Exception as exc:  # noqa: BLE001 - Sprechertrennung ist Zugabe, kein Muss
-            self._log(tr("Sprecher-Modell nicht ladbar ({fehler}) - System-Spur heißt '{name}'", fehler=exc, name=GEGENSEITE))
+            self._log(
+                tr("Sprecher-Modell nicht ladbar ({fehler}) - System-Spur heißt '{name}'", fehler=exc, name=GEGENSEITE)
+            )
         finally:
             self._done.set()
 

@@ -470,8 +470,13 @@ def test_file_fraction_aus_stufe_und_prozent():
 
 
 def test_file_fraction_ist_monoton():
-    folge = [(_Stage(1, 3, "a"), None), (_Stage(1, 3, "a"), 50.0), (_Stage(2, 3, "b"), None),
-             (_Stage(2, 3, "b"), 90.0), (_Stage(3, 3, "c"), 100.0)]
+    folge = [
+        (_Stage(1, 3, "a"), None),
+        (_Stage(1, 3, "a"), 50.0),
+        (_Stage(2, 3, "b"), None),
+        (_Stage(2, 3, "b"), 90.0),
+        (_Stage(3, 3, "c"), 100.0),
+    ]
     werte = [file_fraction(stage, pct) for stage, pct in folge]
     assert werte == sorted(werte)
 
@@ -480,9 +485,7 @@ def test_file_fraction_ist_monoton():
 
 
 def _fs(name, state, duration=None, seconds=None, fraction=0.0):
-    return FileState(
-        name=name, path=name, state=state, duration=duration, seconds=seconds, fraction=fraction
-    )
+    return FileState(name=name, path=name, state=state, duration=duration, seconds=seconds, fraction=fraction)
 
 
 def test_batch_eta_ohne_fertige_datei_keine_schaetzung():
@@ -566,6 +569,7 @@ def test_hook_drosselt_die_meldungen():
 
 def test_hook_kippt_die_diarisierung_nicht():
     """pyannote ruft den Hook ungeschuetzt auf - eine Ausnahme darf nie durchschlagen."""
+
     def kaputt(_percent):
         raise RuntimeError("boom")
 
@@ -711,7 +715,17 @@ def test_index_hat_globale_und_projekt_einstellungen(ui_client):
     for feld in ("gKiDienst", "gSouffleurModel", "gAgentModel", "gSprache", "envChecks"):
         assert f'id="{feld}"' in html
     assert 'id="tabProj" data-view="projekt"' in html
-    for feld in ("pName", "pSitzungen", "pRaw", "pAssets", "pBilder", "pMarkierungen", "pKiDienst", "pSprache", "setWikiState"):
+    for feld in (
+        "pName",
+        "pSitzungen",
+        "pRaw",
+        "pAssets",
+        "pBilder",
+        "pMarkierungen",
+        "pKiDienst",
+        "pSprache",
+        "setWikiState",
+    ):
         assert f'id="{feld}"' in html
     # Die drei globalen Ordnerfelder des alten Reiters gibt es nicht mehr.
     for alt in ("setIn", "setOut", "setAna", "setHandover"):
@@ -728,13 +742,24 @@ def test_index_hat_startseite_mit_fuenf_einstiegen_und_assistent(ui_client):
         assert f'data-launch="{einstieg}"' in html
     for titel in ("Sofort aufnehmen", "Neues Projekt", "Projekt öffnen", "Aufnahme transkribieren", "Demo abspielen"):
         assert f"<h3>{titel}" in html
-    startseite = html[html.index('id="viewStart"'):html.index('id="viewNeu"')]
+    startseite = html[html.index('id="viewStart"') : html.index('id="viewNeu"')]
     assert startseite.count('<details class="more">') == 5  # je Einstieg eine kleine Hilfe
     assert 'id="eingangBox"' in startseite and 'id="zuordnenDlg"' in html
     assert 'id="viewNeu" data-view="neu"' in html
     # Vier Schritte: Projektordner, Wiki (optional), Sitzungen und Ablage, KI und Sprache - mit Strukturvorschau.
-    for feld in ("wizName", "wizSpeicherort", "wizOrdnername", "wizWikiDir", "wizSitzungen", "wizMehr", "wizAssets",
-                 "wizKiDienst", "wizSprache", "wizTree", "wizCreate"):
+    for feld in (
+        "wizName",
+        "wizSpeicherort",
+        "wizOrdnername",
+        "wizWikiDir",
+        "wizSitzungen",
+        "wizMehr",
+        "wizAssets",
+        "wizKiDienst",
+        "wizSprache",
+        "wizTree",
+        "wizCreate",
+    ):
         assert f'id="{feld}"' in html
     assert html.count('name="wizWikiArt"') == 3 and 'value="keins" checked' in html
     for feld in ("pWurzel", "pWikiDir", "pWikiNeu", "pWikiVerknuepfen", "pWikiLoesen", "pAblageCard"):
@@ -774,7 +799,9 @@ def test_probe_environment_ohne_json_ist_unbekannt(monkeypatch):
 
     monkeypatch.setattr(jobs.subprocess, "run", lambda *a, **k: Proc())
     assert jobs.probe_environment() is None
-    monkeypatch.setattr(jobs.subprocess, "run", lambda *a, **k: (_ for _ in ()).throw(subprocess.TimeoutExpired("x", 1)))
+    monkeypatch.setattr(
+        jobs.subprocess, "run", lambda *a, **k: (_ for _ in ()).throw(subprocess.TimeoutExpired("x", 1))
+    )
     assert jobs.probe_environment() is None
 
 
@@ -783,7 +810,8 @@ def test_environment_route_cacht_und_refresh_umgeht(ui_client, monkeypatch):
 
     proben = []
     monkeypatch.setattr(
-        server.jobs, "probe_environment",
+        server.jobs,
+        "probe_environment",
         lambda: (proben.append(1), [{"status": "OK", "name": "Python", "detail": str(len(proben))}])[1],
     )
     monkeypatch.setattr(server, "_env_cache", None)
@@ -812,7 +840,8 @@ def test_run_doctor_json_gibt_liste_aus(monkeypatch, capsys):
 
     kaputt.__name__ = "_check_kaputt"
     monkeypatch.setattr(
-        doctor, "CHECKS",
+        doctor,
+        "CHECKS",
         (lambda: doctor.CheckResult("OK", "Python", "3.12"), kaputt),
     )
     code = doctor.run_doctor(as_json=True)
@@ -840,7 +869,9 @@ def test_devices_enthalten_mps_und_argv_reicht_es_durch(tmp_path):
     from audioscribe.ui.jobs import DEVICES, JobOptions, build_argv
 
     assert "mps" in DEVICES
-    argv = build_argv(tmp_path / "x.mp3", JobOptions(input_dir=tmp_path, output_dir=tmp_path, device="mps"), prefix=["a"])
+    argv = build_argv(
+        tmp_path / "x.mp3", JobOptions(input_dir=tmp_path, output_dir=tmp_path, device="mps"), prefix=["a"]
+    )
     assert "--device=mps" in argv or "--device" in argv
 
 
@@ -858,7 +889,9 @@ def test_parse_accelerator_liest_letzte_zeile_und_waehlt_backend():
     out = parse_accelerator('Warnung\n{"cuda": false, "mps": true, "mlx": true}')
     assert out == {"cuda": False, "mps": True, "backend": "mlx"}
     # Erzwungenes faster-whisper gewinnt; mit CUDA bleibt es faster-whisper.
-    assert parse_accelerator('{"cuda": false, "mps": true, "mlx": true}', "faster-whisper")["backend"] == "faster-whisper"
+    assert (
+        parse_accelerator('{"cuda": false, "mps": true, "mlx": true}', "faster-whisper")["backend"] == "faster-whisper"
+    )
     assert parse_accelerator('{"cuda": true, "mps": false, "mlx": true}')["backend"] == "faster-whisper"
     assert parse_accelerator("") is None
     assert parse_accelerator("kein json") is None

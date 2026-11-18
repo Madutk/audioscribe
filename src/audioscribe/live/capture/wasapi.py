@@ -18,9 +18,7 @@ INSTALL_HINT = "uv sync --extra <cu124|cpu> --extra review --extra live"
 
 def _pyaudio():
     if sys.platform != "win32":
-        raise RuntimeError(
-            tr("Live-Aufnahme braucht natives Windows (WASAPI); unter WSL/Linux nicht verfügbar.")
-        )
+        raise RuntimeError(tr("Live-Aufnahme braucht natives Windows (WASAPI); unter WSL/Linux nicht verfügbar."))
     try:
         import pyaudiowpatch
     except ImportError as exc:

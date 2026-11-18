@@ -86,16 +86,11 @@ def list_devices(platform: str | None = None) -> dict:
 
         return mac()
     raise RuntimeError(
-        tr(
-            "Live-Aufnahme braucht Windows (WASAPI) oder macOS (ScreenCaptureKit); unter WSL/Linux "
-            "nicht verfügbar."
-        )
+        tr("Live-Aufnahme braucht Windows (WASAPI) oder macOS (ScreenCaptureKit); unter WSL/Linux nicht verfügbar.")
     )
 
 
-def ensure_permissions(
-    *, mic: bool, system: bool, log: Callable[[str], None], platform: str | None = None
-) -> None:
+def ensure_permissions(*, mic: bool, system: bool, log: Callable[[str], None], platform: str | None = None) -> None:
     """macOS fragt die TCC-Berechtigungen VOR dem Start der Sitzungsuhr ab.
 
     Die Dialoge können Sekunden dauern; fielen sie in die Aufnahme, würde die Zeitleiste

@@ -208,9 +208,7 @@ def to_browser_path(path: Path, browser: Path) -> str:
     """Pfad so, wie der Browser ihn versteht (Windows-Exe unter WSL -> ``wslpath -w``)."""
     if not is_windows_exe_from_wsl(browser):
         return str(path)
-    return subprocess.run(
-        ["wslpath", "-w", str(path)], capture_output=True, text=True, check=True
-    ).stdout.strip()
+    return subprocess.run(["wslpath", "-w", str(path)], capture_output=True, text=True, check=True).stdout.strip()
 
 
 def _profile_dir(browser: Path) -> str:
@@ -223,7 +221,10 @@ def _profile_dir(browser: Path) -> str:
         try:
             temp = subprocess.run(
                 ["cmd.exe", "/c", "echo %TEMP%"],
-                capture_output=True, text=True, timeout=15, cwd="/mnt/c",
+                capture_output=True,
+                text=True,
+                timeout=15,
+                cwd="/mnt/c",
             ).stdout.strip()
         except (OSError, subprocess.SubprocessError):
             temp = ""
@@ -253,6 +254,7 @@ def browser_argv(browser: Path, url: str, profile_dir: str) -> list[str]:
 
 def build_page(source: str, mode: str = "mermaid") -> str:
     """Render-Seite: ``mode="mermaid"`` rendert Quelltext, ``"svg"`` wandelt fertiges SVG um."""
+
     # JSON ist gueltiges JS; "</" entschaerfen, damit der Quelltext das <script> nicht schliesst.
     def js(value: str) -> str:
         return json.dumps(value).replace("</", "<\\/")

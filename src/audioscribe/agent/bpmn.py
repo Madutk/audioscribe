@@ -162,12 +162,16 @@ def parse_modell(data: object) -> Modell:
         # Falscher Typ / falsche Lane: melden, den Knoten aber behalten - sonst
         # folgen Dutzende Folgefehler ("unbekannter Knoten", "nicht erreichbar").
         if typ not in TYPEN:
-            fehler.append(tr("{wo}: typ {typ} unbekannt (erlaubt: {erlaubt})", wo=where, typ=repr(typ), erlaubt=", ".join(TYPEN)))
+            fehler.append(
+                tr("{wo}: typ {typ} unbekannt (erlaubt: {erlaubt})", wo=where, typ=repr(typ), erlaubt=", ".join(TYPEN))
+            )
         if lane not in lane_ids:
             fehler.append(tr("{wo}: lane {lane} unbekannt", wo=where, lane=repr(lane)))
         art = _str(raw.get("art")) or None
         if art is not None and art not in ARTEN:
-            fehler.append(tr("{wo}: art {art} unbekannt (erlaubt: {erlaubt})", wo=where, art=repr(art), erlaubt=", ".join(ARTEN)))
+            fehler.append(
+                tr("{wo}: art {art} unbekannt (erlaubt: {erlaubt})", wo=where, art=repr(art), erlaubt=", ".join(ARTEN))
+            )
             art = None
         text = _str(raw.get("text"))
         if typ in ("aufgabe", "entscheidung") and not text:
@@ -236,7 +240,9 @@ def lade_modell(path: Path) -> Modell:
     except (OSError, UnicodeDecodeError) as exc:
         raise ModellFehler([tr("{datei} nicht lesbar: {fehler}", datei=Path(path).name, fehler=exc)]) from exc
     except ValueError as exc:
-        raise ModellFehler([tr("{datei} ist kein gueltiges JSON: {fehler}", datei=Path(path).name, fehler=exc)]) from exc
+        raise ModellFehler(
+            [tr("{datei} ist kein gueltiges JSON: {fehler}", datei=Path(path).name, fehler=exc)]
+        ) from exc
     return parse_modell(data)
 
 
@@ -259,7 +265,7 @@ def wrap(text: str, width: float) -> list[str]:
                 lines.append(line)
                 line = ""
             lines.append(word[: max_chars - 1] + "-")
-            word = word[max_chars - 1:]
+            word = word[max_chars - 1 :]
         if not line:
             line = word
         elif len(line) + 1 + len(word) <= max_chars:
@@ -409,9 +415,7 @@ def layout(m: Modell) -> Layout:
         zeile[kid] = row
 
     # 4) Masse: einheitliche Zeilenhoehe, Kanal am Lane-Boden fuer Rueckkanten.
-    row_h = max(
-        [h + _label_hoehe(k) for k in m.knoten for _, h in [_groesse(k)]] + [TASK_H]
-    ) + 40
+    row_h = max([h + _label_hoehe(k) for k in m.knoten for _, h in [_groesse(k)]] + [TASK_H]) + 40
     rueck_je_lane: dict[str, int] = {lane.id: 0 for lane in m.lanes}
     for f in m.fluesse:
         if f.id in rueck:
@@ -431,6 +435,7 @@ def layout(m: Modell) -> Layout:
 
     boxes: dict[str, Box] = {}
     labels: dict[str, Box] = {}
+
     def links_frei(k: Knoten) -> bool:
         return (k.lane, spalte[k.id] - 1, zeile[k.id]) not in belegt
 
@@ -541,8 +546,12 @@ def _q(prefix: str, tag: str) -> str:
 
 def _bounds(parent: ET.Element, b: Box) -> None:
     ET.SubElement(
-        parent, _q("dc", "Bounds"),
-        x=f"{b.x:.0f}", y=f"{b.y:.0f}", width=f"{b.w:.0f}", height=f"{b.h:.0f}",
+        parent,
+        _q("dc", "Bounds"),
+        x=f"{b.x:.0f}",
+        y=f"{b.y:.0f}",
+        width=f"{b.w:.0f}",
+        height=f"{b.h:.0f}",
     )
 
 
@@ -556,8 +565,11 @@ def to_bpmn_xml(m: Modell, lay: Layout, prozessname: str) -> str:
     )
     collab = ET.SubElement(defs, _q("bpmn", "collaboration"), id="Collaboration_1")
     ET.SubElement(
-        collab, _q("bpmn", "participant"),
-        id="Participant_1", name=prozessname, processRef="Process_1",
+        collab,
+        _q("bpmn", "participant"),
+        id="Participant_1",
+        name=prozessname,
+        processRef="Process_1",
     )
     proc = ET.SubElement(defs, _q("bpmn", "process"), id="Process_1", isExecutable="false")
     if m.lanes_begruendung:
@@ -586,18 +598,22 @@ def to_bpmn_xml(m: Modell, lay: Layout, prozessname: str) -> str:
         ET.SubElement(proc, _q("bpmn", "sequenceFlow"), **attrs)
 
     diagram = ET.SubElement(defs, _q("bpmndi", "BPMNDiagram"), id="BPMNDiagram_1")
-    plane = ET.SubElement(
-        diagram, _q("bpmndi", "BPMNPlane"), id="BPMNPlane_1", bpmnElement="Collaboration_1"
-    )
+    plane = ET.SubElement(diagram, _q("bpmndi", "BPMNPlane"), id="BPMNPlane_1", bpmnElement="Collaboration_1")
     shape = ET.SubElement(
-        plane, _q("bpmndi", "BPMNShape"),
-        id="Participant_1_di", bpmnElement="Participant_1", isHorizontal="true",
+        plane,
+        _q("bpmndi", "BPMNShape"),
+        id="Participant_1_di",
+        bpmnElement="Participant_1",
+        isHorizontal="true",
     )
     _bounds(shape, lay.pool)
     for lane in m.lanes:
         shape = ET.SubElement(
-            plane, _q("bpmndi", "BPMNShape"),
-            id=f"Lane_{lane.id}_di", bpmnElement=f"Lane_{lane.id}", isHorizontal="true",
+            plane,
+            _q("bpmndi", "BPMNShape"),
+            id=f"Lane_{lane.id}_di",
+            bpmnElement=f"Lane_{lane.id}",
+            isHorizontal="true",
         )
         _bounds(shape, lay.lanes[lane.id])
     for k in m.knoten:
@@ -609,9 +625,7 @@ def to_bpmn_xml(m: Modell, lay: Layout, prozessname: str) -> str:
         if k.id in lay.labels:
             _bounds(ET.SubElement(shape, _q("bpmndi", "BPMNLabel")), lay.labels[k.id])
     for kante in lay.kanten:
-        edge = ET.SubElement(
-            plane, _q("bpmndi", "BPMNEdge"), id=f"{kante.fluss.id}_di", bpmnElement=kante.fluss.id
-        )
+        edge = ET.SubElement(plane, _q("bpmndi", "BPMNEdge"), id=f"{kante.fluss.id}_di", bpmnElement=kante.fluss.id)
         for x, y in kante.punkte:
             ET.SubElement(edge, _q("di", "waypoint"), x=f"{x:.0f}", y=f"{y:.0f}")
         if kante.label:
@@ -628,8 +642,9 @@ _STROKE = "#22242a"
 _FILL_TASK = "#ffffff"
 
 
-def _text_lines(x: float, y_top: float, lines: list[str], *, anchor: str = "middle",
-                size: int = 12, weight: str = "normal") -> str:
+def _text_lines(
+    x: float, y_top: float, lines: list[str], *, anchor: str = "middle", size: int = 12, weight: str = "normal"
+) -> str:
     out = []
     for i, line in enumerate(lines):
         yy = y_top + (i + 1) * LINE_H - 3
@@ -654,10 +669,7 @@ def _icon(k: Knoten, b: Box) -> str:
             f'<circle cx="{x + 6}" cy="{y + 7}" r="2" fill="none" stroke="{_STROKE}"/>'
         )
     if k.art == "manual":
-        return (
-            f'<path d="M{x} {y + 13} v-6 q0 -2 2 -2 h7 q2 0 2 2 q0 2 -2 2 h-3 v4 z" '
-            f'fill="none" stroke="{_STROKE}"/>'
-        )
+        return f'<path d="M{x} {y + 13} v-6 q0 -2 2 -2 h7 q2 0 2 2 q0 2 -2 2 h-3 v4 z" fill="none" stroke="{_STROKE}"/>'
     return ""
 
 
@@ -678,8 +690,7 @@ def to_svg(m: Modell, lay: Layout, prozessname: str) -> str:
         f'<line x1="{pool.x + POOL_HEAD}" y1="{pool.y}" x2="{pool.x + POOL_HEAD}" '
         f'y2="{pool.y + pool.h}" stroke="{_STROKE}" stroke-width="1.5"/>'
     )
-    p.append(_vertical_text(pool.x + POOL_HEAD / 2, pool.y + pool.h / 2, prozessname, pool.h - 10,
-                            weight="bold"))
+    p.append(_vertical_text(pool.x + POOL_HEAD / 2, pool.y + pool.h / 2, prozessname, pool.h - 10, weight="bold"))
     for i, lane in enumerate(m.lanes):
         b = lay.lanes[lane.id]
         fill = "#f7f8fa" if i % 2 else "#ffffff"

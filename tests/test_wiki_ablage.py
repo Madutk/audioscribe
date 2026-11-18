@@ -45,7 +45,12 @@ def test_zuordnung_zeitstempel_zu_bild_bleibt_erhalten(projekt, sitzung):
     bild2 = "![Bild #0002 – 00:00:12](../assets/2026-10-06_workshop-reisebuchung/0002_00-00-12.jpg)"
     assert bild1 in annotiert and bild2 in annotiert
     # Bild 1 (00:00:03) haengt am ersten Absatz, Bild 2 (00:00:12) am zweiten - wie im Sitzungsordner.
-    assert annotiert.index("zweite Klasse") < annotiert.index(bild1) < annotiert.index("Freigabe?") < annotiert.index(bild2)
+    assert (
+        annotiert.index("zweite Klasse")
+        < annotiert.index(bild1)
+        < annotiert.index("Freigabe?")
+        < annotiert.index(bild2)
+    )
     original = (sitzung / "transkript.annotiert.md").read_text(encoding="utf-8")
     assert re.sub(r"\]\([^)]*/", "](", annotiert) == re.sub(r"\]\([^)]*/", "](", original)
     assert ablage.markierungen == 0  # ohne Wunsch gehen die Markierungen nicht mit
@@ -193,7 +198,9 @@ def test_nachbereitung_mit_bildern_legt_die_sitzung_nicht_doppelt_ab(projekt, si
     ziel = projekt.raw_dir / "2026-10-06_workshop-reisebuchung" / "nachbereitung-ki" / "reisebuchung"
     link = re.search(r"\]\(([^)]+)\)", (ziel / "INDEX.md").read_text(encoding="utf-8")).group(1)
     assert (ziel / link).is_file() and ablage.bilder == 1
-    assert [p.name for p in (projekt.assets_dir / "2026-10-06_workshop-reisebuchung").iterdir()] == ["0001_00-00-03.jpg"]
+    assert [p.name for p in (projekt.assets_dir / "2026-10-06_workshop-reisebuchung").iterdir()] == [
+        "0001_00-00-03.jpg"
+    ]
     # Nur das Arbeitsmaterial der obersten Ebene bleibt draussen - ein gleichnamiger Unterordner geht mit.
     assert (ziel / "berichte" / "material" / "anhang.md").is_file() and not (ziel / "material").exists()
 
@@ -226,7 +233,7 @@ def test_nachbereitung_ohne_bilder_macht_textverweise(projekt, sitzung):
     ws = _analyse(projekt, sitzung)
     wiki_ablage.speichere_sitzung(sitzung, projekt, bilder=False)
     ablage = wiki_ablage.speichere_nachbereitung(ws, projekt, sitzung, bilder=False)
-    index = (projekt.raw_dir / "2026-10-06_workshop-reisebuchung" / "nachbereitung-ki" / "reisebuchung" / "INDEX.md")
+    index = projekt.raw_dir / "2026-10-06_workshop-reisebuchung" / "nachbereitung-ki" / "reisebuchung" / "INDEX.md"
     text = index.read_text(encoding="utf-8")
     assert "_[Bild #0001 – Maske]_" in text and "material/frames" not in text
     assert ablage.bilder == 0 and not projekt.assets_dir.exists()
@@ -274,7 +281,9 @@ def test_speichere_nach_mit_eigenem_bilder_ordner(sitzung, tmp_path):
     ziel = Path(ablage.ordner)
     assert ablage.assets == str(tmp_path / "b" / ziel.name) and not (ziel / "assets").exists()
     marks = json.loads((ziel / "marks.json").read_text(encoding="utf-8"))
-    assert marks[0]["png"] == f"../../b/{ziel.name}/0001_00-00-03.jpg" and all((ziel / m["png"]).is_file() for m in marks)
+    assert marks[0]["png"] == f"../../b/{ziel.name}/0001_00-00-03.jpg" and all(
+        (ziel / m["png"]).is_file() for m in marks
+    )
 
 
 def test_speichere_nach_ohne_bilder(sitzung, tmp_path):
@@ -292,7 +301,9 @@ def test_speichere_nach_verbietet_wiki_seiten_sitzungsordner_und_gleiche_basen(p
             sitzung, raw_basis=projekt.seiten_dir / "quellen", assets_basis=frei, seiten_dir=projekt.seiten_dir
         )
     with pytest.raises(RuntimeError, match="Wiki-Seiten"):
-        wiki_ablage.speichere_nach(sitzung, raw_basis=frei, assets_basis=projekt.seiten_dir, seiten_dir=projekt.seiten_dir)
+        wiki_ablage.speichere_nach(
+            sitzung, raw_basis=frei, assets_basis=projekt.seiten_dir, seiten_dir=projekt.seiten_dir
+        )
     with pytest.raises(RuntimeError, match="Sitzungsordner"):
         wiki_ablage.speichere_nach(sitzung, raw_basis=sitzung, assets_basis=frei)
     with pytest.raises(RuntimeError, match="Sitzungsordner"):
@@ -369,7 +380,9 @@ def test_meeting_kopf_und_relative_bildlinks(projekt_meetings, sitzung):
 def test_meeting_art_aus_der_sitzung_und_pflicht(projekt_meetings, sitzung):
     with pytest.raises(RuntimeError, match="Art des Meetings"):
         wiki_ablage.speichere_sitzung(sitzung, projekt_meetings)
-    assert not (projekt_meetings.raw_dir / "meetings").exists() or not any((projekt_meetings.raw_dir / "meetings").iterdir())
+    assert not (projekt_meetings.raw_dir / "meetings").exists() or not any(
+        (projekt_meetings.raw_dir / "meetings").iterdir()
+    )
     status = json.loads((sitzung / "sitzung.json").read_text(encoding="utf-8"))
     (sitzung / "sitzung.json").write_text(json.dumps({**status, "art": "review"}), encoding="utf-8")
     ablage = wiki_ablage.speichere_sitzung(sitzung, projekt_meetings)
@@ -403,7 +416,9 @@ def test_meeting_souffleur_als_begleitdatei(projekt_meetings, sitzung):
     meetings = Path(ablage.ordner).parent
     assert ablage.markierungen == 1
     assert sorted(p.name for p in meetings.iterdir()) == [
-        f"{STAMM}.md", f"{STAMM}.souffleur.json", f"{STAMM}.souffleur.md",
+        f"{STAMM}.md",
+        f"{STAMM}.souffleur.json",
+        f"{STAMM}.souffleur.md",
     ]
     daten = json.loads((meetings / f"{STAMM}.souffleur.json").read_text(encoding="utf-8"))
     assert daten["markierungen"][0]["art"] == "frage"

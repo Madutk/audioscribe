@@ -86,7 +86,14 @@ def refine_session(session_dir: str | Path) -> Path:
     for name, wav in spuren:
         audio = audios[name]
         dauer = max(dauer, len(audio) / SAMPLE_RATE)
-        stage(tr("Transkription {spur} ({backend} {modell})", spur=anzeige[name], backend=backend, modell=settings.whisper_model))
+        stage(
+            tr(
+                "Transkription {spur} ({backend} {modell})",
+                spur=anzeige[name],
+                backend=backend,
+                modell=settings.whisper_model,
+            )
+        )
         result = transcribe(audio, reporter)
         sprache = result.get("language") or sprache
         # WhisperX liefert keine Qualitätswerte je Segment - nur Lage und Wortzahl.

@@ -42,9 +42,19 @@ LOG_NAME = "agent-log.txt"
 # Aufgabenliste: aktuelle Claude-Code-Versionen haben TaskCreate/TaskUpdate/TaskList/
 # TaskGet, aeltere TodoWrite. Nicht vorhandene Namen ignoriert Claude Code.
 _BASE_TOOLS = [
-    "Read", "Write", "Edit", "Glob", "Grep", "Skill",
-    "TaskCreate", "TaskUpdate", "TaskList", "TaskGet", "TodoWrite",
+    "Read",
+    "Write",
+    "Edit",
+    "Glob",
+    "Grep",
+    "Skill",
+    "TaskCreate",
+    "TaskUpdate",
+    "TaskList",
+    "TaskGet",
+    "TodoWrite",
 ]
+
 
 def install_hint() -> str:
     return tr(
@@ -271,7 +281,9 @@ class AnalyseSitzung:
             permission_mode="default",
             can_use_tool=self._can_use_tool,
             system_prompt={
-                "type": "preset", "preset": "claude_code", "append": system_append(lokal=self._lokal),
+                "type": "preset",
+                "preset": "claude_code",
+                "append": system_append(lokal=self._lokal),
             },
             model=self.auftrag.model,
             max_turns=self.auftrag.max_turns,
@@ -290,9 +302,7 @@ class AnalyseSitzung:
                 await self._client.disconnect()
         finally:
             if exc is not None and self.manifest.status == "laeuft":
-                abgebrochen = exc_type is not None and issubclass(
-                    exc_type, (KeyboardInterrupt, _cancelled_exc())
-                )
+                abgebrochen = exc_type is not None and issubclass(exc_type, (KeyboardInterrupt, _cancelled_exc()))
                 self.manifest.status = "abgebrochen" if abgebrochen else "fehler"
                 self.manifest.fehler = self.manifest.fehler or str(exc) or exc_type.__name__
             self.manifest.beendet = _now()
@@ -348,9 +358,7 @@ class AnalyseSitzung:
                     if block.is_error:
                         detail = block.content if isinstance(block.content, str) else ""
                         self.log(tr("[Werkzeug-Fehler] {detail}", detail=" ".join(detail.split())[:300]))
-                    if self.fortschritt.tool_result(
-                        block.tool_use_id, bool(block.is_error), block.content
-                    ):
+                    if self.fortschritt.tool_result(block.tool_use_id, bool(block.is_error), block.content):
                         self._fortschritt_melden(plan_geaendert=self._ist_plan(block.tool_use_id))
             elif isinstance(msg, SystemMessage) and msg.subtype == "init":
                 self._sitzung_merken(msg.data.get("session_id") if isinstance(msg.data, dict) else None)
@@ -445,12 +453,12 @@ class AnalyseSitzung:
     async def _can_use_tool(self, tool_name: str, tool_input: dict[str, Any], context: Any):
         from claude_agent_sdk import PermissionResultAllow, PermissionResultDeny
 
-        decision = guard.check_tool(
-            tool_name, tool_input, self.workspace, bash=self.auftrag.bash
-        )
+        decision = guard.check_tool(tool_name, tool_input, self.workspace, bash=self.auftrag.bash)
         if decision.erlaubt:
             return PermissionResultAllow()
-        self.log(tr("[Verweigert] {aufruf} - {grund}", aufruf=tool_summary(tool_name, tool_input), grund=decision.grund))
+        self.log(
+            tr("[Verweigert] {aufruf} - {grund}", aufruf=tool_summary(tool_name, tool_input), grund=decision.grund)
+        )
         return PermissionResultDeny(message=decision.grund)
 
 
@@ -463,14 +471,11 @@ def _cancelled_exc() -> type[BaseException]:
         return KeyboardInterrupt
 
 
-async def _run(
-    auftrag: Auftrag, skills: Sequence[Skill], emit: Callable[[str], None], status_zeilen: bool
-) -> bool:
+async def _run(auftrag: Auftrag, skills: Sequence[Skill], emit: Callable[[str], None], status_zeilen: bool) -> bool:
     async with AnalyseSitzung(auftrag, skills, emit=emit, status_zeilen=status_zeilen) as sitzung:
         if auftrag.resume:
             text = auftrag.kontext_text.strip() or tr(
-                "Setze die Analyse fort und bringe alle Dokumente sowie INDEX.md auf den "
-                "aktuellen Stand."
+                "Setze die Analyse fort und bringe alle Dokumente sowie INDEX.md auf den aktuellen Stand."
             )
             return await sitzung.nachricht(text)
         return await sitzung.start()

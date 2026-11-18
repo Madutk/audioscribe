@@ -35,10 +35,13 @@ def test_build_extract_cmd_clamps_negative_time():
 
 
 def test_marks_roundtrip_sorted(tmp_path):
-    save_marks(tmp_path, [
-        Mark(t=12.0, png="frames/00-00-12.png"),
-        Mark(t=3.5, png="frames/00-00-03.png", note="Folie 1"),
-    ])
+    save_marks(
+        tmp_path,
+        [
+            Mark(t=12.0, png="frames/00-00-12.png"),
+            Mark(t=3.5, png="frames/00-00-03.png", note="Folie 1"),
+        ],
+    )
     loaded = load_marks(tmp_path)
     assert [m.t for m in loaded] == [3.5, 12.0]  # nach t sortiert
     assert loaded[0].note == "Folie 1"

@@ -329,7 +329,15 @@ class LiveSession:
             self._sichere_alte_teile()
         self._state("laden", step=f"Whisper {o.model}")
         wie = "Metal" if o.backend == "mlx" else o.compute_type
-        events.log(tr("Lade Modell {modell} ({backend}, {geraet}, {wie}) ...", modell=o.model, backend=o.backend, geraet=o.device, wie=wie))
+        events.log(
+            tr(
+                "Lade Modell {modell} ({backend}, {geraet}, {wie}) ...",
+                modell=o.model,
+                backend=o.backend,
+                geraet=o.device,
+                wie=wie,
+            )
+        )
         started = time.monotonic()
         self._asr = self._load_asr()
         events.log(tr("Whisper {modell} geladen ({dauer})", modell=o.model, dauer=_took(started)))
@@ -367,15 +375,16 @@ class LiveSession:
                     continue
                 spuren[name] = self._wav_name(name)
                 tracks[name] = audio.open(name, device, self.dir / spuren[name])
-                events.log(tr("Spur '{name}': {geraet} ({rate} Hz)", name=name, geraet=device["name"], rate=device["rate"]))
+                events.log(
+                    tr("Spur '{name}': {geraet} ({rate} Hz)", name=name, geraet=device["name"], rate=device["rate"])
+                )
             if not tracks and not (o.monitor or o.window):
                 events.log(tr("Weder Audio noch Bildquelle gewählt - nichts aufzunehmen."))
                 return 1
 
             self._beginne_teil(spuren)
             chunkers = {
-                name: Chunker(vad, pause_s=o.pause_s, max_s=o.max_chunk_s, start=self._start_sample)
-                for name in tracks
+                name: Chunker(vad, pause_s=o.pause_s, max_s=o.max_chunk_s, start=self._start_sample) for name in tracks
             }
             if o.uebersprechen_schwelle > 0 and {"mic", "system"} <= set(tracks):
                 self._rueckblick = {name: Rueckblick() for name in ("mic", "system")}
@@ -413,7 +422,9 @@ class LiveSession:
         self._drain()
         self._threads_stop.set()
         self._finish(
-            laden_s=self._t0 - t_start, aufnahme_s=aufnahme_s, abschluss_s=time.monotonic() - stopped,
+            laden_s=self._t0 - t_start,
+            aufnahme_s=aufnahme_s,
+            abschluss_s=time.monotonic() - stopped,
             gesamt_s=time.monotonic() - t_start,
         )
         return 0
@@ -422,7 +433,10 @@ class LiveSession:
         """Transkript und Live-Fassung sichern, Fazit ablegen und melden (FR-46)."""
         self._persist()
         bilanz = self._diagnose.bilanz(
-            laden_s=laden_s, aufnahme_s=aufnahme_s, abschluss_s=abschluss_s, gesamt_s=gesamt_s,
+            laden_s=laden_s,
+            aufnahme_s=aufnahme_s,
+            abschluss_s=abschluss_s,
+            gesamt_s=gesamt_s,
             schwelle_s=self.opts.catchup_s,
         )
         bilanz = replace(bilanz, backend=self.opts.backend, geraet=self.opts.device, modell=self.opts.model)
@@ -534,9 +548,7 @@ class LiveSession:
         abdeckung = 0.0 if leer else (end - utt.start) / max(1, utt.end - utt.start)
         mic = np.zeros(0, dtype=np.float32) if leer else rb_mic.ausschnitt(utt.start, end)
         system = np.zeros(0, dtype=np.float32) if leer else rb_sys.ausschnitt(utt.start - lag_max, end - lag_min)
-        p = pruefe(
-            mic, system, dauer_s=utt.duration_s, schwelle=self.opts.uebersprechen_schwelle, abdeckung=abdeckung
-        )
+        p = pruefe(mic, system, dauer_s=utt.duration_s, schwelle=self.opts.uebersprechen_schwelle, abdeckung=abdeckung)
         if not protokoll:
             return p
         self._diagnose.uebersprechen(
@@ -555,9 +567,7 @@ class LiveSession:
         )
         return p
 
-    def _offer_partial(
-        self, name: str, chunker: Chunker, finalized: bool, now: float, last_partial: dict
-    ) -> None:
+    def _offer_partial(self, name: str, chunker: Chunker, finalized: bool, now: float, last_partial: dict) -> None:
         utt = chunker.open_utterance()
         with self._lock:
             was_open = self._open.get(name) is not None
@@ -618,9 +628,7 @@ class LiveSession:
             )
         )
         if erg.text and self._still_open(job):
-            events.emit(
-                events.PARTIAL, track=job.track, start=round(job.utterance.start_s, 2), text=erg.text
-            )
+            events.emit(events.PARTIAL, track=job.track, start=round(job.utterance.start_s, 2), text=erg.text)
 
     def _do_final(self, job: Job) -> None:
         utt = job.utterance
@@ -669,7 +677,12 @@ class LiveSession:
             self._last_delay = round(t_ende - utt.end_s, 1)
         # Vor der Meldung: was die Oberfläche gesehen hat, übersteht auch einen Absturz.
         self._journal.segment(
-            id=number, track=job.track, speaker=speaker, start=utt.start_s, end=utt.end_s, text=text,
+            id=number,
+            track=job.track,
+            speaker=speaker,
+            start=utt.start_s,
+            end=utt.end_s,
+            text=text,
             delay=self._last_delay,
         )
         events.emit(
@@ -731,9 +744,7 @@ class LiveSession:
             o.device,
             o.compute_type,
             o.language,
-            on_progress=lambda done, total: events.emit(
-                events.DOWNLOAD, model=o.model, done=done, total=total
-            ),
+            on_progress=lambda done, total: events.emit(events.DOWNLOAD, model=o.model, done=done, total=total),
             cpu_threads=o.cpu_threads,
         )
 
@@ -750,7 +761,11 @@ class LiveSession:
 
             events.log(tr("Replay statt Aufnahme (Tempo {tempo}×)", tempo=f"{o.speed:g}"))
             return ReplayCapture(
-                self.clock, system=o.replay_system, mic=o.replay_mic, speed=o.speed, on_end=self._stop.set,
+                self.clock,
+                system=o.replay_system,
+                mic=o.replay_mic,
+                speed=o.speed,
+                on_end=self._stop.set,
                 start_sample=self._start_sample,
             )
         from audioscribe.live.capture import open_capture
@@ -955,7 +970,11 @@ def finalisiere_sitzung(session_dir: str | Path, *, sentences_per_timestamp: int
     status = journal.lies_status(session_dir)
     if status is None:
         events.log(
-            tr("Keine Sitzung zum Abschließen ({datei} fehlt): {ordner}", datei=journal.STATUS_DATEI, ordner=session_dir)
+            tr(
+                "Keine Sitzung zum Abschließen ({datei} fehlt): {ordner}",
+                datei=journal.STATUS_DATEI,
+                ordner=session_dir,
+            )
         )
         return 1
     if status.get("replay"):
@@ -972,8 +991,12 @@ def finalisiere_sitzung(session_dir: str | Path, *, sentences_per_timestamp: int
     t_start = time.monotonic()
     modell = str(status.get("modell") or "")
     zustand = dict(
-        session=session_dir.name, dir=str(session_dir), model=modell, device="-",
-        sitzung_id=str(status.get("sitzung_id") or ""), titel=str(status.get("titel") or ""),
+        session=session_dir.name,
+        dir=str(session_dir),
+        model=modell,
+        device="-",
+        sitzung_id=str(status.get("sitzung_id") or ""),
+        titel=str(status.get("titel") or ""),
         art=str(status.get("art") or ""),
     )
     try:
@@ -989,9 +1012,15 @@ def finalisiere_sitzung(session_dir: str | Path, *, sentences_per_timestamp: int
         # Das Gesicherte auch an Runner und Browser - die Oberflaeche zeigt, was abgeschlossen wird.
         for s in sorted(bestand.segmente, key=lambda s: int(s["id"])):
             events.emit(
-                events.SEGMENT, id=int(s["id"]), track=s.get("track") or "system", speaker=s.get("speaker"),
-                start=round(float(s["start"]), 2), end=round(float(s["end"]), 2), text=str(s["text"]),
-                delay=s.get("delay"), restored=True,
+                events.SEGMENT,
+                id=int(s["id"]),
+                track=s.get("track") or "system",
+                speaker=s.get("speaker"),
+                start=round(float(s["start"]), 2),
+                end=round(float(s["end"]), 2),
+                text=str(s["text"]),
+                delay=s.get("delay"),
+                restored=True,
             )
         for mark in marks:
             if mark.id is not None:

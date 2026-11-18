@@ -50,9 +50,7 @@ def mac_chip() -> str | None:
     return _sysctl("machdep.cpu.brand_string") or platform.processor() or None
 
 
-def evaluate_mac_platform(
-    version: str, machine: str, translated: bool, chip: str | None, host: str
-) -> CheckResult:
+def evaluate_mac_platform(version: str, machine: str, translated: bool, chip: str | None, host: str) -> CheckResult:
     """Reine Bewertung der macOS-Plattform (testbar ohne Mac)."""
     teile = [f"macOS {version or '?'} ({machine}{', ' + chip if chip else ''})", tr("Terminal-App: {host}", host=host)]
     try:
@@ -179,17 +177,24 @@ def evaluate_device(
     if device.startswith("cuda"):
         label = f"auto={device}" if raw == "auto" else device
         gpu = f" ({gpu_name})" if gpu_name else ""
-        return CheckResult(
-            "OK", "PyTorch/Device", f"{build} -> {label}{gpu}, compute_type={compute_type}"
-        )
+        return CheckResult("OK", "PyTorch/Device", f"{build} -> {label}{gpu}, compute_type={compute_type}")
 
     if raw == "auto":
-        detail = tr("{build} -> auto=cpu, CPU-Fallback (langsam), compute_type={compute_type}", build=build, compute_type=compute_type)
+        detail = tr(
+            "{build} -> auto=cpu, CPU-Fallback (langsam), compute_type={compute_type}",
+            build=build,
+            compute_type=compute_type,
+        )
     else:
         hint = tr(" — Hinweis: CUDA waere verfuegbar") if cuda_ok else ""
-        detail = tr(
-            "{build} -> cpu (explizit; langsam), compute_type={compute_type}", build=build, compute_type=compute_type
-        ) + hint
+        detail = (
+            tr(
+                "{build} -> cpu (explizit; langsam), compute_type={compute_type}",
+                build=build,
+                compute_type=compute_type,
+            )
+            + hint
+        )
     if darwin:
         if not mps_ok:
             detail += tr(" — Tipp: arm64-Python und macOS >= 13 fuer MPS/MLX")
@@ -308,9 +313,7 @@ def _check_asr_backend() -> CheckResult:
 
 def _check_diarization() -> CheckResult:
     if not settings.enable_diarization:
-        return CheckResult(
-            "WARN", tr("Diarisierung"), tr("deaktiviert (--no-diarize / AUDIOSCRIBE_DIARIZATION=0)")
-        )
+        return CheckResult("WARN", tr("Diarisierung"), tr("deaktiviert (--no-diarize / AUDIOSCRIBE_DIARIZATION=0)"))
     try:
         import pyannote.audio  # noqa: F401
     except ImportError as exc:
@@ -380,9 +383,7 @@ def _check_agent() -> CheckResult:
     try:
         import claude_agent_sdk
     except ImportError:
-        return CheckResult(
-            "WARN", tr("KI-Analyse"), tr("Claude Agent SDK fehlt (optional) -> 'uv sync --extra agent'")
-        )
+        return CheckResult("WARN", tr("KI-Analyse"), tr("Claude Agent SDK fehlt (optional) -> 'uv sync --extra agent'"))
     from audioscribe.agent.skills import discover_skills
 
     # Das SDK bringt eine eigene Claude-Code-CLI mit; sonst wird die installierte benutzt.
@@ -499,9 +500,7 @@ def _check_live() -> CheckResult:
             pyobjc_fehlt=berechtigungen.pyobjc_fehlt(),
         )
         return _live_inventory(teile, "OK" if status == "OK" else "WARN")
-    return CheckResult(
-        "WARN", "Live", tr("nur unter nativem Windows (WASAPI) und macOS (ScreenCaptureKit) verfuegbar")
-    )
+    return CheckResult("WARN", "Live", tr("nur unter nativem Windows (WASAPI) und macOS (ScreenCaptureKit) verfuegbar"))
 
 
 def _bekannte_projekte(saved: dict, limit: int = 5) -> list[tuple[str, Path | None]]:
@@ -532,12 +531,19 @@ def _check_souffleur() -> CheckResult:
     if projekte and konfig.wiki_dir is None:
         # Seit den Projekten (PRD §21) gehoert das Wiki zum Projekt - geprueft werden die bekannten.
         zustaende = [(name, pruefe_wiki(wiki) if wiki is not None else None) for name, wiki in projekte]
-        teile = [tr("Wiki je Projekt: {liste}", liste=", ".join(
-            tr("{name} (ohne Wiki)", name=name) if w is None
-            else tr("{name} ({seiten} Seiten)", name=name, seiten=w.seiten) if w.zustand == ZUSTAND_OK
-            else tr("{name} (nicht erreichbar)", name=name)
-            for name, w in zustaende
-        ))]
+        teile = [
+            tr(
+                "Wiki je Projekt: {liste}",
+                liste=", ".join(
+                    tr("{name} (ohne Wiki)", name=name)
+                    if w is None
+                    else tr("{name} ({seiten} Seiten)", name=name, seiten=w.seiten)
+                    if w.zustand == ZUSTAND_OK
+                    else tr("{name} (nicht erreichbar)", name=name)
+                    for name, w in zustaende
+                ),
+            )
+        ]
         status = "OK" if all(w is None or w.zustand == ZUSTAND_OK for _, w in zustaende) else "WARN"
     else:
         wiki = pruefe_wiki(konfig.wiki_dir)

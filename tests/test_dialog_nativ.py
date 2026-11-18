@@ -21,7 +21,7 @@ def test_mac_kommando_und_antworten(monkeypatch, tmp_path):
     cmd = dialog_nativ.kommando(tmp_path, 'Wiki "A" wählen')
     assert cmd[0] == "osascript" and "activate" in cmd
     wahl = cmd[cmd.index("-e", 4) + 1]
-    assert wahl.startswith("set f to choose folder with prompt \"Wiki \\\"A\\\" wählen\"")
+    assert wahl.startswith('set f to choose folder with prompt "Wiki \\"A\\" wählen"')
     assert f'default location (POSIX file "{tmp_path}")' in wahl
     # Kein Startordner, wenn es ihn nicht gibt.
     assert "default location" not in " ".join(dialog_nativ.kommando(tmp_path / "nix", "x"))
@@ -63,7 +63,9 @@ def test_posix_kommando_verfuegbarkeit_und_antworten(monkeypatch, tmp_path):
 
 
 def test_verfuegbar_mac_und_windows(monkeypatch):
-    monkeypatch.setattr(dialog_nativ.shutil, "which", lambda name: "/usr/bin/osascript" if name == "osascript" else None)
+    monkeypatch.setattr(
+        dialog_nativ.shutil, "which", lambda name: "/usr/bin/osascript" if name == "osascript" else None
+    )
     monkeypatch.setattr(dialog_nativ, "PLATTFORM", "mac")
     assert dialog_nativ.verfuegbar() is True
     monkeypatch.setattr(dialog_nativ, "PLATTFORM", "windows")
@@ -115,7 +117,9 @@ def client(tmp_path, monkeypatch):
 def test_route_liefert_pfad_oder_rueckfall(client, monkeypatch, tmp_path):
     monkeypatch.setattr(dialog_nativ, "verfuegbar", lambda: True)
     gefragt = {}
-    monkeypatch.setattr(dialog_nativ, "waehle_ordner", lambda start, titel: gefragt.update(start=start, titel=titel) or tmp_path)
+    monkeypatch.setattr(
+        dialog_nativ, "waehle_ordner", lambda start, titel: gefragt.update(start=start, titel=titel) or tmp_path
+    )
     assert client.get("/api/kontext").json()["dialog_nativ"] is True
     r = client.post("/api/dialog/ordner", json={"start": str(tmp_path), "titel": "Wiki wählen"})
     assert r.json() == {"pfad": str(tmp_path), "verfuegbar": True}
@@ -123,12 +127,17 @@ def test_route_liefert_pfad_oder_rueckfall(client, monkeypatch, tmp_path):
     # Abgebrochen
     monkeypatch.setattr(dialog_nativ, "waehle_ordner", lambda start, titel: None)
     assert client.post("/api/dialog/ordner", json={}).json() == {"pfad": None, "verfuegbar": True}
+
     # Dialog kaputt: Rueckfall auf den eingebauten Dialog
     def kaputt(start, titel):
         raise dialog_nativ.DialogFehler("kein Desktop")
 
     monkeypatch.setattr(dialog_nativ, "waehle_ordner", kaputt)
-    assert client.post("/api/dialog/ordner", json={}).json() == {"pfad": None, "verfuegbar": False, "fehler": "kein Desktop"}
+    assert client.post("/api/dialog/ordner", json={}).json() == {
+        "pfad": None,
+        "verfuegbar": False,
+        "fehler": "kein Desktop",
+    }
     # Nicht verfuegbar
     monkeypatch.setattr(dialog_nativ, "verfuegbar", lambda: False)
     assert client.post("/api/dialog/ordner", json={}).json() == {"pfad": None, "verfuegbar": False}

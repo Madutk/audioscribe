@@ -26,9 +26,7 @@ def test_video_and_audio_suffix_sets_are_disjoint():
 
 
 def test_parse_ffmpeg_duration_liest_stunden_minuten_sekunden():
-    assert parse_ffmpeg_duration(
-        "  Duration: 00:06:58.97, start: 0.000000, bitrate: 4713 kb/s"
-    ) == 418.97
+    assert parse_ffmpeg_duration("  Duration: 00:06:58.97, start: 0.000000, bitrate: 4713 kb/s") == 418.97
     assert parse_ffmpeg_duration("  Duration: 02:00:00.00, start: 0.0") == 7200.0
 
 

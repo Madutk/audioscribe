@@ -161,11 +161,7 @@ def batch_eta(
         "unknown_count": sum(1 for f in files if not f.duration and f.state in (WAITING, RUNNING)),
     }
 
-    samples = [
-        (f.duration, f.seconds)
-        for f in files
-        if f.state == DONE and f.duration and f.seconds is not None
-    ]
+    samples = [(f.duration, f.seconds) for f in files if f.state == DONE and f.duration and f.seconds is not None]
     if len(samples) < _ETA_MIN_DONE:
         return balance
     fit = _fit_cost(samples)
@@ -332,14 +328,8 @@ class BatchRunner(_ProcessRunner):
             lines, new_offset = self._lines_since(offset)
             current = state.current
 
-            elapsed_current = (
-                time.monotonic() - state.file_started if state.file_started is not None else 0.0
-            )
-            eta = (
-                batch_eta(state.files, current, elapsed_current)
-                if state.running
-                else None
-            )
+            elapsed_current = time.monotonic() - state.file_started if state.file_started is not None else 0.0
+            eta = batch_eta(state.files, current, elapsed_current) if state.running else None
             return {
                 "running": state.running,
                 "cancelled": state.cancelled,
@@ -396,9 +386,7 @@ class BatchRunner(_ProcessRunner):
                     self._set_file(index, state=CANCELLED, returncode=code, seconds=elapsed)
                     break
                 if code == 0:
-                    self._set_file(
-                        index, state=DONE, returncode=0, seconds=elapsed, fraction=1.0
-                    )
+                    self._set_file(index, state=DONE, returncode=0, seconds=elapsed, fraction=1.0)
                     self._append(tr("   -> fertig in {sekunden}s", sekunden=elapsed))
                 else:
                     self._set_file(index, state=FAILED, returncode=code, seconds=elapsed)
@@ -890,7 +878,12 @@ class LiveRunner(_ProcessRunner):
             if code != 0 and fertig and not self._discard:
                 # Das Kind hatte die Sitzung schon gesichert ("fertig") und starb erst beim Abbau
                 # (Signal, haengender Audio-Stream): die Sitzung ist vollstaendig - kein Fehler.
-                self._append(tr("Aufnahmeprozess endete nach dem Sichern mit Code {code} - die Sitzung ist vollständig.", code=code))
+                self._append(
+                    tr(
+                        "Aufnahmeprozess endete nach dem Sichern mit Code {code} - die Sitzung ist vollständig.",
+                        code=code,
+                    )
+                )
                 code = 0
             if code == 0 and opts.refine and session and not aborted:
                 with self._lock:
@@ -919,7 +912,9 @@ class LiveRunner(_ProcessRunner):
                 )
                 if code != 0:
                     self._info["error"] = self._last_line
-            self._append("\n" + (tr("Sitzung beendet.") if code == 0 else tr("Beendet mit Exit-Code {code}.", code=code)))
+            self._append(
+                "\n" + (tr("Sitzung beendet.") if code == 0 else tr("Beendet mit Exit-Code {code}.", code=code))
+            )
 
     def _nachlauf(self, code: int) -> None:
         """Nach einem sauberen Ende: ``on_ende`` ausfuehren (z. B. Wiki-Ablage "immer"). Solange
@@ -961,9 +956,7 @@ class LiveRunner(_ProcessRunner):
         with self._lock:
             souffleur = self._souffleur
             if typ == "state":
-                self._info.update(
-                    {k: event.get(k) for k in ("phase", "session", "dir", "model", "device", "step")}
-                )
+                self._info.update({k: event.get(k) for k in ("phase", "session", "dir", "model", "device", "step")})
                 for k in ("sitzung_id", "titel", "art"):
                     if event.get(k):
                         self._info[k] = event[k]

@@ -192,7 +192,13 @@ class TranskriptReplaySession:
         if o.raffen:
             original_s = alle[-1].end
             alle = raffe(alle)
-            events.log(tr("Pausen gerafft: {vorher} s -> {nachher} s", vorher=f"{original_s:.0f}", nachher=f"{alle[-1].end:.0f}"))
+            events.log(
+                tr(
+                    "Pausen gerafft: {vorher} s -> {nachher} s",
+                    vorher=f"{original_s:.0f}",
+                    nachher=f"{alle[-1].end:.0f}",
+                )
+            )
         events.log(
             tr(
                 "Replay von {quelle}: {anzahl} Absätze, {dauer} s, Tempo {tempo}×, Verzögerung {verzoegerung} s",
@@ -207,8 +213,14 @@ class TranskriptReplaySession:
         # Zustandsdatei wie bei einer echten Sitzung (PRD §21) - als Replay gekennzeichnet:
         # ein Replay wird nie fortgesetzt und taucht nicht unter den unterbrochenen auf.
         journal.schreibe_status(
-            self.dir, sitzung_id=self._sitzung_id, status=journal.LAEUFT, titel=o.titel.strip(), art=o.art.strip(), sprache="de",
-            modell=MODELL_REPLAY, replay=True,
+            self.dir,
+            sitzung_id=self._sitzung_id,
+            status=journal.LAEUFT,
+            titel=o.titel.strip(),
+            art=o.art.strip(),
+            sprache="de",
+            modell=MODELL_REPLAY,
+            replay=True,
         )
         threading.Thread(target=self._watch_stdin, daemon=True).start()
 
@@ -231,8 +243,15 @@ class TranskriptReplaySession:
                 if jetzt - last_stats >= 1.0:
                     last_stats = jetzt
                     events.emit(
-                        events.STATS, elapsed=round(jetzt, 1), backlog=0.0, delay=o.delay_s,
-                        level_mic=None, level_sys=None, partials_paused=False, rtf=None, catchup=False,
+                        events.STATS,
+                        elapsed=round(jetzt, 1),
+                        backlog=0.0,
+                        delay=o.delay_s,
+                        level_mic=None,
+                        level_sys=None,
+                        partials_paused=False,
+                        rtf=None,
+                        catchup=False,
                     )
                 if time.monotonic() - last_persist >= _PERSIST_S:
                     self._persist()
@@ -276,10 +295,18 @@ class TranskriptReplaySession:
         self._persist()
         audio_s = sum(s.end - s.start for s in self._segments)
         bilanz = LiveBilanz(
-            laden_s=laden_s, aufnahme_s=aufnahme_s, abschluss_s=0.0, gesamt_s=gesamt_s,
-            abschnitte=len(self._segments), audio_s=audio_s,
-            verzoegerung_mittel_s=self.opts.delay_s, verzoegerung_median_s=self.opts.delay_s,
-            verzoegerung_max_s=self.opts.delay_s, backend=MODE_REPLAY, geraet="-", modell=MODELL_REPLAY,
+            laden_s=laden_s,
+            aufnahme_s=aufnahme_s,
+            abschluss_s=0.0,
+            gesamt_s=gesamt_s,
+            abschnitte=len(self._segments),
+            audio_s=audio_s,
+            verzoegerung_mittel_s=self.opts.delay_s,
+            verzoegerung_median_s=self.opts.delay_s,
+            verzoegerung_max_s=self.opts.delay_s,
+            backend=MODE_REPLAY,
+            geraet="-",
+            modell=MODELL_REPLAY,
         )
         keep_live_copy(self.dir, overwrite=True)
         save_bilanz(self.dir, TEIL_LIVE, bilanz)
@@ -294,8 +321,16 @@ class TranskriptReplaySession:
         # Oberfläche sonst auf einen Sitzungsordner, der nie angelegt wurde.
         ordner = {"session": self.dir.name, "dir": str(self.dir)} if self.dir.is_dir() else {}
         events.emit(
-            events.STATE, phase=phase, model=MODELL_REPLAY, device="-", replay=True,
-            sitzung_id=self._sitzung_id, titel=self.opts.titel.strip(), art=self.opts.art.strip(), **ordner, **extra,
+            events.STATE,
+            phase=phase,
+            model=MODELL_REPLAY,
+            device="-",
+            replay=True,
+            sitzung_id=self._sitzung_id,
+            titel=self.opts.titel.strip(),
+            art=self.opts.art.strip(),
+            **ordner,
+            **extra,
         )
 
     def _watch_stdin(self) -> None:

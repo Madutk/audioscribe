@@ -47,6 +47,7 @@ def _zulaessig(dienst: str) -> str:
     """Unzulässiger Dienst (z. B. ``claude-agent`` aus einer alten Datei) -> lokale KI."""
     return dienst if variante.dienst_zulaessig(dienst) else variante.DIENST_LOKAL
 
+
 # Schlüssel im Einstellungsstand je globalem Wert.
 _STATE_KEY = {
     "ki_dienst": "souffleur_backend",

@@ -53,7 +53,13 @@ SCHEMA = {
                     "segment_id": {"type": "integer"},
                     "grund": {
                         "type": "string",
-                        "enum": ["smalltalk", "organisatorisch", "passt_zum_wiki", "rhetorische_frage", "unverstaendlich"],
+                        "enum": [
+                            "smalltalk",
+                            "organisatorisch",
+                            "passt_zum_wiki",
+                            "rhetorische_frage",
+                            "unverstaendlich",
+                        ],
                     },
                 },
             },
@@ -166,8 +172,15 @@ def fundstellen_mit_ids(fundstellen: list[Fundstelle]) -> list[dict]:
     """Fundstellen als Dicts mit IDs F1..Fk - so gehen sie in Prompt und KiAuftrag.kontext."""
     out = []
     for i, f in enumerate(fundstellen, start=1):
-        out.append({"id": f"F{i}", "datei": f.datei, "ueberschrift": f.ueberschrift, "zeile": f.zeile,
-                    "auszug": f.auszug[:AUSZUG_MAX]})
+        out.append(
+            {
+                "id": f"F{i}",
+                "datei": f.datei,
+                "ueberschrift": f.ueberschrift,
+                "zeile": f.zeile,
+                "auszug": f.auszug[:AUSZUG_MAX],
+            }
+        )
     return out
 
 

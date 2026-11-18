@@ -148,7 +148,9 @@ class Souffleur:
             if lf is not None:
                 with self._lock:
                     self._leitfaden = lf
-                self._log(tr("Souffleur: Leitfaden der unterbrochenen Sitzung übernommen ({n} Punkte)", n=len(lf.punkte)))
+                self._log(
+                    tr("Souffleur: Leitfaden der unterbrochenen Sitzung übernommen ({n} Punkte)", n=len(lf.punkte))
+                )
             elif self._leitfaden is not None:
                 self._schreibe_leitfaden()
             for karte in self._mitdenker.uebernehme(self.session_dir):
@@ -161,7 +163,9 @@ class Souffleur:
             self._ki_aufrufe = int(stand.bilanz.get("ki_aufrufe") or 0)
             self._ki_fehler = int(stand.bilanz.get("ki_fehler") or 0)
             self._fenster_id = int(stand.bilanz.get("fenster") or 0)
-        self._log(tr("Souffleur: {anzahl} Markierungen der unterbrochenen Sitzung übernommen", anzahl=len(stand.markierungen)))
+        self._log(
+            tr("Souffleur: {anzahl} Markierungen der unterbrochenen Sitzung übernommen", anzahl=len(stand.markierungen))
+        )
         for m in stand.markierungen:
             self.on_hinweis(m.als_dict())
 
@@ -177,9 +181,13 @@ class Souffleur:
             self._verknuepfe_leitfaden(index)
             dauer = f"{time.monotonic() - t0:.1f}"
             if gen > 1:
-                self._log(tr("Souffleur: Wiki gewechselt in {dauer} s - {meldung}", dauer=dauer, meldung=index.status.meldung))
+                self._log(
+                    tr("Souffleur: Wiki gewechselt in {dauer} s - {meldung}", dauer=dauer, meldung=index.status.meldung)
+                )
             else:
-                self._log(tr("Souffleur: Wiki geladen in {dauer} s - {meldung}", dauer=dauer, meldung=index.status.meldung))
+                self._log(
+                    tr("Souffleur: Wiki geladen in {dauer} s - {meldung}", dauer=dauer, meldung=index.status.meldung)
+                )
             for w in index.status.warnungen:
                 self._log(tr("Souffleur: Wiki-Warnung: {warnung}", warnung=w))
         except Exception:  # noqa: BLE001 - jeder Fehler wird zum Zustand, nie zum Absturz
@@ -307,9 +315,14 @@ class Souffleur:
             with self._lock:
                 if any(b.datei == shot["file"] for b in self._bilder):
                     continue
-                bild = bt.Bild(id=f"B{len(self._bilder) + 1}", mark_id=int(shot.get("id") or 0),
-                               t=float(shot.get("t") or 0.0), datei=str(shot["file"]), kind=str(shot.get("kind") or ""),
-                               text=text)
+                bild = bt.Bild(
+                    id=f"B{len(self._bilder) + 1}",
+                    mark_id=int(shot.get("id") or 0),
+                    t=float(shot.get("t") or 0.0),
+                    datei=str(shot["file"]),
+                    kind=str(shot.get("kind") or ""),
+                    text=text,
+                )
                 self._bilder.append(bild)
                 if shot.get("restored"):
                     self._bilder_gezeigt.add(bild.id)
@@ -326,11 +339,17 @@ class Souffleur:
         """Bilder fürs Fenster: neue (noch nie im Prompt) bis kurz nach dem Fensterende, dazu
         bereits gezeigte aus dem Kontextzeitraum - die jüngsten ``bilder_im_prompt``. Aufruf unter Lock.
         Zweiter Wert: ob ein neues dabei ist."""
-        kandidaten = [
-            b for b in self._bilder
-            if b.text.strip() and b.t <= bis + _BILD_NACHLAUF_S
-            and (b.id not in self._bilder_gezeigt or b.t >= von - self.konfig.kontext_s)
-        ][-max(0, self.konfig.bilder_im_prompt):] if self.konfig.bilder_im_prompt > 0 else []
+        kandidaten = (
+            [
+                b
+                for b in self._bilder
+                if b.text.strip()
+                and b.t <= bis + _BILD_NACHLAUF_S
+                and (b.id not in self._bilder_gezeigt or b.t >= von - self.konfig.kontext_s)
+            ][-max(0, self.konfig.bilder_im_prompt) :]
+            if self.konfig.bilder_im_prompt > 0
+            else []
+        )
         neu = any(b.id not in self._bilder_gezeigt for b in kandidaten)
         self._bilder_gezeigt.update(b.id for b in kandidaten)
         return kandidaten, neu
@@ -368,7 +387,9 @@ class Souffleur:
                 "wiki": self._wiki,
                 "segmente": [dict(s) for s in self._segmente if float(s["end"]) >= von],
                 "markierungen": [m.als_dict() for m in self._markierungen if m.t_start >= von],
-                "leitfaden": [{"id": p.id, "text": p.text, "status": p.status} for p in lf.offene()] if lf is not None else [],
+                "leitfaden": [{"id": p.id, "text": p.text, "status": p.status} for p in lf.offene()]
+                if lf is not None
+                else [],
                 "suchbegriffe": lf.suchbegriffe() if lf is not None else [],
             }
 
@@ -424,15 +445,20 @@ class Souffleur:
             lf = self._leitfaden
             lf_wiki = lf.wiki_im_gespraech(text) if lf is not None and wiki is not None else {}
             lf_begriffe = lf.suchbegriffe() if lf is not None else []
-            lf_punkte = [{"id": p.id, "text": p.text, "status": p.status} for p in lf.offene()] if lf is not None else []
+            lf_punkte = (
+                [{"id": p.id, "text": p.text, "status": p.status} for p in lf.offene()] if lf is not None else []
+            )
             bilder, bild_neu = self._bilder_fuer(float(fenster[0]["start"]), float(fenster[-1]["end"]))
         mit_lf = bool(lf_punkte)
         mit_bildern = bool(bilder)
         bilder_prompt = [{"id": b.id, "t": b.t, "kind": b.kind, "text": b.text[:_BILD_PROMPT_MAX]} for b in bilder]
         t_verarbeitung = self.uhr.jetzt()
         diag: dict = {
-            "fenster_id": fenster_id, "t_von": float(fenster[0]["start"]), "t_bis": float(fenster[-1]["end"]),
-            "segment_ids": [int(s["id"]) for s in fenster], "t_verarbeitung": t_verarbeitung,
+            "fenster_id": fenster_id,
+            "t_von": float(fenster[0]["start"]),
+            "t_bis": float(fenster[-1]["end"]),
+            "segment_ids": [int(s["id"]) for s in fenster],
+            "t_verarbeitung": t_verarbeitung,
             **({"bilder": [b.id for b in bilder]} if bilder else {}),
         }
         # Vorfilter gegen Smalltalk-Fetzen - eine Frage ist aber immer einen Aufruf wert, und
@@ -472,29 +498,47 @@ class Souffleur:
             glossar = wiki.glossar.eintraege
         fmit = prompt_modul.fundstellen_mit_ids(fundstellen)
         f_id = {(f.datei, f.zeile): fmit[i]["id"] for i, f in enumerate(fundstellen)}
-        wiki_ids = {pid: [f_id[k] for w in ws if (k := (str(w.get("datei")), int(w.get("zeile") or 0))) in f_id]
-                    for pid, ws in lf_wiki.items()}
+        wiki_ids = {
+            pid: [f_id[k] for w in ws if (k := (str(w.get("datei")), int(w.get("zeile") or 0))) in f_id]
+            for pid, ws in lf_wiki.items()
+        }
         lf_text, ausgelassen = "", 0
         if lf is not None and mit_lf:
             with self._lock:
                 lf_text, ausgelassen = lf_modul.prompt_abschnitt_mit_rest(
-                    lf, englisch=prompt_modul.sprache() == "en", wiki_ids=wiki_ids, vorrang=lf.im_fenster(text))
+                    lf, englisch=prompt_modul.sprache() == "en", wiki_ids=wiki_ids, vorrang=lf.im_fenster(text)
+                )
         if ausgelassen and not self._lf_gekappt_gemeldet:
             self._lf_gekappt_gemeldet = True
-            self._log(tr("Souffleur: Leitfaden zu lang für ein Fenster – je Fenster gehen die passendsten offenen "
-                         "Punkte mit, diesmal ohne {n}", n=ausgelassen))
+            self._log(
+                tr(
+                    "Souffleur: Leitfaden zu lang für ein Fenster – je Fenster gehen die passendsten offenen "
+                    "Punkte mit, diesmal ohne {n}",
+                    n=ausgelassen,
+                )
+            )
         if ausgelassen:
             diag["leitfaden_ausgelassen"] = ausgelassen
         auftrag = KiAuftrag(
             system=prompt_modul.system_prompt(mit_leitfaden=mit_lf, mit_bildern=mit_bildern),
             prompt=prompt_modul.baue_prompt(
-                fenster, kontext=kontext, fundstellen=fmit, glossar=glossar, wiki_verknuepft=wiki is not None,
-                leitfaden=lf_text if mit_lf else "", bilder=bilder_prompt,
+                fenster,
+                kontext=kontext,
+                fundstellen=fmit,
+                glossar=glossar,
+                wiki_verknuepft=wiki is not None,
+                leitfaden=lf_text if mit_lf else "",
+                bilder=bilder_prompt,
             ),
             schema=prompt_modul.schema(mit_leitfaden=mit_lf, mit_bildern=mit_bildern),
-            kontext={"art": "abgleich", "segmente": fenster, "fundstellen": fmit, "glossar": glossar,
-                     **({"leitfaden": lf_punkte} if mit_lf else {}),
-                     **({"bilder": bilder_prompt} if mit_bildern else {})},
+            kontext={
+                "art": "abgleich",
+                "segmente": fenster,
+                "fundstellen": fmit,
+                "glossar": glossar,
+                **({"leitfaden": lf_punkte} if mit_lf else {}),
+                **({"bilder": bilder_prompt} if mit_bildern else {}),
+            },
             timeout_s=self.konfig.ki_timeout_s,
         )
         try:
@@ -509,7 +553,9 @@ class Souffleur:
                     self._pause_bis = time.monotonic() + _FEHLER_PAUSE_S
                     self._ki_meldung = tr(
                         "KI-Fehler ({anzahl} in Folge), Pause {pause} s: {fehler}",
-                        anzahl=self._fehler_folge, pause=f"{_FEHLER_PAUSE_S:.0f}", fehler=exc,
+                        anzahl=self._fehler_folge,
+                        pause=f"{_FEHLER_PAUSE_S:.0f}",
+                        fehler=exc,
                     )
             self._log(f"Souffleur: {self._ki_meldung}")
             self._diagnose({**diag, "treffer": len(fundstellen), "suche_s": round(suche_s, 3), "fehler": str(exc)})
@@ -527,39 +573,63 @@ class Souffleur:
         for befund in antwort.daten.get("befunde", []):
             m = self._pruefe_befund(befund, je_id, fund_je_id, bild_je_id)
             if m is None:
-                verworfen.append({"segment_id": befund.get("segment_id"), "art": befund.get("art"), "grund": "ungueltig"})
+                verworfen.append(
+                    {"segment_id": befund.get("segment_id"), "art": befund.get("art"), "grund": "ungueltig"}
+                )
                 continue
             if self._ist_dublette(m):
                 verworfen.append({"segment_id": m.segment_id, "art": m.art, "grund": "dublette"})
                 continue
-            self._bemesse(m, je_id[m.segment_id], t_verarbeitung=t_verarbeitung, suche_s=suche_s,
-                          ki_start_s=antwort.start_s, ki_antwort_s=antwort.antwort_s, fenster_id=fenster_id)
+            self._bemesse(
+                m,
+                je_id[m.segment_id],
+                t_verarbeitung=t_verarbeitung,
+                suche_s=suche_s,
+                ki_start_s=antwort.start_s,
+                ki_antwort_s=antwort.antwort_s,
+                fenster_id=fenster_id,
+            )
             with self._lock:
                 m.id = len(self._markierungen) + 1
                 self._markierungen.append(m)
                 self._letzte_verzoegerung = m.verzoegerung_s
             neue.append(m)
         punkte_neu, punkte_verworfen = (
-            self._uebernehme_punkte(antwort.daten.get("punkte") or [], je_id, bild_je_id, fund_je_id) if mit_lf else ([], []))
+            self._uebernehme_punkte(antwort.daten.get("punkte") or [], je_id, bild_je_id, fund_je_id)
+            if mit_lf
+            else ([], [])
+        )
         for m in neue:
             start = tr(", Start {start} s", start=f"{m.ki_start_s:.1f}") if m.ki_start_s else ""
-            self._log(tr(
-                "Souffleur: {art} bei {t} s (Hinweis nach {verzoegerung} s, KI {ki} s{start})",
-                art=mk.art_label(m.art), t=f"{m.t_start:.0f}", verzoegerung=f"{m.verzoegerung_s or 0:.1f}",
-                ki=f"{m.ki_antwort_s or 0:.1f}", start=start,
-            ))
+            self._log(
+                tr(
+                    "Souffleur: {art} bei {t} s (Hinweis nach {verzoegerung} s, KI {ki} s{start})",
+                    art=mk.art_label(m.art),
+                    t=f"{m.t_start:.0f}",
+                    verzoegerung=f"{m.verzoegerung_s or 0:.1f}",
+                    ki=f"{m.ki_antwort_s or 0:.1f}",
+                    start=start,
+                )
+            )
             try:
                 self.on_hinweis(m.als_dict())
             except Exception as exc:  # noqa: BLE001
                 self._log(tr("Souffleur: Hinweis nicht zugestellt: {fehler}", fehler=exc))
-        self._diagnose({
-            **diag, "treffer": len(fundstellen), "suche_s": round(suche_s, 3),
-            "ki_start_s": round(antwort.start_s, 3), "ki_antwort_s": round(antwort.antwort_s, 3),
-            "befunde": len(antwort.daten.get("befunde", [])), "markiert": [m.id for m in neue], "verworfen": verworfen,
-            "uebergangen": antwort.daten.get("uebergangen", []),
-            **({"leitfaden": punkte_neu, "leitfaden_verworfen": punkte_verworfen} if mit_lf else {}),
-            **({"verbrauch": antwort.verbrauch.als_dict()} if antwort.verbrauch is not None else {}),
-        })
+        self._diagnose(
+            {
+                **diag,
+                "treffer": len(fundstellen),
+                "suche_s": round(suche_s, 3),
+                "ki_start_s": round(antwort.start_s, 3),
+                "ki_antwort_s": round(antwort.antwort_s, 3),
+                "befunde": len(antwort.daten.get("befunde", [])),
+                "markiert": [m.id for m in neue],
+                "verworfen": verworfen,
+                "uebergangen": antwort.daten.get("uebergangen", []),
+                **({"leitfaden": punkte_neu, "leitfaden_verworfen": punkte_verworfen} if mit_lf else {}),
+                **({"verbrauch": antwort.verbrauch.als_dict()} if antwort.verbrauch is not None else {}),
+            }
+        )
         if neue:
             self._schreibe_stand()
         elif punkte_neu:
@@ -567,8 +637,13 @@ class Souffleur:
 
     # --- Leitfaden (Meeting-Vorbereitung) ------------------------------------------------
 
-    def _uebernehme_punkte(self, roh: list, je_id: dict[int, dict], bild_je_id: dict[str, bt.Bild] | None = None,
-                           fund_je_id: dict | None = None) -> tuple[list[dict], list[dict]]:
+    def _uebernehme_punkte(
+        self,
+        roh: list,
+        je_id: dict[int, dict],
+        bild_je_id: dict[str, bt.Bild] | None = None,
+        fund_je_id: dict | None = None,
+    ) -> tuple[list[dict], list[dict]]:
         """Leitfaden-Meldungen der KI prüfen wie Befunde: der Punkt muss existieren, die Aussage
         wörtlich im genannten Segment stehen - oder, als Beleg vom Bildschirm, wörtlich im Text des
         genannten Standbilds. Erst dann ändert sich der Status."""
@@ -605,7 +680,12 @@ class Souffleur:
                 treffer = (fund_je_id or {}).get(abw_id)
                 if treffer is not None and abw_zitat and _norm(abw_zitat) in _norm(treffer[0]["auszug"]):
                     f = treffer[1]
-                    abweichung = {"datei": f.datei, "ueberschrift": f.ueberschrift, "zeile": f.zeile, "zitat": abw_zitat}
+                    abweichung = {
+                        "datei": f.datei,
+                        "ueberschrift": f.ueberschrift,
+                        "zeile": f.zeile,
+                        "zitat": abw_zitat,
+                    }
                 else:
                     verworfen.append({"punkt_id": pid, "grund": "abweichung_ohne_beleg"})
             with self._lock:
@@ -614,25 +694,52 @@ class Souffleur:
                     verworfen.append({"punkt_id": pid, "grund": "unbekannt"})
                     continue
                 vorher = lf.punkt(pid).status
-                geaendert = lf.melde_ki(pid, status, segment_id=segment_id, aussage=aussage,
-                                        stand=str(eintrag.get("stand") or ""), t=t, bild=beleg_bild,
-                                        abweichung=abweichung)
+                geaendert = lf.melde_ki(
+                    pid,
+                    status,
+                    segment_id=segment_id,
+                    aussage=aussage,
+                    stand=str(eintrag.get("stand") or ""),
+                    t=t,
+                    bild=beleg_bild,
+                    abweichung=abweichung,
+                )
             if not geaendert:
                 verworfen.append({"punkt_id": pid, "grund": "unveraendert"})
                 continue
-            neu.append({"punkt_id": pid, "status": status, "segment_id": segment_id,
-                        **({"bild_id": beleg_bild["id"]} if beleg_bild else {}),
-                        **({"abweichung": abw_id} if abweichung else {})})
+            neu.append(
+                {
+                    "punkt_id": pid,
+                    "status": status,
+                    "segment_id": segment_id,
+                    **({"bild_id": beleg_bild["id"]} if beleg_bild else {}),
+                    **({"abweichung": abw_id} if abweichung else {}),
+                }
+            )
             if abweichung:
-                self._log(tr("Souffleur: Leitfaden {punkt} weicht vom Wiki ab ({fundstelle})", punkt=pid,
-                             fundstelle=f"{abweichung['datei']} › {abweichung['ueberschrift']}"))
+                self._log(
+                    tr(
+                        "Souffleur: Leitfaden {punkt} weicht vom Wiki ab ({fundstelle})",
+                        punkt=pid,
+                        fundstelle=f"{abweichung['datei']} › {abweichung['ueberschrift']}",
+                    )
+                )
             if status != vorher:
                 wort = tr("geklärt") if status == lf_modul.GEKLAERT else tr("angesprochen")
                 if beleg_bild:
-                    self._log(tr("Souffleur: Leitfaden {punkt} {status} vom Bildschirm ({bild}, {t} s)",
-                                 punkt=pid, status=wort, bild=beleg_bild["id"], t=f"{t:.0f}"))
+                    self._log(
+                        tr(
+                            "Souffleur: Leitfaden {punkt} {status} vom Bildschirm ({bild}, {t} s)",
+                            punkt=pid,
+                            status=wort,
+                            bild=beleg_bild["id"],
+                            t=f"{t:.0f}",
+                        )
+                    )
                 else:
-                    self._log(tr("Souffleur: Leitfaden {punkt} {status} bei {t} s", punkt=pid, status=wort, t=f"{t:.0f}"))
+                    self._log(
+                        tr("Souffleur: Leitfaden {punkt} {status} bei {t} s", punkt=pid, status=wort, t=f"{t:.0f}")
+                    )
         return neu, verworfen
 
     def _pruefe_anstoesse(self) -> None:
@@ -651,17 +758,31 @@ class Souffleur:
             seg = je_id.get(p.segment_id) if p.segment_id is not None else None
             t = float(seg["start"]) if seg else float(p.t_zuletzt or jetzt)
             m = mk.Markierung(
-                id=0, art=mk.ART_ANKNUEPFEN, segment_id=int(p.segment_id or 0), t_start=t,
-                t_end=float(seg["end"]) if seg else t, sprecher=seg.get("speaker") if seg else None,
-                aussage=p.aussage, ki_text=p.stand, punkt_id=p.id, punkt_text=p.text,
-                t_hinweis=round(jetzt, 2), bild=dict(p.bild) if p.bild else None,
+                id=0,
+                art=mk.ART_ANKNUEPFEN,
+                segment_id=int(p.segment_id or 0),
+                t_start=t,
+                t_end=float(seg["end"]) if seg else t,
+                sprecher=seg.get("speaker") if seg else None,
+                aussage=p.aussage,
+                ki_text=p.stand,
+                punkt_id=p.id,
+                punkt_text=p.text,
+                t_hinweis=round(jetzt, 2),
+                bild=dict(p.bild) if p.bild else None,
             )
             with self._lock:
                 m.id = len(self._markierungen) + 1
                 self._markierungen.append(m)
             neue.append(m)
         for m in neue:
-            self._log(tr("Souffleur: anknüpfen an {punkt} – angesprochen bei {t} s, nicht geklärt", punkt=m.punkt_id, t=f"{m.t_start:.0f}"))
+            self._log(
+                tr(
+                    "Souffleur: anknüpfen an {punkt} – angesprochen bei {t} s, nicht geklärt",
+                    punkt=m.punkt_id,
+                    t=f"{m.t_start:.0f}",
+                )
+            )
             try:
                 self.on_hinweis(m.als_dict())
             except Exception as exc:  # noqa: BLE001
@@ -689,8 +810,14 @@ class Souffleur:
             if self._leitfaden is None:
                 self._leitfaden = lf_modul.Leitfaden(punkte=[], titel=lf_modul.ERGAENZT)
             notiz = tr("Aufgekommen um {zeit} ({art})", zeit=format_timecode(m.t_start), art=mk.art_label(m.art))
-            p = self._leitfaden.ergaenze(m.aussage, herkunft=f"hinweis:{m.id}", segment_id=m.segment_id or None,
-                                         aussage=m.aussage, t=m.t_start, notiz=notiz)
+            p = self._leitfaden.ergaenze(
+                m.aussage,
+                herkunft=f"hinweis:{m.id}",
+                segment_id=m.segment_id or None,
+                aussage=m.aussage,
+                t=m.t_start,
+                notiz=notiz,
+            )
             if self._wiki is not None and not p.wiki:
                 p.wiki = lf_modul.wiki_zu_punkt(p, self._wiki)
             daten = self._leitfaden.als_dict()
@@ -722,8 +849,9 @@ class Souffleur:
             except OSError as exc:
                 self._log(tr("Souffleur: Begleitdatei nicht schreibbar: {fehler}", fehler=exc))
 
-    def _pruefe_befund(self, befund: dict, je_id: dict[int, dict], fund_je_id: dict,
-                       bild_je_id: dict[str, bt.Bild] | None = None) -> mk.Markierung | None:
+    def _pruefe_befund(
+        self, befund: dict, je_id: dict[int, dict], fund_je_id: dict, bild_je_id: dict[str, bt.Bild] | None = None
+    ) -> mk.Markierung | None:
         """Lokale Validierung: nichts gilt, was nicht im Segment bzw. im gelieferten Auszug steht."""
         if not isinstance(befund, dict):
             return None
@@ -763,10 +891,19 @@ class Souffleur:
         if ohne_befund:
             ki_text = ""  # weder Wiki noch Bildschirm: dann kein KI-Ersatztext (Leitplanke 7)
         return mk.Markierung(
-            id=0, art=art, segment_id=segment_id, t_start=float(seg["start"]), t_end=float(seg["end"]),
-            sprecher=seg.get("speaker"), aussage=aussage, fundstellen=fundstellen, wiki_zitat=zitat,
-            ki_text=ki_text, ohne_befund=ohne_befund or (art == mk.ART_OFFEN and not fundstellen),
-            sicherheit=sicherheit, bild=beleg_bild,
+            id=0,
+            art=art,
+            segment_id=segment_id,
+            t_start=float(seg["start"]),
+            t_end=float(seg["end"]),
+            sprecher=seg.get("speaker"),
+            aussage=aussage,
+            fundstellen=fundstellen,
+            wiki_zitat=zitat,
+            ki_text=ki_text,
+            ohne_befund=ohne_befund or (art == mk.ART_OFFEN and not fundstellen),
+            sicherheit=sicherheit,
+            bild=beleg_bild,
         )
 
     def _ist_dublette(self, m: mk.Markierung) -> bool:
@@ -786,8 +923,17 @@ class Souffleur:
                 return True
         return False
 
-    def _bemesse(self, m: mk.Markierung, seg: dict, *, t_verarbeitung: float | None, suche_s: float,
-                 ki_start_s: float, ki_antwort_s: float, fenster_id: int) -> None:
+    def _bemesse(
+        self,
+        m: mk.Markierung,
+        seg: dict,
+        *,
+        t_verarbeitung: float | None,
+        suche_s: float,
+        ki_start_s: float,
+        ki_antwort_s: float,
+        fenster_id: int,
+    ) -> None:
         jetzt = self.uhr.jetzt()
         delay = float(seg.get("delay") or 0.0)
         if jetzt is None:
@@ -816,13 +962,21 @@ class Souffleur:
             segmente = [dict(s) for s in self._segmente]
         if jetzt is None:
             jetzt = max((float(s["end"]) for s in segmente), default=0.0)
-        ergebnis = essenz_modul.erzeuge(self.ki, segmente, jetzt=jetzt, minuten=minuten, timeout_s=self.konfig.essenz_timeout_s)
+        ergebnis = essenz_modul.erzeuge(
+            self.ki, segmente, jetzt=jetzt, minuten=minuten, timeout_s=self.konfig.essenz_timeout_s
+        )
         with self._lock:
             self._essenzen.append(ergebnis)
             ziel = self.session_dir
         if ziel is not None:
             essenz_modul.anhaengen(ziel, ergebnis)
-        self._log(tr("Souffleur: Essenz {fenster} erzeugt ({dauer} s, KI)", fenster=ergebnis.fenster, dauer=f"{ergebnis.ki_s:.1f}"))
+        self._log(
+            tr(
+                "Souffleur: Essenz {fenster} erzeugt ({dauer} s, KI)",
+                fenster=ergebnis.fenster,
+                dauer=f"{ergebnis.ki_s:.1f}",
+            )
+        )
         return ergebnis
 
     # --- Ergebnisse -------------------------------------------------------------------
@@ -839,10 +993,14 @@ class Souffleur:
             markierungen = list(self._markierungen)
             sitzung = self.session_dir.name if self.session_dir else ""
             return mk.SouffleurStand(
-                sitzung=sitzung, speed=self.konfig.speed, wiki=self._wiki_status.als_dict(),
+                sitzung=sitzung,
+                speed=self.konfig.speed,
+                wiki=self._wiki_status.als_dict(),
                 ki={"backend": self.ki_status.backend, "modell": self.ki_status.modell, "zustand": self._ki_zustand()},
                 markierungen=markierungen,
-                bilanz=mk.bilanz(markierungen, ki_aufrufe=self._ki_aufrufe, ki_fehler=self._ki_fehler, fenster=self._fenster_id),
+                bilanz=mk.bilanz(
+                    markierungen, ki_aufrufe=self._ki_aufrufe, ki_fehler=self._ki_fehler, fenster=self._fenster_id
+                ),
             )
 
     def _schreibe_stand(self) -> None:
@@ -886,9 +1044,13 @@ class Souffleur:
                 "mitdenken": mitdenken,
                 "aktiv": self._aktiv,
                 "beendet": self._beendet,
-                "wiki": self._wiki_status.als_dict() if not (self._wiki_laedt or self._wiki_wechselt) else {
-                    **self._wiki_status.als_dict(), "zustand": "laedt",
-                    "meldung": tr("Wiki wird gewechselt …") if self._wiki_wechselt else tr("Wiki wird gelesen …")},
+                "wiki": self._wiki_status.als_dict()
+                if not (self._wiki_laedt or self._wiki_wechselt)
+                else {
+                    **self._wiki_status.als_dict(),
+                    "zustand": "laedt",
+                    "meldung": tr("Wiki wird gewechselt …") if self._wiki_wechselt else tr("Wiki wird gelesen …"),
+                },
                 "ki": {
                     "zustand": zustand,
                     "modell": self.ki_status.modell,

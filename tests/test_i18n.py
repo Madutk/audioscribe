@@ -174,7 +174,10 @@ def test_statisches_html_ist_uebersetzt():
 
 
 def test_tr_folgt_der_einstellung():
-    i18n._woerterbuch["en"] = {"Die Demo läuft bereits.": "The demo is already running.", "{n} Meetings": "{n} meetings"}
+    i18n._woerterbuch["en"] = {
+        "Die Demo läuft bereits.": "The demo is already running.",
+        "{n} Meetings": "{n} meetings",
+    }
     try:
         assert i18n.tr("Die Demo läuft bereits.") == "Die Demo läuft bereits."
         state.save_state({"ui_sprache": "en"})
@@ -187,7 +190,7 @@ def test_tr_folgt_der_einstellung():
 
 
 def test_ungueltige_sprache_wird_nicht_gespeichert():
-    state.save_state({"ui_sprache": "fr\" onload=\"x"})
+    state.save_state({"ui_sprache": 'fr" onload="x'})
     assert "ui_sprache" not in state.load_state()
     assert i18n.sprache() == "de"
 

@@ -143,7 +143,12 @@ def _souffleur_models() -> list[dict]:
     """KI-Modelle fuer den Souffleur mit neutralen Bezeichnungen (kein Produktname in der Oberflaeche)."""
     from audioscribe.souffleur.ki import SOUFFLEUR_MODELS
 
-    labels = (tr("Standard (schnell)"), tr("Sparsam (am schnellsten)"), tr("Stark (langsamer)"), tr("Maximal (am langsamsten)"))
+    labels = (
+        tr("Standard (schnell)"),
+        tr("Sparsam (am schnellsten)"),
+        tr("Stark (langsamer)"),
+        tr("Maximal (am langsamsten)"),
+    )
     return [{"id": m, "label": labels[i] if i < len(labels) else m} for i, m in enumerate(SOUFFLEUR_MODELS)]
 
 
@@ -542,7 +547,10 @@ def create_app():
         """Startseite, "Sofort aufnehmen", "Aufnahme transkribieren" oder Demo waehlen
         (Projekte: /api/projekt/...)."""
         if body.modus not in (
-            kontext_modul.MODUS_START, kontext_modul.MODUS_DATEI, kontext_modul.MODUS_DEMO, kontext_modul.MODUS_AUFNAHME,
+            kontext_modul.MODUS_START,
+            kontext_modul.MODUS_DATEI,
+            kontext_modul.MODUS_DEMO,
+            kontext_modul.MODUS_AUFNAHME,
         ):
             raise HTTPException(400, tr("Unbekannter Modus: {modus}", modus=body.modus))
         if body.modus == kontext_modul.MODUS_DEMO:
@@ -568,7 +576,11 @@ def create_app():
         wiki = modell.wiki_ordner(body.wiki_art, wurzel, wiki_dir)
         vorschlag = modell.vorschlag(wurzel, wiki) if wurzel is not None else {}
         fehler = modell.pruefe(
-            name=body.name, wurzel=wurzel, sitzungen_dir=sitzungen, wiki_art=body.wiki_art, wiki_dir=wiki_dir,
+            name=body.name,
+            wurzel=wurzel,
+            sitzungen_dir=sitzungen,
+            wiki_art=body.wiki_art,
+            wiki_dir=wiki_dir,
             assets_dir=assets,
         )
         # Der gewaehlte Projektordner ist selbst ein Wiki (so sahen Projekte frueher aus): der
@@ -582,11 +594,15 @@ def create_app():
         return JSONResponse(
             {
                 "fehler": fehler,
-                "wiki": pruefe_wiki(wiki).als_dict() if body.wiki_art == modell.WIKI_VORHANDEN and wiki is not None else None,
+                "wiki": pruefe_wiki(wiki).als_dict()
+                if body.wiki_art == modell.WIKI_VORHANDEN and wiki is not None
+                else None,
                 "vorschlag": vorschlag,
                 "pfade": {
-                    "wurzel": str(wurzel or ""), "wiki_dir": str(wiki or ""),
-                    "sitzungen_dir": str(sitzungen or ""), "assets_dir": str(assets or ""),
+                    "wurzel": str(wurzel or ""),
+                    "wiki_dir": str(wiki or ""),
+                    "sitzungen_dir": str(sitzungen or ""),
+                    "assets_dir": str(assets or ""),
                 },
                 "wurzel_ist_wiki": wurzel_ist_wiki,
             }
@@ -601,10 +617,19 @@ def create_app():
             raise HTTPException(400, tr("Bitte Projektordner und Sitzungsordner angeben."))
         try:
             projekt = modell.lege_an(
-                name=body.name, wurzel=wurzel, sitzungen_dir=sitzungen, wiki_art=body.wiki_art, wiki_dir=wiki_dir,
-                assets_dir=assets, ki_dienst=body.ki_dienst, souffleur_model=body.souffleur_model,
-                agent_model=body.agent_model, sprache=body.sprache, wiki_speichern=body.wiki_speichern,
-                wiki_bilder=body.wiki_bilder, wiki_markierungen=body.wiki_markierungen,
+                name=body.name,
+                wurzel=wurzel,
+                sitzungen_dir=sitzungen,
+                wiki_art=body.wiki_art,
+                wiki_dir=wiki_dir,
+                assets_dir=assets,
+                ki_dienst=body.ki_dienst,
+                souffleur_model=body.souffleur_model,
+                agent_model=body.agent_model,
+                sprache=body.sprache,
+                wiki_speichern=body.wiki_speichern,
+                wiki_bilder=body.wiki_bilder,
+                wiki_markierungen=body.wiki_markierungen,
                 wiki_format=body.wiki_format,
             )
         except ProjektFehler as exc:
@@ -655,7 +680,9 @@ def create_app():
             if isinstance(felder.get(key), str) and felder[key].strip():
                 felder[key] = str(browse.normalize_path(felder[key], default=Path("")))
         if "sitzungen_dir" in felder and _beschaeftigt():
-            raise HTTPException(409, tr("{grund} Der Sitzungsordner lässt sich erst danach ändern.", grund=_beschaeftigt()))
+            raise HTTPException(
+                409, tr("{grund} Der Sitzungsordner lässt sich erst danach ändern.", grund=_beschaeftigt())
+            )
         wiki_geaendert = "wiki_art" in felder or "wiki_dir" in felder
         # Waehrend einer Live-Sitzung darf das Wiki wechseln - der Souffleur liest es sofort ein.
         # Analyse und Transkription haengen am Wiki-Ordner, da bleibt die Sperre.
@@ -826,23 +853,32 @@ def create_app():
         raw = browse.normalize_path(body.raw_basis, default=Path("")) if body.raw_basis.strip() else None
         # Standard = das Ziel des Projekt-Wikis (nicht angegeben oder genau dieses): strenge Wiki-Ablage.
         standard = (
-            p is not None and p.raw_dir is not None and not p.demo
-            and (raw is None or modell.gleich(raw, p.raw_dir))
+            p is not None and p.raw_dir is not None and not p.demo and (raw is None or modell.gleich(raw, p.raw_dir))
         )
         if not standard and raw is None:
             if p is not None:
-                raise HTTPException(409, tr("Dieses Projekt hat kein Wiki – in den Projekteinstellungen anlegen oder verknüpfen."))
+                raise HTTPException(
+                    409, tr("Dieses Projekt hat kein Wiki – in den Projekteinstellungen anlegen oder verknüpfen.")
+                )
             raise HTTPException(409, tr("Bitte einen Ordner für das Transkript wählen."))
         try:
             if standard:
                 ablage = wiki_ablage.speichere_sitzung(
-                    ordner, p, titel=body.titel, art=_art(body.art), bilder=body.bilder,
+                    ordner,
+                    p,
+                    titel=body.titel,
+                    art=_art(body.art),
+                    bilder=body.bilder,
                     markierungen=body.markierungen,
                 )
             else:
                 ablage = wiki_ablage.speichere_nach(
-                    ordner, raw_basis=raw, seiten_dir=_seiten_dir(),
-                    titel=body.titel, bilder=body.bilder, markierungen=body.markierungen,
+                    ordner,
+                    raw_basis=raw,
+                    seiten_dir=_seiten_dir(),
+                    titel=body.titel,
+                    bilder=body.bilder,
+                    markierungen=body.markierungen,
                 )
         except (OSError, RuntimeError) as exc:
             raise HTTPException(400, str(exc)) from exc
@@ -858,10 +894,14 @@ def create_app():
             try:
                 kontext.setze(
                     kontext_modul.MODUS_PROJEKT,
-                    modell.aendere(p, {
-                        "wiki_speichern": modell.WIKI_IMMER, "wiki_bilder": body.bilder,
-                        "wiki_markierungen": body.markierungen,
-                    }),
+                    modell.aendere(
+                        p,
+                        {
+                            "wiki_speichern": modell.WIKI_IMMER,
+                            "wiki_bilder": body.bilder,
+                            "wiki_markierungen": body.markierungen,
+                        },
+                    ),
                 )
             except ProjektFehler as exc:
                 antwort["hinweis"] = tr("„Immer speichern“ ließ sich nicht merken: {fehler}", fehler=exc)
@@ -876,7 +916,9 @@ def create_app():
         if p is None or p.demo:
             raise HTTPException(409, tr("Kein Projekt geöffnet."))
         if p.wiki_dir is None:
-            raise HTTPException(409, tr("Dieses Projekt hat kein Wiki – in den Projekteinstellungen anlegen oder verknüpfen."))
+            raise HTTPException(
+                409, tr("Dieses Projekt hat kein Wiki – in den Projekteinstellungen anlegen oder verknüpfen.")
+            )
         workspace = browse.normalize_path(body.workspace, default=Path(""))
         try:
             ok = workspace.is_dir() and workspace.resolve().is_relative_to(p.analysen_dir.resolve())
@@ -942,17 +984,23 @@ def create_app():
         if p is None or p.demo:
             raise HTTPException(409, tr("Kein Projekt geöffnet."))
         if p.wiki_dir is None or p.raw_dir is None:
-            raise HTTPException(409, tr("Dieses Projekt hat kein Wiki – in den Projekteinstellungen anlegen oder verknüpfen."))
+            raise HTTPException(
+                409, tr("Dieses Projekt hat kein Wiki – in den Projekteinstellungen anlegen oder verknüpfen.")
+            )
         if not (p.wiki_dir / "CLAUDE.md").is_file():
             raise HTTPException(409, tr("Im Wiki fehlt CLAUDE.md – ohne Schema kann nicht eingearbeitet werden."))
         if body.sitzung.strip():
             ablage = wiki_ablage.letzte_ablage(_sitzungsordner(body.sitzung), p, auch_freie=False)
             if ablage is None:
-                raise HTTPException(409, tr("Diese Sitzung liegt noch nicht im Wiki – bitte zuerst ins Wiki speichern."))
+                raise HTTPException(
+                    409, tr("Diese Sitzung liegt noch nicht im Wiki – bitte zuerst ins Wiki speichern.")
+                )
         elif body.rohquelle.strip():
             ziel = browse.normalize_path(body.rohquelle, default=Path(""))
             if not ziel.exists() or not modell.ist_unter(ziel, p.raw_dir) or modell.gleich(ziel, p.raw_dir):
-                raise HTTPException(400, tr("Keine Rohquelle unter {ordner}: {pfad}", ordner=p.raw_dir, pfad=body.rohquelle))
+                raise HTTPException(
+                    400, tr("Keine Rohquelle unter {ordner}: {pfad}", ordner=p.raw_dir, pfad=body.rohquelle)
+                )
             ablage = {"ordner": str(ziel)}
         else:
             raise HTTPException(400, tr("Bitte eine Sitzung oder Rohquelle angeben."))
@@ -1077,9 +1125,7 @@ def create_app():
         )
         chosen["input_dir"] = _remembered_dir(chosen["input_dir"], settings.input_dir)
         chosen["output_dir"] = _remembered_dir(chosen["output_dir"], settings.output_dir)
-        chosen["agent_output_dir"] = _remembered_dir(
-            chosen["agent_output_dir"], settings.agent_output_dir
-        )
+        chosen["agent_output_dir"] = _remembered_dir(chosen["agent_output_dir"], settings.agent_output_dir)
         # Im Projekt (und in der Demo) bestimmt das Projekt die Ordner; KI und Sprache kommen
         # aus den Einstellungen (global, vom Projekt ueberschreibbar) statt aus dem letzten Lauf.
         p = _projekt()
@@ -1147,7 +1193,9 @@ def create_app():
             raise HTTPException(409, tr("Es ist schon ein Ordner-Dialog offen."))
         try:
             start = browse.normalize_path(body.start, default=Path("")) if body.start.strip() else None
-            pfad = dialog_nativ.waehle_ordner(start if start is not None and str(start) not in ("", ".") else None, body.titel)
+            pfad = dialog_nativ.waehle_ordner(
+                start if start is not None and str(start) not in ("", ".") else None, body.titel
+            )
         except dialog_nativ.DialogFehler as exc:
             return JSONResponse({"pfad": None, "verfuegbar": False, "fehler": str(exc)})
         finally:
@@ -1295,16 +1343,15 @@ def create_app():
             {
                 "skills_dir": str(settings.agent_skills_dir),
                 "skills": [
-                    {"name": s.name, "description": s.description, "selected": s.name in chosen}
-                    for s in skills
+                    {"name": s.name, "description": s.description, "selected": s.name in chosen} for s in skills
                 ],
                 # Modell und Liste passend zum wirksamen KI-Dienst (lokal: Ollama-Tags).
                 "dienst": dienst,
                 "model": modell_fuer(dienst, eff["agent_model"]),
                 "models": list(einstellungen.modelle(dienst, "agent")),
-                "output_dir": str(_projekt().analysen_dir) if _projekt() is not None else _remembered_dir(
-                    saved.get("agent_output_dir"), settings.agent_output_dir
-                ),
+                "output_dir": str(_projekt().analysen_dir)
+                if _projekt() is not None
+                else _remembered_dir(saved.get("agent_output_dir"), settings.agent_output_dir),
                 "bash": saved.get("agent_bash", True),
             }
         )
@@ -1343,7 +1390,9 @@ def create_app():
             index = ws / "INDEX.md"
             analysen.setdefault(Path(manifest.quelle).name, []).append(
                 {
-                    "name": manifest.name, "workspace": str(ws), "status": manifest.status,
+                    "name": manifest.name,
+                    "workspace": str(ws),
+                    "status": manifest.status,
                     "index": str(index) if index.is_file() else None,
                     "ablagen": wiki_ablage.ablagen(ws),
                 }
@@ -1470,7 +1519,9 @@ def create_app():
                 **inventory(),
                 "platform": browse.PLATFORM,
                 "loopback_label": (
-                    tr("System-Audio (ScreenCaptureKit, Gegenseite)") if browse.IS_MAC else tr("System-Audio (Ausgabe, Gegenseite)")
+                    tr("System-Audio (ScreenCaptureKit, Gegenseite)")
+                    if browse.IS_MAC
+                    else tr("System-Audio (Ausgabe, Gegenseite)")
                 ),
                 "permission_hint": hinweis,
                 "models": list(jobs.LIVE_WHISPER_MODELS),
@@ -1552,7 +1603,10 @@ def create_app():
                 live._append(tr("Leitfaden nicht lesbar: {fehler}", fehler=exc))
         zaehler.beginne(QUELLE_SOUFFLEUR)
         ki, ki_status = make_ki(
-            konfig.backend, konfig.modell, cache_dir=settings.cache_dir, log=live._append,
+            konfig.backend,
+            konfig.modell,
+            cache_dir=settings.cache_dir,
+            log=live._append,
             on_verbrauch=lambda verbrauch: zaehler.buche(QUELLE_SOUFFLEUR, verbrauch),
         )
         # Der Mitdenker bekommt einen eigenen Dienst, damit sein Verbrauch getrennt erscheint. Mit
@@ -1561,11 +1615,15 @@ def create_app():
         mitdenk_ki = None
         if ki is not None and ki.backend == BACKEND_CLAUDE:
             mitdenk_ki, _ = make_ki(
-                konfig.backend, konfig.modell, cache_dir=settings.cache_dir, log=live._append,
+                konfig.backend,
+                konfig.modell,
+                cache_dir=settings.cache_dir,
+                log=live._append,
                 on_verbrauch=lambda verbrauch: zaehler.buche(QUELLE_MITDENKER, verbrauch),
             )
-        return Souffleur(konfig, ki=ki, ki_status=ki_status, log=live._append, leitfaden=leitfaden,
-                         mitdenk_ki=mitdenk_ki)
+        return Souffleur(
+            konfig, ki=ki, ki_status=ki_status, log=live._append, leitfaden=leitfaden, mitdenk_ki=mitdenk_ki
+        )
 
     def _leitfaden_pfad(roh: str) -> Path | None:
         """Pfad der Vorbereitung pruefen (400, wenn sie kein brauchbarer Leitfaden ist)."""
@@ -1681,10 +1739,12 @@ def create_app():
         from audioscribe.live.kommando import inventory
 
         try:
-            body = LiveStartIn(**sofort_modul.aus_einstellungen(state.load_state(), inventory(), sprache=_eff()["sprache"]))
+            body = LiveStartIn(
+                **sofort_modul.aus_einstellungen(state.load_state(), inventory(), sprache=_eff()["sprache"])
+            )
             _starte_live(body)
             sofort.update(status="gestartet", fehler=None)
-            live._append(tr("Automatisch gestartet ueber die Verknuepfung \"Sofort aufnehmen\"."))
+            live._append(tr('Automatisch gestartet ueber die Verknuepfung "Sofort aufnehmen".'))
         except HTTPException as exc:
             sofort.update(status="fehler", fehler=str(exc.detail))
         except Exception as exc:  # noqa: BLE001
@@ -1765,15 +1825,22 @@ def create_app():
         ordner = _unterbrochene_sitzung(body.sitzung)
         saved = state.load_state()
         opts = jobs.LiveJobOptions(
-            output_dir=ordner.parent, resume_dir=ordner, monitor=0, mic="none", loopback="none",
-            language=_eff()["sprache"], device=saved.get("live_device", settings.device),
+            output_dir=ordner.parent,
+            resume_dir=ordner,
+            monitor=0,
+            mic="none",
+            loopback="none",
+            language=_eff()["sprache"],
+            device=saved.get("live_device", settings.device),
             refine=bool(saved.get("live_refine", True)) and (ordner / "audio").is_dir(),
             refine_model=saved.get("live_refine_model", settings.whisper_model),
         )
         try:
             live.reset()
             live.start(
-                opts, souffleur_factory=_souffleur_factory, on_ende=_nach_sitzung,
+                opts,
+                souffleur_factory=_souffleur_factory,
+                on_ende=_nach_sitzung,
                 finalize_builder=jobs.build_finalize_argv,
             )
         except RuntimeError as exc:
@@ -1828,9 +1895,16 @@ def create_app():
         except OSError as exc:
             raise HTTPException(400, tr("Ausgangsordner nicht anlegbar: {fehler}", fehler=exc)) from exc
         opts = jobs.LiveJobOptions(
-            output_dir=out_dir, monitor=0, mic="none", loopback="none", refine=False,
-            replay_transcript=quelle, replay_speed=body.replay_speed, titel=body.titel.strip()[:120],
-            art=_art(body.art), leitfaden=_leitfaden_pfad(body.leitfaden),
+            output_dir=out_dir,
+            monitor=0,
+            mic="none",
+            loopback="none",
+            refine=False,
+            replay_transcript=quelle,
+            replay_speed=body.replay_speed,
+            titel=body.titel.strip()[:120],
+            art=_art(body.art),
+            leitfaden=_leitfaden_pfad(body.leitfaden),
         )
         state.save_state(
             {"live_source": "transcript", "replay_transcript": str(quelle), "replay_speed": f"{body.replay_speed:g}"}
@@ -1867,7 +1941,11 @@ def create_app():
         except (OSError, RuntimeError) as exc:
             raise HTTPException(400, tr("Demo nicht startbar: {fehler}", fehler=exc)) from exc
         opts = jobs.LiveJobOptions(
-            output_dir=p.sitzungen_dir, monitor=0, mic="none", loopback="none", refine=False,
+            output_dir=p.sitzungen_dir,
+            monitor=0,
+            mic="none",
+            loopback="none",
+            refine=False,
             replay_transcript=kontext_modul.demo_wurzel() / kontext_modul.DEMO_TRANSKRIPT,
             replay_speed=kontext_modul.DEMO_TEMPO,
             # Ohne die Gespraechspausen des echten Meetings: nach rund 30 s ist die Demo beim Thema.
@@ -1891,7 +1969,9 @@ def create_app():
         from audioscribe.souffleur.ki import KiFehler
 
         if body.minuten not in MINUTEN:
-            raise HTTPException(400, tr("Fenster muss {minuten} Minuten sein.", minuten=tr(" oder ").join(map(str, MINUTEN))))
+            raise HTTPException(
+                400, tr("Fenster muss {minuten} Minuten sein.", minuten=tr(" oder ").join(map(str, MINUTEN)))
+            )
         souffleur = live.souffleur()
         if souffleur is None:
             raise HTTPException(409, tr("Keine Sitzung mit Souffleur."))
@@ -1907,7 +1987,9 @@ def create_app():
         from audioscribe.souffleur.konfig import wiki_pfad
         from audioscribe.souffleur.wiki import pruefe_wiki
 
-        pfad = browse.normalize_path(path, default=Path("")) if path.strip() else wiki_pfad(state.load_state(), _projekt())
+        pfad = (
+            browse.normalize_path(path, default=Path("")) if path.strip() else wiki_pfad(state.load_state(), _projekt())
+        )
         status = pruefe_wiki(pfad if str(pfad) not in ("", ".") else None)
         antwort = status.als_dict()
         if not path.strip():
@@ -1922,7 +2004,9 @@ def create_app():
         from audioscribe.souffleur.wiki import ZUSTAND_OK, pruefe_wiki
 
         p = _projekt()
-        if kontext.modus not in (kontext_modul.MODUS_PROJEKT, kontext_modul.MODUS_AUFNAHME) or (p is not None and p.demo):
+        if kontext.modus not in (kontext_modul.MODUS_PROJEKT, kontext_modul.MODUS_AUFNAHME) or (
+            p is not None and p.demo
+        ):
             raise HTTPException(409, tr("Das Wiki lässt sich nur im Projekt oder bei „Sofort aufnehmen“ wechseln."))
         pfad = browse.normalize_path(body.pfad, default=Path("")) if body.pfad and body.pfad.strip() else None
         if pfad is not None and str(pfad) in ("", "."):
@@ -1931,7 +2015,11 @@ def create_app():
         if pfad is not None and status.zustand != ZUSTAND_OK:
             raise HTTPException(400, status.meldung)
         if p is not None:
-            felder = {"wiki_art": modell.WIKI_VORHANDEN, "wiki_dir": str(pfad)} if pfad is not None else {"wiki_art": modell.WIKI_KEINS}
+            felder = (
+                {"wiki_art": modell.WIKI_VORHANDEN, "wiki_dir": str(pfad)}
+                if pfad is not None
+                else {"wiki_art": modell.WIKI_KEINS}
+            )
             try:
                 neu = modell.aendere(p, felder)
             except ProjektFehler as exc:
@@ -2044,7 +2132,11 @@ def create_app():
         # auch nach einem Neuladen der Seite (sonst boete die Oberflaeche das Speichern doppelt an).
         p = _projekt()
         im_projekt = p is not None and not p.demo
-        if (im_projekt or kontext.modus == kontext_modul.MODUS_AUFNAHME) and snap.get("dir") and not snap.get("running"):
+        if (
+            (im_projekt or kontext.modus == kontext_modul.MODUS_AUFNAHME)
+            and snap.get("dir")
+            and not snap.get("running")
+        ):
             snap["wiki_ablage"] = wiki_ablage.letzte_ablage(Path(snap["dir"]), p if im_projekt else None)
         if sofort["status"]:
             snap["sofort"] = dict(sofort)

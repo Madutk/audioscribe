@@ -175,14 +175,20 @@ def ollama_sicherstellen(
         return status
     exe = binary if binary is not None else ollama_binary()
     if not exe:
-        return OllamaStatus(False, fehler=tr("{fehler}; 'ollama' nicht gefunden (brew install ollama / ollama.com)", fehler=status.fehler))
+        return OllamaStatus(
+            False,
+            fehler=tr("{fehler}; 'ollama' nicht gefunden (brew install ollama / ollama.com)", fehler=status.fehler),
+        )
     env = dict(os.environ)
     env.setdefault("OLLAMA_CONTEXT_LENGTH", str(SERVE_CONTEXT_LENGTH))
     if log:
-        log(tr(
-            "Lokale KI: Dienst läuft nicht - starte '{programm} serve' (Kontext {kontext}) ...",
-            programm=exe, kontext=env["OLLAMA_CONTEXT_LENGTH"],
-        ))
+        log(
+            tr(
+                "Lokale KI: Dienst läuft nicht - starte '{programm} serve' (Kontext {kontext}) ...",
+                programm=exe,
+                kontext=env["OLLAMA_CONTEXT_LENGTH"],
+            )
+        )
     ausgabe: Any = subprocess.DEVNULL
     try:
         if log_datei is not None:
@@ -207,10 +213,15 @@ def ollama_sicherstellen(
         status = ollama_status(url, post=post, timeout_s=1.0)
         if status.erreichbar:
             if log:
-                log(tr("Lokale KI: Ollama {version} läuft unter {url}", version=status.version or "", url=url).replace("  ", " "))
+                log(
+                    tr("Lokale KI: Ollama {version} läuft unter {url}", version=status.version or "", url=url).replace(
+                        "  ", " "
+                    )
+                )
             return status
     return OllamaStatus(
-        False, fehler=tr("'ollama serve' gestartet, aber nach {sekunden} s nicht erreichbar", sekunden=f"{timeout_s:.0f}")
+        False,
+        fehler=tr("'ollama serve' gestartet, aber nach {sekunden} s nicht erreichbar", sekunden=f"{timeout_s:.0f}"),
     )
 
 
@@ -271,7 +282,9 @@ class OllamaKi:
                     tr("Lokales Modell {modell} nicht vorhanden - 'ollama pull {modell}'", modell=self.modell)
                 ) from exc
             if exc.code is None and exc.text == _ZEITUEBERSCHREITUNG:
-                raise KiFehler(tr("KI-Aufruf nach {sekunden} s abgebrochen", sekunden=f"{auftrag.timeout_s:.0f}")) from exc
+                raise KiFehler(
+                    tr("KI-Aufruf nach {sekunden} s abgebrochen", sekunden=f"{auftrag.timeout_s:.0f}")
+                ) from exc
             if exc.code is None:
                 raise KiFehler(tr("Lokale KI nicht erreichbar unter {url} - 'ollama serve'", url=self.url)) from exc
             raise KiFehler(tr("Lokale KI meldet HTTP {code}: {fehler}", code=exc.code, fehler=exc.text)) from exc
@@ -298,11 +311,20 @@ class OllamaKi:
         aus = int(ergebnis.get("eval_count") or 0)
         laden_s = float(ergebnis.get("load_duration") or 0) / 1e9
         self._log(
-            tr("[KI lokal] {modell}: {ein} Tokens ein, {aus} aus, {dauer} s", modell=self.modell, ein=ein, aus=aus,
-               dauer=f"{antwort_s:.1f}")
+            tr(
+                "[KI lokal] {modell}: {ein} Tokens ein, {aus} aus, {dauer} s",
+                modell=self.modell,
+                ein=ein,
+                aus=aus,
+                dauer=f"{antwort_s:.1f}",
+            )
             + (tr(" (davon Modell laden {dauer} s)", dauer=f"{laden_s:.1f}") if laden_s >= 0.5 else "")
         )
         return KiAntwort(
-            daten=daten, start_s=round(laden_s, 3), antwort_s=antwort_s, modell=self.modell,
-            session_id=None, verbrauch=None,
+            daten=daten,
+            start_s=round(laden_s, 3),
+            antwort_s=antwort_s,
+            modell=self.modell,
+            session_id=None,
+            verbrauch=None,
         )

@@ -14,7 +14,10 @@ def test_transkript_und_bilder_unter_dem_titel(sitzung):
     datei = llm_wiki.erzeuge(sitzung)
     ordner = sitzung / "LLM-Wiki"
     assert datei == ordner / "Workshop Reisebuchung.md"
-    assert sorted(p.name for p in (ordner / "Workshop Reisebuchung").iterdir()) == ["0001_00-00-03.jpg", "0002_00-00-12.jpg"]
+    assert sorted(p.name for p in (ordner / "Workshop Reisebuchung").iterdir()) == [
+        "0001_00-00-03.jpg",
+        "0002_00-00-12.jpg",
+    ]
     links = re.findall(r"!\[[^\]]*\]\(([^)]+)\)", datei.read_text(encoding="utf-8"))
     assert len(links) == 2 and all((ordner / unquote(link)).is_file() for link in links)
     assert "Wir buchen immer zweite Klasse." in datei.read_text(encoding="utf-8")
@@ -37,7 +40,12 @@ def test_neuer_titel_ersetzt_die_alten_namen(sitzung):
 
 @pytest.mark.parametrize(
     ("titel", "name"),
-    [("a/b: c?", "a-b- c-"), ("  ..Geheim  ", "Geheim"), ("", "live-2026-10-06_11-21-57"), ("Über Ärger", "Über Ärger")],
+    [
+        ("a/b: c?", "a-b- c-"),
+        ("  ..Geheim  ", "Geheim"),
+        ("", "live-2026-10-06_11-21-57"),
+        ("Über Ärger", "Über Ärger"),
+    ],
 )
 def test_dateiname(titel, name):
     assert llm_wiki.dateiname(titel, Path("live-2026-10-06_11-21-57")) == name

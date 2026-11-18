@@ -248,8 +248,12 @@ def _cudnn8_lib_dir() -> Path:
 
 # Nur die Inferenz-Bibliotheken werden entpackt: die *_train*-Varianten (rund 230 MB)
 # braucht ctranslate2 nie, und die Dateien sind einzeln mehrere hundert MB gross.
-_CUDNN8_WINDOWS_DLLS = ("cudnn64_8.dll", "cudnn_ops_infer64_8.dll", "cudnn_cnn_infer64_8.dll",
-                        "cudnn_adv_infer64_8.dll")
+_CUDNN8_WINDOWS_DLLS = (
+    "cudnn64_8.dll",
+    "cudnn_ops_infer64_8.dll",
+    "cudnn_cnn_infer64_8.dll",
+    "cudnn_adv_infer64_8.dll",
+)
 
 
 def ensure_cudnn8(log=None) -> Path:
@@ -283,11 +287,8 @@ def ensure_cudnn8(log=None) -> Path:
     with urllib.request.urlopen(meta_url) as resp:
         meta = json.load(resp)
     plattform = "win_amd64" if windows else "manylinux"
-    wheel_url = next(
-        u["url"]
-        for u in meta["urls"]
-        if u["filename"].endswith(".whl") and plattform in u["filename"]
-    )
+    wheel_url = next(u["url"] for u in meta["urls"] if u["filename"].endswith(".whl") and plattform in u["filename"])
+
     # Fortschritt melden: 700 MB ohne jede Rueckmeldung sehen im Protokoll wie ein
     # Haenger aus - gerade in der Stapel-Oberflaeche, wo nur das Log sichtbar ist.
     def _fortschritt(bloecke: int, blockgroesse: int, gesamt: int) -> None:

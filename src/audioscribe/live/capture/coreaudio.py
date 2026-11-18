@@ -86,7 +86,9 @@ def default_input_index(default) -> int | None:
 class MicStream:
     """Ein offener Eingabestream; ``callback`` füttert den Track mit int16-Blöcken."""
 
-    def __init__(self, track: Track, device: dict, clock: Callable[[], float], log: Callable[[str], None] | None = None) -> None:
+    def __init__(
+        self, track: Track, device: dict, clock: Callable[[], float], log: Callable[[str], None] | None = None
+    ) -> None:
         sd = _sounddevice()
         self._track = track
         self._stream = None
@@ -124,7 +126,9 @@ class MicStream:
                     log(tr("Mikrofon: {soll} Hz nicht möglich, nehme {rate} Hz", soll=device["rate"], rate=rate))
             self._stream = stream
             return
-        raise RuntimeError(tr("Mikrofon '{name}' lässt sich nicht öffnen ({fehler})", name=device["name"], fehler=letzter))
+        raise RuntimeError(
+            tr("Mikrofon '{name}' lässt sich nicht öffnen ({fehler})", name=device["name"], fehler=letzter)
+        )
 
     def close(self) -> None:
         if self._stream is not None:

@@ -80,8 +80,7 @@ def test_fill_segment_speakers_from_word_majority():
         2.0,
         "text",
         None,
-        words=[Word(0.0, 0.5, "a", "SPEAKER_00"), Word(0.5, 1.0, "b", "SPEAKER_00"),
-               Word(1.0, 1.5, "c", "SPEAKER_01")],
+        words=[Word(0.0, 0.5, "a", "SPEAKER_00"), Word(0.5, 1.0, "b", "SPEAKER_00"), Word(1.0, 1.5, "c", "SPEAKER_01")],
     )
     fill_segment_speakers([seg])
     assert seg.speaker == "SPEAKER_00"
@@ -91,8 +90,7 @@ def test_result_to_segments_fills_missing_timestamps():
     result = {
         "language": "de",
         "segments": [
-            {"start": None, "end": None, "text": "x",
-             "words": [{"start": 1.0, "end": 1.5, "word": "x"}]},
+            {"start": None, "end": None, "text": "x", "words": [{"start": 1.0, "end": 1.5, "word": "x"}]},
             {"start": 2.0, "end": 3.0, "text": "y", "words": []},
         ],
     }
