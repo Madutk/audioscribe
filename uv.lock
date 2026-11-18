@@ -207,6 +207,7 @@ review = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "httpx" },
     { name = "pytest" },
 ]
 
@@ -241,7 +242,10 @@ requires-dist = [
 provides-extras = ["cpu", "cu124", "review", "agent", "live", "mac"]
 
 [package.metadata.requires-dev]
-dev = [{ name = "pytest", specifier = ">=8" }]
+dev = [
+    { name = "httpx" },
+    { name = "pytest", specifier = ">=8" },
+]
 
 [[package]]
 name = "av"
