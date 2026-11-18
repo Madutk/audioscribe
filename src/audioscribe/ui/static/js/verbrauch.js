@@ -44,8 +44,10 @@ function render(d) {
   const s = d.quellen.souffleur.aktuell;
   const a = d.quellen.analyse.aktuell;
   const w = d.quellen.wiki ? d.quellen.wiki.aktuell : { tokens: 0 };
+  const m = d.quellen.mitdenker ? d.quellen.mitdenker.aktuell : { tokens: 0 };
   $('kiVerbrauchZeilen').innerHTML =
     (s.tokens ? zeile(s.aufrufe === 1 ? tr('Souffleur, diese Sitzung (1 Aufruf)') : tr('Souffleur, diese Sitzung ({n} Aufrufe)', { n: ZAHL.format(s.aufrufe) }), s) : '')
+    + (m.tokens ? zeile(m.aufrufe === 1 ? tr('Mitdenker, diese Sitzung (1 Aufruf)') : tr('Mitdenker, diese Sitzung ({n} Aufrufe)', { n: ZAHL.format(m.aufrufe) }), m) : '')
     + (a.tokens ? zeile(tr('KI-Analyse, dieser Lauf'), a) : '')
     + (w.tokens ? zeile(tr('Einarbeiten ins Wiki, dieser Lauf'), w) : '')
     + zeile(tr('Seit Programmstart'), g, 'sum');

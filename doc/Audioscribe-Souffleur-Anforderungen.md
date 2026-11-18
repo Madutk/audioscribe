@@ -36,13 +36,15 @@ Einsatz in Meetings aller Art: Workshop, Prozess- oder Anforderungsaufnahme, Dis
 6. **Belegtes und KI-Erzeugtes bleiben getrennt.** Jeder Hinweis aus dem Wiki trägt eine Fundstelle. Alles, was die KI selbst formuliert (Zusammenfassung, Einschätzung), ist als KI-erzeugt erkennbar und wird nicht als Quelle abgelegt.
 7. **Kein Hinweis ohne Grundlage.** Findet der Souffleur im Wiki nichts, sagt er das ausdrücklich. Er füllt Lücken nicht mit eigenem Wissen.
 
+**Ausnahme für den Mitdenker (Stufe 2, Entscheidung des Auftraggebers vom 2026-11-17):** Die zuschaltbare Mitdenk-Spur (Abschnitt 6, M1) darf Wiki, Gespräch und Allgemeinwissen der KI verbinden. Leitplanke 7 gilt für sie nicht, für den Abgleich (A, B) unverändert. Leitplanke 6 gilt auch für den Mitdenker: Jede Karte weist ihre Herkunft aus (Wiki, Gespräch, KI-Wissen), Wiki-Belege stehen als wörtliches Zitat getrennt vom KI-Text, und Karten werden nicht als Quelle abgelegt.
+
 ## 5. Umfang
 
 **In dieser Ausbaustufe:** K1, A1, A2, A3, A4, B1, B2, C1 (siehe Abschnitt 6).
 
 **Ausdrücklich nicht in dieser Stufe:**
 
-- B3 Lösungsknopf (KI entwickelt eigene Lösungsvorschläge). Ist für die nächste Stufe vorgesehen. Die Umsetzung soll ihn später ermöglichen, aber jetzt nicht enthalten.
+- B3 Lösungsknopf (KI entwickelt eigene Lösungsvorschläge). Ist für die nächste Stufe vorgesehen. Die Umsetzung soll ihn später ermöglichen, aber jetzt nicht enthalten. Seit 2026-11 deckt der Mitdenker (M1) diesen Bedarf als mitlaufende Spur ab; einen Knopf für einzelne Lösungsvorschläge gibt es weiter nicht.
 - Jede Form von Wiki-Pflege, Konfliktauflösung oder Lint.
 - Anzeige für andere Teilnehmer als den Moderator.
 - Mehrere Wikis gleichzeitig. In dieser Stufe wird einem Projekt genau ein Wiki zugeordnet.
@@ -119,6 +121,18 @@ Der Moderator kann per Knopf die Essenz der letzten 2 oder 5 Minuten abrufen.
 - Die Zusammenfassung bezieht sich genau auf das gewählte Zeitfenster.
 - Sie ist kurz genug, um sie im laufenden Meeting mit einem Blick zu erfassen.
 - Sie ist als KI-erzeugt gekennzeichnet und wird nicht Teil der Quelle fürs Wiki (Leitplanke 6).
+
+### M. Mitdenken (Stufe 2)
+
+**M1 Mitdenker**
+Auf Wunsch (Häkchen „Mitdenken“, Vorgabe aus) denkt die KI in einer zweiten, langsameren Spur über die letzten Minuten des Gesprächs nach und zeigt dem Moderator Karten in einem eigenen Bereich.
+
+- Drei Arten: **Bestätigung** (das Wiki stützt eine Aussage, mit wörtlichem Zitat und Fundstelle), **Erkenntnis** (ein Ergebnis oder Zusammenhang aus dem Gespräch), **Gedanke** (eine angefangene Idee einen Schritt weitergedacht, eine Folge, ein Risiko, eine Rückfrage).
+- Die schnelle Spur (A, B) wird dadurch nicht langsamer; Karten dürfen ein bis drei Minuten nach der Aussage kommen.
+- Lieber keine Karte als eine banale: höchstens zwei je Lauf, nichts Wiederholtes, keine Widersprüche, Fragen oder offenen Punkte (die meldet der Abgleich).
+- Jede Karte trägt ihre Herkunft. „Wiki“ und „Gespräch“ stehen nur da, wenn Zitat bzw. Aussage wörtlich geprüft sind; eine Bestätigung ohne beides wird verworfen.
+- Karten bleiben im Sitzungsordner. Sie gehen weder in die Übergabe ans Wiki noch in die KI-Analyse.
+- Läuft vorerst nicht mit der lokalen KI; der Schalter zeigt das an.
 
 ## 7. Übergreifende Anforderungen
 

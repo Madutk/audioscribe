@@ -41,7 +41,7 @@ from audioscribe.projekt.modell import ProjektFehler
 from audioscribe.ui import browse, dialog_nativ, jobs, kontext as kontext_modul, sofort as sofort_modul, state
 from audioscribe.ui.einarbeitung import Warteschlange
 from audioscribe.ui.runner import AnalyseRunner, BatchRunner, LiveRunner
-from audioscribe.verbrauch import QUELLE_SOUFFLEUR, Zaehler
+from audioscribe.verbrauch import QUELLE_MITDENKER, QUELLE_SOUFFLEUR, Zaehler
 
 _STATIC_DIR = Path(__file__).parent / "static"
 # Ausgeliefert werden nur diese Dateiarten aus static/ (samt Unterordnern js/, css/).
@@ -450,6 +450,7 @@ def create_app():
         souffleur_model: str | None = None
         souffleur_aktiv: bool | None = None
         souffleur_sensibel: bool | None = None
+        souffleur_mitdenken: bool | None = None
         # Aufnahmen ohne Projekt; leer = Vorgabe im Dokumente-Ordner
         eingang_dir: str | None = None
 
@@ -1094,6 +1095,7 @@ def create_app():
         else:
             chosen["wiki_dir"] = chosen.get("wiki_dir") or settings.wiki_dir
         chosen.setdefault("souffleur_aktiv", True)
+        chosen.setdefault("souffleur_mitdenken", False)
         chosen["souffleur_models"] = _souffleur_models()
         chosen["modus"] = kontext.modus
         acc = _accelerator()  # None = Probe nicht moeglich -> alle Geraete anbieten
@@ -1533,7 +1535,7 @@ def create_app():
         """Souffleur je Sitzung (PRD §20). Konfiguration kommt aus dem Einstellungsstand -
         der Wiki-Pfad wird nur in ``souffleur.konfig`` gelesen (K1)."""
         from audioscribe.souffleur.kern import Souffleur
-        from audioscribe.souffleur.ki import make_ki
+        from audioscribe.souffleur.ki import BACKEND_CLAUDE, make_ki
         from audioscribe.souffleur.konfig import lade_konfig
 
         speed = opts.replay_speed if opts.replay_transcript is not None else 1.0
@@ -1552,7 +1554,17 @@ def create_app():
             konfig.backend, konfig.modell, cache_dir=settings.cache_dir, log=live._append,
             on_verbrauch=lambda verbrauch: zaehler.buche(QUELLE_SOUFFLEUR, verbrauch),
         )
-        return Souffleur(konfig, ki=ki, ki_status=ki_status, log=live._append, leitfaden=leitfaden)
+        # Der Mitdenker bekommt einen eigenen Dienst, damit sein Verbrauch getrennt erscheint. Mit
+        # der lokalen KI läuft er vorerst nicht - dort genügt der eine Dienst für die Statusmeldung.
+        zaehler.beginne(QUELLE_MITDENKER)
+        mitdenk_ki = None
+        if ki is not None and ki.backend == BACKEND_CLAUDE:
+            mitdenk_ki, _ = make_ki(
+                konfig.backend, konfig.modell, cache_dir=settings.cache_dir, log=live._append,
+                on_verbrauch=lambda verbrauch: zaehler.buche(QUELLE_MITDENKER, verbrauch),
+            )
+        return Souffleur(konfig, ki=ki, ki_status=ki_status, log=live._append, leitfaden=leitfaden,
+                         mitdenk_ki=mitdenk_ki)
 
     def _leitfaden_pfad(roh: str) -> Path | None:
         """Pfad der Vorbereitung pruefen (400, wenn sie kein brauchbarer Leitfaden ist)."""
@@ -2013,6 +2025,15 @@ def create_app():
         souffleur = live.souffleur()
         if souffleur is not None:
             souffleur.setze_aktiv(body.aktiv)
+        return JSONResponse({"ok": True, "aktiv": body.aktiv})
+
+    @app.post("/api/souffleur/mitdenken")
+    def api_souffleur_mitdenken(body: SouffleurToggleIn):
+        """Mitdenker ein- oder ausschalten - merkt die Wahl und wirkt in der laufenden Sitzung sofort."""
+        state.save_state({"souffleur_mitdenken": body.aktiv})
+        souffleur = live.souffleur()
+        if souffleur is not None:
+            souffleur.setze_mitdenken(body.aktiv)
         return JSONResponse({"ok": True, "aktiv": body.aktiv})
 
     @app.get("/api/live/status")

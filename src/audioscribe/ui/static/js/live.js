@@ -8,7 +8,7 @@ import { zuordnenDialog } from './eingang.js';
 import { askConfirm, pickFolder } from './dialoge.js';
 import { openWikiDialog } from './wiki.js';
 import { karte as einarbeitungsKarte } from './einarbeitung.js';
-import { addHint, markSegment, hintBySeg, renderSouffleur, resetSouffleurView, gotoHint, gotoPunkt, setSouffleurHidden, renderHandover, zeigeWikiStatus, hinweisZahlen, setLeitfadenVorschau } from './souffleur.js';
+import { addHint, addGedanke, markSegment, hintBySeg, renderSouffleur, resetSouffleurView, gotoHint, gotoPunkt, setSouffleurHidden, renderHandover, zeigeWikiStatus, hinweisZahlen, setLeitfadenVorschau } from './souffleur.js';
 import { ladeVorgeschichte, demoZustand, vorspann } from './demo.js';
 import { pipStatus, umschalten as souffleurPip, einkoppeln as souffleurEinkoppeln, istAusgekoppelt, pipMoeglich } from './souffleur-pip.js';
 import { tr, englisch } from './i18n.js';
@@ -399,6 +399,7 @@ function insertByTime(el, t) {
 
 function addLiveEvent(ev) {
   if (ev.type === 'hinweis') { addHint(ev); return; }
+  if (ev.type === 'mitdenken') { addGedanke(ev); return; }  // Karte des Mitdenkers: eigener Bereich
   const el = document.createElement('p');
   if (ev.type === 'segment') {
     el.className = 'seg ' + (ev.track === 'mic' ? 'mic' : 'system');

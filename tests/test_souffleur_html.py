@@ -328,3 +328,44 @@ def test_css_responsiv_und_reduced_motion(css):
     r860 = css[css.index("@media (max-width: 860px)"):css.index("@media (max-width: 560px)")]
     assert ".hint-list { grid-template-columns: 1fr; }" in r860
     assert "@media (prefers-reduced-motion: reduce)" in css
+
+
+# --- Mitdenker (zweite Spur) -------------------------------------------------------------
+
+
+def test_mitdenker_hat_haekchen_und_eigenen_bereich(html):
+    assert '<label class="sf-mitdenken" id="souffleurMitdenkenWahl"' in html
+    haken = html[html.index('id="souffleurMitdenkenOn"') - 40:html.index('id="souffleurMitdenkenOn"') + 40]
+    assert 'type="checkbox"' in haken and "checked" not in haken  # Vorgabe aus
+    assert '<section class="md" id="souffleurMitdenken" hidden' in html
+    for ident in ("souffleurMitdenkenCount", "souffleurMitdenkenState", "souffleurMitdenkenList"):
+        assert f'id="{ident}"' in html
+    # Eigener Bereich zwischen den Hinweisen und den offenen Punkten - nicht in der Hinweisliste.
+    assert html.index('id="souffleurList"') < html.index('id="souffleurMitdenken"') < html.index('id="souffleurOpen"')
+    liste = html[html.index('id="souffleurList"'):html.index('id="souffleurMitdenken"')]
+    assert "souffleurMitdenkenList" not in liste
+
+
+def test_mitdenker_karten_laufen_getrennt_von_den_hinweisen():
+    js = (STATIC / "js" / "souffleur.js").read_text(encoding="utf-8")
+    live = (STATIC / "js" / "live.js").read_text(encoding="utf-8")
+    assert "if (ev.type === 'mitdenken') { addGedanke(ev); return; }" in live
+    assert "export function addGedanke(k)" in js and "post('/api/souffleur/mitdenken', { aktiv })" in js
+    for art in ("bestaetigung", "erkenntnis", "gedanke"):
+        assert f"{art}: {{ cls: '{art}'" in js
+    # Herkunft je Karte sichtbar; Wiki-Beleg nur mit geprüftem Zitat; KI-Text als KI gekennzeichnet.
+    assert "MD_HERKUNFT = { wiki: 'Wiki', gespraech: 'Gespräch', allgemeinwissen: 'KI-Wissen' }" in js
+    karte = js[js.index("function gedankeEl(k)"):js.index("export function addGedanke(k)")]
+    assert "k.wiki_zitat && k.fundstellen" in karte and "kiHtml(a.rolle, k.ki_text)" in karte and "md-her" in karte
+    # Karten zählen nicht als Hinweise und landen nicht in deren Liste oder bei den offenen Punkten.
+    add = js[js.index("export function addGedanke(k)"):js.index("async function toggleMitdenken()")]
+    assert "souffleurHints" not in add and "hintBySeg" not in add and "$('souffleurList')" not in add
+
+
+def test_mitdenker_css_nutzt_tokens(css):
+    for sel in (".sf-mitdenken", ".md {", ".mark.bestaetigung", ".mark.erkenntnis", ".mark.gedanke",
+                ".md-item.bestaetigung", ".md-item.gedanke", ".tag.her"):
+        assert sel in css, sel
+    block = css[css.index("/* Mitdenker:"):css.index("/* Aeltere Hinweise")]
+    assert not re.search(r"#[0-9a-fA-F]{3,6}\b", block)
+    assert "border-style: dashed" in css.split(".mark.gedanke")[1].split("\n")[0]  # KI-erzeugt: gestrichelt wie .ki

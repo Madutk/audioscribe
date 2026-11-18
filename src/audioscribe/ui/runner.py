@@ -869,7 +869,8 @@ class LiveRunner(_ProcessRunner):
         return {**info, "offset": new_offset, "lines": lines, "events": new_events, "ev_offset": total}
 
     def _on_hinweis(self, hinweis: dict) -> None:
-        """Eine Markierung des Souffleurs - als Ereignis fuer den Browser (wie segment/shot)."""
+        """Eine Markierung des Souffleurs - als Ereignis fuer den Browser (wie segment/shot).
+        Karten des Mitdenkers bringen ihren eigenen Typ ("mitdenken") mit; er gewinnt."""
         with self._lock:
             self._events.append({"type": "hinweis", **hinweis})
 

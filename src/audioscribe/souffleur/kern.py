@@ -27,6 +27,7 @@ from audioscribe.souffleur import bildtext as bt
 from audioscribe.souffleur import essenz as essenz_modul
 from audioscribe.souffleur import leitfaden as lf_modul
 from audioscribe.souffleur import markierung as mk
+from audioscribe.souffleur import mitdenker as md_modul
 from audioscribe.souffleur import prompt as prompt_modul
 from audioscribe.souffleur import wiki as wiki_modul
 from audioscribe.souffleur.ki import KiAuftrag, KiDienst, KiFehler, KiStatus
@@ -66,6 +67,7 @@ class Souffleur:
         log: Log | None = None,
         leitfaden: lf_modul.Leitfaden | None = None,
         erkenne: Callable[[Path], str] | None = None,
+        mitdenk_ki: KiDienst | None = None,
     ) -> None:
         self.konfig = konfig
         # Vorbereitung des Moderators (leitfaden.py) - Checkliste, kein Wissen.
@@ -105,6 +107,9 @@ class Souffleur:
         self._bild_worker: threading.Thread | None = None
         self._lf_gekappt_gemeldet = False  # Hinweis "Leitfaden zu lang" nur einmal je Sitzung
         self._letzte_verzoegerung: float | None = None
+        # Zweite Spur (mitdenker.py): eigener Thread, eigener Dienst (für den Verbrauch getrennt
+        # gezählt) - ohne Angabe derselbe wie der Abgleich.
+        self._mitdenker = md_modul.Mitdenker(self, mitdenk_ki if mitdenk_ki is not None else ki, konfig)
 
     # --- Lebenszyklus --------------------------------------------------------------
 
@@ -127,6 +132,7 @@ class Souffleur:
             self._log(f"Souffleur: {self._wiki_status.meldung}")
         self._worker = threading.Thread(target=self._arbeite, name="souffleur", daemon=True)
         self._worker.start()
+        self._mitdenker.starte()
 
     def _uebernehme_stand(self) -> None:
         """Wiederaufnahme (PRD §21): liegt im Sitzungsordner schon ein Stand, werden seine
@@ -145,6 +151,8 @@ class Souffleur:
                 self._log(tr("Souffleur: Leitfaden der unterbrochenen Sitzung übernommen ({n} Punkte)", n=len(lf.punkte)))
             elif self._leitfaden is not None:
                 self._schreibe_leitfaden()
+            for karte in self._mitdenker.uebernehme(self.session_dir):
+                self.on_hinweis({**karte.als_dict(), "type": md_modul.EREIGNIS})
         stand = mk.lade(self.session_dir) if self.session_dir is not None else None
         if stand is None or not stand.markierungen:
             return
@@ -227,10 +235,12 @@ class Souffleur:
         if self._worker is not None and self._worker is not threading.current_thread():
             self._worker.join(timeout=self.konfig.ki_timeout_s + 10)
         self._schreibe_stand()
+        self._mitdenker.abschliessen()
 
     def stop(self) -> None:
         """Harter Abbruch (Reset): keine Spätresultate mehr nach außen, nicht lange warten."""
         self.on_hinweis = lambda h: None
+        self._mitdenker.stop()
         with self._lock:
             self._beendet = True
             self._fenster.clear()
@@ -331,6 +341,36 @@ class Souffleur:
             if not aktiv:
                 self._fenster.clear()
         self._log(tr("Souffleur: eingeschaltet") if aktiv else tr("Souffleur: ausgeschaltet"))
+
+    # --- Mitdenker (zweite Spur) --------------------------------------------------------
+
+    def setze_mitdenken(self, aktiv: bool) -> None:
+        self._mitdenker.setze_aktiv(aktiv)
+        self._log(tr("Mitdenker: eingeschaltet") if aktiv else tr("Mitdenker: ausgeschaltet"))
+
+    def mitdenker(self) -> md_modul.Mitdenker:
+        return self._mitdenker
+
+    def _mitdenk_schnappschuss(self, fenster_s: float) -> dict:
+        """Was der Mitdenker für einen Lauf braucht - kurz unter der Sperre kopiert, damit Suche,
+        KI-Aufruf und Schreiben dort ohne sie laufen."""
+        jetzt = self.uhr.jetzt()
+        with self._lock:
+            if jetzt is None:
+                jetzt = max((float(s["end"]) for s in self._segmente), default=0.0)
+            von = jetzt - fenster_s
+            lf = self._leitfaden
+            return {
+                "jetzt": jetzt,
+                "aktiv": self._aktiv,
+                "beendet": self._beendet,
+                "wiki_laedt": self._wiki_laedt,
+                "wiki": self._wiki,
+                "segmente": [dict(s) for s in self._segmente if float(s["end"]) >= von],
+                "markierungen": [m.als_dict() for m in self._markierungen if m.t_start >= von],
+                "leitfaden": [{"id": p.id, "text": p.text, "status": p.status} for p in lf.offene()] if lf is not None else [],
+                "suchbegriffe": lf.suchbegriffe() if lf is not None else [],
+            }
 
     # --- Fensterung und Abgleich ------------------------------------------------------
 
@@ -839,9 +879,11 @@ class Souffleur:
         return "bereit"
 
     def status(self) -> dict:
+        mitdenken = self._mitdenker.status()  # eigene Sperre - nicht unter der des Souffleurs holen
         with self._lock:
             zustand = self._ki_zustand()
             return {
+                "mitdenken": mitdenken,
                 "aktiv": self._aktiv,
                 "beendet": self._beendet,
                 "wiki": self._wiki_status.als_dict() if not (self._wiki_laedt or self._wiki_wechselt) else {

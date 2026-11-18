@@ -940,6 +940,26 @@ in **„Ins Wiki speichern“** (`markierungen.json`, `markierungen.md` in der Q
 `raw/`, siehe [Projekte](#projekte-und-ablage-ins-wiki)). Ohne Haken bleiben sie hier. Die Essenzen gehen nicht mit – sie sind
 KI-erzeugt und keine Quelle. Einen eigenen Übergabeordner gibt es nicht mehr.
 
+### Mitdenken
+
+Mit dem Häkchen **Mitdenken** (Vorgabe aus, auch während der Sitzung umschaltbar) läuft neben dem
+Abgleich eine zweite, langsamere Spur: Alle ein bis zwei Minuten liest die KI die letzten fünf
+Minuten des Gesprächs, denkt darüber nach und zeigt Karten in einem eigenen Bereich unter den Hinweisen:
+
+| Karte | Was sie bedeutet |
+|---|---|
+| **Bestätigung** | Das Wiki stützt eine Aussage – mit Fundstelle und wörtlichem Zitat. |
+| **Erkenntnis** | Das Gespräch hat etwas ergeben, das festgehalten gehört: ein Ergebnis, ein Zusammenhang. |
+| **Gedanke** | Eine angefangene Idee einen Schritt weitergedacht, eine Folge, ein Risiko, eine Rückfrage. |
+
+Anders als der Abgleich darf der Mitdenker Wiki, Gespräch und Allgemeinwissen der KI verbinden. Jede
+Karte nennt deshalb ihre Herkunft (Wiki, Gespräch, KI-Wissen); „Wiki“ und „Gespräch“ stehen nur da,
+wenn Zitat und Aussage wörtlich geprüft sind. Karten kommen ein bis drei Minuten nach der Aussage,
+höchstens zwei je Lauf. Sie liegen in `souffleur-mitdenker.json` und `souffleur-mitdenker.md` im
+Sitzungsordner und gehen nicht ins Wiki und nicht in die KI-Analyse. Der Abgleich wird dadurch nicht
+langsamer; der Verbrauch steht getrennt als „Mitdenker“. Mit der lokalen KI läuft das Mitdenken
+vorerst nicht.
+
 <details>
 <summary>Wie der Abgleich arbeitet, KI-Dienst, Verzögerung</summary>
 

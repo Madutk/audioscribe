@@ -551,6 +551,34 @@ button.mark.anknuepfen:hover { background: var(--accent-soft); }
 .seg.marked.anknuepfen { border-left-color: var(--accent); border-left-style: dotted; }
 .hint-item.anknuepfen { border-left-color: var(--accent); border-left-style: dotted; }
 
+/* Mitdenker: Schalter in der Werkzeugzeile, eigener Bereich unter den Hinweisen. Ruhiger als die
+   drei Warnarten - Bestätigung gefüllt, Erkenntnis neutral, Gedanke gestrichelt (KI-erzeugt). */
+.sf-mitdenken { display: inline-flex; align-items: center; gap: 6px; flex: none; min-height: 30px; padding: 0 9px; font-size: 12px;
+                color: var(--fg-muted); border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface);
+                cursor: pointer; user-select: none; }
+.sf-mitdenken:has(input:checked) { border-color: var(--accent); color: var(--fg); }
+.sf-mitdenken:has(input:disabled) { opacity: .55; cursor: not-allowed; }
+/* Drei Teile passen nicht immer nebeneinander: dann rutscht das Häkchen in die nächste Zeile,
+   statt die Wiki-Anzeige auf zwei Buchstaben zu quetschen. */
+.souffleur-tools { flex-wrap: wrap; }
+.souffleur-tools .wiki-state.compact { flex: 1 1 150px; }
+.md { margin-top: var(--s3); padding-top: var(--s2); border-top: 1px solid var(--border); }
+.md[hidden] { display: none; }
+.md-kopf { display: flex; align-items: center; gap: 6px; margin-bottom: var(--s2); font-size: 12px; font-weight: 600; color: var(--fg-muted); }
+.md-kopf .ic { width: 14px; height: 14px; color: var(--accent); }
+.md-kopf .hint { font-weight: 400; }
+.md-list { display: flex; flex-direction: column; gap: var(--s2); }
+.md-list .hint.leer { padding: 2px 0 var(--s2); }
+.mark.bestaetigung { background: var(--ok-soft); color: var(--ok); border-color: var(--ok); }
+.mark.erkenntnis { background: var(--surface-2); color: var(--fg); border-color: var(--border-strong); }
+.mark.gedanke { background: transparent; color: var(--fg-muted); border-style: dashed; border-color: var(--border-strong); }
+.md-item.bestaetigung { border-left-color: var(--ok); }
+.md-item.erkenntnis { border-left-color: var(--fg-faint); }
+.md-item.gedanke { border-left-color: var(--border-strong); border-left-style: dashed; }
+.md-her { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: 0; font-size: 11px; color: var(--fg-faint); }
+.tag.her { padding: 0 6px; border: 1px solid var(--border); border-radius: var(--radius-pill); font-size: 11px; color: var(--fg-muted); }
+.tag.her.allgemeinwissen { border-style: dashed; }
+
 /* Aeltere Hinweise, Screenshots darunter */
 details.older > summary, details.shots > summary { list-style: none; display: flex; align-items: center; gap: 6px; font-size: 12px;
             font-weight: 500; color: var(--fg-muted); padding: 6px 0; cursor: pointer; user-select: none; border-radius: var(--radius-sm); }

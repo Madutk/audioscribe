@@ -21,6 +21,11 @@ let souffleurEssenzen = [];      // Ergebnisse von /api/souffleur/essenz, aeltes
 let souffleurToggling = false;   // laufender POST /api/souffleur/toggle - solange nicht vom Poll ueberschreiben
 const HINT_DIRECT = 9;           // ab dem 10. Hinweis wandern die aelteren unter "Ältere (n)"
 const HINT_OPEN = 1;             // nur der neueste Hinweis aufgeklappt - aeltere einzeilig, auf Klick
+// Mitdenker (zweite Spur): Karten vom Typ "mitdenken" - eigener Bereich, eigener ID-Raum (M1, M2, ...)
+let mdKarten = [];               // mitdenken-Ereignisse in Ankunftsreihenfolge
+const mdEls = new Map();         // karte.id -> details.md-item
+let mdToggling = false;          // laufender POST /api/souffleur/mitdenken - solange nicht vom Poll ueberschreiben
+const MD_DIRECT = 5;             // ab der 6. Karte wandern die aelteren unter "Ältere (n)"
 // Leitfaden (Meeting-Vorbereitung) - siehe unten
 let lfVorschau = null;           // /api/leitfaden/vorschau der gewaehlten Datei (vor dem Start)
 let lfKey = '';                  // zuletzt gezeichneter Stand - der Poll zeichnet nur bei Aenderung
@@ -45,6 +50,14 @@ const artOf = (h) => {
     : { cls: 'frage', icon: 'help-circle', wort: h.label || h.art, label: h.label || h.art };
 };
 const hintId = (h) => `h-${h.id}`;
+// rolle = Ueberschrift ueber dem KI-Text; wort und rolle sind deutsche Schluessel wie oben.
+const MD_ART = {
+  bestaetigung: { cls: 'bestaetigung', icon: 'check', wort: 'Bestätigung', rolle: 'Einordnung' },
+  erkenntnis: { cls: 'erkenntnis', icon: 'book-plus', wort: 'Erkenntnis', rolle: 'Erkenntnis' },
+  gedanke: { cls: 'gedanke', icon: 'sparkles', wort: 'Gedanke', rolle: 'Weitergedacht' },
+};
+// Herkunft je Karte setzt der Server: Wiki und Gespraech nur bei woertlich geprueftem Beleg.
+const MD_HERKUNFT = { wiki: 'Wiki', gespraech: 'Gespräch', allgemeinwissen: 'KI-Wissen' };
 const tagKi = () => `<span class="tag ki">${icon('sparkles')}${tr('KI')}</span>`;
 
 export function resetSouffleurView() {
@@ -52,6 +65,9 @@ export function resetSouffleurView() {
   menuAuf(false);
   souffleurInfo = null; souffleurHints = []; souffleurEssenzen = [];
   hintBySeg.clear(); hintEls.clear();
+  mdKarten = []; mdEls.clear();
+  $('souffleurMitdenkenList').innerHTML = '';
+  renderMitdenken(null);
   $('souffleurList').innerHTML = empty('lightbulb', tr('Hinweise zu Fragen, Widersprüchen und offenen Punkten erscheinen hier.'));
   $('souffleurEssenz').innerHTML = ''; $('souffleurEssenz').hidden = true;
   $('souffleurErr').textContent = '';
@@ -378,6 +394,7 @@ export function renderSouffleur(s) {
   liveRunning = !!s.running;
   souffleurInfo = sf;
   if (sf && !souffleurToggling) $('souffleurOn').checked = !!sf.aktiv;
+  renderMitdenken(sf);
   renderSouffleurState(sf, !!s.running);
   renderWikiState($('souffleurWiki'), sf ? sf.wiki : S.wikiStatus, true);
   renderWikiActions(sf ? sf.wiki : S.wikiStatus);
@@ -401,6 +418,97 @@ async function toggleSouffleur() {
     souffleurToggling = false;
   }
   renderSouffleurState(souffleurInfo && { ...souffleurInfo, aktiv: $('souffleurOn').checked }, liveRunning);
+}
+
+// --- Mitdenker: zweite Spur - Karten im eigenen Bereich, getrennt von den Hinweisen ----------
+
+/** Schalter, Zaehler und Zustand. Ohne Sitzung gilt die gemerkte Wahl; die lokale KI kann es noch nicht. */
+function renderMitdenken(sf) {
+  const md = sf ? sf.mitdenken : null;
+  const box = $('souffleurMitdenkenOn');
+  const kann = md ? md.verfuegbar : !cloudCompliant();
+  if (!mdToggling) box.checked = kann && (md ? !!md.aktiv : !!(S.defaults && S.defaults.souffleur_mitdenken));
+  box.disabled = !kann;
+  $('souffleurMitdenkenWahl').title = kann
+    ? tr('Die KI denkt alle ein bis zwei Minuten mit: bestätigt Aussagen aus dem Wiki, denkt Ideen weiter, hält Erkenntnisse fest')
+    : (md && md.grund) || tr('Mitdenken läuft vorerst nicht mit der lokalen KI.');
+  const n = mdKarten.length;
+  $('souffleurMitdenken').hidden = !(n || (kann && box.checked));
+  $('souffleurMitdenkenCount').textContent = n === 1 ? tr('{n} Karte', { n }) : tr('{n} Karten', { n });
+  let text = '', cls = '', title = '';
+  if (md && md.aktiv && liveRunning && !(sf && sf.beendet)) {
+    if (md.zustand === 'denkt') { text = tr('denkt mit …'); cls = 'laeuft'; }
+    else if (md.zustand === 'pause') { text = tr('pausiert'); cls = 'warn'; title = md.meldung || ''; }
+    else { text = tr('wartet'); title = tr('Der nächste Lauf kommt, sobald genug Neues gesagt wurde.'); }
+  }
+  const badge = $('souffleurMitdenkenState');
+  badge.textContent = text; badge.className = 'badge ' + cls; badge.title = title; badge.hidden = !text;
+  const list = $('souffleurMitdenkenList');
+  const leer = list.querySelector(':scope > .leer');
+  if (!n && !leer) list.innerHTML = `<p class="hint leer">${tr('Bestätigungen aus dem Wiki, Erkenntnisse und weitergedachte Ideen erscheinen hier – KI-erzeugt, mit Herkunft.')}</p>`;
+  else if (n && leer) leer.remove();
+}
+
+function gedankeEl(k) {
+  const a = MD_ART[k.art] || MD_ART.gedanke;
+  const el = document.createElement('details');
+  el.className = `hint-item md-item ${a.cls} new`;
+  el.id = `md-${k.id}`;
+  el.open = true;
+  const her = (k.herkunft || []).map((h) => `<span class="tag her ${esc(h)}">${esc(tr(MD_HERKUNFT[h] || h))}</span>`).join('');
+  const said = k.aussage
+    ? `<p class="said">${k.sprecher ? tr('Gesagt ({sprecher}):', { sprecher: esc(k.sprecher) }) : tr('Gesagt:')} <q>${esc(k.aussage)}</q></p>` : '';
+  // Wiki-Beleg nur mit geprueftem Zitat - sonst stuende ein blosser Auszug als Beleg da.
+  const wiki = k.wiki_zitat && k.fundstellen && k.fundstellen.length ? wikiQuoteHtml(k) : '';
+  el.innerHTML = `<summary><span class="mark ${a.cls}">${icon(a.icon)}${esc(tr(a.wort))}</span>`
+    + `<button class="ts" type="button" data-goto-seg="${esc(String(k.segment_id))}" title="${tr('Zur Transkriptzeile')}">${tc(k.t_start)}</button>`
+    + `<span class="title">${esc(k.titel || tr(a.wort))}</span></summary>`
+    + `<div class="hint-body"><p class="md-her">${tr('Herkunft:')} ${her}</p>${said}${wiki}${kiHtml(a.rolle, k.ki_text)}</div>`;
+  setTimeout(() => el.classList.remove('new'), 400);
+  return el;
+}
+
+/** Neue Karte oben und aufgeklappt, alle anderen zu; ab der 6. unter "Ältere (n)". */
+export function addGedanke(k) {
+  if (mdEls.has(k.id)) return;
+  mdKarten.push(k);
+  const list = $('souffleurMitdenkenList');
+  for (const offen of list.querySelectorAll('details.md-item[open]')) offen.open = false;
+  const el = gedankeEl(k);
+  mdEls.set(k.id, el);
+  list.prepend(el);
+  let older = list.querySelector(':scope > details.older');
+  const direct = [...list.children].filter((n) => n.classList.contains('md-item'));
+  if (direct.length > MD_DIRECT) {
+    if (!older) {
+      older = document.createElement('details');
+      older.className = 'older';
+      older.innerHTML = `<summary>${icon('chevron-right')}<span></span></summary>`;
+    }
+    for (const alt of direct.slice(MD_DIRECT)) older.querySelector('summary').after(alt);
+  }
+  if (older) {
+    older.querySelector('summary span').textContent = tr('Ältere ({n})', { n: older.querySelectorAll('.md-item').length });
+    list.append(older);
+  }
+  renderMitdenken(souffleurInfo);
+}
+
+async function toggleMitdenken() {
+  const aktiv = $('souffleurMitdenkenOn').checked;
+  mdToggling = true;
+  $('souffleurErr').textContent = '';
+  try {
+    await post('/api/souffleur/mitdenken', { aktiv });
+    if (S.defaults) S.defaults.souffleur_mitdenken = aktiv;  // gilt auch vor der naechsten Sitzung
+    if (souffleurInfo && souffleurInfo.mitdenken) souffleurInfo.mitdenken.aktiv = aktiv;
+  } catch (err) {
+    $('souffleurErr').textContent = err.message;
+    $('souffleurMitdenkenOn').checked = !aktiv;
+  } finally {
+    mdToggling = false;
+  }
+  renderMitdenken(souffleurInfo);
 }
 
 /** Essenz der letzten 2 oder 5 Minuten - Fehler (400/409) erscheinen ruhig im Bereich, kein Toast. */
@@ -673,6 +781,7 @@ $('souffleurLeitfadenAlle').onclick = () => { lfAlle = !lfAlle; zeichneLeitfaden
 $('souffleurHide').onclick = () => setSouffleurHidden(true);
 $('souffleurShow').onclick = () => setSouffleurHidden(false);
 $('souffleurOn').onchange = toggleSouffleur;
+$('souffleurMitdenkenOn').onchange = toggleMitdenken;
 $('souffleurEssenz2').onclick = () => essenz(2);
 $('souffleurEssenz5').onclick = () => essenz(5);
 $('souffleurEssenz2').disabled = true;

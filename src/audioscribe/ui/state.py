@@ -59,6 +59,8 @@ STATE_KEYS: tuple[str, ...] = (
     "souffleur_backend",
     "souffleur_aktiv",
     "souffleur_sensibel",
+    # Mitdenker: zweite Spur des Souffleurs (Vorgabe aus).
+    "souffleur_mitdenken",
     # Globale Vorgabe fuer die Transkriptionssprache (PRD §21); Projekte koennen sie ueberschreiben.
     "sprache",
     # Projekte (PRD §21): zuletzt geoeffnete, juengstes zuerst - je {"pfad", "name", "geoeffnet"}.
@@ -77,7 +79,7 @@ LIVE_SOURCES: tuple[str, ...] = ("monitor", "window", "none", "transcript")
 
 _BOOL_KEYS = (
     "diarize", "frames", "agent_bash", "live_partials", "live_speakers", "live_refine",
-    "souffleur_aktiv", "souffleur_sensibel",
+    "souffleur_aktiv", "souffleur_sensibel", "souffleur_mitdenken",
 )
 
 _LOESCHBAR = ("wiki_dir", "eingang_dir")

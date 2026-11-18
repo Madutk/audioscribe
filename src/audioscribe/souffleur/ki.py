@@ -62,6 +62,10 @@ class KiAuftrag:
     schema: dict
     kontext: dict = field(default_factory=dict)
     timeout_s: float = DEFAULT_TIMEOUT_S
+    # Nur der Mitdenker (mitdenker.py) lässt nachdenken; der Abgleich je Fenster bleibt schnell.
+    # Dienste ohne Denkmodus (Ollama, Attrappe) übergehen beides.
+    denken: bool = False
+    aufwand: str = "low"
 
 
 @dataclass(frozen=True)
@@ -133,11 +137,13 @@ class ClaudeAgentKi:
             system_prompt=auftrag.system,
             setting_sources=[],  # keine CLAUDE.md, keine Skills, keine Projekt-Einstellungen
             strict_mcp_config=True,
-            max_turns=1,
+            # Mit Denken braucht die strukturierte Antwort einen zweiten Turn (gemessen: mit 1
+            # bricht die CLI mit "Reached maximum number of turns" ab).
+            max_turns=2 if auftrag.denken else 1,
             cwd=str(self.cwd),
             output_format={"type": "json_schema", "schema": auftrag.schema},
-            thinking={"type": "disabled"},
-            effort="low",
+            thinking={"type": "adaptive"} if auftrag.denken else {"type": "disabled"},
+            effort=auftrag.aufwand,
             extra_args={"no-session-persistence": None},
             stderr=lambda line: self._log(f"[KI] {line.rstrip()}"),
         )
@@ -194,6 +200,7 @@ _OFFEN = (
     "still open", "unresolved", "still unclear", "need to clarify", "not clarified",
 )
 _GEKLAERT = ("machen wir so", "ist entschieden", "abgemacht", "einverstanden", "geklärt", "agreed", "decided", "settled")
+_VORSCHLAG = ("man könnte", "wir könnten", "vielleicht sollten wir", "we could", "maybe we should")
 _STOPP = {
     "der", "die", "das", "und", "oder", "ist", "sind", "ein", "eine", "wir", "bei", "uns", "von", "im", "in",
     "mit", "für", "auf", "zu", "den", "dem", "des", "es", "sich", "auch", "nicht", "ab", "an", "wer", "wie",
@@ -233,6 +240,8 @@ class AttrappeKi:
         art = auftrag.kontext.get("art")
         if art == "essenz":
             daten = self._essenz(auftrag.kontext)
+        elif art == "mitdenken":
+            daten = self._mitdenken(auftrag.kontext)
         else:
             daten = self._befunde(auftrag.kontext)
         return KiAntwort(daten=daten, start_s=0.0, antwort_s=time.monotonic() - t0, modell=self.modell)
@@ -321,6 +330,32 @@ class AttrappeKi:
         saetze = [_erster_satz(str(s.get("text", ""))) for s in kontext.get("segmente", [])]
         saetze = [s for s in saetze if len(_woerter(s)) >= 3]
         return {"essenz": [{"punkt": s} for s in saetze[:5]], "offen": []}
+
+    def _mitdenken(self, kontext: dict) -> dict:
+        """Mitdenker (mitdenker.py): ein angefangener Vorschlag wird zum Gedanken, eine Einigung zur
+        Erkenntnis, und was mindestens zwei Inhaltswörter mit einem Wiki-Auszug teilt, zur Bestätigung."""
+        karten: list[dict] = []
+        fundstellen: list[dict] = kontext.get("fundstellen", [])
+        for seg in kontext.get("segmente", []):
+            text = str(seg.get("text", "")).strip()
+            unten = text.lower()
+            karte = {"segment_id": seg["id"], "aussage": text, "titel": _erster_satz(text)[:80],
+                     "fundstelle_id": None, "wiki_zitat": None, "bezug_segment_ids": [],
+                     "allgemeinwissen": False, "relevanz": "hoch"}
+            if any(s in unten for s in _VORSCHLAG):
+                karten.append({**karte, "art": "gedanke", "allgemeinwissen": True,
+                               "ki_text": tr("Der Vorschlag ist noch nicht zu Ende gedacht.")})
+            elif any(s in unten for s in _GEKLAERT) and not any(o in unten for o in _OFFEN):
+                karten.append({**karte, "art": "erkenntnis", "ki_text": tr("Darauf hat sich die Runde geeinigt.")})
+            else:
+                woerter = _woerter(text)
+                treffer = next((f for f in fundstellen
+                                if len(woerter & _woerter(f"{f['ueberschrift']} {f['auszug']}")) >= 2), None)
+                if treffer is not None and not text.endswith("?"):
+                    karten.append({**karte, "art": "bestaetigung", "fundstelle_id": treffer["id"],
+                                   "wiki_zitat": _erster_satz(treffer["auszug"]),
+                                   "ki_text": tr("Das Wiki hält das so fest.")})
+        return {"karten": karten[:2]}
 
 
 def _erster_satz(text: str) -> str:

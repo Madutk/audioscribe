@@ -588,6 +588,8 @@
           <button class="secondary sm" type="button" id="souffleurEssenz2" title="Essenz der letzten 2 Minuten" aria-label="Essenz der letzten 2 Minuten">2 min</button>
           <button class="secondary sm" type="button" id="souffleurEssenz5" title="Essenz der letzten 5 Minuten" aria-label="Essenz der letzten 5 Minuten">5 min</button>
         </div>
+        <!-- Mitdenker: zweite, langsame Spur (Vorgabe aus) - denkt alle ein bis zwei Minuten über das Gespräch nach -->
+        <label class="sf-mitdenken" id="souffleurMitdenkenWahl" title="Die KI denkt alle ein bis zwei Minuten mit: bestätigt Aussagen aus dem Wiki, denkt Ideen weiter, hält Erkenntnisse fest"><input type="checkbox" id="souffleurMitdenkenOn" />Mitdenken</label>
       </div>
       <div class="err" id="souffleurErr"></div>
 
@@ -608,6 +610,18 @@
         <div class="hint-list" id="souffleurList">
           <div class="empty"><svg class="ic" aria-hidden="true"><use href="#i-lightbulb"/></svg>Hinweise zu Fragen, Widersprüchen und offenen Punkten erscheinen hier.</div>
         </div>
+
+        <!-- Karten des Mitdenkers: eigener Bereich, getrennt von den Hinweisen (KI-erzeugt, Herkunft je Karte) -->
+        <section class="md" id="souffleurMitdenken" hidden aria-labelledby="souffleurMitdenkenTitel">
+          <div class="md-kopf">
+            <svg class="ic" aria-hidden="true"><use href="#i-sparkles"/></svg>
+            <span id="souffleurMitdenkenTitel">Mitdenker</span>
+            <span class="hint" id="souffleurMitdenkenCount"></span>
+            <span class="spacer"></span>
+            <span class="badge" id="souffleurMitdenkenState"></span>
+          </div>
+          <div class="md-list" id="souffleurMitdenkenList"></div>
+        </section>
 
         <details class="open-box" id="souffleurOpen">
           <summary><svg class="ic chev" aria-hidden="true"><use href="#i-chevron-right"/></svg>Offene Punkte <span class="hint" id="souffleurOpenCount"></span></summary>

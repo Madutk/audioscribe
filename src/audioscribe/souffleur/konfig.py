@@ -25,6 +25,7 @@ KEY_MODELL = "souffleur_model"
 KEY_BACKEND = "souffleur_backend"
 KEY_AKTIV = "souffleur_aktiv"
 KEY_SENSIBEL = "souffleur_sensibel"
+KEY_MITDENKEN = "souffleur_mitdenken"
 
 
 @dataclass(frozen=True)
@@ -52,6 +53,14 @@ class SouffleurKonfig:
     # Bilder je Fenster im Prompt.
     bildtext: bool = True
     bilder_im_prompt: int = 3
+    # Mitdenker (mitdenker.py): zweite, langsame Spur mit Nachdenken - zuschaltbar, Vorgabe aus.
+    # Ein Lauf frühestens alle ``mitdenken_takt_s`` (Sitzungsuhr) und nur mit genug neuem Inhalt;
+    # er sieht die letzten ``mitdenken_fenster_s`` des Gesprächs.
+    mitdenken: bool = False
+    mitdenken_takt_s: float = 90.0
+    mitdenken_fenster_s: float = 300.0
+    mitdenken_min_woerter: int = 40
+    mitdenken_timeout_s: float = 120.0
 
 
 def _pfad(raw: object) -> Path | None:
@@ -87,5 +96,6 @@ def lade_konfig(
         backend=eff["ki_dienst"],
         aktiv=bool(state.get(KEY_AKTIV, True)),
         sensibel=bool(state.get(KEY_SENSIBEL, False)),
+        mitdenken=bool(state.get(KEY_MITDENKEN, False)),
         speed=speed,
     )

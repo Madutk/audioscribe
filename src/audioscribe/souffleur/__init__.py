@@ -25,4 +25,7 @@ SOUFFLEUR_DATEIEN: tuple[str, ...] = (
     "souffleur-essenz.jsonl",
     "souffleur-leitfaden.json",
     "souffleur-leitfaden.md",
+    # Mitdenker (mitdenker.py): KI-erzeugte Karten - bleiben im Sitzungsordner, nie ins Wiki.
+    "souffleur-mitdenker.json",
+    "souffleur-mitdenker.md",
 )

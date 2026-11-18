@@ -98,6 +98,8 @@ export default {
   "{n} Tokens": "{n} tokens",
   "KI-Verbrauch seit Programmstart: {verbrauch} – Einzelheiten anzeigen": "AI usage since startup: {verbrauch} – show details",
   "Souffleur, diese Sitzung (1 Aufruf)": "Souffleur, this session (1 call)",
+  "Mitdenker, diese Sitzung (1 Aufruf)": "Thinking partner, this session (1 call)",
+  "Mitdenker, diese Sitzung ({n} Aufrufe)": "Thinking partner, this session ({n} calls)",
   "Souffleur, diese Sitzung ({n} Aufrufe)": "Souffleur, this session ({n} calls)",
   "KI-Analyse, dieser Lauf": "AI analysis, this run",
   "Seit Programmstart": "Since startup",

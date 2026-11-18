@@ -470,5 +470,18 @@
   "Zwischenablage nicht umschaltbar: {fehler}": "Clipboard cannot be switched: {fehler}",
   "## Meeting-Vorbereitung": "## Meeting preparation",
   "`{datei}` ist der Leitfaden des Moderators mit dem Stand je Punkt aus dem Meeting (vom Souffleur eingeschätzt oder von Hand gesetzt). Gleiche ihn gegen Transkript und Standbilder ab: Welche Punkte sind laut Material geklärt (mit Beleg), welche offen, welche nur scheinbar geklärt? Nimm das Ergebnis je Punkt in die Dokumente auf. Der Leitfaden ist kein Wissen.": "`{datei}` is the moderator's agenda with the status of each item from the meeting (assessed by the Souffleur or set by hand). Check it against the transcript and the still images: which items are resolved according to the material (with evidence), which are open, which only seem resolved? Include the result per item in the documents. The agenda is not knowledge.",
-  "`{datei}` enthält den per Texterkennung gelesenen Text der Standbilder (Feld `datei` = Bild unter `material/frames/`) - zum Suchen; im Zweifel gilt das Bild selbst.": "`{datei}` contains the text of the still images read via text recognition (field `datei` = image under `material/frames/`) - for searching; when in doubt, the image itself applies."
+  "`{datei}` enthält den per Texterkennung gelesenen Text der Standbilder (Feld `datei` = Bild unter `material/frames/`) - zum Suchen; im Zweifel gilt das Bild selbst.": "`{datei}` contains the text of the still images read via text recognition (field `datei` = image under `material/frames/`) - for searching; when in doubt, the image itself applies.",
+  "Bestätigung": "Confirmation",
+  "Erkenntnis": "Insight",
+  "Gedanke": "Thought",
+  "Mitdenken braucht einen KI-Dienst.": "Thinking along needs an AI service.",
+  "Mitdenken läuft vorerst nicht mit der lokalen KI.": "Thinking along does not run with the local AI yet.",
+  "Mitdenker: Lauf übersprungen: {fehler}": "Thinking partner: run skipped: {fehler}",
+  "Mitdenker: {art} bei {t} s (KI {ki} s)": "Thinking partner: {art} at {t} s (AI {ki} s)",
+  "Mitdenker: Karte nicht zugestellt: {fehler}": "Thinking partner: card not delivered: {fehler}",
+  "Mitdenker: eingeschaltet": "Thinking partner: switched on",
+  "Mitdenker: ausgeschaltet": "Thinking partner: switched off",
+  "Der Vorschlag ist noch nicht zu Ende gedacht.": "The proposal has not been thought through yet.",
+  "Darauf hat sich die Runde geeinigt.": "The group agreed on this.",
+  "Das Wiki hält das so fest.": "The wiki records it this way."
 }

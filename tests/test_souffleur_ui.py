@@ -170,6 +170,42 @@ def test_toggle_route_merkt_zustand(client):
     assert state.load_state()["souffleur_aktiv"] is False
 
 
+def test_mitdenken_route_merkt_zustand_und_vorgabe_ist_aus(client):
+    from audioscribe.ui import state
+
+    assert client.get("/api/defaults").json()["souffleur_mitdenken"] is False
+    assert client.post("/api/souffleur/mitdenken", json={"aktiv": True}).json() == {"ok": True, "aktiv": True}
+    assert state.load_state()["souffleur_mitdenken"] is True
+    assert client.get("/api/defaults").json()["souffleur_mitdenken"] is True
+    assert client.post("/api/state", json={"souffleur_mitdenken": False}).status_code == 200
+    assert state.load_state()["souffleur_mitdenken"] is False
+
+
+def test_mitdenk_karten_kommen_als_eigenes_ereignis(tmp_path):
+    """Der Mitdenker meldet über denselben Weg wie die Hinweise, aber mit eigenem Typ - die
+    Oberfläche hält beide Listen getrennt."""
+    konfig = SouffleurKonfig(wiki_dir=None, backend="attrappe", mitdenken=True, mitdenken_takt_s=0.0,
+                             mitdenken_min_woerter=1)
+    kind = CHILD.replace("Guten Morgen zusammen, schön dass alle da sind.",
+                         "Man könnte die Rechnungen vielleicht automatisch vorprüfen.").replace(
+        "time.sleep(0.2)", "time.sleep(2.5)")
+    (tmp_path / "live-x").mkdir()
+    runner = LiveRunner()
+    runner.start(
+        LiveJobOptions(output_dir=tmp_path, refine=False),
+        argv_builder=lambda o: [sys.executable, "-c", kind, str(tmp_path / "live-x")],
+        souffleur_factory=lambda o: _attrappe(konfig),
+    )
+    snap = _warte(runner)
+    karten = [e for e in snap["events"] if e["type"] == "mitdenken"]
+    assert [k["id"] for k in karten] == ["M1"] and karten[0]["art"] == "gedanke"
+    assert karten[0]["herkunft"] == ["gespraech", "allgemeinwissen"] and karten[0]["segment_id"] == 1
+    assert [e["art"] for e in snap["events"] if e["type"] == "hinweis"] == ["frage"]
+    st = snap["souffleur"]["mitdenken"]
+    assert st["aktiv"] is True and st["verfuegbar"] is True and st["karten"] == 1
+    assert (tmp_path / "live-x" / "souffleur-mitdenker.json").is_file()
+
+
 def test_state_route_merkt_souffleur_einstellungen(client, tmp_path):
     from audioscribe.ui import state
 
