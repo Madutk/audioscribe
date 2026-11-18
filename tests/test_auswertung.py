@@ -10,6 +10,7 @@ import re
 import shutil
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -266,21 +267,319 @@ def test_falsche_form_ist_nicht_lesbar_und_fehlendes_log_laesst_felder_leer(tmp_
     assert "Verworfene KI-Meldungen: nicht erfasst" in (ordner / MD_DATEI).read_text(encoding="utf-8")
 
 
-def test_unbekannter_grund_zaehlt_nur_als_kurzer_bezeichner(tmp_path):
-    """Kriterium 16: ein Grund, der kein kurzer Bezeichner ist, zählt unter „sonstige“."""
+def test_unbekannter_grund_zaehlt_unter_sonstige(tmp_path):
+    """Kriterium 16: ein unbekannter Wert - auch ein kurzer Bezeichner - steht in keiner der zwei
+    Dateien und nicht im Ergebnis; er zählt unter „sonstige“."""
     ordner = tmp_path / "s"
     ordner.mkdir()
     zeilen = [
         {"fenster_id": 1, "uebergangen": "neuer_grund"},
         {"fenster_id": 2, "uebergangen": "ERFUNDEN ein ganzer Satz statt eines Grundes"},
-        {"fenster_id": 3, "ki_antwort_s": 1.0, "verworfen": [{"grund": "x" * 41}, {"grund": "neu_2"}, "kein objekt"]},
+        {"fenster_id": 3, "uebergangen": "zu_kurz"},
+        {"fenster_id": 4, "ki_antwort_s": 1.0, "verworfen": [{"grund": "x" * 41}, {"grund": "neu_2"}, "kein objekt"]},
+        {"fenster_id": 5, "ki_antwort_s": 1.0, "verworfen": [{"grund": "dublette"}, {"grund": "ohne_beleg"}]},
     ]
     (ordner / "souffleur-diagnose.jsonl").write_text("".join(json.dumps(z) + "\n" for z in zeilen), encoding="utf-8")
-    fenster = auswertung.erzeuge(ordner)["fenster"]
-    assert fenster["ohne_ki_aufruf"] == {"neuer_grund": 1, "sonstige": 1}
-    assert fenster["verworfen"] == {"sonstige": 2, "neu_2": 1}
-    assert "ERFUNDEN" not in (ordner / JSON_DATEI).read_text(encoding="utf-8")
-    assert "ERFUNDEN" not in (ordner / MD_DATEI).read_text(encoding="utf-8")
+    daten = auswertung.erzeuge(ordner)
+    assert daten["fenster"]["ohne_ki_aufruf"] == {"zu_kurz": 1, "sonstige": 2}
+    # "ohne_beleg" ist ein Grund des Leitfadens, kein Grund für verworfene Befunde.
+    assert daten["fenster"]["verworfen"] == {"dublette": 1, "sonstige": 4}
+    for text in _alle_fassungen(ordner, daten):
+        assert "neuer_grund" not in text and "neu_2" not in text and "xxxx" not in text and "ERFUNDEN" not in text
+
+
+def _alle_fassungen(ordner: Path, daten: dict) -> list[str]:
+    """JSON-Datei, Markdown-Datei und das Ergebnis, wie es in den Sitzungszustand geht."""
+    return [
+        (ordner / JSON_DATEI).read_text(encoding="utf-8"),
+        (ordner / MD_DATEI).read_text(encoding="utf-8"),
+        json.dumps(daten, ensure_ascii=False),
+    ]
+
+
+def _fremd(tmp_path: Path) -> Path:
+    """session-full mit je einem fremden Wort in ``art``, ``wiki.zustand``, ``ki.backend``,
+    ``herkunft``, einem Status, einer Relevanz und Gründen der KI."""
+    ordner = _kopie(tmp_path, "session-full")
+    stand = json.loads((ordner / "souffleur.json").read_text(encoding="utf-8"))
+    stand["markierungen"][0]["art"] = "FREMDART"
+    stand["markierungen"][1]["sicherheit"] = "FREMDSICHER"
+    stand["wiki"]["zustand"] = "FREMDZUSTAND"
+    stand["ki"]["backend"] = "FREMDDIENST"
+    (ordner / "souffleur.json").write_text(json.dumps(stand), encoding="utf-8")
+    karten = json.loads((ordner / "souffleur-mitdenker.json").read_text(encoding="utf-8"))
+    karten["karten"][0]["herkunft"] = ["wiki", "FREMDHERKUNFT"]
+    karten["karten"][1]["art"] = "FREMDKARTE"
+    karten["karten"][2]["relevanz"] = "FREMDRELEVANZ"
+    (ordner / "souffleur-mitdenker.json").write_text(json.dumps(karten), encoding="utf-8")
+    punkte = json.loads((ordner / "souffleur-leitfaden.json").read_text(encoding="utf-8"))
+    punkte["punkte"][0]["status"] = "FREMDSTATUS"
+    punkte["punkte"][1]["gesetzt_von"] = "FREMDURHEBER"
+    (ordner / "souffleur-leitfaden.json").write_text(json.dumps(punkte), encoding="utf-8")
+    with (ordner / "souffleur-diagnose.jsonl").open("a", encoding="utf-8") as fh:
+        fh.write(
+            json.dumps(
+                {
+                    "fenster_id": 14,
+                    "ki_antwort_s": 1.0,
+                    "verworfen": [{"grund": "FREMDVERWORFEN"}],
+                    "uebergangen": [{"segment_id": 1, "grund": "FREMDGRUND"}],
+                    "leitfaden_verworfen": [{"punkt_id": "P1", "grund": "FREMDMELDUNG"}],
+                }
+            )
+            + "\n"
+            + json.dumps({"spur": "mitdenker", "verworfen": [{"art": "gedanke", "grund": "FREMDKARTENGRUND"}]})
+            + "\n"
+        )
+    return ordner
+
+
+def test_fremde_woerter_stehen_weder_in_json_noch_markdown_noch_im_zustand(tmp_path):
+    ordner = _fremd(tmp_path)
+    daten = auswertung.erzeuge(ordner)
+    for text in _alle_fassungen(ordner, daten):
+        assert "FREMD" not in text
+    assert daten["hinweise"]["je_art"] == {
+        "widerspruch": 1,
+        "frage": 2,
+        "offener_punkt": 2,
+        "anknuepfen": 1,
+        "sonstige": 1,
+    }
+    assert daten["hinweise"]["je_sicherheit"] == {"hoch": 5, "mittel": 1, "sonstige": 1}
+    assert daten["rahmen"]["wiki"] == {"zustand": None, "seiten": 12}
+    assert daten["rahmen"]["ki"] == {"backend": None, "modell": "erfunden-modell"}
+    assert daten["fenster"]["verworfen"] == {"ungueltig": 3, "dublette": 1, "sonstige": 1}
+    assert daten["fenster"]["ki_uebergangen"]["sonstige"] == 1
+    assert daten["leitfaden"]["je_status"] == {
+        "offen": 2,
+        "angesprochen": 3,
+        "geklaert": 1,
+        "vertagt": 1,
+        "sonstige": 1,
+    }
+    assert daten["leitfaden"]["gesetzt_von"] == {"ki": 2, "moderator": 2, "datei": 3, "sonstige": 1}
+    assert daten["leitfaden"]["ki_verworfen"] == {"ohne_beleg": 2, "unbekannt": 1, "unveraendert": 1, "sonstige": 1}
+    assert daten["mitdenker"]["je_art"] == {"bestaetigung": 1, "gedanke": 1, "sonstige": 1}
+    assert daten["mitdenker"]["je_herkunft"] == {"wiki": 1, "gespraech": 1, "allgemeinwissen": 1, "sonstige": 1}
+    assert daten["mitdenker"]["je_relevanz"] == {"hoch": 2, "sonstige": 1}
+    assert daten["mitdenker"]["verworfen"]["sonstige"] == 1
+
+
+def test_fremde_woerter_gelangen_nicht_in_den_sitzungszustand(tmp_path):
+    sitzung = _fremd(tmp_path)
+    runner = LiveRunner()
+    _starte(runner, sitzung, souffleur=None)
+    snap = _beendet(runner)
+    assert snap["auswertung"]["hinweise"]["je_art"]["sonstige"] == 1
+    assert "FREMD" not in json.dumps(snap["auswertung"], ensure_ascii=False)
+    assert "FREMD" not in "\n".join(snap["lines"])
+
+
+def _literale(muster: str, text: str) -> set[str]:
+    return {w for fund in re.findall(muster, text) for w in ([fund] if isinstance(fund, str) else fund)}
+
+
+def test_feste_listen_stimmen_mit_dem_produktcode_ueberein():
+    """Listen ohne Konstante im Produktcode: gegen Antwortschemata und Diagnosezeilen geprüft."""
+    from audioscribe.souffleur import ki, leitfaden, markierung, mitdenker, prompt, wiki
+
+    def enums(knoten) -> list[list[str]]:
+        if isinstance(knoten, dict):
+            eigene = [knoten["enum"]] if isinstance(knoten.get("enum"), list) else []
+            return eigene + [e for wert in knoten.values() for e in enums(wert)]
+        if isinstance(knoten, list):
+            return [e for wert in knoten for e in enums(wert)]
+        return []
+
+    # Importierte Listen: dieselben Werte wie die Konstanten des Produkts.
+    assert set(auswertung.HINWEIS_ARTEN) == set(markierung.ALLE_ARTEN)
+    assert auswertung.PUNKT_STATUS == leitfaden.STATUS and auswertung.KARTEN_ARTEN == mitdenker.ARTEN
+    assert set(auswertung.KARTEN_HERKUNFT) == set(mitdenker.HERKUNFT_LABEL)
+    assert auswertung.KI_DIENSTE == ki.BACKENDS
+    assert set(auswertung.WIKI_ZUSTAENDE) == {wiki.ZUSTAND_KEINS, wiki.ZUSTAND_OK, wiki.ZUSTAND_FEHLER, "laedt"}
+
+    kern_text = (SRC / "souffleur" / "kern.py").read_text(encoding="utf-8")
+    mitdenker_text = (SRC / "souffleur" / "mitdenker.py").read_text(encoding="utf-8")
+    assert '"zustand": "laedt"' in kern_text
+
+    # Antwortschemata der KI: Sicherheit, Relevanz und die Gründe für übergangene Segmente.
+    schema = enums(prompt.SCHEMA)
+    assert list(auswertung.STUFEN) in schema and list(auswertung.KI_UEBERGANGEN) in schema
+    assert list(auswertung.STUFEN) in enums([v for v in vars(mitdenker).values() if isinstance(v, dict)])
+
+    # Diagnosezeilen: was kern.py und mitdenker.py als Grund schreiben.
+    assert _literale(r'"uebergangen": "(\w+)"', kern_text) == set(auswertung.OHNE_KI_AUFRUF)
+    gruende_kern = _literale(r'"grund": "(\w+)"', kern_text) | _literale(
+        r'grund = "(\w+)" if [^\n]* else "(\w+)"', kern_text
+    )
+    assert gruende_kern == set(auswertung.BEFUND_VERWORFEN) | set(auswertung.LEITFADEN_VERWORFEN)
+    assert _literale(r'"art": \S+ "grund": "(\w+)"', kern_text) == set(auswertung.BEFUND_VERWORFEN)
+    assert _literale(r'"punkt_id": pid, "grund": "(\w+)"', kern_text) | _literale(
+        r'grund = "(\w+)" if [^\n]* else "(\w+)"', kern_text
+    ) == set(auswertung.LEITFADEN_VERWORFEN)
+    gruende_karten = _literale(r'return None, "(\w+)"', mitdenker_text) | _literale(r'"grund": "(\w+)"', mitdenker_text)
+    assert gruende_karten == set(auswertung.KARTEN_VERWORFEN)
+    # Jeder Bezeichner hat eine deutsche Bezeichnung für die Markdown-Datei.
+    listen = (
+        auswertung.HINWEIS_ARTEN,
+        auswertung.PUNKT_STATUS,
+        auswertung.KARTEN_ARTEN,
+        auswertung.KARTEN_HERKUNFT,
+        auswertung.STUFEN,
+        auswertung.OHNE_KI_AUFRUF,
+        auswertung.BEFUND_VERWORFEN,
+        auswertung.KI_UEBERGANGEN,
+        auswertung.LEITFADEN_VERWORFEN,
+        auswertung.KARTEN_VERWORFEN,
+    )
+    stufen_und_status = {"hoch", "mittel", "offen", "angesprochen", "vertagt", "unbekannt"}
+    assert {b for liste in listen for b in liste} - set(auswertung._LABEL) == stufen_und_status
+
+
+# --- Nicht endliche und übergroße Zahlen, tiefe Verschachtelung ------------------------------
+
+
+def test_nan_gilt_als_fehlender_wert_und_die_datei_bleibt_gueltiges_json(tmp_path):
+    pytest.importorskip("fastapi")
+    from fastapi.responses import JSONResponse
+
+    ordner = _kopie(tmp_path, "session-full")
+    pfad = ordner / "souffleur.json"
+    text = pfad.read_text(encoding="utf-8")
+    assert text.count('"verzoegerung_s": 8.0') == 1 and text.count('"verzoegerung_real_s": 9.0') == 1
+    text = text.replace('"verzoegerung_s": 8.0', '"verzoegerung_s": NaN')
+    text = text.replace('"verzoegerung_real_s": 9.0', '"verzoegerung_real_s": Infinity')
+    pfad.write_text(text.replace('"speed": 1.0', '"speed": -Infinity'), encoding="utf-8")
+    with (ordner / "souffleur-diagnose.jsonl").open("a", encoding="utf-8") as fh:
+        fh.write(
+            '{"fenster_id": 14, "ki_antwort_s": 1.0, "verbrauch": {"aufrufe": 1, "kosten_usd": NaN, "tokens": Infinity}}\n'
+        )
+
+    daten = auswertung.erzeuge(ordner)
+
+    def streng(wert):
+        raise AssertionError(f"nicht endliche Zahl in der Datei: {wert}")
+
+    assert json.loads((ordner / JSON_DATEI).read_text(encoding="utf-8"), parse_constant=streng) == daten
+    # Der Hinweis mit NaN fehlt in der Grundmenge; der mit Infinity nur in der realen Verzögerung.
+    v = daten["verzoegerung"]
+    assert v["n"] == 5 and v["sprachende"] == {"mittel": 12.8, "median": 12.0, "max": 20.0}
+    assert v["real"] == {"mittel": 12.25, "median": 13.0, "max": 18.0} and v["gestreckt"] is False
+    assert daten["rahmen"]["speed"] is None and daten["hinweise"] == FULL["hinweise"]
+    assert daten["verbrauch"]["abgleich"] == {**FULL["verbrauch"]["abgleich"], "aufrufe": 8}
+    JSONResponse(daten)  # wirft bei NaN oder Infinity
+    md = (ordner / MD_DATEI).read_text(encoding="utf-8").lower()
+    assert "nan" not in md and "inf" not in md
+
+
+@pytest.mark.parametrize("gift", ["1e999", "9" * 400, "[" * 100_000], ids=["1e999", "400-stellen", "tief"])
+def test_uebergrosse_zahlen_und_tiefe_verschachtelung_machen_nur_die_gruppe_unlesbar(tmp_path, capsys, gift):
+    ordner = _kopie(tmp_path, "session-full")
+    if gift.startswith("["):
+        (ordner / "souffleur-leitfaden.json").write_text(gift, encoding="utf-8")
+    else:
+        pfad = ordner / "souffleur-leitfaden.json"
+        text = pfad.read_text(encoding="utf-8")
+        assert '"version": 1' in text
+        pfad.write_text(text.replace('"version": 1', f'"version": {gift}'), encoding="utf-8")
+        mit = ordner / "souffleur-mitdenker.json"
+        text = mit.read_text(encoding="utf-8")
+        assert text.count('"t_hinweis": 120.0') == 1
+        mit.write_text(text.replace('"t_hinweis": 120.0', f'"t_hinweis": {gift}'), encoding="utf-8")
+    with (ordner / "souffleur-diagnose.jsonl").open("a", encoding="utf-8") as fh:
+        fh.write(gift + "\n")
+        fh.write(f'{{"fenster_id": 15, "ki_antwort_s": {gift[:400]}}}\n' if not gift.startswith("[") else "\n")
+
+    # Das Kommando endet nie mit einem Traceback.
+    assert main(["auswertung", str(ordner)]) == 0
+    assert "Traceback" not in capsys.readouterr().err
+    daten = _gelesen(ordner)
+    assert (ordner / MD_DATEI).is_file()
+    assert daten["hinweise"] == FULL["hinweise"] and daten["verzoegerung"] == FULL["verzoegerung"]
+    if gift.startswith("["):
+        assert daten["leitfaden"] == {"nicht_lesbar": True}
+        assert daten["fenster"] == {**FULL["fenster"], "unlesbare_zeilen": 1}
+        assert daten["mitdenker"] == FULL["mitdenker"]
+    else:
+        # Die Zahl steht in einem Feld, das nicht gezählt wird, bzw. gilt als fehlender Wert.
+        assert daten["leitfaden"] == FULL["leitfaden"]
+        assert daten["mitdenker"]["karten"] == 3
+        assert daten["mitdenker"]["zeit_bis_karte"] == {"mittel": 70.0, "median": 70.0, "max": 95.0}
+        assert daten["fenster"]["unlesbare_zeilen"] == 1 and daten["fenster"]["gesamt"] == 14
+        # ki_antwort_s ohne endlichen Wert: die Zeile gilt nicht als erfolgreicher Aufruf.
+        assert daten["fenster"]["ki_aufrufe"] == FULL["fenster"]["ki_aufrufe"]
+
+
+def test_kommando_meldet_jeden_fehler_ohne_traceback(tmp_path, capsys, monkeypatch):
+    ordner = _kopie(tmp_path, "session-full")
+
+    def wirft(session_dir):
+        raise RecursionError("zu tief")
+
+    monkeypatch.setattr(auswertung, "erzeuge", wirft)
+    assert main(["auswertung", str(ordner)]) != 0
+    err = capsys.readouterr().err
+    assert "Auswertung fehlgeschlagen" in err and "Traceback" not in err
+    assert not list(ordner.glob("souffleur-auswertung*"))
+
+
+# --- Atomar schreiben ---------------------------------------------------------------------
+
+
+def test_schreibt_nie_durch_einen_symlink_und_laesst_keine_zwischendatei(tmp_path):
+    ordner = _kopie(tmp_path, "session-full")
+    fremd = tmp_path / "fremd.txt"
+    fremd.write_text("bleibt", encoding="utf-8")
+    try:
+        (ordner / JSON_DATEI).symlink_to(fremd)
+        (ordner / (JSON_DATEI + ".tmp")).symlink_to(fremd)  # der frühere feste Zwischenname
+    except OSError:
+        pytest.skip("Symlinks hier nicht erlaubt")
+    vorher = sorted(p.name for p in ordner.iterdir())
+    auswertung.erzeuge(ordner)
+    assert fremd.read_text(encoding="utf-8") == "bleibt"
+    assert not (ordner / JSON_DATEI).is_symlink() and _gelesen(ordner)["hinweise"] == FULL["hinweise"]
+    assert sorted(p.name for p in ordner.iterdir()) == sorted({*vorher, MD_DATEI})
+
+
+def test_fehler_beim_schreiben_raeumt_die_zwischendatei_auf(tmp_path, monkeypatch):
+    ordner = _kopie(tmp_path, "session-full")
+    vorher = sorted(p.name for p in ordner.iterdir())
+
+    def kaputt(quelle, ziel):
+        raise OSError("Platte voll")
+
+    monkeypatch.setattr(auswertung.os, "replace", kaputt)
+    with pytest.raises(OSError, match="Platte voll"):
+        auswertung.erzeuge(ordner)
+    assert sorted(p.name for p in ordner.iterdir()) == vorher
+
+
+# --- Segmente zählen wie das Journal ----------------------------------------------------------
+
+
+def test_segmente_zaehlen_wie_lies_journal(tmp_path):
+    from audioscribe.live import journal
+
+    ordner = _kopie(tmp_path, "session-full")
+    assert len(journal.lies_journal(ordner).segmente) == 40
+    (ordner / "bilanz.json").unlink()
+    with (ordner / "sitzung.journal.jsonl").open("a", encoding="utf-8") as fh:
+        for zeile in (
+            {"art": "segment", "id": 40, "start": 680.0, "end": 689.0, "text": "ERFUNDEN doppelte Nummer"},
+            {"art": "segment", "id": 41, "start": 700.0, "end": 705.0, "text": "   "},  # ohne Text
+            {"art": "segment", "id": 42, "start": "x", "end": 9999.0, "text": "ERFUNDEN ohne Zeit"},
+            {"art": "segment", "start": 1.0, "end": 9999.0, "text": "ERFUNDEN ohne Nummer"},
+            {"art": "segment", "id": "43", "start": 1900.0, "end": 1905.5, "text": "ERFUNDEN Nummer als Text"},
+            {"art": "takt", "elapsed": "kaputt"},
+        ):
+            fh.write(json.dumps(zeile) + "\n")
+        fh.write("kein json\n")
+    rahmen = auswertung.erzeuge(ordner)["rahmen"]
+    assert rahmen["segmente"] == len(journal.lies_journal(ordner).segmente) == 41
+    # Ohne bilanz.json: der größte Wert aus Takt und Segmentende der gültigen Zeilen.
+    assert rahmen["aufnahme_s"] == 1905.5
 
 
 # --- a bis g ------------------------------------------------------------------------------
@@ -483,15 +782,46 @@ def test_i_fehler_in_der_auswertung_haelt_das_ende_nicht_auf(tmp_path, monkeypat
     assert not list(sitzung.glob("souffleur-auswertung*"))
 
 
-def test_j_verworfene_sitzung_bekommt_keine_auswertung(tmp_path):
+class _HaengenderAbschluss(Souffleur):
+    """Souffleur, dessen Abschluss stehen bleibt, bis er gestoppt wird - so lässt sich eine Sitzung
+    in der Phase „abschluss“ verwerfen, nachdem der Aufnahmeprozess schon mit 0 geendet hat."""
+
+    def __init__(self) -> None:
+        konfig = SouffleurKonfig(wiki_dir=None, backend="attrappe")
+        super().__init__(konfig, ki=AttrappeKi(), ki_status=KiStatus("bereit", "attrappe", "attrappe", "Attrappe"))
+        self.im_abschluss = threading.Event()
+        self.gestoppt = threading.Event()
+
+    def abschliessen(self) -> None:
+        self.im_abschluss.set()
+        assert self.gestoppt.wait(20), "Sitzung wurde nicht verworfen"
+
+    def stop(self) -> None:
+        self.gestoppt.set()
+        super().stop()
+
+
+def test_j_verworfene_sitzung_bekommt_keine_auswertung(tmp_path, monkeypatch):
+    """Verworfen bei Exit-Code 0: Zurücksetzen während der Phase „abschluss“. Ohne die Prüfung auf
+    „verworfen“ im Runner entstünde hier die Auswertung."""
     sitzung = _kopie(tmp_path, "session-full")  # Quelldateien liegen schon da
+    aufrufe = []
+    erzeuge = auswertung.erzeuge
+    monkeypatch.setattr(auswertung, "erzeuge", lambda d: aufrufe.append(d) or erzeuge(d))
+    souffleur = _HaengenderAbschluss()
     runner = LiveRunner()
-    _starte(runner, sitzung, warten=True)
-    _warte(lambda: runner.snapshot().get("stats"))
+    _starte(runner, sitzung, souffleur=lambda opts: souffleur)
+    assert souffleur.im_abschluss.wait(20)
+    snap = runner.snapshot()
+    assert snap["running"] is True and snap["phase"] == "abschluss"  # das Kind ist schon mit 0 beendet
     assert runner.reset() == sitzung
     snap = runner.snapshot()
     assert snap["running"] is False and "auswertung" not in snap
-    assert not list(sitzung.glob("souffleur-auswertung*"))
+    assert aufrufe == [] and not list(sitzung.glob("souffleur-auswertung*"))
+
+    # Gegenprobe: dieselbe Sitzung ohne Verwerfen bekommt die Auswertung.
+    _starte(runner, sitzung, souffleur=None)
+    assert _beendet(runner)["auswertung"]["hinweise"] == FULL["hinweise"] and len(aufrufe) == 1
 
 
 def test_k_sitzung_ohne_souffleur_dateien_bleibt_ohne_auswertung_und_ohne_fehler(tmp_path):
