@@ -1,0 +1,3 @@
+{"fenster_id": 1, "t_von": 50.0, "t_bis": 62.0, "segment_ids": [3, 4], "t_verarbeitung": 64.0, "treffer": 3, "suche_s": 0.02, "ki_start_s": 1.5, "ki_antwort_s": 5.0, "befunde": 1, "markiert": [1], "verworfen": [], "uebergangen": []}
+{"fenster_id": 2, "t_von": 100.0, "t_bis": 112.0, "segment_ids": [6, 7], "t_verarbeitung": 114.0, "treffer": 3, "suche_s": 0.02, "ki_start_s": 1.5, "ki_antwort_s": 5.0, "befunde": 1, "markiert": [2], "verworfen": [], "uebergangen": [{"segment_id": 7, "grund": "smalltalk"}]}
+{"fenster_id": 3, "t_von": 150.0, "t_bis": 162.0, "segment_ids": [9, 10], "t_verarbeitung": 164.0, "uebergangen": "zu_kurz"}

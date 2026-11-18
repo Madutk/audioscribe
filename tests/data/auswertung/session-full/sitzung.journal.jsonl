@@ -1,0 +1,43 @@
+{"art": "segment", "id": 1, "track": "system", "speaker": "Sprecher 1", "start": 17.0, "end": 26.0, "text": "ERFUNDEN-SEGMENTTEXT-1", "delay": 2.0}
+{"art": "segment", "id": 2, "track": "system", "speaker": "Sprecher 1", "start": 34.0, "end": 43.0, "text": "ERFUNDEN-SEGMENTTEXT-2", "delay": 2.0}
+{"art": "segment", "id": 3, "track": "system", "speaker": "Sprecher 1", "start": 51.0, "end": 60.0, "text": "ERFUNDEN-SEGMENTTEXT-3", "delay": 2.0}
+{"art": "segment", "id": 4, "track": "system", "speaker": "Sprecher 1", "start": 68.0, "end": 77.0, "text": "ERFUNDEN-SEGMENTTEXT-4", "delay": 2.0}
+{"art": "segment", "id": 5, "track": "system", "speaker": "Sprecher 1", "start": 85.0, "end": 94.0, "text": "ERFUNDEN-SEGMENTTEXT-5", "delay": 2.0}
+{"art": "segment", "id": 6, "track": "system", "speaker": "Sprecher 1", "start": 102.0, "end": 111.0, "text": "ERFUNDEN-SEGMENTTEXT-6", "delay": 2.0}
+{"art": "segment", "id": 7, "track": "system", "speaker": "Sprecher 1", "start": 119.0, "end": 128.0, "text": "ERFUNDEN-SEGMENTTEXT-7", "delay": 2.0}
+{"art": "segment", "id": 8, "track": "system", "speaker": "Sprecher 1", "start": 136.0, "end": 145.0, "text": "ERFUNDEN-SEGMENTTEXT-8", "delay": 2.0}
+{"art": "segment", "id": 9, "track": "system", "speaker": "Sprecher 1", "start": 153.0, "end": 162.0, "text": "ERFUNDEN-SEGMENTTEXT-9", "delay": 2.0}
+{"art": "segment", "id": 10, "track": "system", "speaker": "Sprecher 1", "start": 170.0, "end": 179.0, "text": "ERFUNDEN-SEGMENTTEXT-10", "delay": 2.0}
+{"art": "takt", "elapsed": 170.0}
+{"art": "segment", "id": 11, "track": "system", "speaker": "Sprecher 1", "start": 187.0, "end": 196.0, "text": "ERFUNDEN-SEGMENTTEXT-11", "delay": 2.0}
+{"art": "segment", "id": 12, "track": "system", "speaker": "Sprecher 1", "start": 204.0, "end": 213.0, "text": "ERFUNDEN-SEGMENTTEXT-12", "delay": 2.0}
+{"art": "segment", "id": 13, "track": "system", "speaker": "Sprecher 1", "start": 221.0, "end": 230.0, "text": "ERFUNDEN-SEGMENTTEXT-13", "delay": 2.0}
+{"art": "segment", "id": 14, "track": "system", "speaker": "Sprecher 1", "start": 238.0, "end": 247.0, "text": "ERFUNDEN-SEGMENTTEXT-14", "delay": 2.0}
+{"art": "segment", "id": 15, "track": "system", "speaker": "Sprecher 1", "start": 255.0, "end": 264.0, "text": "ERFUNDEN-SEGMENTTEXT-15", "delay": 2.0}
+{"art": "segment", "id": 16, "track": "system", "speaker": "Sprecher 1", "start": 272.0, "end": 281.0, "text": "ERFUNDEN-SEGMENTTEXT-16", "delay": 2.0}
+{"art": "segment", "id": 17, "track": "system", "speaker": "Sprecher 1", "start": 289.0, "end": 298.0, "text": "ERFUNDEN-SEGMENTTEXT-17", "delay": 2.0}
+{"art": "segment", "id": 18, "track": "system", "speaker": "Sprecher 1", "start": 306.0, "end": 315.0, "text": "ERFUNDEN-SEGMENTTEXT-18", "delay": 2.0}
+{"art": "segment", "id": 19, "track": "system", "speaker": "Sprecher 1", "start": 323.0, "end": 332.0, "text": "ERFUNDEN-SEGMENTTEXT-19", "delay": 2.0}
+{"art": "shot", "id": 1, "t": 300.0}
+{"art": "segment", "id": 20, "track": "system", "speaker": "Sprecher 1", "start": 340.0, "end": 349.0, "text": "ERFUNDEN-SEGMENTTEXT-20", "delay": 2.0}
+{"art": "segment", "id": 21, "track": "system", "speaker": "Sprecher 1", "start": 357.0, "end": 366.0, "text": "ERFUNDEN-SEGMENTTEXT-21", "delay": 2.0}
+{"art": "segment", "id": 22, "track": "system", "speaker": "Sprecher 1", "start": 374.0, "end": 383.0, "text": "ERFUNDEN-SEGMENTTEXT-22", "delay": 2.0}
+{"art": "segment", "id": 23, "track": "system", "speaker": "Sprecher 1", "start": 391.0, "end": 400.0, "text": "ERFUNDEN-SEGMENTTEXT-23", "delay": 2.0}
+{"art": "segment", "id": 24, "track": "system", "speaker": "Sprecher 1", "start": 408.0, "end": 417.0, "text": "ERFUNDEN-SEGMENTTEXT-24", "delay": 2.0}
+{"art": "segment", "id": 25, "track": "system", "speaker": "Sprecher 1", "start": 425.0, "end": 434.0, "text": "ERFUNDEN-SEGMENTTEXT-25", "delay": 2.0}
+{"art": "segment", "id": 26, "track": "system", "speaker": "Sprecher 1", "start": 442.0, "end": 451.0, "text": "ERFUNDEN-SEGMENTTEXT-26", "delay": 2.0}
+{"art": "segment", "id": 27, "track": "system", "speaker": "Sprecher 1", "start": 459.0, "end": 468.0, "text": "ERFUNDEN-SEGMENTTEXT-27", "delay": 2.0}
+{"art": "segment", "id": 28, "track": "system", "speaker": "Sprecher 1", "start": 476.0, "end": 485.0, "text": "ERFUNDEN-SEGMENTTEXT-28", "delay": 2.0}
+{"art": "segment", "id": 29, "track": "system", "speaker": "Sprecher 1", "start": 493.0, "end": 502.0, "text": "ERFUNDEN-SEGMENTTEXT-29", "delay": 2.0}
+{"art": "segment", "id": 30, "track": "system", "speaker": "Sprecher 1", "start": 510.0, "end": 519.0, "text": "ERFUNDEN-SEGMENTTEXT-30", "delay": 2.0}
+{"art": "segment", "id": 31, "track": "system", "speaker": "Sprecher 1", "start": 527.0, "end": 536.0, "text": "ERFUNDEN-SEGMENTTEXT-31", "delay": 2.0}
+{"art": "segment", "id": 32, "track": "system", "speaker": "Sprecher 1", "start": 544.0, "end": 553.0, "text": "ERFUNDEN-SEGMENTTEXT-32", "delay": 2.0}
+{"art": "segment", "id": 33, "track": "system", "speaker": "Sprecher 1", "start": 561.0, "end": 570.0, "text": "ERFUNDEN-SEGMENTTEXT-33", "delay": 2.0}
+{"art": "segment", "id": 34, "track": "system", "speaker": "Sprecher 1", "start": 578.0, "end": 587.0, "text": "ERFUNDEN-SEGMENTTEXT-34", "delay": 2.0}
+{"art": "segment", "id": 35, "track": "system", "speaker": "Sprecher 1", "start": 595.0, "end": 604.0, "text": "ERFUNDEN-SEGMENTTEXT-35", "delay": 2.0}
+{"art": "segment", "id": 36, "track": "system", "speaker": "Sprecher 1", "start": 612.0, "end": 621.0, "text": "ERFUNDEN-SEGMENTTEXT-36", "delay": 2.0}
+{"art": "segment", "id": 37, "track": "system", "speaker": "Sprecher 1", "start": 629.0, "end": 638.0, "text": "ERFUNDEN-SEGMENTTEXT-37", "delay": 2.0}
+{"art": "segment", "id": 38, "track": "system", "speaker": "Sprecher 1", "start": 646.0, "end": 655.0, "text": "ERFUNDEN-SEGMENTTEXT-38", "delay": 2.0}
+{"art": "segment", "id": 39, "track": "system", "speaker": "Sprecher 1", "start": 663.0, "end": 672.0, "text": "ERFUNDEN-SEGMENTTEXT-39", "delay": 2.0}
+{"art": "segment", "id": 40, "track": "system", "speaker": "Sprecher 1", "start": 680.0, "end": 689.0, "text": "ERFUNDEN-SEGMENTTEXT-40", "delay": 2.0}
+{"art": "takt", "elapsed": 1800.0}

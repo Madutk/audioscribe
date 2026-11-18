@@ -1,0 +1,95 @@
+{
+  "version": 1,
+  "sitzung": "session-full",
+  "modell": "erfunden-modell",
+  "ki_erzeugt": true,
+  "karten": [
+    {
+      "id": "M1",
+      "art": "bestaetigung",
+      "segment_id": 5,
+      "t_start": 74.0,
+      "t_end": 80.0,
+      "sprecher": "Sprecher 2",
+      "aussage": "ERFUNDEN-KARTENAUSSAGE-1",
+      "titel": "ERFUNDEN-KARTENTITEL-1",
+      "ki_text": "ERFUNDEN-KARTENTEXT-1",
+      "fundstellen": [],
+      "wiki_zitat": null,
+      "bezug_segment_ids": [],
+      "herkunft": [
+        "wiki",
+        "gespraech"
+      ],
+      "relevanz": "hoch",
+      "t_hinweis": 120.0,
+      "ki_antwort_s": 20.0,
+      "lauf": 1,
+      "erstellt": "2026-01-15 10:05:00",
+      "ki_erzeugt": true,
+      "label": "bestaetigung",
+      "fundstelle": null
+    },
+    {
+      "id": "M2",
+      "art": "erkenntnis",
+      "segment_id": 10,
+      "t_start": 244.0,
+      "t_end": 250.0,
+      "sprecher": "Sprecher 2",
+      "aussage": "ERFUNDEN-KARTENAUSSAGE-2",
+      "titel": "ERFUNDEN-KARTENTITEL-2",
+      "ki_text": "ERFUNDEN-KARTENTEXT-2",
+      "fundstellen": [],
+      "wiki_zitat": null,
+      "bezug_segment_ids": [],
+      "herkunft": [
+        "gespraech"
+      ],
+      "relevanz": "hoch",
+      "t_hinweis": 345.0,
+      "ki_antwort_s": 20.0,
+      "lauf": 3,
+      "erstellt": "2026-01-15 10:05:00",
+      "ki_erzeugt": true,
+      "label": "erkenntnis",
+      "fundstelle": null
+    },
+    {
+      "id": "M3",
+      "art": "gedanke",
+      "segment_id": 15,
+      "t_start": 294.0,
+      "t_end": 300.0,
+      "sprecher": "Sprecher 2",
+      "aussage": "ERFUNDEN-KARTENAUSSAGE-3",
+      "titel": "ERFUNDEN-KARTENTITEL-3",
+      "ki_text": "ERFUNDEN-KARTENTEXT-3",
+      "fundstellen": [],
+      "wiki_zitat": null,
+      "bezug_segment_ids": [],
+      "herkunft": [
+        "allgemeinwissen"
+      ],
+      "relevanz": "mittel",
+      "t_hinweis": 345.0,
+      "ki_antwort_s": 20.0,
+      "lauf": 3,
+      "erstellt": "2026-01-15 10:05:00",
+      "ki_erzeugt": true,
+      "label": "gedanke",
+      "fundstelle": null
+    }
+  ],
+  "bilanz": {
+    "karten": 3,
+    "laeufe": 4,
+    "fehler": 1,
+    "stand_t": 640.0,
+    "je_art": {
+      "bestaetigung": 1,
+      "erkenntnis": 1,
+      "gedanke": 1
+    }
+  }
+}
