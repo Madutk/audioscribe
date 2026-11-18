@@ -229,7 +229,7 @@ def test_wsl_to_windows_laesst_linux_pfade_stehen():
 
 def test_to_native_richtet_sich_nach_dem_system():
     assert browse.to_native(r"C:\Users\user", windows=True) == r"C:\Users\user"
-    assert browse.to_native(r"C:\Users\user", windows=False) == "/mnt/c/Users/user"
+    assert browse.to_native(r"C:\Users\user", windows=False, mac=False) == "/mnt/c/Users/user"
 
 
 def test_normalize_path_nutzt_default_bei_leerer_eingabe(tmp_path):
@@ -317,6 +317,7 @@ def test_quick_links_findet_nur_laufwerksbuchstaben(tmp_path):
         home=root,
         mnt_root=mnt,
         windows=False,
+        mac=False,
     )
     labels = [label for label, _ in links]
     assert labels == ["Projekt", "Windows C:", "Windows D:"]

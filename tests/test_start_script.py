@@ -75,7 +75,9 @@ def _run(tmp_path: Path, os_name: str, arch: str, *args: str, nvidia: bool = Fal
 
 @pytest.mark.skipif(os.name == "nt", reason="bash")
 def test_start_sh_mac_waehlt_cpu_mac_live_und_venv_mac(tmp_path):
-    out = _run(tmp_path, "Darwin", "arm64", "--port", "9000")
+    # Kopie ohne .venv-mac: im echten Repo-Ordner entfaellt der Hinweis zum ersten Start zu Recht.
+    root = _kopie(tmp_path, "VARIANTE = CLOUD_COMPLIANT" if variante.aktiv() else "VARIANTE = STANDARD")
+    out = _run(tmp_path, "Darwin", "arm64", "--port", "9000", root=root)
     assert f"UV run --extra cpu {EXTRAS} --extra mac audioscribe ui --port 9000" in out
     assert "VENV " in out and out.split("VENV ")[1].split()[0].endswith(".venv-mac")
     assert "MPSFB 1" in out

@@ -689,8 +689,10 @@ def test_refine_session_times_its_stages(tmp_path, monkeypatch):
         wav.setsampwidth(2)
         wav.setframerate(SR)
         wav.writeframes(np.zeros(SR * 3, dtype="<i2").tobytes())
+    # Backend und Gerät festlegen: sonst wählt "auto" auf Apple Silicon mlx (Stufenname).
     monkeypatch.setattr(refine, "settings", replace(refine.settings, enable_alignment=True, enable_diarization=True,
-                                                    whisper_model="tiny"))
+                                                    whisper_model="tiny", asr_backend="faster-whisper",
+                                                    device="cpu"))
     ergebnis = {"language": "de", "segments": [{"start": 0.0, "end": 1.0, "text": "Hallo", "words": []}]}
     monkeypatch.setattr("audioscribe.pipeline.transcribe.transcribe", lambda audio, reporter: dict(ergebnis))
     monkeypatch.setattr("audioscribe.pipeline.transcribe.align", lambda audio, result, reporter: result)
@@ -1039,6 +1041,7 @@ def test_list_windows_markiert_bevorzugt(monkeypatch):
 
 
 def test_list_windows_is_empty_off_windows(monkeypatch):
+    monkeypatch.setattr(fenster, "_mac", lambda: False)  # sonst liest der Test auf dem Mac die echte Fensterliste
     monkeypatch.setattr(fenster, "_api", lambda: None)
     assert fenster.list_windows() == []
     assert fenster.is_window(4711) is False
